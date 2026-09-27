@@ -1,8 +1,9 @@
 # Maillage Thread : conception de l'étape 1 (vue depuis le Mac)
 
 > **Statut : conception validée** par Majid le 28/09/2026, section par
-> section (1 à 6). Suite : relecture de cette spec par Majid, puis plan
-> d'implémentation.
+> section (1 à 6), spec relue et approuvée. Plan d'implémentation de l'app :
+> `docs/superpowers/plans/2026-09-28-maillage-thread-etape-1.md` ; le passeur
+> Catalyst (section 5) fera l'objet d'un second plan.
 
 ## 0. Contexte, but, décisions
 
@@ -89,7 +90,9 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   préfixe des adresses des appareils.
 - **Appareils** : `_matter._tcp` (une instance par fabrique,
   `<fabrique>-<nœud>`, regroupées par nom d'hôte = un appareil à N
-  fabriques ; `SII`/`ICD` ⇒ endormi) ; `_hap._udp` (accessoires HomeKit sur
+  fabriques ; `ICD`, ou `SII` d'au moins 5 s ⇒ endormi : presque tous les
+  appareils Thread annoncent `SII`, le pont Halo, alimenté, annonce 2000) ;
+  `_hap._udp` (accessoires HomeKit sur
   Thread, avec leur nom). Adresses : dans un préfixe OMR ⇒ Thread, dans la
   partition du préfixe ; réseau local ⇒ appareil IP (liste à part) ; aucune ⇒
   « sans adresse ».
@@ -266,3 +269,7 @@ transport vers l'app (USB série et/ou UDP, à concevoir) ; l'app remplit les
   les champs TXT binaires s'échappent mal dans `dns-sd` ; décodage fiable par
   `NWBrowser(.bonjourWithTXTRecord)`.
 - Relevé brut, scripts et limites : `docs/releves/2026-09-28/`.
+- Capture complète par le recenseur à 02:15 (format `Annonces`) :
+  `docs/releves/2026-09-28/capture-0215.json` : même réseau scindé, mais 2
+  hôtes sans adresse (`1EA39E8E72FC9ADA` et `72FBDA00C4A43024`) ; ce sont
+  les données des tests et du mode démo.
