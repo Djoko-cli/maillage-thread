@@ -1,0 +1,20 @@
+# Projet genere par xcodegen (project.yml fait foi)
+*.xcodeproj/
+*.xcworkspace/
+# Produits de compilation
+build/
+DerivedData/
+.build/
+*.xcresult
+*.dmg
+# Fichiers propres a l'utilisateur
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+.DS_Store
+__pycache__/
+# Espace de travail des outils de conception (maquettes, suivi d'execution)
+.superpowers/
+
+# Signature propre au poste (equipe Apple Development), jamais commitee
+Local.xcconfig

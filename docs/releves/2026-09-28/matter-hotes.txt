@@ -1,0 +1,31 @@
+57 instances _matter._tcp
+== Apple (fd2d) : 23 appareil(s)
+   02A271A6D5FC4CB9.local (2 fabrique(s)) fd2d:3b27:72b8:0000:c5f8:1001:0da8:4eb7
+   0A87C94AB92DEC89.local (3 fabrique(s)) fd2d:3b27:72b8:0000:ad2d:2718:eec4:5dec
+   32E1CCA9C1A0F448.local (1 fabrique(s)) fd2d:3b27:72b8:0000:e326:7ca9:5641:e3db
+   3AA21A204E668543.local (2 fabrique(s)) fd2d:3b27:72b8:0000:bf93:85fe:3d0f:3359
+   4608101CB826BD90.local (3 fabrique(s)) fd2d:3b27:72b8:0000:58f6:df88:80e7:d641
+   46D9C54DAA6079AC.local (2 fabrique(s)) fd2d:3b27:72b8:0000:3fea:3eee:9378:74eb
+   561F9A6463953778.local (2 fabrique(s)) fd2d:3b27:72b8:0000:2c97:f3e3:ac5e:9b25
+   72FBDA00C4A43024.local (1 fabrique(s)) fd2d:3b27:72b8:0000:9761:3362:c2d8:3da5
+   7A550C85AFFF5F14.local (3 fabrique(s)) fd2d:3b27:72b8:0000:92f6:a1d6:93c9:c473
+   7A9DABB000AD621D.local (2 fabrique(s)) fd2d:3b27:72b8:0000:51e7:eea1:ee59:b2db
+   8251013C2EAB1BB9.local (2 fabrique(s)) fd2d:3b27:72b8:0000:d653:bf1d:1c61:4395
+   86E8EDA04DCFDE3F.local (3 fabrique(s)) fd2d:3b27:72b8:0000:0f24:a9fe:2ece:b120
+   8A90F991B314DF2E.local (1 fabrique(s)) fd2d:3b27:72b8:0000:470b:6cc2:05b9:e6ef
+   8AD56494F325575D.local (3 fabrique(s)) fd2d:3b27:72b8:0000:70c7:cb3a:d9b5:815c
+   9A952C5F437861C5.local (1 fabrique(s)) fd2d:3b27:72b8:0000:ef8f:bb5a:cc52:9816
+   9AD3C6E5296BEAF9.local (3 fabrique(s)) fd2d:3b27:72b8:0000:9be5:7344:60dd:0ebe
+   AA106FAEB4980093.local (3 fabrique(s)) fd2d:3b27:72b8:0000:a8fc:71c0:1e48:0fb1
+   C6A566044F350DFD.local (2 fabrique(s)) fd2d:3b27:72b8:0000:d086:1317:d88b:328f
+   C6A7BFBB152E6B99.local (3 fabrique(s)) fd2d:3b27:72b8:0000:b739:d32c:2316:9920
+   D60E698E80D7DA48.local (2 fabrique(s)) fd2d:3b27:72b8:0000:4ace:f7c2:6dbe:86e3
+   D61B585F32E9C793.local (2 fabrique(s)) fd2d:3b27:72b8:0000:23e8:53dc:6e74:b582
+   DA41BDE63CF37320.local (2 fabrique(s)) fd2d:3b27:72b8:0000:d83e:5ee1:4188:7c4d
+   FAD7066DD54C259D.local (2 fabrique(s)) fd2d:3b27:72b8:0000:4c1e:7863:cfeb:5ac9
+== autre / aucune : 5 appareil(s)
+   1EA39E8E72FC9ADA.local (1 fabrique(s)) 
+   54EF448D15E50000.local (1 fabrique(s)) fd4b:5d37:6d94:480e:56ef:44ff:fe8d:15e5
+   A013F0C01AD8.local (1 fabrique(s)) fd4b:5d37:6d94:480e:0003:fd43:a000:a708 fd4b:5d37:6d94:480e:1005:a1f7:f1d2:9a31
+   C42996C911BF.local (2 fabrique(s)) fd4b:5d37:6d94:480e:c629:96ff:feb9:11bf
+   C4E7AE1CCF31.local (2 fabrique(s)) fd4b:5d37:6d94:480e:3eab:72ff:fe44:4bdf
