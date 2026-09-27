@@ -1,0 +1,24 @@
+{
+  "sourceLanguage" : "fr",
+  "strings" : {
+    "NSLocalNetworkUsageDescription" : {
+      "comment" : "Autorisation reseau local (ecoute Bonjour des routeurs de bordure et des appareils).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maillage Thread listens to local network announcements (Thread border routers, Matter and HomeKit devices) to draw the Thread network."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maillage Thread écoute les annonces du réseau local (routeurs de bordure Thread, appareils Matter et HomeKit) pour dessiner le réseau Thread."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

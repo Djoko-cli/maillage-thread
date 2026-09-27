@@ -18,3 +18,6 @@ __pycache__/
 
 # Signature propre au poste (equipe Apple Development), jamais commitee
 Local.xcconfig
+
+# Genere par xcodegen depuis project.yml (info:)
+MaillageThread/Info.plist

@@ -1,0 +1,109 @@
+name: MaillageThread
+options:
+  bundleIdPrefix: fr.djoko.maillage
+  deploymentTarget:
+    macOS: "26.0"
+  developmentLanguage: fr
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+configFiles:
+  Debug: Signature.xcconfig
+  Release: Signature.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    # Textes : catalogues .xcstrings (francais, langue de developpement, et
+    # anglais), cles extraites par le compilateur.
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    STRING_CATALOG_GENERATE_SYMBOLS: NO
+targets:
+  MaillageCoeur:
+    type: framework
+    platform: macOS
+    sources:
+      - path: MaillageCoeur
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.djoko.maillage.coeur
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        SKIP_INSTALL: YES
+        DEFINES_MODULE: YES
+  MaillageThread:
+    type: application
+    platform: macOS
+    sources:
+      - path: MaillageThread
+    dependencies:
+      - target: MaillageCoeur
+    info:
+      path: MaillageThread/Info.plist
+      properties:
+        CFBundleDisplayName: Maillage Thread
+        LSApplicationCategoryType: public.app-category.utilities
+        LSUIElement: true
+        NSHumanReadableCopyright: ""
+        NSLocalNetworkUsageDescription: "Maillage Thread écoute les annonces du réseau local (routeurs de bordure Thread, appareils Matter et HomeKit) pour dessiner le réseau Thread."
+        NSBonjourServices:
+          - _meshcop._udp
+          - _matter._tcp
+          - _hap._udp
+    settings:
+      base:
+        PRODUCT_NAME: Maillage Thread
+        PRODUCT_MODULE_NAME: MaillageThread
+        PRODUCT_BUNDLE_IDENTIFIER: fr.djoko.maillage
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_ENTITLEMENTS: MaillageThread/Droits.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+  MaillageCoeurTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: MaillageCoeurTests
+    dependencies:
+      - target: MaillageCoeur
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.djoko.maillage.coeur.tests
+        GENERATE_INFOPLIST_FILE: YES
+  MaillageThreadTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: MaillageThreadTests
+    dependencies:
+      - target: MaillageThread
+      - target: MaillageCoeur
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.djoko.maillage.tests
+        GENERATE_INFOPLIST_FILE: YES
+        # Le produit s'appelle "Maillage Thread" (avec une espace), pas comme la cible.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Maillage Thread.app/Contents/MacOS/Maillage Thread"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  MaillageThread:
+    build:
+      targets:
+        MaillageThread: all
+        MaillageCoeur: all
+        MaillageCoeurTests: [test]
+        MaillageThreadTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MaillageCoeurTests
+        - MaillageThreadTests
+    archive:
+      config: Release
