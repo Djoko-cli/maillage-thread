@@ -1,0 +1,6 @@
+Apple TV 4K | Apple BorderRouter tv=1.4.0 | nn=MyHome1482620090 xp=4B36A2B7FEFB200B | partition=73586B68 | jeu actif du 2024-08-28 | interface active, role CHEF (leader), BBR primaire
+Aqara HubM100 #DFEB | Aqara HubM100 tv=1.3.0 | nn=MyHome1482620090 xp=4B36A2B7FEFB200B | partition=E2E79FFC | jeu actif du 2024-08-28 | interface active, role detache/desactive, BBR primaire | omr=40FD0354F005DE0001
+HomePod Avant | Apple BorderRouter tv=1.4.0 | nn=MyHome1482620090 xp=4B36A2B7FEFB200B | partition=73586B68 | jeu actif du 2024-08-28 | interface active, role routeur, BBR actif
+HomePod Palier | Apple BorderRouter tv=1.4.0 | nn=MyHome1482620090 xp=4B36A2B7FEFB200B | partition=73586B68 | jeu actif du 2024-08-28 | interface active, role routeur, BBR actif
+HomePod mini bureau | Apple BorderRouter tv=1.4.0 | nn=MyHome1482620090 xp=4B36A2B7FEFB200B | partition=73586B68 | jeu actif du 2024-08-28 | interface active, role routeur, BBR actif
+HomePod mini chambre | Apple BorderRouter tv=1.4.0 | nn=MyHome1482620090 xp=4B36A2B7FEFB200B | partition=73586B68 | jeu actif du 2024-08-28 | interface active, role routeur, BBR actif

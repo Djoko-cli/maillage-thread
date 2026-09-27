@@ -1,0 +1,11 @@
+== Journal de l'assistant halo-routes (/Library/Logs/fr.djoko.halo.routes.log), 25-27/09
+2026-09-25 17:12:15 halo-routes : demarre (prefixes ULA /64 annonces par les routeurs de bordure)
+2026-09-25 17:12:15 halo-routes : route fd4f:9c:ed42::/64 remise via fe80::e14:1eca:d086:9a92%en0
+2026-09-26 18:17:41 halo-routes : route fd03:54f0:5de:1::/64 remise via fe80::ae:f065:37ea:3d33%en0
+2026-09-27 04:04:03 halo-routes : route fd19:961f:2db3::/64 remise via fe80::5a:d5f3:dc72:e7d6%en0
+
+== Table de routage IPv6 du Mac le 28/09 vers 00:45 (netstat -rn -f inet6, lignes du reseau Thread)
+fd03:54f0:5de:1::/64                    fe80::56ef:44ff:fe97:b882%en0           UGc                   en0
+fd19:961f:2db3::/64                     fe80::5a:d5f3:dc72:e7d6%en0             UGS1c                 en0
+fd4b:36a2:b7fe:200b::/64                link#15                                 UC                    en0
+fd4b:36a2:b7fe:200b::/64                link#13                                 UCI                  en18

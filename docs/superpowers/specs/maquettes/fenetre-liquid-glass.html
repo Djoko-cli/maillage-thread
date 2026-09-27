@@ -1,0 +1,71 @@
+<h2>Section 3, version Liquid Glass</h2>
+<p class="subtitle">Le graphe occupe toute la fenêtre ; barre d'outils, bandeau d'alerte et fiche flottent au-dessus en verre translucide (API SwiftUI de macOS 26 : glassEffect, GlassEffectContainer, boutons .glass).</p>
+
+<style>
+  .stage { position: relative; height: 470px; border-radius: 16px; overflow: hidden;
+    background: radial-gradient(circle at 30% 35%, #1e3a8a 0%, #0f172a 55%, #020617 100%);
+    font: 12px -apple-system, system-ui, sans-serif; color: #f8fafc; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+  .glass { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.35);
+    backdrop-filter: blur(18px) saturate(170%); -webkit-backdrop-filter: blur(18px) saturate(170%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 8px 24px rgba(0,0,0,.25); }
+  .tb { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 5px; border-radius: 999px; }
+  .cap { padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,.12); }
+  .cap.on { background: rgba(255,255,255,.28); }
+  .lights { position: absolute; top: 16px; left: 16px; }
+  .lights span { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; }
+  .banner { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px;
+    background: rgba(245,158,11,.28); border: 1px solid rgba(251,191,36,.6); backdrop-filter: blur(14px); white-space: nowrap; }
+  .card { position: absolute; left: 20px; right: 20px; bottom: 16px; border-radius: 22px; padding: 12px 16px; display: flex; gap: 22px; }
+  .card .z { color: rgba(248,250,252,.72); } .ok { color: #4ade80; }
+  .btn { padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.4); }
+  svg text { font: 10.5px -apple-system, system-ui, sans-serif; fill: #e2e8f0; }
+</style>
+
+<div class="stage">
+  <svg viewBox="0 0 900 470" width="100%" height="100%" style="position:absolute; inset:0">
+    <defs>
+      <radialGradient id="g1"><stop offset="0%" stop-color="#93c5fd"/><stop offset="100%" stop-color="#2563eb"/></radialGradient>
+      <radialGradient id="g2"><stop offset="0%" stop-color="#fde68a"/><stop offset="100%" stop-color="#d97706"/></radialGradient>
+      <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <ellipse cx="360" cy="215" rx="300" ry="150" fill="rgba(59,130,246,0.16)" stroke="rgba(147,197,253,0.35)"/>
+    <text x="90" y="80" style="fill:#bfdbfe">Partition 73586B68 · fd19:961f:2db3::/64</text>
+    <ellipse cx="775" cy="215" rx="85" ry="100" fill="rgba(245,158,11,0.16)" stroke="rgba(252,211,77,0.45)"/>
+    <text x="712" y="105" style="fill:#fde68a">E2E79FFC · fd03:…:1::/64</text>
+    <g stroke="rgba(203,213,225,0.35)" stroke-dasharray="2 4">
+      <line x1="360" y1="215" x2="95" y2="210"/><line x1="360" y1="215" x2="130" y2="130"/><line x1="360" y1="215" x2="130" y2="300"/>
+      <line x1="360" y1="215" x2="625" y2="210"/><line x1="360" y1="215" x2="590" y2="130"/><line x1="360" y1="215" x2="590" y2="300"/>
+      <line x1="360" y1="215" x2="360" y2="85"/><line x1="360" y1="215" x2="300" y2="330"/>
+      <line x1="775" y1="200" x2="785" y2="262"/>
+    </g>
+    <line x1="360" y1="215" x2="420" y2="330" stroke="rgba(255,255,255,0.7)" stroke-dasharray="2 4" stroke-width="1.6"/>
+    <circle cx="360" cy="215" r="22" fill="url(#g1)" filter="url(#glow)"/><text x="326" y="252">Apple TV 4K 👑</text>
+    <circle cx="250" cy="150" r="14" fill="url(#g1)" opacity="0.9"/><text x="206" y="130">HomePod Palier</text>
+    <circle cx="470" cy="150" r="14" fill="url(#g1)" opacity="0.9"/><text x="440" y="130">HomePod Avant</text>
+    <circle cx="250" cy="280" r="14" fill="url(#g1)" opacity="0.9"/><text x="200" y="310">HP mini bureau</text>
+    <circle cx="470" cy="280" r="14" fill="url(#g1)" opacity="0.9"/><text x="440" y="310">HP mini chambre</text>
+    <g fill="#4ade80" filter="url(#glow)">
+      <circle cx="95" cy="210" r="6"/><circle cx="130" cy="130" r="6"/><circle cx="130" cy="300" r="6"/>
+      <circle cx="625" cy="210" r="6"/><circle cx="590" cy="130" r="6"/><circle cx="590" cy="300" r="6"/>
+      <circle cx="360" cy="85" r="6"/><circle cx="300" cy="330" r="6"/>
+    </g>
+    <text x="60" y="230">Prise</text><text x="92" y="118">Eve Door 🔋</text><text x="98" y="320">Capteur</text>
+    <text x="636" y="214">Halo</text><text x="600" y="126">Eve Energy</text><text x="600" y="304">Lampe</text>
+    <text x="372" y="82">Volet</text><text x="246" y="350">Thermostat</text>
+    <circle cx="420" cy="330" r="9" fill="#bef264" stroke="#fff" stroke-width="2.5" filter="url(#glow)"/><text x="434" y="334">Nuki Ultra 🔋</text>
+    <circle cx="775" cy="200" r="16" fill="url(#g2)" filter="url(#glow)"/><text x="746" y="178">Aqara M100</text>
+    <circle cx="785" cy="262" r="7" fill="#f87171" filter="url(#glow)"/><text x="752" y="284">1E5019DA… ⚠︎</text>
+  </svg>
+
+  <div class="lights"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+  <div class="tb glass"><span class="cap on">MyHome1482620090 ▾</span><span class="cap">Appareils IP · 4</span><span class="cap">Journal</span><span class="cap">↻</span></div>
+  <div class="banner">⚠︎ Réseau scindé en 2 partitions depuis 04:14 (27/09) · Aqara M100 isolé</div>
+
+  <div class="card glass">
+    <div><b style="font-size:14px">Nuki Ultra</b><br><span class="z">Entrée · Nuki · Smart Lock Ultra</span><br><span class="ok">● joignable</span> <span class="z">· vu il y a 12 s</span></div>
+    <div class="z">Matter · endormi (réveil 6 s)<br>2 fabriques : Maison, Home Assistant<br>fd19:961f:2db3:0:0f36:e6fc:ba42:14fe</div>
+    <div class="z">Partition 73586B68<br>Parent : inconnu (étape 2)<br>Journal : revenu le 28/09 à 09:12</div>
+    <div style="margin-left:auto"><span class="btn">Renommer…</span></div>
+  </div>
+</div>
+<p class="subtitle" style="margin-top:10px">En mode clair, le fond devient un dégradé pâle et le verre s'éclaircit ; le menu de la barre des menus suit le même matériau.</p>
