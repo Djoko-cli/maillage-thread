@@ -41,4 +41,41 @@ struct FicheTests {
         #expect(FicheNoeud.ligneDescription(maison: nil, modeleHomeKit: "Eve Door") == "Eve Door")
         #expect(FicheNoeud.ligneDescription(maison: nil, modeleHomeKit: nil) == "")
     }
+
+    /// Niveau, puis l'etat de charge ; faible, « batterie faible » (et « en
+    /// charge » seulement) ; sans niveau, l'alerte seule.
+    @Test func ligneBatterie() {
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 52, charge: .horsCharge)) == "52 % · sur batterie")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 81, charge: .enCharge)) == "81 % · en charge")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 97, charge: .nonRechargeable))
+                == "97 % · non rechargeable")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 88)) == "88 %")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 12, charge: .horsCharge)) == "12 % · batterie faible")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 15, charge: .enCharge))
+                == "15 % · batterie faible · en charge")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(alerte: true)) == "batterie faible")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(alerte: false)) == "batterie OK")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(charge: .enCharge, alerte: false)) == "batterie OK · en charge")
+    }
+
+    /// Triangle si faible, eclair en charge, sinon le niveau par quart.
+    @Test func symboleBatterie() {
+        #expect(FicheNoeud.symboleBatterie(BatterieMaison(niveau: 12)) == "exclamationmark.triangle.fill")
+        #expect(FicheNoeud.symboleBatterie(BatterieMaison(alerte: true)) == "exclamationmark.triangle.fill")
+        #expect(FicheNoeud.symboleBatterie(BatterieMaison(niveau: 81, charge: .enCharge)) == "battery.100percent.bolt")
+        #expect(FicheNoeud.symboleBatterie(BatterieMaison(niveau: 30)) == "battery.25percent")
+        #expect(FicheNoeud.symboleBatterie(BatterieMaison(niveau: 52)) == "battery.50percent")
+        #expect(FicheNoeud.symboleBatterie(BatterieMaison(niveau: 64)) == "battery.75percent")
+        #expect(FicheNoeud.symboleBatterie(BatterieMaison(niveau: 100)) == "battery.100percent")
+        #expect(FicheNoeud.symboleBatterie(BatterieMaison(alerte: false)) == "battery.100percent")
+    }
+
+    /// Pastille du graphe : seulement pour une batterie faible ; le niveau, sinon « faible ».
+    @Test func pastilleBatterie() {
+        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(niveau: 12)) == "12 %")
+        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(alerte: true)) == "faible")
+        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(niveau: 90, alerte: true)) == "90 %")
+        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(niveau: 52)) == nil)
+        #expect(GrapheCanvas.pastilleBatterie(nil) == nil)
+    }
 }

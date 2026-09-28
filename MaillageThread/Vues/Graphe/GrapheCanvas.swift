@@ -76,6 +76,7 @@ struct GrapheCanvas: View {
             let r = max(n.rayon * min(projection.echelle, 1.1), 3)
             let rect = CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)
             var libelle: String
+            var pastille: String?
             switch n.genre {
             case .centre, .routeur:
                 let couleur = palette.routeur(principale: principales.contains(n.zone))
@@ -99,6 +100,7 @@ struct GrapheCanvas: View {
                     }
                 }
                 libelle = a?.nom ?? n.id
+                pastille = Self.pastilleBatterie(a?.batterie)
                 if a?.endormi == true { libelle += " 🔋" }
                 if a?.etat == .sansAdresse || a?.etat == .disparu { libelle += " ⚠︎" }
             }
@@ -112,17 +114,66 @@ struct GrapheCanvas: View {
             // cotes, au-dessus ou au-dessous en haut et en bas ; sous le centre.
             let centreZone = centres[n.zone] ?? n.position
             let angle = atan2(n.position.y - centreZone.y, n.position.x - centreZone.x)
+            let place: (point: CGPoint, ancre: UnitPoint)
             if n.genre == .centre {
-                ctx.draw(texte, at: CGPoint(x: c.x, y: c.y + r + 4), anchor: .top)
+                place = (CGPoint(x: c.x, y: c.y + r + 4), .top)
             } else if cos(angle) > 0.35 {
-                ctx.draw(texte, at: CGPoint(x: c.x + r + 4, y: c.y), anchor: .leading)
+                place = (CGPoint(x: c.x + r + 4, y: c.y), .leading)
             } else if cos(angle) < -0.35 {
-                ctx.draw(texte, at: CGPoint(x: c.x - r - 4, y: c.y), anchor: .trailing)
+                place = (CGPoint(x: c.x - r - 4, y: c.y), .trailing)
             } else if sin(angle) < 0 {
-                ctx.draw(texte, at: CGPoint(x: c.x, y: c.y - r - 3), anchor: .bottom)
+                place = (CGPoint(x: c.x, y: c.y - r - 3), .bottom)
             } else {
-                ctx.draw(texte, at: CGPoint(x: c.x, y: c.y + r + 3), anchor: .top)
+                place = (CGPoint(x: c.x, y: c.y + r + 3), .top)
+            }
+            let resolu = ctx.resolve(texte)
+            ctx.draw(resolu, at: place.point, anchor: place.ancre)
+            if let pastille {
+                // Au bout du libelle, du cote oppose au noeud.
+                let t = resolu.measure(in: CGSize(width: 1000, height: 1000))
+                let cadre = CGRect(x: place.point.x - place.ancre.x * t.width, y: place.point.y - place.ancre.y * t.height,
+                                   width: t.width, height: t.height)
+                switch place.ancre {
+                case .leading:
+                    dessinerPastille(&ctx, pastille, at: CGPoint(x: cadre.maxX + 5, y: place.point.y), anchor: .leading)
+                case .trailing:
+                    dessinerPastille(&ctx, pastille, at: CGPoint(x: cadre.minX - 5, y: place.point.y), anchor: .trailing)
+                case .bottom:
+                    dessinerPastille(&ctx, pastille, at: CGPoint(x: place.point.x, y: cadre.minY - 3), anchor: .bottom)
+                default:
+                    dessinerPastille(&ctx, pastille, at: CGPoint(x: place.point.x, y: cadre.maxY + 3), anchor: .top)
+                }
             }
         }
+    }
+
+    /// Texte de la pastille d'une batterie faible : son niveau, sinon « faible » ;
+    /// nil si elle ne l'est pas.
+    static func pastilleBatterie(_ b: BatterieMaison?) -> String? {
+        guard let b, b.faible else { return nil }
+        return b.niveau.map { String(localized: "\($0) %") } ?? String(localized: "faible")
+    }
+
+    /// Pastille orange en surbrillance : petit triangle et texte, dans une capsule
+    /// qui luit. (Triangle et texte sont dessines a part : `Text + Text` est
+    /// deprecie, et une interpolation ferait une cle de traduction.)
+    private func dessinerPastille(_ ctx: inout GraphicsContext, _ texte: String, at p: CGPoint, anchor: UnitPoint) {
+        let police = Font.caption2.weight(.semibold)
+        let icone = ctx.resolve(Text(Image(systemName: "exclamationmark.triangle.fill")).font(police)
+            .foregroundStyle(palette.texteBatterieFaible))
+        let valeur = ctx.resolve(Text(verbatim: texte).font(police).foregroundStyle(palette.texteBatterieFaible))
+        let grand = CGSize(width: 1000, height: 1000)
+        let ti = icone.measure(in: grand)
+        let tv = valeur.measure(in: grand)
+        let taille = CGSize(width: 6 + ti.width + 3 + tv.width + 6, height: max(ti.height, tv.height) + 4)
+        let cadre = CGRect(origin: CGPoint(x: p.x - anchor.x * taille.width, y: p.y - anchor.y * taille.height),
+                           size: taille)
+        let capsule = Path(roundedRect: cadre, cornerRadius: taille.height / 2)
+        ctx.drawLayer { l in
+            l.addFilter(.shadow(color: palette.batterieFaible.opacity(0.9), radius: 6))
+            l.fill(capsule, with: .color(palette.batterieFaible))
+        }
+        ctx.draw(icone, at: CGPoint(x: cadre.minX + 6, y: cadre.midY), anchor: .leading)
+        ctx.draw(valeur, at: CGPoint(x: cadre.minX + 6 + ti.width + 3, y: cadre.midY), anchor: .leading)
     }
 }

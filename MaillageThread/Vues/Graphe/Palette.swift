@@ -17,6 +17,9 @@ struct Palette {
     var lien: Color { sombre ? Color.white.opacity(0.28) : Color.black.opacity(0.22) }
     var lienEclaire: Color { sombre ? Color.white.opacity(0.85) : Color.black.opacity(0.7) }
     var selection: Color { sombre ? .white : .black }
+    /// Pastille d'une batterie faible : orange vif en halo, texte brun fonce.
+    var batterieFaible: Color { Color(red: 1.0, green: 0.62, blue: 0.1) }
+    var texteBatterieFaible: Color { Color(red: 0.25, green: 0.12, blue: 0.0) }
 
     /// La principale en bleu, les autres en ambre, les sans-partition en gris.
     func zone(_ z: Disposition.Zone) -> Color {

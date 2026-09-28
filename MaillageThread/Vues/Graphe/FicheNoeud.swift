@@ -48,10 +48,20 @@ struct FicheNoeud: View {
                 Text(description).foregroundStyle(.secondary)
             }
             HStack(spacing: 6) {
-                Circle().fill(couleur(a, disparu: disparu)).frame(width: 8, height: 8)
+                PointEtat(couleur: couleur(a, disparu: disparu), pulse: !disparu && a.etat == .joignable)
                 Text(etat(a, disparu: disparu))
                 if let vu = vuLe(a, disparu: disparu) {
                     Text("· vu \(Self.relatif(vu, surveillance.maintenant))").foregroundStyle(.secondary)
+                }
+            }
+            if let b = maison?.batterie {
+                HStack(spacing: 6) {
+                    Image(systemName: Self.symboleBatterie(b))
+                        .foregroundStyle(b.faible ? Color.orange : b.charge == .enCharge ? Color.green : Color.primary)
+                    Text(Self.ligneBatterie(b)).foregroundStyle(b.faible ? Color.orange : Color.primary)
+                    if let releve = surveillance.noms.maison?.date {
+                        Text("· relevé \(Self.relatif(releve, surveillance.maintenant))").foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -75,6 +85,37 @@ struct FicheNoeud: View {
         let firmware = maison?.firmware.flatMap { $0.isEmpty ? nil : String(localized: "firmware \($0)") }
         return [maison?.piece, maison?.fabricant ?? modeleHomeKit, maison?.modele, firmware]
             .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// Niveau, puis l'etat de charge ; faible, « batterie faible » (et « en
+    /// charge » seulement) ; sans niveau, « batterie OK » ou « batterie faible ».
+    static func ligneBatterie(_ b: BatterieMaison) -> String {
+        var parties: [String] = []
+        if let n = b.niveau {
+            parties.append(String(localized: "\(n) %"))
+            if b.faible { parties.append(String(localized: "batterie faible")) }
+        } else {
+            parties.append(b.faible ? String(localized: "batterie faible") : String(localized: "batterie OK"))
+        }
+        switch b.charge {
+        case .enCharge: parties.append(String(localized: "en charge"))
+        case .horsCharge where !b.faible: parties.append(String(localized: "sur batterie"))
+        case .nonRechargeable where !b.faible: parties.append(String(localized: "non rechargeable"))
+        default: break
+        }
+        return parties.joined(separator: " · ")
+    }
+
+    /// Triangle si faible, eclair en charge, sinon le niveau par quart.
+    static func symboleBatterie(_ b: BatterieMaison) -> String {
+        if b.faible { return "exclamationmark.triangle.fill" }
+        if b.charge == .enCharge { return "battery.100percent.bolt" }
+        switch b.niveau ?? 100 {
+        case ..<38: return "battery.25percent"
+        case ..<63: return "battery.50percent"
+        case ..<88: return "battery.75percent"
+        default: return "battery.100percent"
+        }
     }
 
     private func etat(_ a: Appareil, disparu: Bool) -> String {
@@ -183,5 +224,27 @@ struct FicheNoeud: View {
                     .lineLimit(1)
             }
         }
+    }
+}
+
+/// Point d'etat de la fiche. Joignable, il pulse doucement : un halo s'elargit
+/// et s'efface toutes les 2 s, sauf si « Reduire les animations » est active.
+private struct PointEtat: View {
+    let couleur: Color
+    let pulse: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduire
+
+    var body: some View {
+        Circle().fill(couleur).frame(width: 8, height: 8)
+            .background {
+                if pulse && !reduire {
+                    Circle().fill(couleur)
+                        .phaseAnimator([false, true]) { halo, etendu in
+                            halo.scaleEffect(etendu ? 2.6 : 1).opacity(etendu ? 0 : 0.55)
+                        } animation: { etendu in
+                            etendu ? .easeOut(duration: 2) : nil
+                        }
+                }
+            }
     }
 }
