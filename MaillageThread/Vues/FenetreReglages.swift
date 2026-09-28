@@ -79,7 +79,14 @@ struct FenetreReglages: View {
     }
 
     private func enregistrerCapture() {
-        guard let donnees = try? surveillance.captureJSON() else { return }
+        let donnees: Data
+        do {
+            guard let d = try surveillance.captureJSON() else { return }
+            donnees = d
+        } catch {
+            messageCapture = error.localizedDescription
+            return
+        }
         let panneau = NSSavePanel()
         panneau.allowedContentTypes = [.json]
         panneau.nameFieldStringValue = "capture-maillage.json"
