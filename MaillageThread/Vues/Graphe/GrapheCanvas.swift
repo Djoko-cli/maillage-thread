@@ -101,7 +101,7 @@ struct GrapheCanvas: View {
                 }
                 libelle = a?.nom ?? n.id
                 pastille = Self.pastilleBatterie(a?.batterie)
-                if a?.endormi == true { libelle += " 🔋" }
+                if a?.endormi == true { libelle += " ☾" }
                 if a?.etat == .sansAdresse || a?.etat == .disparu { libelle += " ⚠︎" }
             }
             if n.id == selection {

@@ -136,7 +136,7 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   anneau intérieur ; appareils sur un anneau extérieur (triés par pièce puis
   par nom) ; **pointillés pâles vers le chef** (ou le centre de la partition),
   légende « rattachement, pas un lien radio » ; états : vert joignable, rouge
-  sans adresse/disparu, gris inconnu, 🔋 endormi ; batterie faible : pastille
+  sans adresse/disparu, gris inconnu, ☾ endormi (🔋 jusqu'au 28/09) ; batterie faible : pastille
   orange en surbrillance au bout du nom (triangle et niveau, ou « faible ») ;
   un appareil disparu reste
   en rouge à sa place jusqu'à son retour ou au prochain lancement ; zoom et
