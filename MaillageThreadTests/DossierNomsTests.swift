@@ -155,6 +155,36 @@ struct DossierNomsTests {
                 == DossierNoms.ErreurNoms.illisible("x").errorDescription)
     }
 
+    /// Relance a l'ouverture du graphe : releve absent ou de plus de 15 min, et
+    /// pas de demande dans les 15 dernieres minutes (pas de relance en boucle).
+    @Test func aRafraichir() {
+        let t = Date(timeIntervalSince1970: 1_790_000_000)
+        #expect(DossierNoms.aRafraichir(releve: nil, demande: nil, maintenant: t))
+        #expect(!DossierNoms.aRafraichir(releve: t.addingTimeInterval(-14 * 60), demande: nil, maintenant: t))
+        #expect(DossierNoms.aRafraichir(releve: t.addingTimeInterval(-16 * 60), demande: nil, maintenant: t))
+        #expect(!DossierNoms.aRafraichir(releve: t.addingTimeInterval(-3600), demande: t.addingTimeInterval(-60),
+                                         maintenant: t), "demande recente : le passeur ne s'est peut-etre pas lance")
+        #expect(DossierNoms.aRafraichir(releve: t.addingTimeInterval(-3600), demande: t.addingTimeInterval(-16 * 60),
+                                        maintenant: t))
+    }
+
+    /// La demande deposee avant de lancer le passeur se relit dans le dossier.
+    @Test func demandeDeposee() throws {
+        let dossier = try Self.dossierTemporaire()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let t = Date(timeIntervalSince1970: 1_790_000_000)
+        try DossierNoms.deposerDemande(dans: dossier, date: t)
+        let lue = try DemandePasseur.lire(Data(contentsOf: dossier.appendingPathComponent(DemandePasseur.fichier)))
+        #expect(lue == DemandePasseur(date: t))
+    }
+
+    /// Sans memoire (demo, tests) : l'ouverture du graphe ne lance jamais le passeur.
+    @Test func pasDeRafraichissementEnDemo() {
+        let d = DossierNoms(cache: nil)
+        d.rafraichirSiAncien()
+        #expect(d.derniereDemande == nil)
+    }
+
     /// Mode demo (sans memoire) : ni preferences ni signet, meme valide.
     @Test func modeDemo() throws {
         let (preferences, domaine) = try Self.preferences()

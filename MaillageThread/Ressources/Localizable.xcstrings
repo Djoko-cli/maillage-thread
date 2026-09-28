@@ -1409,18 +1409,18 @@
         }
       }
     },
-    "Rafraîchir les noms de Maison" : {
+    "Rafraîchir depuis Maison" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Refresh Home names"
+            "value" : "Refresh from Home"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Rafraîchir les noms de Maison"
+            "value" : "Rafraîchir depuis Maison"
           }
         }
       }

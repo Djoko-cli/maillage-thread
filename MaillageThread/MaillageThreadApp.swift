@@ -55,6 +55,7 @@ struct MaillageThreadApp: App {
         Window("Maillage Thread", id: "graphe") {
             FenetreGraphe()
                 .environment(surveillance)
+                .environment(nomsMaison)
         }
         .defaultSize(width: 1100, height: 760)
         .defaultLaunchBehavior(.suppressed)

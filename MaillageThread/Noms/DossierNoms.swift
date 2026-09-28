@@ -27,6 +27,8 @@ final class DossierNoms {
     nonisolated static let idPasseur = "fr.djoko.maillage.passeur"
     /// Profil gratuit du passeur : 7 jours ; au-dela, il faut le recompiler.
     nonisolated static let validite: TimeInterval = 7 * 24 * 3600
+    /// Plus recent, un releve suffit : l'ouverture du graphe ne relance pas le passeur.
+    nonisolated static let fraicheur: TimeInterval = 15 * 60
 
     private(set) var dossier: URL?
     /// Derniers noms lus avec succes.
@@ -37,6 +39,8 @@ final class DossierNoms {
     private(set) var probleme: String?
     /// Appele a chaque changement des noms retenus.
     @ObservationIgnored var surNoms: ((NomsMaison?) -> Void)?
+    /// Dernier lancement du passeur par l'app.
+    @ObservationIgnored private(set) var derniereDemande: Date?
 
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let cache: URL?
@@ -122,17 +126,52 @@ final class DossierNoms {
     }
 
     /// Lance le passeur (installe par outils/passeur.sh) ; il ecrit puis se ferme.
+    /// En arriere-plan : une demande deposee dans le dossier lui dit de se
+    /// fermer aussitot, sans compte a rebours ; sa fenetre ne fait que passer
+    /// derriere les autres.
     func lancerPasseur() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.idPasseur) else {
             probleme = String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
             return
         }
-        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, erreur in
+        derniereDemande = .now
+        if let dossier {
+            let acces = dossier.startAccessingSecurityScopedResource()
+            defer { if acces { dossier.stopAccessingSecurityScopedResource() } }
+            // Sans demande, le passeur ecrit quand meme, puis attend 10 s avant de se fermer.
+            try? Self.deposerDemande(dans: dossier, date: .now)
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.addsToRecentItems = false
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [weak self] _, erreur in
             guard let erreur else { return }
             // Cause la plus probable apres quelques jours : le profil gratuit a expire.
             let m = String(localized: "\(erreur.localizedDescription) (profil de 7 jours expiré ? relance outils/passeur.sh)")
             Task { @MainActor in self?.probleme = m }
         }
+    }
+
+    /// A l'ouverture du graphe, puis toutes les heures tant qu'il reste ouvert :
+    /// relance le passeur si le dernier releve a plus de 15 min. Jamais sans
+    /// memoire (mode demo, tests) ni sans dossier.
+    func rafraichirSiAncien(maintenant: Date = .now) {
+        guard cache != nil, dossier != nil,
+              Self.aRafraichir(releve: noms?.date, demande: derniereDemande, maintenant: maintenant) else { return }
+        lancerPasseur()
+    }
+
+    /// Releve absent ou de plus de 15 min, et pas de demande dans les 15
+    /// dernieres minutes : un passeur qui ne se lance pas n'est pas relance en boucle.
+    nonisolated static func aRafraichir(releve: Date?, demande: Date?, maintenant: Date) -> Bool {
+        func ancien(_ d: Date?) -> Bool { d.map { maintenant.timeIntervalSince($0) > fraicheur } ?? true }
+        return ancien(releve) && ancien(demande)
+    }
+
+    /// Demande lue par le passeur a l'ecriture de `noms.json` (acces au dossier deja ouvert).
+    nonisolated static func deposerDemande(dans dossier: URL, date: Date) throws {
+        try DemandePasseur(date: date).donnees().write(to: dossier.appendingPathComponent(DemandePasseur.fichier),
+                                                       options: .atomic)
     }
 
     /// Un releve reussi remplace les noms ; un echec les garde et dit pourquoi,

@@ -3,7 +3,9 @@ import SwiftUI
 
 /// Passeur des noms de Maison : app iOS lancee sur le Mac (« concue pour
 /// iPad »), seule forme qui ait HomeKit avec une equipe gratuite. Elle lit
-/// Maison, ecrit `noms.json` dans le dossier choisi une fois, puis se ferme.
+/// Maison (noms, pieces, batteries), ecrit `noms.json` dans le dossier choisi
+/// une fois, puis se ferme : aussitot si l'app l'a lancee (demande deposee
+/// dans le dossier), sinon apres 10 s.
 @main
 struct PasseurApp: App {
     @State private var passeur = Passeur()
@@ -75,6 +77,13 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
     @ObservationIgnored private var maisonChargee = false
     /// Delai de secours : sans reponse de Maison, le dire plutot qu'attendre sans fin.
     static let delaiMaison: Duration = .seconds(30)
+    /// Lectures des batteries : Maison repond depuis son cache (0,2 s pour 78
+    /// valeurs le 28/09) ; au-dela, le releve part avec les valeurs deja connues.
+    static let delaiLectures: Duration = .seconds(5)
+    /// Lectures en cours : a la fin, `apresLectures` ecrit le releve.
+    @ObservationIgnored private var cycle = 0
+    @ObservationIgnored private var lecturesRestantes = 0
+    @ObservationIgnored private var apresLectures: (@MainActor () -> Void)?
 
     func demarrer() {
         guard gestionnaire == nil else { return }
@@ -124,14 +133,67 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
             ecrire(NomsMaison(date: .now, statut: .erreur, message: "Aucun domicile dans Maison"))
             return
         }
+        // Un releve a la fois : les deux rappels de HomeKit peuvent arriver pendant les lectures.
+        guard apresLectures == nil else { return }
+        let caracteristiques = manager.homes.flatMap(\.accessories).compactMap(Self.batterie)
+            .flatMap { [$0.niveau, $0.charge, $0.alerte].compactMap { $0 } }
+        lire(caracteristiques) { self.ecrireReleve(manager) }
+    }
+
+    private func ecrireReleve(_ manager: HMHomeManager) {
         let accessoires = manager.homes.flatMap(\.accessories).map { a in
-            AccessoireMaison(nom: a.name, piece: a.room?.name, fabricant: a.manufacturer, modele: a.model,
-                             firmware: a.firmwareVersion, categorie: a.category.localizedDescription,
-                             noeudMatter: AccessoireMaison.noeud(a.matterNodeID),
-                             pont: a.category.categoryType == HMAccessoryCategoryTypeBridge ? true : nil)
+            let b = Self.batterie(a)
+            return AccessoireMaison(nom: a.name, piece: a.room?.name, fabricant: a.manufacturer, modele: a.model,
+                                    firmware: a.firmwareVersion, categorie: a.category.localizedDescription,
+                                    noeudMatter: AccessoireMaison.noeud(a.matterNodeID),
+                                    pont: a.category.categoryType == HMAccessoryCategoryTypeBridge ? true : nil,
+                                    batterie: b.flatMap {
+                                        BatterieMaison.depuisHomeKit(niveau: $0.niveau?.value, charge: $0.charge?.value,
+                                                                     alerte: $0.alerte?.value)
+                                    })
         }.sorted { $0.nom < $1.nom }
         let domicile = manager.homes.map(\.name).joined(separator: " + ")
         ecrire(NomsMaison(date: .now, statut: .ok, domicile: domicile.isEmpty ? nil : domicile, accessoires: accessoires))
+    }
+
+    /// Service Batterie d'un accessoire : niveau, etat de charge, alerte.
+    private static func batterie(_ a: HMAccessory)
+        -> (niveau: HMCharacteristic?, charge: HMCharacteristic?, alerte: HMCharacteristic?)? {
+        guard let s = a.services.first(where: { $0.serviceType == HMServiceTypeBattery }) else { return nil }
+        func c(_ type: String) -> HMCharacteristic? { s.characteristics.first { $0.characteristicType == type } }
+        return (c(HMCharacteristicTypeBatteryLevel), c(HMCharacteristicTypeChargingState),
+                c(HMCharacteristicTypeStatusLowBattery))
+    }
+
+    /// Lit les valeurs, puis appelle `fin` une fois : a la derniere lecture ou au
+    /// delai. (Appels a rappel hors d'une fonction async : pas d'avertissement.)
+    private func lire(_ caracteristiques: [HMCharacteristic], puis fin: @escaping @MainActor () -> Void) {
+        cycle += 1
+        let n = cycle
+        apresLectures = fin
+        lecturesRestantes = caracteristiques.count
+        for c in caracteristiques {
+            c.readValue { @Sendable _ in
+                Task { @MainActor in self.lectureFinie(n) }
+            }
+        }
+        Task {
+            try? await Task.sleep(for: Self.delaiLectures)
+            self.terminerLectures(n)
+        }
+        if caracteristiques.isEmpty { terminerLectures(n) }
+    }
+
+    private func lectureFinie(_ n: Int) {
+        guard n == cycle else { return }
+        lecturesRestantes -= 1
+        if lecturesRestantes == 0 { terminerLectures(n) }
+    }
+
+    private func terminerLectures(_ n: Int) {
+        guard n == cycle, let fin = apresLectures else { return }
+        apresLectures = nil
+        fin()
     }
 
     func dossierChoisi(_ r: Result<URL, any Error>) {
@@ -178,12 +240,23 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
             etat = n.statut == .ok
                 ? "\(n.accessoires.count) accessoires écrits dans \(Self.fichier)."
                 : (n.message ?? "Accès à Maison refusé.")
+            // Lance en arriere-plan par l'app : se fermer aussitot.
+            if Self.retirerDemande(dans: dossier) { exit(0) }
             reprendreFermeture()
         } catch {
             enAttente = n
             dossierManquant = true
             etat = "Écriture impossible : \(error.localizedDescription)"
         }
+    }
+
+    /// Demande deposee par l'app avant de lancer le passeur : retiree ; vrai si
+    /// elle est recente (plus ancienne, c'est un reste : le passeur a ete ouvert a la main).
+    private static func retirerDemande(dans dossier: URL) -> Bool {
+        let url = dossier.appendingPathComponent(DemandePasseur.fichier)
+        guard let donnees = try? Data(contentsOf: url) else { return false }
+        try? FileManager.default.removeItem(at: url)
+        return (try? DemandePasseur.lire(donnees))?.estRecente(.now) == true
     }
 
     /// Le compte a rebours s'arrete pendant le choix d'un autre dossier.
