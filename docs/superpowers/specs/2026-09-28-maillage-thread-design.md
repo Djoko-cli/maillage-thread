@@ -93,8 +93,10 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   préfixe des adresses des appareils.
 - **Appareils** : `_matter._tcp` (une instance par fabrique,
   `<fabrique>-<nœud>`, regroupées par nom d'hôte = un appareil à N
-  fabriques ; `ICD`, ou `SII` d'au moins 5 s ⇒ endormi : presque tous les
-  appareils Thread annoncent `SII`, le pont Halo, alimenté, annonce 2000) ;
+  fabriques ; `ICD`, ou `SII` de plus de 2 s ⇒ endormi : presque tous les
+  appareils Thread annoncent `SII` ; relevé du 28/09 : au plus 2000 ms sur
+  secteur, dont le pont Halo à 2000, et au moins 2800 ms sur pile : Zemismart
+  2800, Eve Motion 3300, Nuki 3500, Aqara 6000 à 7000) ;
   `_hap._udp` (accessoires HomeKit sur
   Thread, avec leur nom). Adresses : dans un préfixe OMR ⇒ Thread, dans la
   partition du préfixe ; réseau local ⇒ appareil IP (liste à part) ; aucune ⇒

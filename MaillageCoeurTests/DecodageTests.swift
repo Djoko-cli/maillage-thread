@@ -81,6 +81,8 @@ struct DecodageTests {
 
     @Test func proprietesMatter() {
         #expect(ProprietesMatter(txt: ChampsTXT(["SII": Data("6000".utf8)])).endormi, "1E5019DAC2638F92, 28/09")
+        #expect(ProprietesMatter(txt: ChampsTXT(["SII": Data("3500".utf8)])).endormi, "Nuki, sur pile, 28/09")
+        #expect(ProprietesMatter(txt: ChampsTXT(["SII": Data("2800".utf8)])).endormi, "Zemismart, sur pile, 28/09")
         #expect(!ProprietesMatter(txt: ChampsTXT(["SII": Data("2000".utf8), "SAI": Data("2000".utf8)])).endormi,
                 "pont Halo, alimente")
         #expect(!ProprietesMatter(txt: ChampsTXT(["SII": Data("300".utf8)])).endormi)

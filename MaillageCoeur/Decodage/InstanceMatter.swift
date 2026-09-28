@@ -37,8 +37,10 @@ public struct ProprietesMatter: Hashable, Sendable {
         icd = txt.entier("icd")
     }
 
-    /// Endormi (appareil a faible consommation) : ICD annonce, ou repos d'au
-    /// moins 5 s. SII seul ne suffit pas : presque tous les appareils Thread
-    /// l'annoncent (le pont Halo, alimente, annonce 2000 ; releve du 28/09).
-    public var endormi: Bool { icd != nil || (sii ?? 0) >= 5000 }
+    /// Endormi (appareil a faible consommation) : ICD annonce, ou repos de plus
+    /// de 2 s. Presque tous les appareils Thread annoncent SII ; releve du
+    /// 28/09 : sur secteur, au plus 2000 ms (le pont Halo, exactement 2000) ;
+    /// sur pile, au moins 2800 ms (Zemismart 2800, Eve Motion 3300, Nuki 3500,
+    /// Aqara 6000 a 7000).
+    public var endormi: Bool { icd != nil || (sii ?? 0) > 2000 }
 }
