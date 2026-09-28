@@ -241,6 +241,22 @@
         }
       }
     },
+    "Accès à Maison refusé au passeur." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The name bridge was denied access to Home."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accès à Maison refusé au passeur."
+          }
+        }
+      }
+    },
     "Afficher le journal dans le Finder" : {
       "localizations" : {
         "en" : {
@@ -625,6 +641,22 @@
         }
       }
     },
+    "Dossier où le passeur écrit noms.json, hors iCloud et hors du dépôt (par exemple « Maillage Thread » dans ton dossier personnel)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder where the name bridge writes noms.json, outside iCloud and the repository (for example \"Maillage Thread\" in your home folder)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dossier où le passeur écrit noms.json, hors iCloud et hors du dépôt (par exemple « Maillage Thread » dans ton dossier personnel)."
+          }
+        }
+      }
+    },
     "Enregistrer" : {
       "localizations" : {
         "en" : {
@@ -737,6 +769,22 @@
         }
       }
     },
+    "HomeKit indisponible pour le passeur." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomeKit is unavailable to the name bridge."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HomeKit indisponible pour le passeur."
+          }
+        }
+      }
+    },
     "Journal" : {
       "localizations" : {
         "en" : {
@@ -797,6 +845,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Langue"
+          }
+        }
+      }
+    },
+    "Le passeur a échoué." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The name bridge failed."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le passeur a échoué."
           }
         }
       }
@@ -1053,6 +1117,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Partition %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Pas encore de noms.json dans ce dossier : lance le passeur." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No noms.json in this folder yet: run the name bridge."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pas encore de noms.json dans ce dossier : lance le passeur."
+          }
+        }
+      }
+    },
+    "Passeur Noms introuvable : lance outils/passeur.sh." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms not found: run outils/passeur.sh."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms introuvable : lance outils/passeur.sh."
           }
         }
       }
@@ -1869,6 +1965,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "mode démo"
+          }
+        }
+      }
+    },
+    "noms.json illisible : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unreadable noms.json: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "noms.json illisible : %@"
           }
         }
       }
