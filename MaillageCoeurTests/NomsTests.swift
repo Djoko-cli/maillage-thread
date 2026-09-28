@@ -36,6 +36,20 @@ struct NomsTests {
         #expect(ResolveurNoms(maison: maison).nom(appareil: halo, fabriqueApple: f) == "Lampe 1")
     }
 
+    /// Plusieurs ponts sur un meme noeud : le premier par nom, quel que soit
+    /// l'ordre du fichier.
+    @Test func plusieursPonts() throws {
+        let halo = try #require(instantane.appareil("561F9A6463953778"))
+        let f = "309BEA1CCA0C1569"
+        let noeud = try #require(halo.instances.first { $0.fabrique == f }?.noeud)
+        let maison = NomsMaison(date: Date(timeIntervalSince1970: 1_790_000_000), accessoires: [
+            AccessoireMaison(nom: "Pont B", noeudMatter: noeud, pont: true),
+            AccessoireMaison(nom: "Lampe", noeudMatter: noeud),
+            AccessoireMaison(nom: "Pont A", noeudMatter: noeud, pont: true),
+        ])
+        #expect(ResolveurNoms(maison: maison).nom(appareil: halo, fabriqueApple: f) == "Pont A")
+    }
+
     /// Un `matterNodeID` a 0 (accessoire non Matter) n'identifie personne.
     @Test func noeudNul() throws {
         var b = Banc()

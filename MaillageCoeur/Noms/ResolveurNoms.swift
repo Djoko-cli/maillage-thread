@@ -29,12 +29,13 @@ public struct ResolveurNoms: Hashable, Sendable {
 
     /// Accessoire de Maison d'un appareil (par son noeud sur la fabrique d'Apple).
     /// Un pont porte plusieurs accessoires sur un seul noeud : le noeud prend
-    /// le nom du pont, sinon du premier par nom.
+    /// le nom du pont (du premier par nom s'il y en a plusieurs), sinon du
+    /// premier accessoire par nom ; l'ordre du fichier ne compte pas.
     public func accessoire(de a: Appareil, fabriqueApple f: String?) -> AccessoireMaison? {
         guard let f, let maison, let noeud = a.instances.first(where: { $0.fabrique == f })?.noeud,
               noeud != Self.noeudNul else { return nil }
         let candidats = maison.accessoires.filter { $0.noeudMatter?.uppercased() == noeud }
-        return candidats.first { $0.pont == true } ?? candidats.min { $0.nom < $1.nom }
+        return candidats.filter { $0.pont == true }.min { $0.nom < $1.nom } ?? candidats.min { $0.nom < $1.nom }
     }
 
     public func nom(appareil a: Appareil, fabriqueApple f: String?) -> String {

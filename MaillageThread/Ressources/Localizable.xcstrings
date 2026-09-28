@@ -742,7 +742,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Folder where the name bridge writes noms.json, outside iCloud and the repository (for example \"Maillage Thread\" in your home folder)."
+            "value" : "Folder where Passeur Noms writes noms.json, outside iCloud and the repository (for example “Maillage Thread” in your home folder)."
           }
         },
         "fr" : {
@@ -870,7 +870,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "HomeKit is unavailable to the name bridge."
+            "value" : "HomeKit is unavailable to Passeur Noms."
           }
         },
         "fr" : {
@@ -966,7 +966,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The name bridge failed."
+            "value" : "Passeur Noms failed."
           }
         },
         "fr" : {
@@ -1286,7 +1286,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No noms.json in this folder yet: run the name bridge."
+            "value" : "No noms.json in this folder yet: run Passeur Noms."
           }
         },
         "fr" : {
