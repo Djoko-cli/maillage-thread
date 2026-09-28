@@ -55,7 +55,11 @@ public struct Partition: Hashable, Sendable, Identifiable {
     public let id: String
     /// Centre d'abord (chef, sinon BBR primaire, sinon le premier par nom), puis par nom.
     public let routeurs: [RouteurBordure]
+    /// Prefixes OMR attribues a la partition, tries.
     public let prefixes: [PrefixeIPv6]
+    /// Prefixes que la partition revendique et qu'au moins une autre revendique
+    /// aussi, tries : sur celle a qui le prefixe est attribue comme sur les autres.
+    public let prefixesPartages: [PrefixeIPv6]
     /// Identifiants des appareils Thread de la partition, tries.
     public let appareils: [String]
     public let estPrincipale: Bool
@@ -104,5 +108,12 @@ public struct Instantane: Hashable, Sendable {
 
     public func reseau(_ id: String) -> Reseau? {
         reseaux.first { $0.id == id }
+    }
+
+    /// La partition de l'appareil lui vient d'un prefixe partage (une autre
+    /// partition le revendique aussi) : il peut aussi bien etre dans l'autre.
+    public func partitionIncertaine(_ a: Appareil) -> Bool {
+        guard let p = a.prefixe, let id = a.partition, let r = a.idReseau.flatMap({ reseau($0) }) else { return false }
+        return r.partitions.first { $0.id == id }?.prefixesPartages.contains(p) ?? false
     }
 }

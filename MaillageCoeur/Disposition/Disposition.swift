@@ -56,7 +56,14 @@ public struct Disposition: Hashable, Sendable {
         public var centre: Point2D
         public var rayon: Double
         public var principale: Bool
+        /// Prefixes attribues a la partition.
         public var prefixes: [PrefixeIPv6]
+        /// Prefixes partages de la partition (`Partition.prefixesPartages`).
+        public var prefixesPartages: [PrefixeIPv6]
+
+        /// Prefixes du titre : ceux de la partition, plus les partages qu'elle
+        /// revendique sans les avoir eus ; tries.
+        public var prefixesTitre: [PrefixeIPv6] { Set(prefixes + prefixesPartages).sorted() }
     }
 
     public struct Noeud: Hashable, Sendable, Identifiable {
@@ -114,7 +121,8 @@ public struct Disposition: Hashable, Sendable {
 
         for (k, p) in reseau.partitions.enumerated() {
             let centre = centres[k]
-            zones.append(Zone(id: p.id, centre: centre, rayon: rayons[k], principale: p.estPrincipale, prefixes: p.prefixes))
+            zones.append(Zone(id: p.id, centre: centre, rayon: rayons[k], principale: p.estPrincipale, prefixes: p.prefixes,
+                              prefixesPartages: p.prefixesPartages))
             guard let premier = p.routeurs.first else { continue }
             noeuds.append(Noeud(id: premier.instance, genre: .centre, zone: p.id, position: centre, rayon: 22))
             let autres = Array(p.routeurs.dropFirst())
@@ -137,7 +145,7 @@ public struct Disposition: Hashable, Sendable {
             let rAnneau = max(Self.rayonZoneSeule, Double(orphelins.count) * Self.arcAppareil / (2 * .pi))
             let rayon = rAnneau + Self.marge
             let centre = Point2D(0, r0 + Self.ecart + rayon)
-            zones.append(Zone(id: "", centre: centre, rayon: rayon, principale: false, prefixes: []))
+            zones.append(Zone(id: "", centre: centre, rayon: rayon, principale: false, prefixes: [], prefixesPartages: []))
             for (j, a) in orphelins.enumerated() {
                 noeuds.append(Noeud(id: a.id, genre: .appareil, zone: "",
                                     position: Self.surAnneau(centre, rAnneau, j, orphelins.count), rayon: 7))

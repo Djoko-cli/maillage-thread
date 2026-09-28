@@ -1,6 +1,22 @@
 {
   "sourceLanguage" : "fr",
   "strings" : {
+    "%@ (partagé)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (shared)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (partagé)"
+          }
+        }
+      }
+    },
     "%@ : nouvelle adresse de lien (redémarrage probable)" : {
       "localizations" : {
         "en" : {
@@ -957,6 +973,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Partition %@"
+          }
+        }
+      }
+    },
+    "Partition %@ (incertaine : préfixe partagé)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Partition %@ (uncertain: shared prefix)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Partition %@ (incertaine : préfixe partagé)"
           }
         }
       }

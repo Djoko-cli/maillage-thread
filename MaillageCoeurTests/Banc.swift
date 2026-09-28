@@ -67,3 +67,15 @@ struct Banc {
                  routes: routes, prefixesLocaux: locaux)
     }
 }
+
+/// Captures reelles enregistrees par l'app, lues dans le depot (`docs/releves/2026-09-28/`).
+enum Captures {
+    static let dossier = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()  // MaillageCoeurTests
+        .deletingLastPathComponent()  // racine du depot
+        .appendingPathComponent("docs/releves/2026-09-28")
+
+    static func annonces(_ fichier: String) throws -> Annonces {
+        try CodageJSON.decodeur().decode(Annonces.self, from: Data(contentsOf: dossier.appendingPathComponent(fichier)))
+    }
+}

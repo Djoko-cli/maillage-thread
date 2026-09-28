@@ -1,4 +1,5 @@
 {
+  "%@ (partagé)": "%@ (shared)",
   "%@ : nouvelle adresse de lien (redémarrage probable)": "%@: new link-local address (probable restart)",
   "%@ : rôle %@ → %@": "%1$@: role %2$@ → %3$@",
   "%@ a disparu": "%@ disappeared",
@@ -58,6 +59,7 @@
   "Ouvrir les Réglages Système": "Open System Settings",
   "Ouvrir à la connexion": "Open at Login",
   "Partition %@": "Partition %@",
+  "Partition %@ (incertaine : préfixe partagé)": "Partition %@ (uncertain: shared prefix)",
   "Partition %@ · %@": "Partition %1$@ · %2$@",
   "Préfixe %@ retiré": "Prefix %@ withdrawn",
   "Préfixes": "Prefixes",

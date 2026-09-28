@@ -36,7 +36,10 @@ struct GrapheCanvas: View {
                                                        center: c, startRadius: 0, endRadius: r))
                 ctx.stroke(cercle, with: .color(couleur.opacity(0.45)), lineWidth: 1)
             }
-            let prefixes = z.prefixes.map(\.description).joined(separator: ", ")
+            // Un prefixe revendique par plusieurs partitions est marque, sur chacune.
+            let prefixes = z.prefixesTitre.map { p in
+                z.prefixesPartages.contains(p) ? String(localized: "\(p.description) (partagé)") : p.description
+            }.joined(separator: ", ")
             let titre: String
             if z.id.isEmpty {
                 titre = String(localized: "Sans partition connue")

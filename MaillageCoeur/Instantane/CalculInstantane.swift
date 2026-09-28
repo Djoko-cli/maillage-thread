@@ -26,10 +26,14 @@ extension Instantane {
     /// Calcule l'instantane a partir des annonces : routeurs groupes en
     /// reseaux (`xp`) et partitions (`pt`), prefixes OMR attribues, appareils places.
     ///
-    /// Prefixe OMR -> partition, dans l'ordre : champ `omr` d'un routeur ; route
-    /// du Mac dont la passerelle est une adresse lien-local d'un routeur ; enfin,
-    /// par elimination, si un seul reseau est visible : il n'a qu'une partition,
-    /// ou une seule de ses partitions n'a pas de prefixe et un seul prefixe reste.
+    /// Prefixe OMR -> partition. Chaque partition qui le revendique compte : par
+    /// le champ `omr` d'un de ses routeurs, ou par une route du Mac dont la
+    /// passerelle est une adresse lien-local d'un de ses routeurs. Une seule : il
+    /// est a elle. Plusieurs : il est partage (`Partition.prefixesPartages`, sur
+    /// chacune) et va a celle qui a le plus de routeurs de bordure, puis a celle
+    /// qui a un chef connu, puis au plus petit identifiant. Enfin, par
+    /// elimination, si un seul reseau est visible : il n'a qu'une partition, ou
+    /// une seule de ses partitions n'a pas de prefixe et un seul prefixe reste.
     /// Sinon le prefixe reste sans partition (ses appareils : etat inconnu).
     /// Les prefixes du reseau local (interfaces du Mac, prefixe tire de `xp`) ne
     /// sont jamais des prefixes OMR.
@@ -41,19 +45,39 @@ extension Instantane {
         var locaux = Set(a.prefixesLocaux.compactMap { PrefixeIPv6($0) })
         locaux.formUnion(routeurs.compactMap(\.prefixeReseauLocal))
 
-        // 1. Prefixes OMR : champ omr, puis routes du Mac.
-        var attribution: [PrefixeIPv6: ClePartition] = [:]
+        // 1. Prefixes OMR : toutes les revendications (champ omr, routes du Mac),
+        //    puis une partition par prefixe ; revendique par plusieurs, il est partage.
+        var revendications: [PrefixeIPv6: Set<ClePartition>] = [:]
         for r in routeurs {
-            if let p = r.prefixeOMR { attribution[p] = cleDe(r) }
+            if let p = r.prefixeOMR { revendications[p, default: []].insert(cleDe(r)) }
         }
         var parLien: [AdresseIPv6: RouteurBordure] = [:]
         for r in routeurs {
             for l in r.adressesLien where parLien[l] == nil { parLien[l] = r }
         }
         for route in a.routes {
-            guard let p = PrefixeIPv6(route.prefixe), attribution[p] == nil, !locaux.contains(p),
+            guard let p = PrefixeIPv6(route.prefixe), !locaux.contains(p),
                   let g = route.passerelle.flatMap({ AdresseIPv6($0) }), let r = parLien[g] else { continue }
-            attribution[p] = cleDe(r)
+            revendications[p, default: []].insert(cleDe(r))
+        }
+        let routeursDe = Dictionary(grouping: routeurs, by: cleDe)
+        // Preferee : le plus de routeurs de bordure, puis un chef connu, puis le plus petit identifiant.
+        func avant(_ c1: ClePartition, _ c2: ClePartition) -> Bool {
+            let n1 = routeursDe[c1]?.count ?? 0
+            let n2 = routeursDe[c2]?.count ?? 0
+            if n1 != n2 { return n1 > n2 }
+            let chef1 = routeursDe[c1]?.contains { $0.role == .chef } ?? false
+            let chef2 = routeursDe[c2]?.contains { $0.role == .chef } ?? false
+            if chef1 != chef2 { return chef1 }
+            return (c1.partition, c1.reseau) < (c2.partition, c2.reseau)
+        }
+        var attribution: [PrefixeIPv6: ClePartition] = [:]
+        var partages: [ClePartition: [PrefixeIPv6]] = [:]
+        for (p, cles) in revendications {
+            attribution[p] = cles.min(by: avant)
+            if cles.count > 1 {
+                for c in cles { partages[c, default: []].append(p) }
+            }
         }
 
         // 2. Appareils : instances Matter et accessoires HAP regroupes par hote.
@@ -134,6 +158,7 @@ extension Instantane {
             let parts = groupes.enumerated().map { i, g in
                 Partition(id: g.cle.partition, routeurs: g.routeurs,
                           prefixes: attribution.filter { $0.value == g.cle }.map(\.key).sorted(),
+                          prefixesPartages: (partages[g.cle] ?? []).sorted(),
                           appareils: g.appareils, estPrincipale: i == 0)
             }
             reseaux.append(Reseau(id: idReseau, nom: duReseau.compactMap(\.nomReseau).first ?? idReseau,
