@@ -32,6 +32,8 @@ final class Recenseur {
     private var releveEnAttente = false
     private var tachePeriodique: Task<Void, Never>?
     private var tacheCalme: Task<Void, Never>?
+    /// Demande de tout resoudre a nouveau, consommee au debut du prochain releve.
+    private var oublierCibles = false
 
     func demarrer() {
         guard !demarre else { return }
@@ -62,9 +64,12 @@ final class Recenseur {
         enRoute = false
     }
 
-    /// Releve immediat (bouton rafraichir, reveil du Mac) : resout tout a nouveau.
+    /// Releve immediat (bouton rafraichir, reveil du Mac) : tout sera resolu a
+    /// nouveau au debut du prochain releve, jamais pendant un releve en cours
+    /// (qui publierait sinon des services sans hote). Sans effet avant la mise en route.
     func rafraichir() {
-        cibles = [:]
+        oublierCibles = true
+        guard enRoute else { return }
         Task { @MainActor [weak self] in await self?.releve() }
     }
 
@@ -113,6 +118,10 @@ final class Recenseur {
     }
 
     private func faireReleve() async -> Annonces {
+        if oublierCibles {
+            cibles = [:]
+            oublierCibles = false
+        }
         // 1. Instances vues, et leur cible (hote, port) : resolue une fois par instance.
         var vues: [(type: String, instance: String, txt: Data)] = []
         for n in navigateurs {
