@@ -51,8 +51,16 @@ final class Surveillance {
     @ObservationIgnored private let journal: JournalFichiers?
     @ObservationIgnored private let fichierSurnoms: URL?
     @ObservationIgnored private var alertes = Alertes()
+    /// Ou garder les scissions deja notifiees (`cleScissionsNotifiees`).
+    @ObservationIgnored private let preferences: UserDefaults
+    /// Scissions notifiees lues (au demarrage, en mode direct) : ecrites ensuite a
+    /// chaque changement. Sinon (demo, surveillance pas demarree : tests), ni lues ni ecrites.
+    @ObservationIgnored private var scissionsChargees = false
     @ObservationIgnored private var debutVeille: Date?
     @ObservationIgnored private var observateurs: [NSObjectProtocol] = []
+
+    /// Signatures des scissions deja notifiees (`[String]`), d'un lancement a l'autre.
+    static let cleScissionsNotifiees = "scissionsNotifiees"
 
     /// Lance par les tests (heberges dans l'app) : ne rien ecouter ni ecrire.
     static var sousTests: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
@@ -63,9 +71,11 @@ final class Surveillance {
             .appendingPathComponent("Maillage Thread")
     }
 
-    /// `dossier` : ou garder le journal et les surnoms (nil : nulle part).
-    init(mode: Mode, dossier: URL?) {
+    /// `dossier` : ou garder le journal et les surnoms (nil : nulle part) ;
+    /// `preferences` : les scissions deja notifiees (mode direct, une fois demarree).
+    init(mode: Mode, dossier: URL?, preferences: UserDefaults = .standard) {
         self.mode = mode
+        self.preferences = preferences
         switch mode {
         case .direct:
             etatEcoute = .demarrage
@@ -87,6 +97,7 @@ final class Surveillance {
         case .demo:
             for a in ScenarioPanne.releves { integrer(a) }
         case .direct:
+            chargerScissionsNotifiees()
             if let journal {
                 do {
                     try journal.purger(maintenant: Date())
@@ -100,6 +111,13 @@ final class Surveillance {
             recenseur?.demarrer()
             observerVeille()
         }
+    }
+
+    /// Lit les scissions deja notifiees (au demarrage, mode direct) : un reseau
+    /// qui reste scinde n'est pas notifie de nouveau a chaque lancement.
+    func chargerScissionsNotifiees() {
+        alertes.scissionsNotifiees = Set(preferences.stringArray(forKey: Self.cleScissionsNotifiees) ?? [])
+        scissionsChargees = true
     }
 
     func arreter() {
@@ -157,7 +175,11 @@ final class Surveillance {
         } catch {
             erreurJournal = error.localizedDescription
         }
+        let notifiees = alertes.scissionsNotifiees
         let envoyer = alertes.traiter(nouveaux)
+        if scissionsChargees && alertes.scissionsNotifiees != notifiees {
+            preferences.set(alertes.scissionsNotifiees.sorted(), forKey: Self.cleScissionsNotifiees)
+        }
         if mode == .direct && !envoyer.isEmpty { surAlertes?(envoyer) }
     }
 

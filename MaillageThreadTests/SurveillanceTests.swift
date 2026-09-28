@@ -122,4 +122,58 @@ struct SurveillanceTests {
         s.integrer(retour)
         #expect(s.rienVuDepuis == nil)
     }
+
+    /// Scissions deja notifiees, gardees d'un lancement a l'autre (mode direct, lues
+    /// au demarrage) : la scission trouvee de nouveau au lancement suivant n'est pas
+    /// notifiee, mais reste au journal ; une reunion l'oublie. La demo n'ecrit rien,
+    /// ni une surveillance pas demarree. Preferences jetables, jamais celles de l'app.
+    @Test func scissionsNotifieesGardees() throws {
+        // Domaine jetable, vide avant et apres ; toujours le meme : le systeme garde
+        // son fichier (vide) dans le conteneur de l'app, un seul donc. L'ecriture est
+        // attendue : l'app de test s'arrete aussitot apres.
+        let domaine = "maillage-tests-scissions"
+        let preferences = try #require(UserDefaults(suiteName: domaine))
+        preferences.removePersistentDomain(forName: domaine)
+        defer {
+            preferences.removePersistentDomain(forName: domaine)
+            preferences.synchronize()
+        }
+        let cle = Surveillance.cleScissionsNotifiees
+        let scinde = Releve20260928.annonces  // l'Aqara seul dans E2E79FFC
+        var envoyees: [CategorieAlerte] = []
+        /// Un lancement : les scissions notifiees sont lues comme au demarrage, sans ecouter le reseau.
+        func lancement() -> Surveillance {
+            let s = Surveillance(mode: .direct, dossier: nil, preferences: preferences)
+            s.surAlertes = { envoyees += $0.map(\.categorie) }
+            s.chargerScissionsNotifiees()
+            return s
+        }
+
+        Surveillance(mode: .demo, dossier: nil, preferences: preferences).demarrer()
+        #expect(preferences.object(forKey: cle) == nil, "la demo (une scission a 04:14) n'ecrit rien")
+
+        lancement().integrer(scinde)
+        #expect(envoyees == [.scission], "premier lancement : constatee et notifiee")
+        #expect(preferences.stringArray(forKey: cle) == ["4B36A2B7FEFB200B|73586B68,E2E79FFC"])
+
+        envoyees = []
+        let second = lancement()
+        second.integrer(scinde)
+        #expect(envoyees.isEmpty, "toujours scinde au lancement suivant : pas de seconde notification")
+        #expect(second.evenements.contains { $0.type == .reseauScinde && $0.constate }, "le journal la note toujours")
+
+        // L'Aqara rejoint la partition Apple : reunion, la signature est oubliee.
+        var reuni = scinde
+        reuni.date = scinde.date.addingTimeInterval(60)
+        let aqara = try #require(reuni.routeurs.firstIndex { $0.instance == "Aqara HubM100 #DFEB" })
+        var txt = reuni.routeurs[aqara].txt.valeurs
+        txt["pt"] = Data([0x73, 0x58, 0x6B, 0x68])
+        reuni.routeurs[aqara].txt = ChampsTXT(txt)
+        second.integrer(reuni)
+        #expect(second.evenements.last?.type == .reseauReuni)
+        #expect(preferences.stringArray(forKey: cle) == [])
+
+        Surveillance(mode: .direct, dossier: nil, preferences: preferences).integrer(scinde)
+        #expect(preferences.stringArray(forKey: cle) == [], "pas demarree (comme les autres tests) : rien n'est ecrit")
+    }
 }
