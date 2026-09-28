@@ -18,7 +18,9 @@ import Foundation
 ///   premiere absence.
 /// - Apres une veille du Mac, ce qui est constate dans les 4 min qui suivent le
 ///   reveil est date de la veille (`periode`), jamais du reveil ; un point de
-///   depart garde sa date.
+///   depart garde sa date. Une absence en cours reprend au reveil : son sursis
+///   de 2 min ne compte pas la veille, et si elle est retenue, elle est datee
+///   du reveil, donc de la veille.
 public struct Suivi: Sendable {
     public static let apresReveil: TimeInterval = 240
 
@@ -37,6 +39,7 @@ public struct Suivi: Sendable {
     /// Note une veille du Mac et rend son evenement.
     public mutating func noterVeille(_ periode: DateInterval) -> [Evenement] {
         derniereVeille = periode
+        memoire.reprendre(apres: periode.end)
         return [Evenement(date: periode.end, type: .veille, periode: periode)]
     }
 
