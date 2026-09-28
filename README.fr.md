@@ -122,8 +122,8 @@ HomeKit n'existe pas en macOS natif, et une équipe de développement Apple
 gratuite ne peut pas le donner à une app Mac Catalyst. Les noms de Maison
 viennent donc de **Passeur Noms**, une petite app iOS lancée sur le Mac
 (« conçue pour iPad ») : elle lit Maison (noms, pièces, fabricants,
-`matterNodeID`), écrit `noms.json` dans un dossier choisi une fois, et se
-ferme.
+`matterNodeID`, batteries), écrit `noms.json` dans un dossier choisi une
+fois, et se ferme.
 
 ```sh
 outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe, lance
@@ -137,9 +137,19 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
   « endommagée » : cliquer Annuler, puis Réglages Système › Confidentialité et
   sécurité › « Ouvrir quand même ». Autoriser ensuite l'accès à Maison.
 - Choisir un dossier **hors iCloud et hors de ce dépôt** (par exemple
-  `~/Maillage Thread`) ; « Changer de dossier… » reste proposé 10 s après
-  l'écriture. `noms.json` est ignoré par git : ne jamais le commiter.
+  `~/Maillage Thread`) ; ouvert à la main, Passeur Noms propose « Changer de
+  dossier… » pendant 10 s après l'écriture. `noms.json` est ignoré par git :
+  ne jamais le commiter.
 - Dans Maillage Thread : Réglages › Noms de Maison › Choisir… (le même
-  dossier). Les noms sont relus quand Passeur Noms se ferme ; « Rafraîchir les
-  noms de Maison » (menu ou réglages) le relance. Priorité : surnom > Maison >
-  HomeKit (`_hap._udp`) > hôte.
+  dossier). Les noms sont relus quand Passeur Noms se ferme.
+  Priorité : surnom > Maison > HomeKit (`_hap._udp`) > hôte.
+- Rafraîchissement : la fenêtre du graphe lance Passeur Noms en arrière-plan à
+  son ouverture (si le relevé a plus de 15 min), puis toutes les heures ;
+  « Rafraîchir depuis Maison » (menu ou réglages) le fait à la demande. L'app
+  dépose d'abord `passeur-demande.json` dans le dossier : Passeur Noms écrit
+  et se ferme aussitôt, sa fenêtre ne fait que passer derrière les autres.
+- Batteries : niveau, état de charge et alerte de l'accessoire lui-même, pour
+  chaque accessoire de Maison qui a une batterie. La fiche de l'appareil les
+  montre avec l'âge du relevé ; dans le graphe, une pastille orange en
+  surbrillance signale une batterie faible (l'accessoire le dit, ou son niveau
+  est de 20 % ou moins).

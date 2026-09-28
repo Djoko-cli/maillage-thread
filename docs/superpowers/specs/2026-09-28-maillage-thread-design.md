@@ -125,7 +125,10 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   - **fiche** de l'appareil sélectionné, carte de verre en bas : nom, pièce,
     fabricant, modèle, type (routeur, Matter, HomeKit, endormi), fabriques,
     adresses, partition, état et « vu il y a… », 5 derniers événements du
-    journal pour ce nœud, « Renommer… ».
+    journal pour ce nœud, « Renommer… » ; batterie de Maison (niveau, état de
+    charge, âge du relevé ; en orange si faible) ; le point vert « joignable »
+    pulse doucement, sauf si « Réduire les animations » est activé (ajouts du
+    28/09 au soir).
 - Graphe (Canvas SwiftUI, disposition **stable** : mêmes nœuds ⇒ mêmes
   positions) : une zone par partition
   (la plus grande en bleu, les autres en ambre ; identifiant et préfixe) ;
@@ -133,7 +136,9 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   anneau intérieur ; appareils sur un anneau extérieur (triés par pièce puis
   par nom) ; **pointillés pâles vers le chef** (ou le centre de la partition),
   légende « rattachement, pas un lien radio » ; états : vert joignable, rouge
-  sans adresse/disparu, gris inconnu, 🔋 endormi ; un appareil disparu reste
+  sans adresse/disparu, gris inconnu, 🔋 endormi ; batterie faible : pastille
+  orange en surbrillance au bout du nom (triangle et niveau, ou « faible ») ;
+  un appareil disparu reste
   en rouge à sa place jusqu'à son retour ou au prochain lancement ; zoom et
   déplacement au trackpad ; survol = nom + lien éclairé ; clic = fiche.
 - **Barre des menus** (même matériau) : icône orange si alerte ; résumé
@@ -206,8 +211,10 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
 - **Signature :** profil gratuit valable **7 jours**.
 - **Lancement :** par `outils/passeur.sh`, qui compile avec
   `-allowProvisioningUpdates`, enveloppe l'app comme Xcode (`Wrapper/` et
-  `WrappedBundle`), puis la lance. Ou par « Rafraîchir les noms de Maison »
-  dans l'app, tant que la signature est valide.
+  `WrappedBundle`), puis la lance. Ou par l'app, en arrière-plan, tant que la
+  signature est valide : « Rafraîchir depuis Maison », et à l'ouverture de la
+  fenêtre du graphe si le relevé a plus de 15 min, puis toutes les heures tant
+  qu'elle reste ouverte (révision du 28/09 au soir, pour les batteries).
 - **Gatekeeper :** au premier lancement d'une compilation, il demande une
   autorisation dans Réglages Système › Confidentialité et sécurité.
 
@@ -217,9 +224,21 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   catégorie, `matterNodeID` (`UInt64?` en Swift ; « node identifier used to
   identify the device on Apple's Matter fabric »), ainsi que le nom du
   domicile.
+- **Batteries (ajout du 28/09 au soir).** Pour chaque accessoire qui a un
+  service Batterie : niveau (0 à 100), état de charge (hors charge, en charge,
+  non rechargeable) et alerte « batterie faible » de l'accessoire
+  (`BatterieMaison`, champ facultatif). Maison répond depuis son cache
+  (0,2 s pour 78 valeurs), sans réveiller les appareils ; un appareil
+  injoignable garde sa dernière valeur connue. Essai du 28/09 : 46 accessoires
+  avec batterie, tous avec l'alerte, 26 avec le niveau, 6 avec l'état de charge.
 - Il écrit `noms.json` d'un coup, au format `NomsMaison`, dans **un dossier
   choisi une fois** (par défaut Documents/Maillage Thread ; signet gardé),
-  puis se ferme.
+  puis se ferme : aussitôt si l'app l'a lancé, sinon 10 s plus tard. L'app
+  dépose `passeur-demande.json` (`DemandePasseur`, valable 2 min, ignoré par
+  git) dans le dossier juste avant de le lancer ; le passeur le retire après
+  l'écriture. Il ne peut pas le deviner seul : lancé sans activation, il se dit
+  quand même au premier plan (essai du 28/09), et sa fenêtre passe un instant
+  derrière les autres.
 
 **Côté app.**
 - Elle lit ce fichier après **un choix unique** dans ses Réglages
@@ -227,6 +246,8 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   change.
 - Elle garde les derniers noms **indéfiniment**, avec leur date. Au-delà de
   7 jours, elle affiche : « Noms du <date> : relancer outils/passeur.sh ».
+- Batterie faible : l'alerte de l'accessoire, ou un niveau de 20 % ou moins
+  (décision de Majid, 28/09).
 
 **Correspondance.**
 - L'app retrouve seule la fabrique d'Apple : celle dont les numéros de nœud
