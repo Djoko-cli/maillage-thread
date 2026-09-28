@@ -1,12 +1,17 @@
 import Foundation
 import MaillageCoeur
 import UserNotifications
+import os
 
 /// Notifications du systeme (le mode Concentration s'applique de lui-meme).
 /// Une categorie se coupe dans les reglages ; une notification de meme
-/// identifiant remplace la precedente (pertes groupees).
+/// identifiant remplace la precedente (pertes groupees). Un refus ou un echec
+/// du systeme est consigne dans le journal du Mac (Console, sous-systeme
+/// fr.djoko.maillage), jamais perdu en silence.
 @MainActor
 final class Notifications {
+    nonisolated static let journal = Logger(subsystem: "fr.djoko.maillage", category: "notifications")
+
     static func cle(_ c: CategorieAlerte) -> String { "notification.\(c.rawValue)" }
 
     static func active(_ c: CategorieAlerte, preferences: UserDefaults = .standard) -> Bool {
@@ -14,7 +19,13 @@ final class Notifications {
     }
 
     func demanderAutorisation() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { accordee, erreur in
+            if let erreur {
+                Self.journal.error("autorisation des notifications : \(erreur.localizedDescription, privacy: .public)")
+            } else if !accordee {
+                Self.journal.notice("notifications refusees : rien ne sera presente")
+            }
+        }
     }
 
     func presenter(_ alertes: [AlerteAEnvoyer]) {
@@ -24,8 +35,13 @@ final class Notifications {
             contenu.title = titre
             contenu.body = corps
             if a.categorie != .informations { contenu.sound = .default }
-            let requete = UNNotificationRequest(identifier: a.identifiant, content: contenu, trigger: nil)
-            UNUserNotificationCenter.current().add(requete) { _ in }
+            let identifiant = a.identifiant
+            let requete = UNNotificationRequest(identifier: identifiant, content: contenu, trigger: nil)
+            UNUserNotificationCenter.current().add(requete) { erreur in
+                if let erreur {
+                    Self.journal.error("notification \(identifiant, privacy: .public) non presentee : \(erreur.localizedDescription, privacy: .public)")
+                }
+            }
         }
     }
 }
