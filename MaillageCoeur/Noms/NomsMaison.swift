@@ -16,6 +16,8 @@ public struct AccessoireMaison: Codable, Hashable, Sendable {
     public var piece: String?
     public var fabricant: String?
     public var modele: String?
+    /// `HMAccessory.firmwareVersion` (absent des fichiers anciens).
+    public var firmware: String?
     public var categorie: String?
     /// `HMAccessory.matterNodeID` en 16 hexa majuscules : son noeud sur la fabrique d'Apple.
     public var noeudMatter: String?
@@ -24,11 +26,12 @@ public struct AccessoireMaison: Codable, Hashable, Sendable {
     public var pont: Bool?
 
     public init(nom: String, piece: String? = nil, fabricant: String? = nil, modele: String? = nil,
-                categorie: String? = nil, noeudMatter: String? = nil, pont: Bool? = nil) {
+                firmware: String? = nil, categorie: String? = nil, noeudMatter: String? = nil, pont: Bool? = nil) {
         self.nom = nom
         self.piece = piece
         self.fabricant = fabricant
         self.modele = modele
+        self.firmware = firmware
         self.categorie = categorie
         self.noeudMatter = noeudMatter
         self.pont = pont

@@ -126,7 +126,7 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
         }
         let accessoires = manager.homes.flatMap(\.accessories).map { a in
             AccessoireMaison(nom: a.name, piece: a.room?.name, fabricant: a.manufacturer, modele: a.model,
-                             categorie: a.category.localizedDescription,
+                             firmware: a.firmwareVersion, categorie: a.category.localizedDescription,
                              noeudMatter: AccessoireMaison.noeud(a.matterNodeID),
                              pont: a.category.categoryType == HMAccessoryCategoryTypeBridge ? true : nil)
         }.sorted { $0.nom < $1.nom }

@@ -2049,6 +2049,22 @@
         }
       }
     },
+    "firmware %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "firmware %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "firmware %@"
+          }
+        }
+      }
+    },
     "illisible : préfixes tirés des adresses" : {
       "localizations" : {
         "en" : {
