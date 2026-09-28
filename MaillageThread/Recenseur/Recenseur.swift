@@ -2,12 +2,13 @@ import Foundation
 import MaillageCoeur
 
 /// Ecoute le reseau local et produit des releves (`Annonces`). Le premier des
-/// que l'ecoute est prete (tous les navigateurs) et qu'un routeur de bordure est
-/// liste, jamais avant 10 s (le temps que les reponses arrivent) et au plus tard
-/// 60 s apres le demarrage. Ensuite, a chaque changement des services (apres
+/// que l'ecoute est prete (tous les navigateurs), qu'un routeur de bordure est
+/// liste et que les annonces se sont calmees (aucun changement des navigateurs
+/// depuis 2 s), jamais avant 10 s (le temps que les reponses arrivent) et au plus
+/// tard 60 s apres le demarrage. Ensuite, a chaque changement des services (apres
 /// 2 s de calme) et au moins toutes les 60 s ; un changement avant le premier
-/// releve ne declenche rien. Une instance n'entre dans un releve qu'avec sa
-/// cible resolue (hote, port).
+/// releve ne declenche rien (il retarde seulement le premier). Une instance
+/// n'entre dans un releve qu'avec sa cible resolue (hote, port).
 @MainActor
 final class Recenseur {
     enum Etat: Equatable, Sendable {
@@ -18,7 +19,7 @@ final class Recenseur {
     static let types = ["_meshcop._udp", "_matter._tcp", "_hap._udp"]
     nonisolated static let miseEnRoute: Duration = .seconds(10)
     nonisolated static let attenteMax: Duration = .seconds(60)
-    static let calme: Duration = .seconds(2)
+    nonisolated static let calme: Duration = .seconds(2)
     static let periode: Duration = .seconds(60)
 
     private(set) var etat: Etat = .demarrage
@@ -37,6 +38,8 @@ final class Recenseur {
     private var releveEnAttente = false
     private var tachePeriodique: Task<Void, Never>?
     private var tacheCalme: Task<Void, Never>?
+    /// Instant du dernier changement d'un navigateur (nil : aucun depuis le demarrage).
+    private var dernierChangement: ContinuousClock.Instant?
     /// Demande de resoudre de nouveau toutes les instances listees, consommee au debut du prochain releve.
     private var toutResoudre = false
 
@@ -54,7 +57,9 @@ final class Recenseur {
             // Premier releve : quand premierReleveDu le dit (verifie chaque seconde).
             while !Task.isCancelled {
                 guard let self else { return }
-                if Self.premierReleveDu(depuis: .now - debut, etat: self.etat, routeurVu: self.routeurVu) { break }
+                let maintenant = ContinuousClock.now
+                if Self.premierReleveDu(depuis: maintenant - debut, etat: self.etat, routeurVu: self.routeurVu,
+                                        calmeDepuis: maintenant - (self.dernierChangement ?? debut)) { break }
                 try? await Task.sleep(for: .seconds(1))
             }
             while !Task.isCancelled {
@@ -67,12 +72,16 @@ final class Recenseur {
     }
 
     /// Le premier releve est-il du ? Jamais avant la mise en route (10 s) ;
-    /// ensuite des que l'ecoute est prete (tous les navigateurs) et qu'un routeur
-    /// de bordure est liste ; au plus tard `attenteMax` apres le demarrage, quel
-    /// que soit l'etat (invite en attente, acces refuse, reseau muet).
-    nonisolated static func premierReleveDu(depuis ecoule: Duration, etat: Etat, routeurVu: Bool) -> Bool {
+    /// ensuite des que l'ecoute est prete (tous les navigateurs), qu'un routeur
+    /// de bordure est liste et que les navigateurs n'ont rien change depuis
+    /// `calme` (`calmeDepuis` : temps ecoule depuis le dernier changement, ou
+    /// depuis le demarrage s'il n'y en a pas eu) : les reponses ont fini
+    /// d'arriver. Au plus tard `attenteMax` apres le demarrage, quel que soit
+    /// l'etat (invite en attente, acces refuse, reseau muet, annonces sans fin).
+    nonisolated static func premierReleveDu(depuis ecoule: Duration, etat: Etat, routeurVu: Bool,
+                                            calmeDepuis: Duration) -> Bool {
         guard ecoule >= miseEnRoute else { return false }
-        return ecoule >= attenteMax || (etat == .actif && routeurVu)
+        return ecoule >= attenteMax || (etat == .actif && routeurVu && calmeDepuis >= calme)
     }
 
     /// Au moins un routeur de bordure (`_meshcop._udp`) est liste.
@@ -87,6 +96,7 @@ final class Recenseur {
         navigateurs = []
         demarre = false
         enRoute = false
+        dernierChangement = nil
     }
 
     /// Releve immediat (bouton rafraichir, reveil du Mac). Au releve suivant, chaque
@@ -99,7 +109,11 @@ final class Recenseur {
         Task { @MainActor [weak self] in await self?.releve() }
     }
 
+    /// Tout changement d'un navigateur (instances ou etat), avant comme apres la
+    /// mise en route : son instant compte pour le calme du premier releve ;
+    /// ensuite, un releve 2 s apres le dernier changement.
     private func changement() {
+        dernierChangement = .now
         mettreAJourEtat()
         guard enRoute else { return }
         tacheCalme?.cancel()
