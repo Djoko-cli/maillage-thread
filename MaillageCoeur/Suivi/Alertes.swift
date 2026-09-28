@@ -28,8 +28,18 @@ public struct AlerteAEnvoyer: Hashable, Sendable {
 }
 
 /// Decide des notifications a partir des nouveaux evenements.
+///
+/// Une scission n'est notifiee qu'une fois : l'app s'ouvre a chaque ouverture
+/// de session, et un reseau qui reste scinde ne doit pas le redire a chaque
+/// lancement. Une scission constatee deja notifiee (meme signature) ne notifie
+/// pas ; une scission observee notifie toujours ; les deux sont retenues. Une
+/// reunion oublie les signatures de son reseau.
 public struct Alertes: Sendable {
     public static let seuilPertes = 3
+
+    /// Signatures des scissions deja notifiees (voir `signature`), gardees d'un
+    /// lancement a l'autre par l'app.
+    public var scissionsNotifiees: Set<String> = []
 
     private var debutFenetre: Date?
     /// Identifiant de la notification groupee, fixe a l'ouverture de la fenetre
@@ -56,7 +66,15 @@ public struct Alertes: Sendable {
             } else {
                 switch e.type {
                 case .reseauScinde:
-                    sortie.append(AlerteAEnvoyer(categorie: .scission, identifiant: e.id, evenements: [e]))
+                    let s = Self.signature(e)
+                    if !(e.constate && scissionsNotifiees.contains(s)) {
+                        sortie.append(AlerteAEnvoyer(categorie: .scission, identifiant: e.id, evenements: [e]))
+                    }
+                    scissionsNotifiees.insert(s)
+                case .reseauReuni:
+                    let reseau = (e.reseau ?? "") + "|"
+                    scissionsNotifiees = scissionsNotifiees.filter { !$0.hasPrefix(reseau) }
+                    sortie.append(AlerteAEnvoyer(categorie: .informations, identifiant: e.id, evenements: [e]))
                 case .routeurDisparu:
                     sortie.append(AlerteAEnvoyer(categorie: .routeurDisparu, identifiant: e.id, evenements: [e]))
                 case .surveillanceDemarree, .veille:
@@ -71,5 +89,11 @@ public struct Alertes: Sendable {
                                          evenements: pertes.sorted { $0.date < $1.date }))
         }
         return sortie
+    }
+
+    /// Signature d'une scission : "<reseau>|<partitions triees>", les partitions
+    /// etant les cles de ses `details` (`Suivi.detailsPartitions`), jointes par ",".
+    static func signature(_ e: Evenement) -> String {
+        "\(e.reseau ?? "")|\(e.details.keys.sorted().joined(separator: ","))"
     }
 }
