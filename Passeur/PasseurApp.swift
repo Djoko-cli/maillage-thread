@@ -70,30 +70,60 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
     /// Dernier releve ecrit : reecrit ailleurs si l'on change de dossier.
     @ObservationIgnored private var dernier: NomsMaison?
     @ObservationIgnored private var compteARebours: Task<Void, Never>?
+    /// Maison a donne ses domiciles : avant `homeManagerDidUpdateHomes`, la
+    /// liste est vide (HMHomeManager.h).
+    @ObservationIgnored private var maisonChargee = false
+    /// Delai de secours : sans reponse de Maison, le dire plutot qu'attendre sans fin.
+    static let delaiMaison: Duration = .seconds(30)
 
     func demarrer() {
         guard gestionnaire == nil else { return }
         let g = HMHomeManager()
         g.delegate = self
         gestionnaire = g
+        Task { [weak self] in
+            try? await Task.sleep(for: Self.delaiMaison)
+            // Rien d'ecrit ni en attente d'un dossier : Maison n'a pas repondu.
+            guard let self, self.dernier == nil, self.enAttente == nil else { return }
+            self.ecrire(NomsMaison(date: .now, statut: .erreur, message: "Maison n'a pas répondu"))
+        }
     }
 
+    // HomeKit ne dit pas sur quel fil il appelle son delegue : passer par l'acteur principal.
     nonisolated func homeManagerDidUpdateHomes(_ manager: HMHomeManager) {
-        MainActor.assumeIsolated { self.relever(manager) }
+        Task { @MainActor in
+            self.maisonChargee = true
+            self.relever(manager)
+        }
     }
 
     nonisolated func homeManager(_ manager: HMHomeManager, didUpdate status: HMHomeManagerAuthorizationStatus) {
-        MainActor.assumeIsolated { self.autorisation(status) }
+        Task { @MainActor in self.autorisation(status) }
     }
 
+    /// Acces refuse : fichier « refuse ». Acces accorde : releve, des que Maison
+    /// a donne ses domiciles (sinon `homeManagerDidUpdateHomes` le fera). L'ordre
+    /// des deux rappels ne compte pas.
     private func autorisation(_ s: HMHomeManagerAuthorizationStatus) {
-        guard s.contains(.determined), !s.contains(.authorized) else { return }
-        ecrire(NomsMaison(date: .now, statut: .refuse,
-                          message: "Accès à Maison refusé : Réglages Système › Confidentialité et sécurité › Maison."))
+        if s.contains(.authorized) {
+            if maisonChargee, let g = gestionnaire { relever(g) }
+        } else if s.contains(.determined) {
+            ecrire(NomsMaison(date: .now, statut: .refuse,
+                              message: "Accès à Maison refusé : Réglages Système › Confidentialité et sécurité › Maison."))
+        }
     }
 
     private func relever(_ manager: HMHomeManager) {
-        guard manager.authorizationStatus.contains(.authorized) else { return }
+        guard manager.authorizationStatus.contains(.authorized) else {
+            // Au relancement apres un refus, le statut peut ne jamais etre annonce comme un changement.
+            autorisation(manager.authorizationStatus)
+            return
+        }
+        guard !manager.homes.isEmpty else {
+            // Jamais un « ok » vide : il effacerait les noms gardes par l'app.
+            ecrire(NomsMaison(date: .now, statut: .erreur, message: "Aucun domicile dans Maison"))
+            return
+        }
         let accessoires = manager.homes.flatMap(\.accessories).map { a in
             AccessoireMaison(nom: a.name, piece: a.room?.name, fabricant: a.manufacturer, modele: a.model,
                              categorie: a.category.localizedDescription,
@@ -117,18 +147,18 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
         if let n = enAttente ?? dernier { ecrire(n) }
     }
 
-    private func dossier() -> URL? {
+    /// Dossier du signet ; `perime` : a renouveler (dossier deplace ou renomme).
+    private func dossier() -> (url: URL, perime: Bool)? {
         guard let signet = UserDefaults.standard.data(forKey: Self.cleDossier) else { return nil }
         var perime = false
         guard let url = try? URL(resolvingBookmarkData: signet, options: [], relativeTo: nil,
                                  bookmarkDataIsStale: &perime) else { return nil }
-        if perime, let nouveau = try? url.bookmarkData() { UserDefaults.standard.set(nouveau, forKey: Self.cleDossier) }
-        return url
+        return (url, perime)
     }
 
     /// Ecrit `noms.json` dans le dossier choisi, puis ferme l'app 10 s plus tard.
     private func ecrire(_ n: NomsMaison) {
-        guard let dossier = dossier() else {
+        guard let (dossier, perime) = dossier() else {
             enAttente = n
             dossierManquant = true
             etat = "\(n.accessoires.count) accessoires lus. Choisis le dossier où écrire noms.json."
@@ -136,6 +166,10 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
         }
         let acces = dossier.startAccessingSecurityScopedResource()
         defer { if acces { dossier.stopAccessingSecurityScopedResource() } }
+        // Un signet perime se renouvelle pendant que l'acces est ouvert.
+        if perime, let nouveau = try? dossier.bookmarkData() {
+            UserDefaults.standard.set(nouveau, forKey: Self.cleDossier)
+        }
         do {
             try n.donnees().write(to: dossier.appendingPathComponent(Self.fichier), options: .atomic)
             enAttente = nil
