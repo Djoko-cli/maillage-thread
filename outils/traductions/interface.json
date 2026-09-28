@@ -87,6 +87,7 @@
   "Sans partition connue": "No known partition",
   "Services vus": "Services seen",
   "Surnom": "Nickname",
+  "Surveillance du réseau %@ démarrée (routeurs : %@, appareils : %@)": "Monitoring of network %1$@ started (routers: %2$@, devices: %3$@)",
   "Surveillance démarrée (routeurs : %@, appareils : %@)": "Monitoring started (routers: %1$@, devices: %2$@)",
   "Table de routage": "Routing table",
   "Tous": "All",

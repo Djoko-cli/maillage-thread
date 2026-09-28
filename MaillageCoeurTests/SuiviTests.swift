@@ -25,6 +25,22 @@ struct SuiviTests {
         return s
     }
 
+    static let xpVoisin = "1122334455667788"
+
+    /// Second reseau Thread (Voisin, autre xp) : un chef qui publie son prefixe
+    /// OMR et ses appareils ; scinde : un second chef dans une autre partition.
+    static func ajouterVoisin(_ b: inout Banc, scinde: Bool = false, appareils: Int = 1) {
+        b.routeur("Voisin", partition: "BBBBBBBB", role: .chef, primaire: true, lien: "fe80::b1",
+                  omr: "fd99:0:0:1::/64", xp: xpVoisin, nn: "Voisin")
+        if scinde {
+            b.routeur("Voisin isole", partition: "CCCCCCCC", role: .chef, primaire: true, lien: "fe80::c1",
+                      omr: "fd98:0:0:1::/64", xp: xpVoisin, nn: "Voisin")
+        }
+        for n in 0..<appareils {
+            b.appareil(String(format: "BBBB%012X", n + 1), noeud: 11 + n, adresses: ["fd99:0:0:1::\(n + 1)"])
+        }
+    }
+
     @Test func lancement() {
         var s = Suivi()
         let ev = s.integrer(Self.banc(Self.t0).annonces)
@@ -46,6 +62,107 @@ struct SuiviTests {
         #expect(scission.gravite == .alerte)
         #expect(scission.details["E2E79FFC"] == "Isole")
         #expect(scission.details["73586B68"] == "Chef, Second")
+    }
+
+    /// Un releve vide ne dit rien de Thread (reseau local coupe, acces refuse,
+    /// invite en attente) : il est ignore, meme au-dela du sursis.
+    @Test func releveVideIgnore() {
+        #expect(Annonces(date: Self.t0).estVide)
+        #expect(!Annonces(date: Self.t0, hap: [AnnonceService(instance: "Eve Door 4A3B")]).estVide, "un accessoire HomeKit suffit")
+        var s = Self.demarre()
+        for minute in 1...4 {
+            #expect(s.integrer(Annonces(date: Self.t0 + Double(minute) * 60)).isEmpty, "\(minute) min sans rien")
+            #expect(s.instantane?.date == Self.t0, "instantane inchange")
+        }
+        #expect(s.integrer(Self.banc(Self.t0 + 600).annonces).isEmpty, "le meme reseau 10 min plus tard : ni perte ni apparu")
+    }
+
+    @Test func premierReleveVide() throws {
+        var s = Suivi()
+        #expect(s.integrer(Annonces(date: Self.t0)).isEmpty)
+        #expect(s.instantane == nil, "le point de depart attend un releve non vide")
+        var b = Self.banc(Self.t0 + 60)
+        b.routeur("Isole", partition: "E2E79FFC", role: nil, primaire: true, lien: "fe80::3")
+        let ev = s.integrer(b.annonces)
+        #expect(ev.map(\.type) == [.surveillanceDemarree, .reseauScinde])
+        #expect(ev.first?.date == Self.t0 + 60)
+        let scission = try #require(ev.last)
+        #expect(scission.constate)
+    }
+
+    /// Un reseau vu pour la premiere fois apres le lancement est son propre point
+    /// de depart : ni "apparu", ni "nouveau", ni "nouveau prefixe" pour ses membres.
+    @Test func nouveauReseauPointDeDepart() throws {
+        var s = Self.demarre()
+        var b = Self.banc(Self.t0 + 60)
+        Self.ajouterVoisin(&b, scinde: true)
+        let ev = s.integrer(b.annonces)
+        #expect(ev.map(\.type) == [.surveillanceDemarree, .reseauScinde])
+        let depart = try #require(ev.first)
+        #expect(depart.reseau == Self.xpVoisin)
+        #expect(depart.sujet == Sujet(id: Self.xpVoisin, nom: "Voisin"))
+        #expect(depart.details == ["routeurs": "2", "appareils": "1"])
+        let scission = try #require(ev.last)
+        #expect(scission.reseau == Self.xpVoisin)
+        #expect(scission.sujet == Sujet(id: Self.xpVoisin, nom: "Voisin"))
+        #expect(scission.constate)
+        #expect(scission.apres == "2")
+        #expect(scission.details == ["BBBBBBBB": "Voisin", "CCCCCCCC": "Voisin isole"])
+
+        // Ensuite, comparaison normale : un appareil ajoute au voisin est nouveau.
+        var c = Self.banc(Self.t0 + 120)
+        Self.ajouterVoisin(&c, scinde: true, appareils: 2)
+        let suite = s.integrer(c.annonces)
+        #expect(suite.map(\.type) == [.appareilNouveau])
+        #expect(suite.first?.reseau == Self.xpVoisin)
+    }
+
+    /// Un appareil disparu qui revient dans un reseau vu pour la premiere fois : "revenu".
+    @Test func revenuDansUnNouveauReseau() {
+        var s = Self.demarre()
+        var b = Self.banc(Self.t0 + 60)
+        b.retirer(Self.a2)
+        _ = s.integrer(b.annonces)
+        b.date = Self.t0 + 180
+        #expect(s.integrer(b.annonces).map(\.type) == [.appareilDisparu])
+        var c = Self.banc(Self.t0 + 240)
+        Self.ajouterVoisin(&c, appareils: 0)
+        c.adresses[Self.a2 + ".local"] = ["fd99:0:0:1::12"]
+        let ev = s.integrer(c.annonces)
+        #expect(ev.map(\.type) == [.surveillanceDemarree, .appareilRevenu])
+        #expect(ev.first?.details == ["routeurs": "1", "appareils": "1"])
+        #expect(ev.last?.reseau == Self.xpVoisin)
+        #expect(s.disparus.isEmpty)
+    }
+
+    /// Un reseau deja vu qui disparait puis revient n'est pas un nouveau depart.
+    @Test func reseauQuiRevient() {
+        var s = Self.demarre()
+        var b = Self.banc(Self.t0 + 60)
+        Self.ajouterVoisin(&b)
+        #expect(s.integrer(b.annonces).map(\.type) == [.surveillanceDemarree])
+        var sans = Self.banc(Self.t0 + 120)
+        #expect(s.integrer(sans.annonces).isEmpty)
+        sans.date = Self.t0 + 180
+        #expect(s.integrer(sans.annonces).isEmpty)
+        sans.date = Self.t0 + 240
+        #expect(s.integrer(sans.annonces).map(\.type) == [.routeurDisparu, .prefixeRetire, .appareilDisparu])
+        var retour = Self.banc(Self.t0 + 300)
+        Self.ajouterVoisin(&retour)
+        #expect(s.integrer(retour.annonces).map(\.type) == [.routeurApparu, .prefixeNouveau, .appareilRevenu])
+    }
+
+    /// Un point de depart (reseau vu peu apres un reveil) garde sa date : la
+    /// surveillance de ce reseau commence au releve, pas pendant la veille.
+    @Test func departApresUnReveil() {
+        var s = Self.demarre()
+        let veille = DateInterval(start: Self.t0 + 60, end: Self.t0 + 3600)
+        _ = s.noterVeille(veille)
+        var b = Self.banc(veille.end + 10)
+        Self.ajouterVoisin(&b, scinde: true)
+        let ev = s.integrer(b.annonces)
+        #expect(ev.map(\.type) == [.surveillanceDemarree, .reseauScinde])
+        #expect(ev.allSatisfy { $0.periode == nil && $0.date == veille.end + 10 })
     }
 
     @Test func disparitionConfirmeeApresDeuxMinutes() throws {

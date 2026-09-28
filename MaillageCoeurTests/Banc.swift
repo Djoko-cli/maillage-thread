@@ -18,7 +18,7 @@ struct Banc {
     /// Routeur de bordure ; `role` nil : Thread 1.3 (role inconnu).
     mutating func routeur(_ nom: String, partition: String = "73586B68", role: RoleThread? = .routeur,
                           primaire: Bool = false, lien: String, omr: String? = nil,
-                          xp: String = "4B36A2B7FEFB200B") {
+                          xp: String = "4B36A2B7FEFB200B", nn: String = "MyHome1482620090") {
         let bitsRole: UInt32 = switch role {
         case .detache?: 0
         case .enfant?: 1
@@ -28,7 +28,7 @@ struct Banc {
         }
         let sb: UInt32 = 0x01 | 0x10 | 0x20 | 0x80 | (primaire ? 0x100 : 0) | bitsRole << 9
         var txt: [String: Data] = [
-            "nn": Data("MyHome1482620090".utf8), "xp": Data(hexa: xp)!, "tv": Data((role == nil ? "1.3.0" : "1.4.0").utf8),
+            "nn": Data(nn.utf8), "xp": Data(hexa: xp)!, "tv": Data((role == nil ? "1.3.0" : "1.4.0").utf8),
             "pt": Data(hexa: partition)!, "sb": Data(withUnsafeBytes(of: sb.bigEndian) { Array($0) }),
             "at": Data([0x00, 0x00, 0x66, 0xCE, 0xC7, 0x00, 0x00, 0x00]),
         ]

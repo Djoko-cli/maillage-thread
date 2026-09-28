@@ -2,13 +2,22 @@ import Foundation
 
 /// Suit le reseau de releve en releve et en tire les evenements du journal.
 ///
-/// - Au premier releve : un seul point de depart (`surveillanceDemarree`), et
-///   une scission deja la est notee comme constatee, sans autre comparaison.
+/// - Un releve vide (ni routeur, ni Matter, ni HAP) est ignore : le Mac
+///   n'entend rien (reseau local coupe, acces refuse, invite en attente), rien
+///   n'est conclu sur Thread et rien ne change.
+/// - Au premier releve non vide : un seul point de depart (`surveillanceDemarree`),
+///   et une scission deja la est notee comme constatee, sans autre comparaison.
+/// - Un reseau Thread vu pour la premiere fois ensuite est son propre point de
+///   depart : son `surveillanceDemarree`, sa scission constatee s'il est scinde,
+///   et ni "apparu", ni "nouveau", ni "nouveau prefixe" pour ses membres (un
+///   disparu qui y revient reste "revenu"). Un reseau deja vu qui revient est
+///   compare normalement.
 /// - Ensuite : differences entre deux instantanes. Une absence (service ou
 ///   adresses) n'est retenue qu'apres 2 min (`MemoireAnnonces`) et datee de la
 ///   premiere absence.
 /// - Apres une veille du Mac, ce qui est constate dans les 4 min qui suivent le
-///   reveil est date de la veille (`periode`), jamais du reveil.
+///   reveil est date de la veille (`periode`), jamais du reveil ; un point de
+///   depart garde sa date.
 public struct Suivi: Sendable {
     public static let apresReveil: TimeInterval = 240
 
@@ -19,6 +28,8 @@ public struct Suivi: Sendable {
     public private(set) var dernieresPartitions: [String: String] = [:]
     private var memoire = MemoireAnnonces()
     private var derniereVeille: DateInterval?
+    /// Reseaux (`Reseau.id`) vus depuis le lancement.
+    private var reseauxVus: Set<String> = []
 
     public init() {}
 
@@ -30,30 +41,45 @@ public struct Suivi: Sendable {
 
     /// Integre un releve et rend les evenements qu'il fait apparaitre.
     public mutating func integrer(_ releve: Annonces, noms: ResolveurNoms = ResolveurNoms()) -> [Evenement] {
+        // Releve vide : le Mac n'entend rien, rien a conclure sur Thread.
+        guard !releve.estVide else { return [] }
         let nouveau = Instantane(annonces: memoire.completer(releve))
         let date = releve.date
         var ev: [Evenement] = []
         if let ancien = instantane {
+            // Reseaux vus pour la premiere fois : chacun son point de depart.
+            let apparus = nouveau.reseaux.filter { !reseauxVus.contains($0.id) }
+            for r in apparus {
+                let appareils = nouveau.appareils.filter { $0.idReseau == r.id }.count
+                ev.append(Evenement(date: date, type: .surveillanceDemarree, reseau: r.id, sujet: Sujet(id: r.id, nom: r.nom),
+                                    details: ["routeurs": String(r.routeurs.count), "appareils": String(appareils)]))
+                if r.estScinde { ev.append(Self.scissionConstatee(r, date, noms)) }
+            }
             let fabrique = noms.fabriqueApple(appareils: nouveau.appareils + nouveau.appareilsIP + ancien.appareils)
             ev += Self.evenementsReseaux(ancien, nouveau, date, noms)
-            ev += evenementsRouteurs(ancien, nouveau, date, noms)
-            ev += Self.evenementsPrefixes(ancien, nouveau, date)
-            ev += evenementsAppareils(ancien, nouveau, date, noms, fabrique)
+            ev += evenementsRouteurs(ancien, nouveau, date, noms, sauf: Set(apparus.flatMap(\.routeurs).map(\.instance)))
+            ev += Self.evenementsPrefixes(ancien, nouveau, date, sauf: Set(apparus.flatMap(\.prefixes)))
+            ev += evenementsAppareils(ancien, nouveau, date, noms, fabrique, sauf: Set(apparus.map(\.id)))
         } else {
             ev.append(Evenement(date: date, type: .surveillanceDemarree,
                                 details: ["routeurs": String(nouveau.routeurs.count),
                                           "appareils": String(nouveau.appareils.count)]))
             for r in nouveau.reseaux where r.estScinde {
-                ev.append(Evenement(date: date, type: .reseauScinde, reseau: r.id, sujet: Sujet(id: r.id, nom: r.nom),
-                                    apres: String(r.partitions.count), constate: true,
-                                    details: Self.detailsPartitions(r, noms)))
+                ev.append(Self.scissionConstatee(r, date, noms))
             }
         }
         instantane = nouveau
+        reseauxVus.formUnion(nouveau.reseaux.map(\.id))
         for a in nouveau.appareils {
             if let p = a.partition { dernieresPartitions[a.id] = p }
         }
         return ev.map(dater)
+    }
+
+    /// Scission trouvee au point de depart d'un reseau : constatee, pas observee.
+    static func scissionConstatee(_ r: Reseau, _ date: Date, _ noms: ResolveurNoms) -> Evenement {
+        Evenement(date: date, type: .reseauScinde, reseau: r.id, sujet: Sujet(id: r.id, nom: r.nom),
+                  apres: String(r.partitions.count), constate: true, details: detailsPartitions(r, noms))
     }
 
     /// Partition -> noms de ses routeurs, pour dire qui est isole.
@@ -92,15 +118,18 @@ public struct Suivi: Sendable {
         return ev
     }
 
+    /// `membres` : routeurs des reseaux vus pour la premiere fois (jamais "apparus").
     private func evenementsRouteurs(_ ancien: Instantane, _ nouveau: Instantane, _ date: Date,
-                                    _ noms: ResolveurNoms) -> [Evenement] {
+                                    _ noms: ResolveurNoms, sauf membres: Set<String>) -> [Evenement] {
         var ev: [Evenement] = []
         let anciens = Dictionary(ancien.routeurs.map { ($0.instance, $0) }, uniquingKeysWith: { a, _ in a })
         let nouveaux = Dictionary(nouveau.routeurs.map { ($0.instance, $0) }, uniquingKeysWith: { a, _ in a })
         for r in nouveau.routeurs {
             let s = Sujet(id: r.instance, nom: noms.nom(routeur: r))
             guard let a = anciens[r.instance] else {
-                ev.append(Evenement(date: date, type: .routeurApparu, reseau: r.idReseau, sujet: s, apres: r.partition))
+                if !membres.contains(r.instance) {
+                    ev.append(Evenement(date: date, type: .routeurApparu, reseau: r.idReseau, sujet: s, apres: r.partition))
+                }
                 continue
             }
             if let ra = a.role, let rn = r.role, ra != rn {
@@ -123,11 +152,13 @@ public struct Suivi: Sendable {
         return ev
     }
 
-    static func evenementsPrefixes(_ ancien: Instantane, _ nouveau: Instantane, _ date: Date) -> [Evenement] {
+    /// `exclus` : prefixes des reseaux vus pour la premiere fois (jamais "nouveaux").
+    static func evenementsPrefixes(_ ancien: Instantane, _ nouveau: Instantane, _ date: Date,
+                                   sauf exclus: Set<PrefixeIPv6> = []) -> [Evenement] {
         let pa = Set(ancien.prefixes)
         let pn = Set(nouveau.prefixes)
         func reseau(_ p: PrefixeIPv6, _ i: Instantane) -> String? { i.reseaux.first { $0.prefixes.contains(p) }?.id }
-        return pn.subtracting(pa).sorted().map {
+        return pn.subtracting(pa).subtracting(exclus).sorted().map {
             Evenement(date: date, type: .prefixeNouveau, reseau: reseau($0, nouveau),
                       sujet: Sujet(id: $0.description, nom: $0.description))
         } + pa.subtracting(pn).sorted().map {
@@ -136,8 +167,10 @@ public struct Suivi: Sendable {
         }
     }
 
+    /// `reseauxApparus` : reseaux vus pour la premiere fois (leurs appareils ne sont pas "nouveaux").
     private mutating func evenementsAppareils(_ ancien: Instantane, _ nouveau: Instantane, _ date: Date,
-                                              _ noms: ResolveurNoms, _ fabrique: String?) -> [Evenement] {
+                                              _ noms: ResolveurNoms, _ fabrique: String?,
+                                              sauf reseauxApparus: Set<String>) -> [Evenement] {
         var ev: [Evenement] = []
         let anciens = Dictionary(ancien.appareils.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let nouveaux = Dictionary(nouveau.appareils.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -160,6 +193,8 @@ public struct Suivi: Sendable {
             } else if disparus[n.id] != nil {
                 disparus[n.id] = nil
                 ev.append(Evenement(date: date, type: .appareilRevenu, reseau: n.idReseau, sujet: s, apres: n.partition))
+            } else if let r = n.idReseau, reseauxApparus.contains(r) {
+                // Compte dans le point de depart de son reseau.
             } else {
                 ev.append(Evenement(date: date, type: .appareilNouveau, reseau: n.idReseau, sujet: s, apres: n.partition))
             }
@@ -175,9 +210,10 @@ public struct Suivi: Sendable {
         return ev
     }
 
-    /// Ce qui est constate peu apres un reveil est date de la veille.
+    /// Ce qui est constate peu apres un reveil est date de la veille ; un point
+    /// de depart (surveillance demarree, scission constatee) garde sa date.
     private func dater(_ e: Evenement) -> Evenement {
-        guard let v = derniereVeille, e.type != .veille, e.periode == nil,
+        guard let v = derniereVeille, e.type != .veille, e.type != .surveillanceDemarree, !e.constate, e.periode == nil,
               e.date >= v.end, e.date <= v.end.addingTimeInterval(Self.apresReveil) else { return e }
         var c = e
         c.periode = v
