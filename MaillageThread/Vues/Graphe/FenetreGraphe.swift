@@ -7,7 +7,7 @@ struct NoeudChoisi: Identifiable {
 }
 
 /// Fenetre du graphe : le graphe occupe toute la fenetre ; barre d'outils,
-/// bandeau d'alerte et fiche flottent par-dessus, en verre.
+/// bandeau d'alerte, legende des pointilles et fiche flottent par-dessus, en verre.
 struct FenetreGraphe: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(\.colorScheme) private var apparence
@@ -36,6 +36,10 @@ struct FenetreGraphe: View {
                     BandeauScission(reseau: r)
                 }
                 Spacer()
+                if surveillance.reseau != nil && selection == nil {
+                    LegendeLiens()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if let selection {
                     FicheNoeud(id: selection, aRenommer: $aRenommer) { self.selection = nil }
                 }
@@ -157,6 +161,27 @@ struct BandeauScission: View {
             return String(localized: "Réseau scindé en \(n) partitions, constaté le \(quand) · à part : \(aPart)")
         }
         return String(localized: "Réseau scindé en \(n) partitions depuis le \(quand) · à part : \(aPart)")
+    }
+}
+
+/// Legende des pointilles du graphe (en bas a gauche, cachee sous une fiche).
+struct LegendeLiens: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Path { p in
+                p.move(to: CGPoint(x: 0, y: 1))
+                p.addLine(to: CGPoint(x: 22, y: 1))
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
+            .frame(width: 22, height: 2)
+            .accessibilityHidden(true)
+            Text("rattachement, pas un lien radio")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .glassEffect(.regular, in: .capsule)
     }
 }
 
