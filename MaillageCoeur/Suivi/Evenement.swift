@@ -66,7 +66,7 @@ public struct Evenement: Codable, Hashable, Sendable, Identifiable {
     public var apres: String?
     /// Date incertaine : le changement a eu lieu pendant cette periode (veille du Mac).
     public var periode: DateInterval?
-    /// Etat trouve au lancement, pas un changement observe.
+    /// Etat trouve (au lancement, a la decouverte ou au retour d'un reseau), pas un changement observe.
     public var constate: Bool
     /// Complements ("routeurs": "6", partition -> routeurs, "coupee": "oui"...).
     public var details: [String: String]

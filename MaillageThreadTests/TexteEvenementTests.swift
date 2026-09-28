@@ -50,4 +50,16 @@ struct TexteEvenementTests {
         #expect(!TexteEvenement.titre(lancement).contains("Voisin"))
         #expect(TexteEvenement.titre(lancement).contains("24"), "le texte du lancement ne change pas")
     }
+
+    /// Scission constatee : un seul texte, qu'elle soit trouvee au lancement, a la
+    /// decouverte ou au retour d'un reseau (francais ou anglais, selon le Mac).
+    @Test func scissionTrouvee() {
+        let t = ScenarioPanne.date(4, 14)
+        var e = Evenement(date: t, type: .reseauScinde, reseau: "1122334455667788",
+                          sujet: Sujet(id: "1122334455667788", nom: "Voisin"), avant: "1", apres: "2", constate: true)
+        #expect(["Réseau Voisin trouvé scindé", "Network Voisin found split"].contains(TexteEvenement.titre(e)))
+        e.constate = false
+        #expect(["Réseau Voisin scindé en 2 partitions", "Network Voisin split into 2 partitions"]
+                .contains(TexteEvenement.titre(e)), "observee : inchange")
+    }
 }

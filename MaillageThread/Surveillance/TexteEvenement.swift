@@ -41,7 +41,8 @@ enum TexteEvenement {
             guard let p = e.periode else { return String(localized: "Mac en veille") }
             return String(localized: "Mac en veille de \(heure(p.start)) à \(heure(p.end))")
         case .reseauScinde:
-            if e.constate { return String(localized: "Réseau \(nom) scindé (constaté au lancement)") }
+            // Constatee : au lancement, a la decouverte ou au retour du reseau.
+            if e.constate { return String(localized: "Réseau \(nom) trouvé scindé") }
             return String(localized: "Réseau \(nom) scindé en \(apres) partitions")
         case .reseauReuni:
             return String(localized: "Réseau \(nom) réuni")

@@ -137,7 +137,8 @@ struct BarreOutils: View {
     }
 }
 
-/// Bandeau ambre d'un reseau scinde : depuis quand (ou constate au lancement), et qui est a part.
+/// Bandeau ambre d'un reseau scinde : depuis quand (ou quand ce fut constate : au
+/// lancement, a la decouverte ou au retour du reseau), et qui est a part.
 struct BandeauScission: View {
     @Environment(Surveillance.self) private var surveillance
     let reseau: Reseau

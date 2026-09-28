@@ -11,7 +11,8 @@ import Foundation
 ///   depart : son `surveillanceDemarree`, sa scission constatee s'il est scinde,
 ///   et ni "apparu", ni "nouveau", ni "nouveau prefixe" pour ses membres (un
 ///   disparu qui y revient reste "revenu"). Un reseau deja vu qui revient est
-///   compare normalement.
+///   compare normalement ; s'il revient scinde, sa scission est constatee,
+///   comme au lancement.
 /// - Ensuite : differences entre deux instantanes. Une absence (service ou
 ///   adresses) n'est retenue qu'apres 2 min (`MemoireAnnonces`) et datee de la
 ///   premiere absence.
@@ -55,6 +56,11 @@ public struct Suivi: Sendable {
                                     details: ["routeurs": String(r.routeurs.count), "appareils": String(appareils)]))
                 if r.estScinde { ev.append(Self.scissionConstatee(r, date, noms)) }
             }
+            // Reseaux deja vus qui reviennent (absents de l'instantane precedent) : une
+            // scission est constatee, rien n'etant a comparer ; leurs membres, si.
+            for r in nouveau.reseaux where r.estScinde && reseauxVus.contains(r.id) && ancien.reseau(r.id) == nil {
+                ev.append(Self.scissionConstatee(r, date, noms))
+            }
             let fabrique = noms.fabriqueApple(appareils: nouveau.appareils + nouveau.appareilsIP + ancien.appareils)
             ev += Self.evenementsReseaux(ancien, nouveau, date, noms)
             ev += evenementsRouteurs(ancien, nouveau, date, noms, sauf: Set(apparus.flatMap(\.routeurs).map(\.instance)))
@@ -76,7 +82,8 @@ public struct Suivi: Sendable {
         return ev.map(dater)
     }
 
-    /// Scission trouvee au point de depart d'un reseau : constatee, pas observee.
+    /// Scission trouvee (au lancement, a la decouverte ou au retour d'un reseau) :
+    /// constatee, pas observee.
     static func scissionConstatee(_ r: Reseau, _ date: Date, _ noms: ResolveurNoms) -> Evenement {
         Evenement(date: date, type: .reseauScinde, reseau: r.id, sujet: Sujet(id: r.id, nom: r.nom),
                   apres: String(r.partitions.count), constate: true, details: detailsPartitions(r, noms))
