@@ -3,7 +3,9 @@
 > **Statut : conception validée** par Djoko le 28/09/2026, section par
 > section (1 à 6), spec relue et approuvée. Plan d'implémentation de l'app :
 > `docs/superpowers/plans/2026-09-28-maillage-thread-etape-1.md` ; le passeur
-> Catalyst (section 5) fera l'objet d'un second plan.
+> (section 5, révisée le 28/09 après essai : app iOS lancée sur le Mac, pas
+> Catalyst) fera l'objet du plan 2 ; la sonde a sa propre spec
+> (`2026-09-28-maillage-thread-sonde-design.md`).
 
 ## 0. Contexte, but, décisions
 
@@ -35,8 +37,9 @@ OpenThread précompilée d'Arduino (pont Halo) n'a pas `otThreadSendDiagnosticGe
 - Étapes : vue Mac d'abord, sonde ensuite.
 - App **séparée** de Halo Compagnon, **nouveau dépôt** `~/Dev/maillage-thread`
   (hors iCloud ; public ou privé à décider à la création sur GitHub).
-- **macOS natif SwiftUI** ; noms de Maison par un **passeur Mac Catalyst**
-  (HomeKit n'existe pas en macOS natif).
+- **macOS natif SwiftUI** ; noms de Maison par un **passeur** (HomeKit
+  n'existe pas en macOS natif ; révisé le 28/09 : app iOS lancée sur le Mac,
+  section 5).
 - **Vue + journal** : l'app tourne en permanence (barre des menus, ouverture
   à la connexion) et note les changements.
 - Architecture **A** : une seule app (pas d'agent séparé), graphe en Canvas
@@ -65,9 +68,9 @@ Dépôt `~/Dev/maillage-thread`, XcodeGen, Swift Testing. Trois cibles :
    - **interface** : `MenuBarExtra` (état d'un coup d'œil), fenêtre
      **Graphe** (fiche en bas), fenêtre **Journal** ; ouverture à la
      connexion (`SMAppService.mainApp`).
-3. **`Passeur Noms`** (Mac Catalyst, sans interface visible, capacité
-   HomeKit), rangé dans l'app : lancé à la demande, lit Maison, écrit
-   `noms.json` dans le conteneur partagé (App Group), se ferme.
+3. **`Passeur Noms`** (app iOS lancée sur le Mac « conçue pour iPad »,
+   capacité HomeKit ; section 5) : lancé à la demande, lit Maison, écrit
+   `noms.json` dans un dossier choisi une fois, se ferme.
 
 Flux : recenseur → instantané → journal et notifications ; instantané + noms
 → graphe. Le modèle prévoit dès l'étape 1 des **liens** (enfant → parent,
@@ -177,35 +180,73 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   appareils perdus en 10 min (une notification groupée) ; rien pour les
   simples infos. Mode Concentration respecté.
 
-## 5. Noms : le passeur Catalyst (validée)
+## 5. Noms : le passeur (validée ; révisée le 28/09 après essai)
 
-- `Passeur Noms` (`fr.djoko.maillage.passeur`), Mac Catalyst, sans icône
-  dans le Dock, rangé dans l'app ; lancé au premier lancement, par
-  « Rafraîchir les noms de Maison », puis une fois par jour.
-- Il ouvre Maison (HomeKit, invite unique « Passeur Noms souhaite accéder à
-  vos données Maison »), relève pour chaque accessoire : nom, pièce,
-  fabricant, modèle, catégorie, `matterNodeID` (vérifié dans le SDK :
-  `HMAccessory.matterNodeID`, « node identifier used to identify the device
-  on Apple's Matter fabric », `macCatalyst(16.1)`, classe `HMAccessory`
-  indisponible en macOS natif), nom du domicile ; écrit `noms.json` d'un coup
-  dans le conteneur partagé (App Group), se ferme. L'app surveille le fichier.
-- Correspondance : l'app retrouve seule la fabrique d'Apple (celle dont les
-  numéros de nœud correspondent le mieux aux `matterNodeID`).
-- Si refus d'accès : l'app le dit (Réglages Système › Confidentialité et
-  sécurité › Maison) et continue (surnoms, noms d'hôte). Si la capacité
-  HomeKit est indisponible pour l'équipe : l'app se construit et marche sans
-  passeur. Rien ne sort du Mac.
-- À vérifier au jour 1 : entitlement HomeKit sur une cible Catalyst avec
-  l'équipe ; forme du groupe partagé (`<équipe>.fr.djoko.maillage` côté
-  macOS, repli si Catalyst exige `group.`) ; `matterNodeID` renseigné pour
-  les accessoires Matter de Djoko.
+**Révision du 28/09, après essai.** L'équipe Xcode de Djoko est gratuite
+(« Personal Team »).
+- **Catalyst refusé.** Le provisionnement refuse HomeKit à une app Mac
+  Catalyst : « Entitlement com.apple.developer.homekit not found and could not
+  be included in profile ».
+- **App iOS acceptée.** Il l'accepte pour une **app iOS lancée sur le Mac**,
+  en mode « conçue pour iPad ».
+- **Résultat de l'essai :**
+  - 131 accessoires lus ;
+  - `matterNodeID` présent ;
+  - 61 accessoires à 0, parce qu'ils ne sont pas Matter ;
+  - 45 accessoires au même nœud, celui d'un pont ;
+  - 22 des 23 nœuds de la fabrique d'Apple vus en mDNS retrouvent leur nom.
+- **Pas d'App Group :** une équipe gratuite n'y a pas droit.
+
+**Le passeur.**
+- **Forme.** `Passeur Noms` (`fr.djoko.maillage.passeur`) est une app iOS
+  (SwiftUI), compilée pour « Designed for iPad » et lancée sur le Mac Apple
+  Silicon.
+- **Signature :** profil gratuit valable **7 jours**.
+- **Lancement :** par `outils/passeur.sh`, qui compile avec
+  `-allowProvisioningUpdates`, enveloppe l'app comme Xcode (`Wrapper/` et
+  `WrappedBundle`), puis la lance. Ou par « Rafraîchir les noms de Maison »
+  dans l'app, tant que la signature est valide.
+- **Gatekeeper :** au premier lancement d'une compilation, il demande une
+  autorisation dans Réglages Système › Confidentialité et sécurité.
+
+**Ce qu'il fait.**
+- Il ouvre Maison (invite unique « … souhaite accéder à vos données Maison »).
+- Il relève, pour chaque accessoire : nom, pièce, fabricant, modèle,
+  catégorie, `matterNodeID` (`UInt64?` en Swift ; « node identifier used to
+  identify the device on Apple's Matter fabric »), ainsi que le nom du
+  domicile.
+- Il écrit `noms.json` d'un coup, au format `NomsMaison`, dans **un dossier
+  choisi une fois** (par défaut Documents/Maillage Thread ; signet gardé),
+  puis se ferme.
+
+**Côté app.**
+- Elle lit ce fichier après **un choix unique** dans ses Réglages
+  (« Fichier des noms… », signet à portée de sécurité), et le relit quand il
+  change.
+- Elle garde les derniers noms **indéfiniment**, avec leur date. Au-delà de
+  7 jours, elle affiche : « Noms du <date> : relancer outils/passeur.sh ».
+
+**Correspondance.**
+- L'app retrouve seule la fabrique d'Apple : celle dont les numéros de nœud
+  correspondent le mieux aux `matterNodeID`.
+- Un `matterNodeID` à 0 est ignoré.
+- Un nœud porté par un pont (plusieurs accessoires au même `matterNodeID`,
+  par exemple le hub Aqara et ses accessoires Zigbee) prend le nom de
+  l'accessoire de catégorie pont ; sinon, celui du premier par nom.
+
+**Si l'accès est refusé,** l'app le dit (Réglages Système › Confidentialité et
+sécurité › Maison) et continue avec les surnoms, le fabricant et le modèle
+(sonde), ou les noms d'hôte.
+
+**Confidentialité.** Rien ne sort du Mac.
 
 ## 6. Permissions, erreurs, tests, projet (validée)
 
 - **Permissions** : réseau local (`NSLocalNetworkUsageDescription`,
   `NSBonjourServices` : `_meshcop._udp`, `_matter._tcp`, `_hap._udp`) ;
   notifications ; ouverture à la connexion (`SMAppService`, approbation dans
-  Réglages Système › Général › Ouverture) ; HomeKit (passeur seulement).
+  Réglages Système › Général › Ouverture) ; HomeKit (passeur seulement) ;
+  fichier des noms choisi une fois (`files.user-selected`, signet).
   Bac à sable avec `network.client` ; lecture de la table de routage par
   `sysctl` (à vérifier au jour 1, repli : préfixes tirés des adresses).
 - **Erreurs visibles** : réseau local refusé (bandeau + état du menu, le
@@ -264,12 +305,13 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
     services Matter ; revendication d'un préfixe par une route, à garder en
     sursis comme les services.
 
-## 7. Étape 2 (rappel, sous-projet suivant)
+## 7. Étape 2 : la sonde
 
-Sonde ESP32-C6 dédiée (terminal, jamais parent) ; client TMF de diagnostic ;
-transport vers l'app (USB série et/ou UDP, à concevoir) ; l'app remplit les
-**liens** du modèle ; seule la partition de la sonde est visible par elle
-(les partitions coupées restent vues par le Mac).
+Conçue et validée le 28/09 dans `2026-09-28-maillage-thread-sonde-design.md` :
+- une sonde ESP32-C6 en USB, qui sert de relais ;
+- les requêtes `DIAG_GET` sont fabriquées à la main ;
+- l'intelligence est dans l'app ;
+- deux plans : 3a (la vue) et 3b (le journal et l'historique).
 
 ## 8. Faits réels relevés le 28/09 (pour les tests)
 
