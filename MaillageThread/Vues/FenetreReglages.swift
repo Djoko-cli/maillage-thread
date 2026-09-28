@@ -3,10 +3,12 @@ import MaillageCoeur
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Reglages : notifications par categorie, ouverture a la connexion, langue, diagnostic et capture.
+/// Reglages : notifications par categorie, ouverture a la connexion, langue,
+/// noms de Maison (dossier du passeur), diagnostic et capture.
 struct FenetreReglages: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(OuvertureSession.self) private var ouverture
+    @Environment(DossierNoms.self) private var nomsMaison
     @AppStorage(Notifications.cle(.scission)) private var scission = CategorieAlerte.scission.parDefaut
     @AppStorage(Notifications.cle(.routeurDisparu)) private var routeurDisparu = CategorieAlerte.routeurDisparu.parDefaut
     @AppStorage(Notifications.cle(.pertes)) private var pertes = CategorieAlerte.pertes.parDefaut
@@ -53,6 +55,30 @@ struct FenetreReglages: View {
                 if let messageLangue {
                     Text(messageLangue).foregroundStyle(.red)
                 }
+            }
+            Section("Noms de Maison") {
+                LabeledContent("Dossier des noms") {
+                    HStack {
+                        Text(nomsMaison.dossier?.path(percentEncoded: false) ?? "—")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Button("Choisir…") { nomsMaison.choisir() }
+                    }
+                }
+                if let n = nomsMaison.noms {
+                    LabeledContent("Noms lus",
+                                   value: String(localized: "\(n.accessoires.count) accessoires · \(n.date.formatted(date: .abbreviated, time: .shortened))"))
+                    if DossierNoms.estAncien(n, maintenant: .now) {
+                        Text("Noms du \(n.date.formatted(date: .abbreviated, time: .omitted)) : relance outils/passeur.sh pour les rafraîchir.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                if let p = nomsMaison.probleme {
+                    Text(p).font(.caption).foregroundStyle(.red)
+                }
+                Button("Rafraîchir les noms de Maison") { nomsMaison.lancerPasseur() }
+                    .disabled(surveillance.mode == .demo)
             }
             Section("Diagnostic") {
                 LabeledContent("Écoute", value: etatEcoute)

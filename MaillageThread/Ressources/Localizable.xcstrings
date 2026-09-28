@@ -193,6 +193,22 @@
         }
       }
     },
+    "%lld accessoires · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld accessories · %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld accessoires · %2$@"
+          }
+        }
+      }
+    },
     "%lld appareils Thread perdus" : {
       "localizations" : {
         "en" : {
@@ -609,6 +625,22 @@
         }
       }
     },
+    "Choisir…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisir…"
+          }
+        }
+      }
+    },
     "Dernier relevé" : {
       "localizations" : {
         "en" : {
@@ -637,6 +669,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diagnostic"
+          }
+        }
+      }
+    },
+    "Dossier des noms" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Names folder"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dossier des noms"
           }
         }
       }
@@ -945,6 +993,54 @@
         }
       }
     },
+    "Noms de Maison" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home names"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noms de Maison"
+          }
+        }
+      }
+    },
+    "Noms du %@ : relance outils/passeur.sh pour les rafraîchir." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Names from %@: run outils/passeur.sh again to refresh them."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noms du %@ : relance outils/passeur.sh pour les rafraîchir."
+          }
+        }
+      }
+    },
+    "Noms lus" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Names read"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noms lus"
+          }
+        }
+      }
+    },
     "Notifications" : {
       "localizations" : {
         "en" : {
@@ -1229,6 +1325,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rafraîchir"
+          }
+        }
+      }
+    },
+    "Rafraîchir les noms de Maison" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh Home names"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rafraîchir les noms de Maison"
           }
         }
       }

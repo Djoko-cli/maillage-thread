@@ -37,6 +37,7 @@ struct IconeBarre: View {
 struct MenuBarre: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(OuvertureSession.self) private var ouverture
+    @Environment(DossierNoms.self) private var nomsMaison
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
@@ -59,6 +60,9 @@ struct MenuBarre: View {
             Group {
                 Button("Ouvrir le graphe") { ouvrir("graphe") }
                 Button("Journal…") { ouvrir("journal") }
+                if surveillance.mode == .direct {
+                    Button("Rafraîchir les noms de Maison") { nomsMaison.lancerPasseur() }
+                }
                 Toggle("Ouvrir à la connexion", isOn: Binding(get: { ouverture.active }, set: { ouverture.basculer($0) }))
                     .toggleStyle(.checkbox)
                 if ouverture.approbationRequise {
