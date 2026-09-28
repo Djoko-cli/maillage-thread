@@ -33,6 +33,9 @@ enum TexteEvenement {
         case .surveillanceDemarree:
             let r = e.details["routeurs"] ?? "0"
             let a = e.details["appareils"] ?? "0"
+            if e.sujet != nil {
+                return String(localized: "Surveillance du réseau \(nom) démarrée (routeurs : \(r), appareils : \(a))")
+            }
             return String(localized: "Surveillance démarrée (routeurs : \(r), appareils : \(a))")
         case .veille:
             guard let p = e.periode else { return String(localized: "Mac en veille") }

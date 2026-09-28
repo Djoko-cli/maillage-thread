@@ -1425,6 +1425,22 @@
         }
       }
     },
+    "Surveillance du réseau %@ démarrée (routeurs : %@, appareils : %@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monitoring of network %1$@ started (routers: %2$@, devices: %3$@)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Surveillance du réseau %1$@ démarrée (routeurs : %2$@, appareils : %3$@)"
+          }
+        }
+      }
+    },
     "Surveillance démarrée (routeurs : %@, appareils : %@)" : {
       "localizations" : {
         "en" : {

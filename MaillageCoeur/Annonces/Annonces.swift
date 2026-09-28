@@ -69,4 +69,7 @@ public struct Annonces: Codable, Equatable, Sendable {
     public func adresses(de hote: String?) -> [String] {
         hote.flatMap { adresses[$0] } ?? []
     }
+
+    /// Rien d'annonce : ni routeur, ni Matter, ni HAP (le Mac n'entend rien).
+    public var estVide: Bool { routeurs.isEmpty && matter.isEmpty && hap.isEmpty }
 }

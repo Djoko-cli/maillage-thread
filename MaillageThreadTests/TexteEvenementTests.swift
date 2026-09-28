@@ -31,4 +31,18 @@ struct TexteEvenementTests {
         #expect(Notifications.active(.scission, preferences: UserDefaults(suiteName: "vide-\(UUID())")!))
         #expect(!Notifications.active(.informations, preferences: UserDefaults(suiteName: "vide-\(UUID())")!))
     }
+
+    /// Point de depart d'un reseau vu apres le lancement : le reseau est nomme.
+    @Test func departDUnReseau() {
+        let t = ScenarioPanne.date(4, 14)
+        let lancement = Evenement(date: t, type: .surveillanceDemarree, details: ["routeurs": "6", "appareils": "24"])
+        let reseau = Evenement(date: t, type: .surveillanceDemarree, reseau: "1122334455667788",
+                               sujet: Sujet(id: "1122334455667788", nom: "Voisin"),
+                               details: ["routeurs": "2", "appareils": "1"])
+        let titre = TexteEvenement.titre(reseau)
+        #expect(titre.contains("Voisin"), "le reseau est nomme")
+        #expect(titre.contains("2") && titre.contains("1"))
+        #expect(!TexteEvenement.titre(lancement).contains("Voisin"))
+        #expect(TexteEvenement.titre(lancement).contains("24"), "le texte du lancement ne change pas")
+    }
 }
