@@ -3,7 +3,7 @@ import MaillageCoeur
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Reglages : notifications par categorie, ouverture a la connexion, diagnostic et capture.
+/// Reglages : notifications par categorie, ouverture a la connexion, langue, diagnostic et capture.
 struct FenetreReglages: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(OuvertureSession.self) private var ouverture
@@ -12,6 +12,8 @@ struct FenetreReglages: View {
     @AppStorage(Notifications.cle(.pertes)) private var pertes = CategorieAlerte.pertes.parDefaut
     @AppStorage(Notifications.cle(.informations)) private var informations = CategorieAlerte.informations.parDefaut
     @State private var messageCapture: String?
+    @State private var langue = LangueApp.lire()
+    @State private var messageLangue: String?
 
     var body: some View {
         Form {
@@ -28,6 +30,28 @@ struct FenetreReglages: View {
                 }
                 if let e = ouverture.erreur {
                     Text(e).foregroundStyle(.red)
+                }
+            }
+            Section {
+                Picker("Langue", selection: $langue) {
+                    Text("Celle du Mac").tag(LangueApp.systeme)
+                    Text(verbatim: "Français").tag(LangueApp.francais)
+                    Text(verbatim: "English").tag(LangueApp.anglais)
+                }
+                .onChange(of: langue) { _, l in LangueApp.ecrire(l) }
+                if langue != LangueApp.auLancement {
+                    HStack {
+                        Text("La langue change au prochain lancement.").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Relancer maintenant") {
+                            Task {
+                                do { try await LangueApp.relancer() } catch { messageLangue = error.localizedDescription }
+                            }
+                        }
+                    }
+                }
+                if let messageLangue {
+                    Text(messageLangue).foregroundStyle(.red)
                 }
             }
             Section("Diagnostic") {

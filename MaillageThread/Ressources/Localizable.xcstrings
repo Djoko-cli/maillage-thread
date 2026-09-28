@@ -577,6 +577,22 @@
         }
       }
     },
+    "Celle du Mac" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Same as the Mac"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Celle du Mac"
+          }
+        }
+      }
+    },
     "Dernier relevé" : {
       "localizations" : {
         "en" : {
@@ -749,6 +765,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Journal…"
+          }
+        }
+      }
+    },
+    "La langue change au prochain lancement." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The language changes at the next launch."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La langue change au prochain lancement."
+          }
+        }
+      }
+    },
+    "Langue" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Language"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Langue"
           }
         }
       }
@@ -1085,6 +1133,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rafraîchir"
+          }
+        }
+      }
+    },
+    "Relancer maintenant" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relaunch now"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relancer maintenant"
           }
         }
       }
