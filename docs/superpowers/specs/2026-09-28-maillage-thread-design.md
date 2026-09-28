@@ -232,6 +232,37 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
 - **Projet** : Swift 6, concurrence stricte, avertissements = erreurs,
   catalogues FR/EN, signature par `Local.xcconfig` (équipe, jamais commité),
   macOS 26 minimum, DMG plus tard. Dépôt hors iCloud dès le départ.
+- **Vérifié le 28/09/2026 (jour 1, avec Djoko ; MacBook Pro en Wi-Fi et
+  Ethernet, réseau réel scindé)** :
+  - invites du premier lancement : réseau local, notifications ; ouverture à
+    la connexion inscrite après correction (`SMAppService` répond `.notFound`,
+    pas `.notRegistered`, pour une app jamais inscrite) ; la case suit
+    Réglages Système dans les deux sens ;
+  - table de routage **lue** dans le bac à sable ;
+  - 6 routeurs de bordure, 2 partitions. L'Aqara HubM100 reste seul dans la
+    sienne (au sous-sol, puis 8 min à côté d'un HomePod sans fusion) et a
+    annoncé un temps le préfixe OMR de la partition Apple : un **préfixe
+    partagé** par deux partitions ne dit pas où sont les appareils ; il va à
+    la partition qui a le plus de routeurs de bordure et il est marqué
+    « partagé » (capture `docs/releves/2026-09-28/capture-1228.json`) ;
+  - premier relevé : attendre aussi 2 s de calme des annonces après l'invite
+    « réseau local » (sinon « appareils : 0 », puis une rafale de nouveaux) ;
+  - une scission constatée n'est notifiée qu'une fois par état (décision de
+    Djoko) ; « trouvé scindé » vaut au lancement, à la découverte ou au
+    retour d'un réseau ;
+  - capture enregistrée depuis les réglages et relue par
+    `CodageJSON.decodeur()` (test sur `capture-1228.json`) ;
+  - veille d'une minute : ligne « Mac en veille » ; un relevé pendant
+    l'endormissement faisait courir le sursis pendant la veille : il repart
+    désormais du réveil ;
+  - bouton rafraîchir : aucun faux événement ; textes anglais relus à
+    l'écran ;
+  - l'icône de la barre des menus peut être masquée par un gestionnaire de
+    barre des menus (Pelmet chez Djoko) ;
+  - reste à voir en vrai : coupure du réseau local du Mac (couverte par les
+    tests) ; Mac portable sur un autre réseau local qui a ses propres
+    services Matter ; revendication d'un préfixe par une route, à garder en
+    sursis comme les services.
 
 ## 7. Étape 2 (rappel, sous-projet suivant)
 
