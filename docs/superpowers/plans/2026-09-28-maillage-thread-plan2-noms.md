@@ -1742,3 +1742,34 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | Correspondance : fabrique d'Apple trouvée seule ; `matterNodeID` à 0 ignoré ; nœud d'un pont : nom du pont, sinon premier par nom | 1 |
 | Accès refusé : l'app le dit et continue ; rien ne sort du Mac | 2 (fichier « refusé »), 3 (noms gardés, problème affiché) |
 | Pas d'App Group | 2, 3 (dossier choisi et signets) |
+
+## Écarts d'exécution
+
+Plan exécuté en sous-agents le 28/09/2026 (branche `plan2-noms`). Chaque tâche a été relue. La relecture finale a suivi, puis une vague de correction, relue à son tour. Enfin, une vérification en direct avec Majid.
+
+| Où | Écart | Commits |
+|---|---|---|
+| Tâches 1 à 4 | code identique au plan (transcrit, relu) | `3667be9` à `9f8a76e` |
+| Relecture finale (I1) | dossier des noms résolu à chaque lecture, signet périmé renouvelé, dossier introuvable ou inaccessible signalé ; l'app est inerte en démo et sous tests | `9ab81e1` |
+| Relecture finale (I2, M9) | `outils/passeur.sh` : `APP` doit être un `.app` et l'enveloppe existante la sienne ; produit vérifié avant l'effacement ; certificat valide ; arguments inconnus refusés | `7a82c2e` |
+| Relecture finale (M2 à M4) | passeur : renouvellement du signet sous accès, pas de supposition sur le fil de HomeKit, refus déjà acquis, maison vide et délai de 30 s traités | `5d4858c` |
+| Décision de Majid | « endormi » = `ICD`, ou `SII` de plus de 2 s (secteur ≤ 2000 ms, pile ≥ 2800 ms sur ses relevés) | `7087d90` |
+| Décision de Majid | version du firmware des accessoires dans la fiche (`AccessoireMaison.firmware`) | `b541ad5` |
+| Relecture finale (M7, M8) | textes anglais « Passeur Noms » et guillemets typographiques, commentaires, pont choisi par nom | `a49d529` |
+| Tâche 5 | README, spec (sections 2, 5 et 6), suite spatiale 3D dans la spec de la sonde | `636e3f8` |
+
+**Vérifié en direct avec Majid le 28/09 :**
+- noms, pièces et firmware dans le graphe et la fiche ;
+- dossier des noms toujours reconnu après une recompilation de l'app ;
+- 🔋 sur les appareils sur pile ;
+- « Rafraîchir les noms de Maison » ;
+- noms gardés après relancement.
+
+**Choix de Majid :** le dossier des noms reste la racine du dépôt, où `noms.json` est ignoré par git.
+
+**Constat du jour :**
+- 4 accessoires n'annonçaient plus leur identité Apple. Un redémarrage des routeurs de bordure (Apple TV et HomePod) les a fait revenir sans réappairage.
+- L'Aqara refonde toujours sa propre partition, en reprenant le préfixe OMR de la partition Apple.
+
+À la fin : 88 tests (framework, 13 suites) et 32 tests (app, 13 suites).
+
