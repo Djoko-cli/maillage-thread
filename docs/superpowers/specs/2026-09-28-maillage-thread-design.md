@@ -253,9 +253,10 @@ sécurité › Maison) et continue avec les surnoms, le fabricant et le modèle
   sur la fiche ; noms gardés après relancement ; « Rafraîchir les noms de
   Maison » relance le passeur, qui écrit puis se ferme, et l'app relit.
 - **Constat du jour** : 4 accessoires de Maison n'annoncent plus leur nœud sur
-  la fabrique d'Apple (2 détecteurs FP300, la serrure Nuki de l'entrée, un
-  store Zemismart) ; 3 sont « Sans réponse » dans Maison (le 4e répond,
-  sans doute par une adresse gardée en cache) ; l'app les montre sans nom.
+  la fabrique d'Apple (2 détecteurs, une serrure, un store) ; 3 sont « Sans
+  réponse » dans Maison (le 4e répond, sans doute par une adresse gardée en
+  cache) ; l'app les montre sans nom. Un redémarrage des routeurs de bordure
+  (Apple TV puis HomePod) les fait revenir le soir même, sans réappairage.
 
 ## 6. Permissions, erreurs, tests, projet (validée)
 
