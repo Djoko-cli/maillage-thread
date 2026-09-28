@@ -24,7 +24,7 @@ final class Recenseur {
     var surEtat: ((Etat) -> Void)?
 
     private var navigateurs: [NavigateurBonjour] = []
-    /// "type|instance" -> cible resolue.
+    /// "type|instance" -> derniere cible resolue, gardee tant que l'instance est listee.
     private var cibles: [String: ResolveurDNSSD.Cible] = [:]
     private var demarre = false
     private var enRoute = false
@@ -32,8 +32,8 @@ final class Recenseur {
     private var releveEnAttente = false
     private var tachePeriodique: Task<Void, Never>?
     private var tacheCalme: Task<Void, Never>?
-    /// Demande de tout resoudre a nouveau, consommee au debut du prochain releve.
-    private var oublierCibles = false
+    /// Demande de resoudre de nouveau toutes les instances listees, consommee au debut du prochain releve.
+    private var toutResoudre = false
 
     func demarrer() {
         guard !demarre else { return }
@@ -64,11 +64,12 @@ final class Recenseur {
         enRoute = false
     }
 
-    /// Releve immediat (bouton rafraichir, reveil du Mac) : tout sera resolu a
-    /// nouveau au debut du prochain releve, jamais pendant un releve en cours
-    /// (qui publierait sinon des services sans hote). Sans effet avant la mise en route.
+    /// Releve immediat (bouton rafraichir, reveil du Mac). Au releve suivant, chaque
+    /// instance listee est resolue de nouveau : une reussite remplace sa cible, un
+    /// echec garde la precedente. Un releve en cours n'est pas interrompu : celui-ci
+    /// le suit. Avant la mise en route, rien n'est lance.
     func rafraichir() {
-        oublierCibles = true
+        toutResoudre = true
         guard enRoute else { return }
         Task { @MainActor [weak self] in await self?.releve() }
     }
@@ -118,27 +119,25 @@ final class Recenseur {
     }
 
     private func faireReleve() async -> Annonces {
-        if oublierCibles {
-            cibles = [:]
-            oublierCibles = false
-        }
-        // 1. Instances vues, et leur cible (hote, port) : resolue une fois par instance.
-        var vues: [(type: String, instance: String, txt: Data)] = []
+        // 1. Instances listees, et leur cible (hote, port) : resolue une fois par
+        //    instance, et de nouveau pour toutes apres rafraichir().
+        var vues: [InstanceListee] = []
         for n in navigateurs {
-            for (instance, txt) in n.instances { vues.append((n.type, instance, txt)) }
+            for (instance, txt) in n.instances { vues.append(InstanceListee(type: n.type, instance: instance, txt: txt)) }
         }
-        let cles = Set(vues.map { "\($0.type)|\($0.instance)" })
-        cibles = cibles.filter { cles.contains($0.key) }
-        let aResoudre = vues.filter { cibles["\($0.type)|\($0.instance)"] == nil }.map { ($0.type, $0.instance) }
+        let tout = toutResoudre
+        toutResoudre = false
+        let aResoudre = vues.filter { tout || cibles[Self.cle($0.type, $0.instance)] == nil }
         let resolues = await withTaskGroup(of: (String, ResolveurDNSSD.Cible?).self) { groupe in
-            for (type, instance) in aResoudre {
-                groupe.addTask { ("\(type)|\(instance)", await ResolveurDNSSD.resoudre(instance: instance, type: type)) }
+            for v in aResoudre {
+                let cle = Self.cle(v.type, v.instance)
+                groupe.addTask { (cle, await ResolveurDNSSD.resoudre(instance: v.instance, type: v.type)) }
             }
             var r: [String: ResolveurDNSSD.Cible] = [:]
             for await (cle, cible) in groupe { if let cible { r[cle] = cible } }
             return r
         }
-        cibles.merge(resolues) { _, nouvelle in nouvelle }
+        cibles = Self.retenir(cibles: cibles, resolues: resolues, listees: Set(vues.map { Self.cle($0.type, $0.instance) }))
 
         // 2. Adresses de chaque hote, a chaque releve.
         let hotes = Set(cibles.values.map(\.hote))
@@ -155,15 +154,8 @@ final class Recenseur {
         let routes = TableRoutage.lire()
         routesLisibles = routes != nil
 
-        func services(_ type: String) -> [AnnonceService] {
-            vues.filter { $0.type == type }.map { v in
-                let cible = cibles["\(type)|\(v.instance)"]
-                let txt = v.txt.isEmpty ? (cible?.txt ?? Data()) : v.txt
-                return AnnonceService(instance: v.instance, hote: cible?.hote, port: cible?.port, txt: ChampsTXT(brut: txt))
-            }.sorted { $0.instance < $1.instance }
-        }
-        return Annonces(date: Date(), routeurs: services("_meshcop._udp"), matter: services("_matter._tcp"),
-                        hap: services("_hap._udp"), adresses: adresses, routes: routes ?? [],
-                        prefixesLocaux: InterfacesLocales.prefixes())
+        // 4. Le releve : seules les instances dont la cible est connue y entrent.
+        return Self.assembler(vues: vues, cibles: cibles, adresses: adresses, routes: routes ?? [],
+                              prefixesLocaux: InterfacesLocales.prefixes(), date: Date())
     }
 }
