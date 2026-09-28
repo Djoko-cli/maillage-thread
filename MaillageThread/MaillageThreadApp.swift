@@ -8,6 +8,7 @@ import SwiftUI
 struct MaillageThreadApp: App {
     @State private var surveillance: Surveillance
     @State private var ouverture: OuvertureSession
+    @State private var nomsMaison: DossierNoms
     private let notifications = Notifications()
     private static let demo = CommandLine.arguments.contains("-demo")
     /// Le graphe s'ouvre au lancement en mode demo et au tout premier lancement
@@ -18,8 +19,10 @@ struct MaillageThreadApp: App {
     init() {
         let s = Surveillance(mode: Self.demo ? .demo : .direct, dossier: Self.demo ? nil : Surveillance.dossierParDefaut)
         let o = OuvertureSession()
+        let d = DossierNoms(cache: Self.demo ? nil : Surveillance.dossierParDefaut.appendingPathComponent("noms-maison.json"))
         _surveillance = State(initialValue: s)
         _ouverture = State(initialValue: o)
+        _nomsMaison = State(initialValue: d)
         let premier = !UserDefaults.standard.bool(forKey: Self.clePremierGraphe)
         ouvrirGraphe = !Surveillance.sousTests && (Self.demo || premier)
         guard !Surveillance.sousTests else { return }
@@ -29,6 +32,8 @@ struct MaillageThreadApp: App {
             s.surAlertes = { n.presenter($0) }
             n.demanderAutorisation()
             o.proposerAuPremierLancement()
+            d.surNoms = { [weak s] m in s?.noms.maison = m }
+            d.demarrer()
         }
         s.demarrer()
     }
@@ -38,6 +43,7 @@ struct MaillageThreadApp: App {
             MenuBarre()
                 .environment(surveillance)
                 .environment(ouverture)
+                .environment(nomsMaison)
         } label: {
             IconeBarre(ouvrirGraphe: ouvrirGraphe)
                 .environment(surveillance)
@@ -62,6 +68,7 @@ struct MaillageThreadApp: App {
             FenetreReglages()
                 .environment(surveillance)
                 .environment(ouverture)
+                .environment(nomsMaison)
         }
     }
 }
