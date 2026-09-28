@@ -119,8 +119,8 @@ catalog match.
 HomeKit does not exist in native macOS, and a free Apple developer team cannot
 give it to a Mac Catalyst app. So Home names come from **Passeur Noms**, a small
 iOS app run on the Mac ("Designed for iPad"): it reads Home (names, rooms,
-manufacturers, `matterNodeID`), writes `noms.json` in a folder you choose once,
-and quits.
+manufacturers, `matterNodeID`, batteries), writes `noms.json` in a folder you
+choose once, and quits.
 
 ```sh
 outils/passeur.sh          # build with your team (Xcode account), wrap, launch
@@ -133,8 +133,17 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   then System Settings › Privacy & Security › "Open Anyway". Then allow Home
   access.
 - Choose a folder **outside iCloud and outside this repository** (for example
-  `~/Maillage Thread`); "Change folder…" stays available for 10 s after writing.
-  `noms.json` is ignored by git: never commit it.
+  `~/Maillage Thread`); opened by hand, Passeur Noms offers "Change folder…"
+  for 10 s after writing. `noms.json` is ignored by git: never commit it.
 - In Maillage Thread: Settings › Home names › Choose… (the same folder). Names
-  are reread when Passeur Noms quits; "Refresh Home names" (menu or settings)
-  launches it again. Priority: nickname > Home > HomeKit (`_hap._udp`) > host.
+  are reread when Passeur Noms quits. Priority: nickname > Home > HomeKit
+  (`_hap._udp`) > host.
+- Refreshing: the graph window launches Passeur Noms in the background when it
+  opens (if the last reading is older than 15 min), then every hour; "Refresh
+  from Home" (menu or settings) does it on demand. The app first drops
+  `passeur-demande.json` in the folder, so Passeur Noms writes and quits at
+  once; its window only flashes behind the others.
+- Batteries: level, charging state and the accessory's own low-battery alert,
+  for every Home accessory with a battery. The device card shows them with the
+  age of the reading; in the graph, a glowing orange badge marks a low battery
+  (the accessory says so, or its level is 20 % or less).
