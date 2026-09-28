@@ -58,6 +58,8 @@ struct FenetreReglages: View {
         }
         .formStyle(.grouped)
         .frame(width: 560)
+        // Etat de l'ouverture a la connexion relu a chaque ouverture (Reglages Systeme).
+        .onAppear { ouverture.actualiser() }
     }
 
     private var etatEcoute: String {

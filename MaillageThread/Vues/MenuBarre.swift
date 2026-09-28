@@ -74,6 +74,8 @@ struct MenuBarre: View {
         }
         .padding(14)
         .frame(width: 320, alignment: .leading)
+        // Etat de l'ouverture a la connexion relu a chaque ouverture du menu (Reglages Systeme).
+        .onAppear { ouverture.actualiser() }
     }
 
     @ViewBuilder
