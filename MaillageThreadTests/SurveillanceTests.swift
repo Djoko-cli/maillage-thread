@@ -30,6 +30,9 @@ struct SurveillanceTests {
                 == ["Ampoule entrée", "Prise bureau", "Prise salon", "Thermo chambre"])
         #expect(affiches.first { $0.id == "46F77B36E071F8D0" }?.partition == "73586B68", "disparu a sa derniere place")
         #expect(affiches.first { $0.id == "56B1E064401F74EF" }?.piece == "Bureau")
+        #expect(affiches.first { $0.id == "86E7BD1A75F28E6D" }?.batterie
+                == BatterieMaison(niveau: 52, charge: .horsCharge, alerte: false), "batterie de Maison")
+        #expect(affiches.filter { $0.batterie?.faible == true }.map(\.nom).sorted() == ["Eve Motion", "Fenêtre chambre"])
         #expect(s.evenements(de: "46F77B36E071F8D0").first?.type == .appareilDisparu)
         #expect(s.derniereScission(r)?.date == ScenarioPanne.date(4, 14))
         #expect(s.appareil("46F77B36E071F8D0") != nil, "un disparu reste consultable")

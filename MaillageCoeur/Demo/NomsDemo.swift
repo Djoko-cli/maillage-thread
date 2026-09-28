@@ -34,13 +34,29 @@ public enum NomsDemo {
         "C4E7AE91A29B": ("Prise Wi-Fi bureau", "Bureau", "Meross", "Smart Plug", "Prise"),
     ]
 
+    /// Hote -> batterie : une faible par son niveau, une par l'alerte seule, un volet en charge.
+    static let batteries: [String: BatterieMaison] = [
+        "86E7BD1A75F28E6D": BatterieMaison(niveau: 52, charge: .horsCharge, alerte: false),
+        "02A8C3C5600F136B": BatterieMaison(niveau: 88, alerte: false),
+        "3A5DFAFCAB581AAF": BatterieMaison(niveau: 12, alerte: false),
+        "C656F369B620027F": BatterieMaison(niveau: 45, alerte: false),
+        "D661EE20B3E97C66": BatterieMaison(niveau: 40, alerte: false),
+        "327DF9C45C82BBD6": BatterieMaison(niveau: 100, alerte: false),
+        "462DA5B311AFFCC7": BatterieMaison(alerte: true),
+        "9A5C1F9FDFAB242D": BatterieMaison(niveau: 97, charge: .nonRechargeable, alerte: false),
+        "AA3D322B8A4500C4": BatterieMaison(alerte: false),
+        "82570DF21CF3784B": BatterieMaison(niveau: 81, charge: .enCharge, alerte: false),
+        "724CC16B32D8F820": BatterieMaison(niveau: 64, charge: .horsCharge, alerte: false),
+    ]
+
     public static let maison: NomsMaison = {
         var accessoires: [AccessoireMaison] = []
         for s in Releve20260928.annonces.matter {
-            guard let i = InstanceMatter(instance: s.instance), i.fabrique == fabrique,
-                  let hote = s.hote, let e = table[Instantane.idAppareil(hote: hote, instance: s.instance)] else { continue }
+            guard let i = InstanceMatter(instance: s.instance), i.fabrique == fabrique, let hote = s.hote else { continue }
+            let id = Instantane.idAppareil(hote: hote, instance: s.instance)
+            guard let e = table[id] else { continue }
             accessoires.append(AccessoireMaison(nom: e.0, piece: e.1, fabricant: e.2, modele: e.3,
-                                                categorie: e.4, noeudMatter: i.noeud))
+                                                categorie: e.4, noeudMatter: i.noeud, batterie: batteries[id]))
         }
         return NomsMaison(date: Releve20260928.annonces.date, domicile: "Maison (démo)",
                           accessoires: accessoires.sorted { $0.nom < $1.nom })
