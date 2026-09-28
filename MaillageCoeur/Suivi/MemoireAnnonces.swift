@@ -4,7 +4,8 @@ import Foundation
 /// `sursis` secondes avec ses derniers champs ; passe ce delai, il est
 /// abandonne et la date de sa premiere absence est gardee. De meme pour les
 /// adresses d'un hote qui ne se resolvent plus. Une absence n'est donc retenue
-/// que si elle dure (anti-fausses alertes).
+/// que si elle dure (anti-fausses alertes). Au reveil du Mac, une absence en
+/// cours reprend au reveil (`reprendre`) : son sursis ne compte pas la veille.
 struct MemoireAnnonces: Sendable {
     static let sursis: TimeInterval = 120
 
@@ -79,6 +80,16 @@ struct MemoireAnnonces: Sendable {
             absencesAdresses[hote] = nil
         }
         return sortie
+    }
+
+    /// Au reveil (`fin` de la veille) : chaque absence en cours, de service ou
+    /// d'adresses, commencee avant `fin` reprend a `fin`. Un releve fait pendant
+    /// l'endormissement (reseau deja coupe) ou juste apres le reveil (resolution
+    /// pas prete) ne fait donc rien abandonner d'un coup ; une absence retenue
+    /// ensuite est datee du reveil.
+    mutating func reprendre(apres fin: Date) {
+        absences = absences.mapValues { max($0, fin) }
+        absencesAdresses = absencesAdresses.mapValues { max($0, fin) }
     }
 
     static func services(de a: Annonces) -> [Cle: AnnonceService] {

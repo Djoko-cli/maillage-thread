@@ -367,6 +367,70 @@ struct SuiviTests {
         #expect(tard.first?.date == veille.end + 600)
     }
 
+    /// Veille de 8 h ; une absence commence au releve fait 10 s avant (reseau deja coupe).
+    static let longueVeille = DateInterval(start: t0 + 60, duration: 8 * 3600)
+
+    /// Des adresses manquent 10 s avant la veille, et encore 5 s apres le reveil
+    /// (resolution pas prete) : le sursis reprend au reveil, rien n'est abandonne.
+    /// Revenues 60 s apres : aucun evenement, ni perte ni retour.
+    @Test func sursisReprisAuReveil() {
+        var s = Self.demarre()
+        let veille = Self.longueVeille
+        var b = Self.banc(veille.start - 10)
+        b.adresses[Self.a2 + ".local"] = []
+        #expect(s.integrer(b.annonces).isEmpty)
+        #expect(s.noterVeille(veille).map(\.type) == [.veille])
+        b.date = veille.end + 5
+        #expect(s.integrer(b.annonces).isEmpty, "5 s apres le reveil : toujours en sursis")
+        #expect(s.integrer(Self.banc(veille.end + 60).annonces).isEmpty, "revenues : ni perte ni retour")
+        #expect(s.instantane?.appareil(Self.a2)?.etat == .joignable)
+    }
+
+    /// Les memes adresses manquent encore 130 s apres le reveil : une seule perte,
+    /// datee du reveil, donc de la veille.
+    @Test func sansAdresseDateeDuReveil() throws {
+        var s = Self.demarre()
+        let veille = Self.longueVeille
+        var b = Self.banc(veille.start - 10)
+        b.adresses[Self.a2 + ".local"] = []
+        #expect(s.integrer(b.annonces).isEmpty)
+        #expect(s.noterVeille(veille).map(\.type) == [.veille])
+        b.date = veille.end + 5
+        #expect(s.integrer(b.annonces).isEmpty)
+        b.date = veille.end + 60
+        #expect(s.integrer(b.annonces).isEmpty)
+        b.date = veille.end + 130
+        let ev = s.integrer(b.annonces)
+        #expect(ev.map(\.type) == [.appareilSansAdresse])
+        let e = try #require(ev.first)
+        #expect(e.sujet?.id == Self.a2)
+        #expect(e.date == veille.end, "datee du reveil, pas de l'endormissement")
+        #expect(e.periode == veille, "pendant la veille")
+    }
+
+    /// Le meme debut pour des services absents (l'appareil n'annonce plus rien) :
+    /// disparu 2 min apres le reveil seulement, date du reveil, donc de la veille.
+    @Test func disparuDateDuReveil() throws {
+        var s = Self.demarre()
+        let veille = Self.longueVeille
+        var b = Self.banc(veille.start - 10)
+        b.retirer(Self.a2)
+        #expect(s.integrer(b.annonces).isEmpty)
+        #expect(s.noterVeille(veille).map(\.type) == [.veille])
+        b.date = veille.end + 5
+        #expect(s.integrer(b.annonces).isEmpty)
+        b.date = veille.end + 119
+        #expect(s.integrer(b.annonces).isEmpty, "moins de 2 min apres le reveil")
+        b.date = veille.end + 130
+        let ev = s.integrer(b.annonces)
+        #expect(ev.map(\.type) == [.appareilDisparu])
+        let e = try #require(ev.first)
+        #expect(e.sujet?.id == Self.a2)
+        #expect(e.date == veille.end, "date du reveil")
+        #expect(e.periode == veille, "pendant la veille")
+        #expect(Array(s.disparus.keys) == [Self.a2])
+    }
+
     @Test func formatJSON() throws {
         let e = Evenement(date: Self.t0, type: .reseauScinde, reseau: "4B36A2B7FEFB200B",
                           sujet: Sujet(id: "4B36A2B7FEFB200B", nom: "MyHome1482620090"), avant: "1", apres: "2",
