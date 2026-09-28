@@ -19,15 +19,25 @@ public struct AccessoireMaison: Codable, Hashable, Sendable {
     public var categorie: String?
     /// `HMAccessory.matterNodeID` en 16 hexa majuscules : son noeud sur la fabrique d'Apple.
     public var noeudMatter: String?
+    /// Accessoire de categorie pont : il donne son nom au noeud qu'il partage
+    /// avec les accessoires qu'il porte (absent des fichiers anciens).
+    public var pont: Bool?
 
     public init(nom: String, piece: String? = nil, fabricant: String? = nil, modele: String? = nil,
-                categorie: String? = nil, noeudMatter: String? = nil) {
+                categorie: String? = nil, noeudMatter: String? = nil, pont: Bool? = nil) {
         self.nom = nom
         self.piece = piece
         self.fabricant = fabricant
         self.modele = modele
         self.categorie = categorie
         self.noeudMatter = noeudMatter
+        self.pont = pont
+    }
+
+    /// `matterNodeID` en 16 hexa majuscules ; nil pour un accessoire non Matter (absent ou 0).
+    public static func noeud(_ id: UInt64?) -> String? {
+        guard let id, id != 0 else { return nil }
+        return String(format: "%016llX", id)
     }
 }
 
