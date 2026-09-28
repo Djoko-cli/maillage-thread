@@ -1,9 +1,13 @@
 import Foundation
 import MaillageCoeur
 
-/// Ecoute le reseau local et produit des releves (`Annonces`) : le premier
-/// 10 s apres le demarrage (le temps que les reponses arrivent), puis a chaque
-/// changement des services (apres 2 s de calme) et au moins toutes les 60 s.
+/// Ecoute le reseau local et produit des releves (`Annonces`). Le premier des
+/// que l'ecoute est prete (tous les navigateurs) et qu'un routeur de bordure est
+/// liste, jamais avant 10 s (le temps que les reponses arrivent) et au plus tard
+/// 60 s apres le demarrage. Ensuite, a chaque changement des services (apres
+/// 2 s de calme) et au moins toutes les 60 s ; un changement avant le premier
+/// releve ne declenche rien. Une instance n'entre dans un releve qu'avec sa
+/// cible resolue (hote, port).
 @MainActor
 final class Recenseur {
     enum Etat: Equatable, Sendable {
@@ -12,7 +16,8 @@ final class Recenseur {
     }
 
     static let types = ["_meshcop._udp", "_matter._tcp", "_hap._udp"]
-    static let miseEnRoute: Duration = .seconds(10)
+    nonisolated static let miseEnRoute: Duration = .seconds(10)
+    nonisolated static let attenteMax: Duration = .seconds(60)
     static let calme: Duration = .seconds(2)
     static let periode: Duration = .seconds(60)
 
@@ -44,8 +49,14 @@ final class Recenseur {
             n.demarrer()
             return n
         }
+        let debut = ContinuousClock.now
         tachePeriodique = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: Self.miseEnRoute)
+            // Premier releve : quand premierReleveDu le dit (verifie chaque seconde).
+            while !Task.isCancelled {
+                guard let self else { return }
+                if Self.premierReleveDu(depuis: .now - debut, etat: self.etat, routeurVu: self.routeurVu) { break }
+                try? await Task.sleep(for: .seconds(1))
+            }
             while !Task.isCancelled {
                 guard let self else { return }
                 self.enRoute = true
@@ -53,6 +64,20 @@ final class Recenseur {
                 try? await Task.sleep(for: Self.periode)
             }
         }
+    }
+
+    /// Le premier releve est-il du ? Jamais avant la mise en route (10 s) ;
+    /// ensuite des que l'ecoute est prete (tous les navigateurs) et qu'un routeur
+    /// de bordure est liste ; au plus tard `attenteMax` apres le demarrage, quel
+    /// que soit l'etat (invite en attente, acces refuse, reseau muet).
+    nonisolated static func premierReleveDu(depuis ecoule: Duration, etat: Etat, routeurVu: Bool) -> Bool {
+        guard ecoule >= miseEnRoute else { return false }
+        return ecoule >= attenteMax || (etat == .actif && routeurVu)
+    }
+
+    /// Au moins un routeur de bordure (`_meshcop._udp`) est liste.
+    private var routeurVu: Bool {
+        navigateurs.contains { $0.type == "_meshcop._udp" && !$0.instances.isEmpty }
     }
 
     func arreter() {
