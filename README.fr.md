@@ -76,13 +76,18 @@ notifié. Les noms de Maison de la démo sont inventés.
 
 `Signature.xcconfig` (suivi) signe ad hoc : le dépôt compile et teste
 partout, sans compte Apple, mais l'autorisation « réseau local » ne tient pas
-d'une compilation à l'autre. Pour signer avec son équipe, créer
-`Local.xcconfig` (ignoré par git) :
+d'une compilation à l'autre. Pour signer Maillage Thread avec son équipe,
+créer `Local.xcconfig` (ignoré par git) :
 
 ```
 DEVELOPMENT_TEAM = <équipe, 10 caractères>
 CODE_SIGN_IDENTITY = Apple Development
 ```
+
+Si une installation ad hoc existe déjà, passer à la signature d'équipe fait
+dire une fois à macOS « L'app diffère des versions précédemment ouvertes », et
+l'autorisation « réseau local » est redemandée. Passeur Noms n'est signé avec
+l'équipe que par `outils/passeur.sh` (voir plus bas).
 
 ## Textes : français et anglais
 
@@ -103,12 +108,38 @@ catalogue vont ensemble.
 | Dossier | Rôle |
 |---|---|
 | `MaillageCoeur/` | framework sans interface : décodage des TXT, instantané (réseaux, partitions, préfixes, appareils), suivi et événements du journal, journal en fichiers, noms, disposition du graphe, table de routage ; testé sur le relevé réel et sur la panne rejouée |
+| `MaillageThread/Noms/` | noms de Maison : dossier choisi une fois (signet à portée de sécurité), lecture de `noms.json`, derniers noms gardés, lancement de Passeur Noms |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | modèle de l'app : relevés → suivi → journal et notifications ; veille du Mac ; ouverture à la connexion |
 | `MaillageThread/Vues/` | barre des menus, fenêtre du graphe (Canvas, surcouches en verre), journal, réglages |
+| `Passeur/` | Passeur Noms : app iOS lancée sur le Mac (« conçue pour iPad ») qui lit Maison et écrit `noms.json` |
 | `docs/releves/` | relevés réels (les données des tests et de la démo) |
 | `docs/superpowers/` | conception (spec) et plans d'implémentation |
 
-Pas encore dans cette étape : les noms de Maison, lus par un passeur Mac
-Catalyst (HomeKit n'existe pas en macOS natif). Sans lui, les noms sont :
-surnom > nom HomeKit > hôte.
+## Noms de Maison (Passeur Noms)
+
+HomeKit n'existe pas en macOS natif, et une équipe de développement Apple
+gratuite ne peut pas le donner à une app Mac Catalyst. Les noms de Maison
+viennent donc de **Passeur Noms**, une petite app iOS lancée sur le Mac
+(« conçue pour iPad ») : elle lit Maison (noms, pièces, fabricants,
+`matterNodeID`), écrit `noms.json` dans un dossier choisi une fois, et se
+ferme.
+
+```sh
+outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe, lance
+```
+
+- L'équipe vient de ton certificat « Apple Development » (`EQUIPE=` pour
+  l'imposer). Une équipe gratuite a un profil de 7 jours : relancer le script
+  pour rafraîchir les noms. Seul Passeur Noms est signé avec l'équipe ;
+  Maillage Thread reste ad hoc.
+- Au premier lancement de chaque compilation, macOS dit que l'app est
+  « endommagée » : cliquer Annuler, puis Réglages Système › Confidentialité et
+  sécurité › « Ouvrir quand même ». Autoriser ensuite l'accès à Maison.
+- Choisir un dossier **hors iCloud et hors de ce dépôt** (par exemple
+  `~/Maillage Thread`) ; « Changer de dossier… » reste proposé 10 s après
+  l'écriture. `noms.json` est ignoré par git : ne jamais le commiter.
+- Dans Maillage Thread : Réglages › Noms de Maison › Choisir… (le même
+  dossier). Les noms sont relus quand Passeur Noms se ferme ; « Rafraîchir les
+  noms de Maison » (menu ou réglages) le relance. Priorité : surnom > Maison >
+  HomeKit (`_hap._udp`) > hôte.

@@ -242,6 +242,21 @@ sécurité › Maison) et continue avec les surnoms, le fabricant et le modèle
 
 **Confidentialité.** Rien ne sort du Mac.
 
+- **Dossier conseillé (révision du 28/09, après essai)** : hors iCloud et hors
+  du dépôt, par exemple `~/Maillage Thread` ; le passeur montre le dossier
+  utilisé et « Changer de dossier… » pendant les 10 s qui précèdent sa
+  fermeture ; `noms.json` est ignoré par git (Djoko a gardé la racine du
+  dépôt : c'est le filet de sécurité).
+- **Vérifié le 28/09/2026 avec Djoko** : `outils/passeur.sh` (Gatekeeper
+  autorisé), 131 accessoires écrits ; dans l'app, 22 des 23 nœuds visibles de
+  la fabrique d'Apple nommés (le 23e n'est pas un accessoire de Maison), pièce
+  sur la fiche ; noms gardés après relancement ; « Rafraîchir les noms de
+  Maison » relance le passeur, qui écrit puis se ferme, et l'app relit.
+- **Constat du jour** : 4 accessoires de Maison n'annoncent plus leur nœud sur
+  la fabrique d'Apple (2 détecteurs FP300, la serrure Nuki de l'entrée, un
+  store Zemismart) ; 3 sont « Sans réponse » dans Maison (le 4e répond,
+  sans doute par une adresse gardée en cache) ; l'app les montre sans nom.
+
 ## 6. Permissions, erreurs, tests, projet (validée)
 
 - **Permissions** : réseau local (`NSLocalNetworkUsageDescription`,
@@ -273,8 +288,13 @@ sécurité › Maison) et continue avec les surnoms, le fabricant et le modèle
 - **Mode démo** (`-demo`) : rejoue une capture, pour les captures d'écran et
   les essais sans réseau (comme Halo Compagnon).
 - **Projet** : Swift 6, concurrence stricte, avertissements = erreurs,
-  catalogues FR/EN, signature par `Local.xcconfig` (équipe, jamais commité),
-  macOS 26 minimum, DMG plus tard. Dépôt hors iCloud dès le départ.
+  catalogues FR/EN, signature ad hoc par défaut (`Signature.xcconfig`) ;
+  `Local.xcconfig` (équipe, jamais commité) signe l'app avec l'équipe, mais si
+  une installation ad hoc existe déjà, macOS dit une fois « L'app diffère des
+  versions précédemment ouvertes » et l'autorisation « réseau local » est
+  redemandée ; le passeur n'est signé avec l'équipe que par
+  `outils/passeur.sh` ; macOS 26 minimum, DMG plus tard. Dépôt hors iCloud
+  dès le départ.
 - **Vérifié le 28/09/2026 (jour 1, avec Djoko ; MacBook Pro en Wi-Fi et
   Ethernet, réseau réel scindé)** :
   - invites du premier lancement : réseau local, notifications ; ouverture à
