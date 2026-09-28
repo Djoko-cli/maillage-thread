@@ -1793,6 +1793,22 @@
         }
       }
     },
+    "rattachement, pas un lien radio" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "attachment, not a radio link"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rattachement, pas un lien radio"
+          }
+        }
+      }
+    },
     "routeur" : {
       "localizations" : {
         "en" : {
