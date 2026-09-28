@@ -1,10 +1,16 @@
 // Signature de l'app et des tests.
-// Par defaut : ad hoc (le depot compile partout, sans compte Apple). Pour que
-// l'autorisation "reseau local" tienne d'une compilation a l'autre, signer
-// avec son equipe : creer Local.xcconfig (ignore par git) avec
+// Par defaut : ad hoc (le depot compile partout, sans compte Apple), mais
+// l'autorisation "reseau local" ne tient pas d'une compilation a l'autre. Pour
+// signer l'app avec son equipe : creer Local.xcconfig (ignore par git) avec
 //   DEVELOPMENT_TEAM = <equipe, 10 caracteres>
 //   CODE_SIGN_IDENTITY = Apple Development
-// L'equipe : security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject (champ OU).
+// L'equipe : champ OU d'un certificat « Apple Development » encore valide
+// (outils/passeur.sh la trouve ainsi dans le trousseau).
+// Si une installation ad hoc existe deja, passer a la signature d'equipe fait
+// dire une fois a macOS « L'app differe des versions precedemment ouvertes »,
+// et l'autorisation "reseau local" est redemandee.
+// Le passeur n'est signe avec l'equipe que par outils/passeur.sh (DEVELOPMENT_TEAM
+// en ligne de commande).
 CODE_SIGN_IDENTITY = -
 CODE_SIGN_STYLE = Manual
 DEVELOPMENT_TEAM =

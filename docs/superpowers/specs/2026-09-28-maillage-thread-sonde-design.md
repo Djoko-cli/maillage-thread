@@ -268,3 +268,15 @@ Le plan 3a s'écrit ensuite à partir de ces faits.
 - **Appareils endormis :** délai réel de réponse d'un appareil endormi à qui
   l'on écrit.
 - **Deux C6 en USB :** l'app ne touche jamais au port du pont Halo.
+
+## 9. Suite prévue : vue spatiale (souhait de Majid, 28/09)
+
+Après le plan 3a : une représentation du réseau **par pièce et par étage**,
+avec les vrais liens radio par-dessus. Les pièces viennent de Maison (plan
+2) ; les étages, des zones de Maison (`HMHome.zones`, à exporter par le
+passeur). Rendu **3D** (RealityKit, `RealityView`) : étages en dalles
+translucides empilées, pièces en tuiles (disposées automatiquement,
+déplaçables plus tard), appareils en sphères, routeurs plus gros (couronne
+pour le chef), liens radio en fils colorés selon la qualité, qui traversent
+les dalles ; rotation, zoom, clic pour la fiche. À concevoir quand les liens
+existent.

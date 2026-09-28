@@ -74,13 +74,18 @@ notified. Home names in the demo are made up.
 
 `Signature.xcconfig` (tracked) signs ad hoc: the repository builds and tests
 anywhere, without an Apple account, but the local network permission does
-not survive a rebuild. To sign with your team, create `Local.xcconfig`
-(ignored by git):
+not survive a rebuild. To sign Maillage Thread with your team, create
+`Local.xcconfig` (ignored by git):
 
 ```
 DEVELOPMENT_TEAM = <team, 10 characters>
 CODE_SIGN_IDENTITY = Apple Development
 ```
+
+If an ad hoc install already exists, switching to team signing makes macOS
+warn once that the app differs from previously opened versions, and the local
+network permission is asked again. Passeur Noms is signed with the team only
+by `outils/passeur.sh` (see below).
 
 ## Texts: French and English
 
@@ -101,12 +106,35 @@ catalog match.
 | Folder | Role |
 |---|---|
 | `MaillageCoeur/` | framework without UI: TXT decoding, snapshot (networks, partitions, prefixes, devices), tracking and log events, file log, names, graph layout, routing table; tested on the real survey and on the replayed outage |
+| `MaillageThread/Noms/` | Home names: folder chosen once (security-scoped bookmark), reading `noms.json`, last names kept, launching Passeur Noms |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | app model: surveys → tracking → log and notifications; sleep of the Mac; login item |
 | `MaillageThread/Vues/` | menu bar, graph window (Canvas, glass overlays), log window, settings |
+| `Passeur/` | Passeur Noms: iOS app run on the Mac (Designed for iPad) that reads Home and writes `noms.json` |
 | `docs/releves/` | real surveys (the fixture of the tests and the demo) |
 | `docs/superpowers/` | design (spec) and implementation plans |
 
-Not in this step yet: Home names read through a Mac Catalyst helper (HomeKit
-does not exist in native macOS). Without it, names are: nickname > HomeKit
-name > host.
+## Home names (Passeur Noms)
+
+HomeKit does not exist in native macOS, and a free Apple developer team cannot
+give it to a Mac Catalyst app. So Home names come from **Passeur Noms**, a small
+iOS app run on the Mac ("Designed for iPad"): it reads Home (names, rooms,
+manufacturers, `matterNodeID`), writes `noms.json` in a folder you choose once,
+and quits.
+
+```sh
+outils/passeur.sh          # build with your team (Xcode account), wrap, launch
+```
+
+- The team comes from your "Apple Development" certificate (`EQUIPE=` to force
+  it). A free team gets a 7-day profile: run the script again to refresh names.
+  Only Passeur Noms is signed with the team; Maillage Thread stays ad hoc.
+- First launch of each build: macOS says the app is "damaged". Click Cancel,
+  then System Settings › Privacy & Security › "Open Anyway". Then allow Home
+  access.
+- Choose a folder **outside iCloud and outside this repository** (for example
+  `~/Maillage Thread`); "Change folder…" stays available for 10 s after writing.
+  `noms.json` is ignored by git: never commit it.
+- In Maillage Thread: Settings › Home names › Choose… (the same folder). Names
+  are reread when Passeur Noms quits; "Refresh Home names" (menu or settings)
+  launches it again. Priority: nickname > Home > HomeKit (`_hap._udp`) > host.
