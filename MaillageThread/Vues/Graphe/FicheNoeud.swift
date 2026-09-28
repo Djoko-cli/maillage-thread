@@ -67,7 +67,8 @@ struct FicheNoeud: View {
             }
             Text(a.id).font(.caption.monospaced()).foregroundStyle(.tertiary).textSelection(.enabled)
         }
-        colonneJournal(partition: a.partition ?? surveillance.suivi.dernieresPartitions[a.id], prefixe: a.prefixe)
+        colonneJournal(partition: a.partition ?? surveillance.suivi.dernieresPartitions[a.id], prefixe: a.prefixe,
+                       incertaine: surveillance.instantane?.partitionIncertaine(a) == true)
     }
 
     private func etat(_ a: Appareil, disparu: Bool) -> String {
@@ -156,10 +157,15 @@ struct FicheNoeud: View {
 
     // MARK: Journal du noeud
 
-    private func colonneJournal(partition: String?, prefixe: PrefixeIPv6?) -> some View {
+    /// `incertaine` : partition d'un appareil tiree d'un prefixe partage (voir `Instantane.partitionIncertaine`).
+    private func colonneJournal(partition: String?, prefixe: PrefixeIPv6?, incertaine: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             if let partition {
-                Text("Partition \(partition)").foregroundStyle(.secondary)
+                if incertaine {
+                    Text("Partition \(partition) (incertaine : préfixe partagé)").foregroundStyle(.secondary)
+                } else {
+                    Text("Partition \(partition)").foregroundStyle(.secondary)
+                }
             }
             if let prefixe {
                 Text(prefixe.description).font(.caption.monospaced()).foregroundStyle(.secondary)

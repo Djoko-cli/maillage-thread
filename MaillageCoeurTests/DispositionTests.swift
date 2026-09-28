@@ -71,6 +71,26 @@ struct DispositionTests {
         #expect(d.zones.first?.rayon == 210)
     }
 
+    /// Titre d'une zone : les prefixes de la partition, plus un prefixe partage
+    /// qu'elle revendique sans l'avoir eu (capture de 12:28).
+    @Test func prefixesPartagesDansLesTitres() throws {
+        let i = Instantane(annonces: try Captures.annonces("capture-1228.json"))
+        let d = Disposition(reseau: try #require(i.reseaux.first), appareils: Self.affiches(i))
+        let fd2d = try #require(PrefixeIPv6("fd2d:3b27:72b8::/64"))
+        try #require(d.zones.map(\.id) == ["7C6A2A68", "682A6A7C", ""])
+        #expect(d.zones[0].prefixes == [fd2d])
+        #expect(d.zones[0].prefixesPartages == [fd2d])
+        #expect(d.zones[0].prefixesTitre == [fd2d])
+        #expect(d.zones[1].prefixes.isEmpty)
+        #expect(d.zones[1].prefixesPartages == [fd2d])
+        #expect(d.zones[1].prefixesTitre == [fd2d], "revendique sans l'avoir eu")
+        #expect(d.zones[2].prefixesTitre.isEmpty)
+        // 02:15 : rien de partage, le titre garde les prefixes de la partition.
+        let d0 = Disposition(reseau: try #require(Self.instantane.reseaux.first), appareils: Self.affiches(Self.instantane))
+        #expect(d0.zones.allSatisfy { $0.prefixesPartages.isEmpty && $0.prefixesTitre == $0.prefixes })
+        #expect(d0.zones.first?.prefixesTitre.map(\.description) == ["fd2d:3b27:72b8::/64"])
+    }
+
     @Test func clic() throws {
         let r = try #require(Self.instantane.reseaux.first)
         let d = Disposition(reseau: r, appareils: Self.affiches(Self.instantane))
