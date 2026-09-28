@@ -39,6 +39,19 @@ public struct BatterieMaison: Codable, Hashable, Sendable {
         self.alerte = alerte
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case niveau, charge, alerte
+    }
+
+    /// Un etat de charge inconnu (ecrit par un passeur plus recent que l'app)
+    /// est ignore, plutot que de rendre tout `noms.json` illisible.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        niveau = try c.decodeIfPresent(Int.self, forKey: .niveau)
+        charge = (try? c.decodeIfPresent(Charge.self, forKey: .charge)) ?? nil
+        alerte = try c.decodeIfPresent(Bool.self, forKey: .alerte)
+    }
+
     /// Faible : l'accessoire le signale, ou son niveau est au plus au seuil.
     public var faible: Bool {
         alerte == true || niveau.map { $0 <= Self.seuilFaible } == true
@@ -160,6 +173,17 @@ public struct DemandePasseur: Codable, Hashable, Sendable {
 
     public func estRecente(_ maintenant: Date) -> Bool {
         abs(maintenant.timeIntervalSince(date)) <= Self.validite
+    }
+
+    /// Pour le passeur, apres une ecriture reussie (acces au dossier ouvert) :
+    /// retire la demande du dossier, quelle qu'elle soit ; vrai si elle est
+    /// recente, donc s'il doit se fermer aussitot. Plus ancienne ou illisible,
+    /// c'est un reste : le passeur a ete ouvert a la main.
+    public static func consommer(dans dossier: URL, maintenant: Date) -> Bool {
+        let url = dossier.appendingPathComponent(fichier)
+        guard let donnees = try? Data(contentsOf: url) else { return false }
+        try? FileManager.default.removeItem(at: url)
+        return (try? lire(donnees))?.estRecente(maintenant) == true
     }
 
     public static func lire(_ donnees: Data) throws -> DemandePasseur {

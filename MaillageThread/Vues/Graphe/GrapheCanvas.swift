@@ -151,7 +151,7 @@ struct GrapheCanvas: View {
     /// nil si elle ne l'est pas.
     static func pastilleBatterie(_ b: BatterieMaison?) -> String? {
         guard let b, b.faible else { return nil }
-        return b.niveau.map { String(localized: "\($0) %") } ?? String(localized: "faible")
+        return b.niveau.map { String(localized: "\($0)\u{202F}%") } ?? String(localized: "faible")
     }
 
     /// Pastille orange en surbrillance : petit triangle et texte, dans une capsule

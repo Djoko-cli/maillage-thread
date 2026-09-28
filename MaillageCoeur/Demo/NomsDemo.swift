@@ -58,7 +58,8 @@ public enum NomsDemo {
             accessoires.append(AccessoireMaison(nom: e.0, piece: e.1, fabricant: e.2, modele: e.3,
                                                 categorie: e.4, noeudMatter: i.noeud, batterie: batteries[id]))
         }
-        return NomsMaison(date: Releve20260928.annonces.date, domicile: "Maison (démo)",
+        // Dans le temps de la demo (la fin de la panne rejouee) : « releve il y a 5 minutes ».
+        return NomsMaison(date: ScenarioPanne.fin.addingTimeInterval(-5 * 60), domicile: "Maison (démo)",
                           accessoires: accessoires.sorted { $0.nom < $1.nom })
     }()
 }

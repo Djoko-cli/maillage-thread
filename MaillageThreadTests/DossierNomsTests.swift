@@ -178,11 +178,15 @@ struct DossierNomsTests {
         #expect(lue == DemandePasseur(date: t))
     }
 
-    /// Sans memoire (demo, tests) : l'ouverture du graphe ne lance jamais le passeur.
-    @Test func pasDeRafraichissementEnDemo() {
-        let d = DossierNoms(cache: nil)
-        d.rafraichirSiAncien()
-        #expect(d.derniereDemande == nil)
+    /// Sans memoire (demo, tests) ou sans dossier : l'ouverture du graphe ne
+    /// lance jamais le passeur, meme avec un releve ancien.
+    @Test func doitRafraichir() {
+        let t = Date(timeIntervalSince1970: 1_790_000_000)
+        let ancien = t.addingTimeInterval(-3600)
+        #expect(DossierNoms.doitRafraichir(memoire: true, dossier: true, releve: ancien, demande: nil, maintenant: t))
+        #expect(!DossierNoms.doitRafraichir(memoire: false, dossier: true, releve: ancien, demande: nil, maintenant: t))
+        #expect(!DossierNoms.doitRafraichir(memoire: true, dossier: false, releve: ancien, demande: nil, maintenant: t))
+        #expect(!DossierNoms.doitRafraichir(memoire: true, dossier: true, releve: t, demande: nil, maintenant: t))
     }
 
     /// Mode demo (sans memoire) : ni preferences ni signet, meme valide.

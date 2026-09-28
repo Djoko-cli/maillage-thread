@@ -143,7 +143,7 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   déplacement au trackpad ; survol = nom + lien éclairé ; clic = fiche.
 - **Barre des menus** (même matériau) : icône orange si alerte ; résumé
   (réseau, partitions, routeurs, appareils, injoignables), 3 derniers
-  événements, « Ouvrir le graphe », « Journal… », « Rafraîchir les noms de
+  événements, « Ouvrir le graphe », « Journal… », « Rafraîchir depuis
   Maison », « Ouvrir à la connexion », « Quitter ».
 - Fenêtre **Journal** : événements datés, filtres par type et gravité,
   recherche.
@@ -264,9 +264,9 @@ sécurité › Maison) et continue avec les surnoms, le fabricant et le modèle
 **Confidentialité.** Rien ne sort du Mac.
 
 - **Dossier conseillé (révision du 28/09, après essai)** : hors iCloud et hors
-  du dépôt, par exemple `~/Maillage Thread` ; le passeur montre le dossier
-  utilisé et « Changer de dossier… » pendant les 10 s qui précèdent sa
-  fermeture ; `noms.json` est ignoré par git (Djoko a gardé la racine du
+  du dépôt, par exemple `~/Maillage Thread` ; ouvert à la main, le passeur
+  montre le dossier utilisé et « Changer de dossier… » pendant les 10 s qui
+  précèdent sa fermeture ; `noms.json` est ignoré par git (Djoko a gardé la racine du
   dépôt : c'est le filet de sécurité).
 - **Vérifié le 28/09/2026 avec Djoko** : `outils/passeur.sh` (Gatekeeper
   autorisé), 131 accessoires écrits ; dans l'app, 22 des 23 nœuds visibles de

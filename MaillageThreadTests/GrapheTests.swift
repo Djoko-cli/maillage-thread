@@ -42,20 +42,36 @@ struct FicheTests {
         #expect(FicheNoeud.ligneDescription(maison: nil, modeleHomeKit: nil) == "")
     }
 
+    /// Textes de l'app, dans la langue de l'hote des tests.
+    static func pourcent(_ n: Int) -> String { String(localized: "\(n)\u{202F}%") }
+    static let surBatterie = String(localized: "sur batterie")
+    static let enCharge = String(localized: "en charge")
+    static let nonRechargeable = String(localized: "non rechargeable")
+    static let faible = String(localized: "batterie faible")
+    static let ok = String(localized: "batterie OK")
+
     /// Niveau, puis l'etat de charge ; faible, « batterie faible » (et « en
-    /// charge » seulement) ; sans niveau, l'alerte seule.
+    /// charge » seulement) ; sans niveau, l'alerte seule, et « batterie OK »
+    /// seulement si l'accessoire le dit.
     @Test func ligneBatterie() {
-        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 52, charge: .horsCharge)) == "52 % · sur batterie")
-        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 81, charge: .enCharge)) == "81 % · en charge")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 52, charge: .horsCharge))
+                == "\(Self.pourcent(52)) · \(Self.surBatterie)")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 81, charge: .enCharge))
+                == "\(Self.pourcent(81)) · \(Self.enCharge)")
         #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 97, charge: .nonRechargeable))
-                == "97 % · non rechargeable")
-        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 88)) == "88 %")
-        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 12, charge: .horsCharge)) == "12 % · batterie faible")
+                == "\(Self.pourcent(97)) · \(Self.nonRechargeable)")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 88)) == Self.pourcent(88))
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 12, charge: .horsCharge))
+                == "\(Self.pourcent(12)) · \(Self.faible)")
         #expect(FicheNoeud.ligneBatterie(BatterieMaison(niveau: 15, charge: .enCharge))
-                == "15 % · batterie faible · en charge")
-        #expect(FicheNoeud.ligneBatterie(BatterieMaison(alerte: true)) == "batterie faible")
-        #expect(FicheNoeud.ligneBatterie(BatterieMaison(alerte: false)) == "batterie OK")
-        #expect(FicheNoeud.ligneBatterie(BatterieMaison(charge: .enCharge, alerte: false)) == "batterie OK · en charge")
+                == "\(Self.pourcent(15)) · \(Self.faible) · \(Self.enCharge)")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(alerte: true)) == Self.faible)
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(alerte: false)) == Self.ok)
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(charge: .enCharge, alerte: false))
+                == "\(Self.ok) · \(Self.enCharge)")
+        #expect(FicheNoeud.ligneBatterie(BatterieMaison(charge: .enCharge)) == Self.enCharge, "alerte inconnue")
+        #expect(Self.pourcent(52).contains("\u{202F}") || !Self.pourcent(52).contains(" "),
+                "pas d'espace secable avant %")
     }
 
     /// Triangle si faible, eclair en charge, sinon le niveau par quart.
@@ -72,9 +88,9 @@ struct FicheTests {
 
     /// Pastille du graphe : seulement pour une batterie faible ; le niveau, sinon « faible ».
     @Test func pastilleBatterie() {
-        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(niveau: 12)) == "12 %")
-        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(alerte: true)) == "faible")
-        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(niveau: 90, alerte: true)) == "90 %")
+        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(niveau: 12)) == Self.pourcent(12))
+        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(alerte: true)) == String(localized: "faible"))
+        #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(niveau: 90, alerte: true)) == Self.pourcent(90))
         #expect(GrapheCanvas.pastilleBatterie(BatterieMaison(niveau: 52)) == nil)
         #expect(GrapheCanvas.pastilleBatterie(nil) == nil)
     }

@@ -4,6 +4,7 @@ import SwiftUI
 /// Fiche du noeud choisi : carte de verre en bas de la fenetre.
 struct FicheNoeud: View {
     @Environment(Surveillance.self) private var surveillance
+    @Environment(\.colorScheme) private var apparence
     let id: String
     @Binding var aRenommer: NoeudChoisi?
     var fermer: () -> Void
@@ -57,8 +58,8 @@ struct FicheNoeud: View {
             if let b = maison?.batterie {
                 HStack(spacing: 6) {
                     Image(systemName: Self.symboleBatterie(b))
-                        .foregroundStyle(b.faible ? Color.orange : b.charge == .enCharge ? Color.green : Color.primary)
-                    Text(Self.ligneBatterie(b)).foregroundStyle(b.faible ? Color.orange : Color.primary)
+                        .foregroundStyle(b.faible ? orange : b.charge == .enCharge ? Color.green : Color.primary)
+                    Text(Self.ligneBatterie(b)).foregroundStyle(b.faible ? orange : Color.primary)
                     if let releve = surveillance.noms.maison?.date {
                         Text("· relevé \(Self.relatif(releve, surveillance.maintenant))").foregroundStyle(.secondary)
                     }
@@ -88,14 +89,17 @@ struct FicheNoeud: View {
     }
 
     /// Niveau, puis l'etat de charge ; faible, « batterie faible » (et « en
-    /// charge » seulement) ; sans niveau, « batterie OK » ou « batterie faible ».
+    /// charge » seulement) ; sans niveau, l'alerte : « batterie OK » seulement
+    /// si l'accessoire le dit.
     static func ligneBatterie(_ b: BatterieMaison) -> String {
         var parties: [String] = []
         if let n = b.niveau {
-            parties.append(String(localized: "\(n) %"))
+            parties.append(String(localized: "\(n)\u{202F}%"))
             if b.faible { parties.append(String(localized: "batterie faible")) }
-        } else {
-            parties.append(b.faible ? String(localized: "batterie faible") : String(localized: "batterie OK"))
+        } else if b.faible {
+            parties.append(String(localized: "batterie faible"))
+        } else if b.alerte == false {
+            parties.append(String(localized: "batterie OK"))
         }
         switch b.charge {
         case .enCharge: parties.append(String(localized: "en charge"))
@@ -117,6 +121,9 @@ struct FicheNoeud: View {
         default: return "battery.100percent"
         }
     }
+
+    /// Orange de la batterie faible, assez fonce en mode clair pour se lire sur le verre pale.
+    private var orange: Color { apparence == .dark ? .orange : Color(red: 0.72, green: 0.36, blue: 0) }
 
     private func etat(_ a: Appareil, disparu: Bool) -> String {
         if disparu { return String(localized: "disparu") }
