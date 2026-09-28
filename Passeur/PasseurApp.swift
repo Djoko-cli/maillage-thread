@@ -92,8 +92,8 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
         gestionnaire = g
         Task { [weak self] in
             try? await Task.sleep(for: Self.delaiMaison)
-            // Rien d'ecrit ni en attente d'un dossier : Maison n'a pas repondu.
-            guard let self, self.dernier == nil, self.enAttente == nil else { return }
+            // Rien d'ecrit, ni en attente d'un dossier, ni lecture en cours : Maison n'a pas repondu.
+            guard let self, self.dernier == nil, self.enAttente == nil, self.apresLectures == nil else { return }
             self.ecrire(NomsMaison(date: .now, statut: .erreur, message: "Maison n'a pas répondu"))
         }
     }
@@ -218,7 +218,8 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
         return (url, perime)
     }
 
-    /// Ecrit `noms.json` dans le dossier choisi, puis ferme l'app 10 s plus tard.
+    /// Ecrit `noms.json` dans le dossier choisi, puis ferme l'app : aussitot si
+    /// l'app l'a demande, sinon 10 s plus tard.
     private func ecrire(_ n: NomsMaison) {
         guard let (dossier, perime) = dossier() else {
             enAttente = n
@@ -241,22 +242,13 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
                 ? "\(n.accessoires.count) accessoires écrits dans \(Self.fichier)."
                 : (n.message ?? "Accès à Maison refusé.")
             // Lance en arriere-plan par l'app : se fermer aussitot.
-            if Self.retirerDemande(dans: dossier) { exit(0) }
+            if DemandePasseur.consommer(dans: dossier, maintenant: .now) { exit(0) }
             reprendreFermeture()
         } catch {
             enAttente = n
             dossierManquant = true
             etat = "Écriture impossible : \(error.localizedDescription)"
         }
-    }
-
-    /// Demande deposee par l'app avant de lancer le passeur : retiree ; vrai si
-    /// elle est recente (plus ancienne, c'est un reste : le passeur a ete ouvert a la main).
-    private static func retirerDemande(dans dossier: URL) -> Bool {
-        let url = dossier.appendingPathComponent(DemandePasseur.fichier)
-        guard let donnees = try? Data(contentsOf: url) else { return false }
-        try? FileManager.default.removeItem(at: url)
-        return (try? DemandePasseur.lire(donnees))?.estRecente(.now) == true
     }
 
     /// Le compte a rebours s'arrete pendant le choix d'un autre dossier.

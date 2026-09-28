@@ -135,14 +135,18 @@ final class DossierNoms {
             return
         }
         derniereDemande = .now
+        // Le dossier a pu bouger depuis la derniere lecture.
+        resoudre()
+        var demandeDeposee = false
         if let dossier {
             let acces = dossier.startAccessingSecurityScopedResource()
             defer { if acces { dossier.stopAccessingSecurityScopedResource() } }
-            // Sans demande, le passeur ecrit quand meme, puis attend 10 s avant de se fermer.
-            try? Self.deposerDemande(dans: dossier, date: .now)
+            demandeDeposee = (try? Self.deposerDemande(dans: dossier, date: .now)) != nil
         }
         let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = false
+        // Sans demande (pas de dossier, ecriture impossible), le passeur attend 10 s
+        // ou demande un dossier : au premier plan, pour qu'on le voie.
+        configuration.activates = !demandeDeposee
         configuration.addsToRecentItems = false
         NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [weak self] _, erreur in
             guard let erreur else { return }
@@ -156,9 +160,14 @@ final class DossierNoms {
     /// relance le passeur si le dernier releve a plus de 15 min. Jamais sans
     /// memoire (mode demo, tests) ni sans dossier.
     func rafraichirSiAncien(maintenant: Date = .now) {
-        guard cache != nil, dossier != nil,
-              Self.aRafraichir(releve: noms?.date, demande: derniereDemande, maintenant: maintenant) else { return }
+        guard Self.doitRafraichir(memoire: cache != nil, dossier: dossier != nil, releve: noms?.date,
+                                  demande: derniereDemande, maintenant: maintenant) else { return }
         lancerPasseur()
+    }
+
+    nonisolated static func doitRafraichir(memoire: Bool, dossier: Bool, releve: Date?, demande: Date?,
+                                           maintenant: Date) -> Bool {
+        memoire && dossier && aRafraichir(releve: releve, demande: demande, maintenant: maintenant)
     }
 
     /// Releve absent ou de plus de 15 min, et pas de demande dans les 15

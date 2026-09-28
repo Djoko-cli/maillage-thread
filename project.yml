@@ -76,7 +76,7 @@ targets:
       path: Passeur/Info.plist
       properties:
         CFBundleDisplayName: Passeur Noms
-        NSHomeKitUsageDescription: "Passeur Noms lit les noms, pièces et fabricants de vos accessoires Maison pour Maillage Thread. Rien ne sort de ce Mac."
+        NSHomeKitUsageDescription: "Passeur Noms lit les noms, pièces, fabricants et batteries de vos accessoires Maison pour Maillage Thread. Rien ne sort de ce Mac."
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

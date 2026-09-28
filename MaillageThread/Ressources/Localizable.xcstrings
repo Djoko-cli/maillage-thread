@@ -209,22 +209,6 @@
         }
       }
     },
-    "%lld %%" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld%%"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld %%"
-          }
-        }
-      }
-    },
     "%lld accessoires · %@" : {
       "localizations" : {
         "en" : {
@@ -269,6 +253,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld appareils perdus entre %2$@ et %3$@"
+          }
+        }
+      }
+    },
+    "%lld %%" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%%"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld %%"
           }
         }
       }

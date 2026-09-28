@@ -98,6 +98,13 @@ struct NomsTests {
         #expect(try NomsMaison.lire(try n.donnees()) == n)
     }
 
+    /// Un etat de charge inconnu (passeur plus recent que l'app) ne rend pas le
+    /// fichier illisible : seule la charge est perdue.
+    @Test func chargeInconnue() throws {
+        let json = #"{"accessoires":[{"batterie":{"charge":"sansFil","niveau":40},"nom":"Store"}],"date":"2026-09-28T12:00:00.000Z","statut":"ok","version":1}"#
+        #expect(try NomsMaison.lire(Data(json.utf8)).accessoires.first?.batterie == BatterieMaison(niveau: 40))
+    }
+
     /// Faible : l'accessoire le signale, ou son niveau est a 20 % ou moins.
     @Test func batterieFaible() {
         #expect(BatterieMaison(niveau: 20).faible)
@@ -124,6 +131,26 @@ struct NomsTests {
                 == BatterieMaison(alerte: true), "hors bornes")
         #expect(BatterieMaison.depuisHomeKit(niveau: "99", charge: nil, alerte: nil) == nil, "pas un nombre")
         #expect(BatterieMaison.depuisHomeKit(niveau: nil, charge: nil, alerte: nil) == nil)
+    }
+
+    /// Le passeur consomme la demande apres son ecriture : il la retire dans
+    /// tous les cas, et ne se ferme aussitot que si elle est recente.
+    @Test func demandeConsommee() throws {
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("demande-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent(DemandePasseur.fichier)
+        let t = Date(timeIntervalSince1970: 1_790_000_000)
+        #expect(!DemandePasseur.consommer(dans: dossier, maintenant: t), "pas de demande : ouvert a la main")
+        try DemandePasseur(date: t).donnees().write(to: fichier)
+        #expect(DemandePasseur.consommer(dans: dossier, maintenant: t.addingTimeInterval(3)))
+        #expect(!FileManager.default.fileExists(atPath: fichier.path))
+        try DemandePasseur(date: t).donnees().write(to: fichier)
+        #expect(!DemandePasseur.consommer(dans: dossier, maintenant: t.addingTimeInterval(600)), "un reste")
+        #expect(!FileManager.default.fileExists(atPath: fichier.path))
+        try Data("pas du json".utf8).write(to: fichier)
+        #expect(!DemandePasseur.consommer(dans: dossier, maintenant: t))
+        #expect(!FileManager.default.fileExists(atPath: fichier.path))
     }
 
     /// Demande de l'app au passeur : relue telle quelle, recente 2 min seulement.
