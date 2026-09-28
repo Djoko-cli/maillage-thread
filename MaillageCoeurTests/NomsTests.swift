@@ -83,6 +83,59 @@ struct NomsTests {
         #expect(try NomsMaison.lire(try n.donnees()) == n)
     }
 
+    /// `batterie` est facultatif : un fichier ancien, sans ce champ, se lit ;
+    /// un fichier qui l'a le garde.
+    @Test func contratBatterie() throws {
+        let ancien = #"{"accessoires":[{"nom":"Halo"}],"date":"2026-09-28T12:00:00.000Z","statut":"ok","version":1}"#
+        #expect(try NomsMaison.lire(Data(ancien.utf8)).accessoires.first?.batterie == nil)
+        let avec = #"{"accessoires":[{"batterie":{"alerte":false,"charge":"enCharge","niveau":81},"nom":"Store"}],"date":"2026-09-28T12:00:00.000Z","statut":"ok","version":1}"#
+        #expect(try NomsMaison.lire(Data(avec.utf8)).accessoires.first?.batterie
+                == BatterieMaison(niveau: 81, charge: .enCharge, alerte: false))
+        let n = NomsMaison(date: Date(timeIntervalSince1970: 1_790_000_000), accessoires: [
+            AccessoireMaison(nom: "Serrure", batterie: BatterieMaison(niveau: 52, charge: .horsCharge, alerte: false)),
+            AccessoireMaison(nom: "Interrupteur", batterie: BatterieMaison(alerte: true)),
+        ])
+        #expect(try NomsMaison.lire(try n.donnees()) == n)
+    }
+
+    /// Faible : l'accessoire le signale, ou son niveau est a 20 % ou moins.
+    @Test func batterieFaible() {
+        #expect(BatterieMaison(niveau: 20).faible)
+        #expect(!BatterieMaison(niveau: 21).faible)
+        #expect(BatterieMaison(niveau: 90, alerte: true).faible, "l'accessoire le signale")
+        #expect(BatterieMaison(alerte: true).faible, "alerte sans niveau")
+        #expect(!BatterieMaison(alerte: false).faible)
+        #expect(!BatterieMaison().faible)
+    }
+
+    /// Valeurs de HomeKit (NSNumber) : niveau de 0 a 100 ; charge 0 (hors
+    /// charge), 1 (en charge) ou 2 (non rechargeable) ; alerte 0 ou 1. Une
+    /// valeur hors de ces bornes est ignoree ; rien de lisible : pas de batterie.
+    @Test func batterieDepuisHomeKit() {
+        #expect(BatterieMaison.depuisHomeKit(niveau: NSNumber(value: 99), charge: NSNumber(value: 0),
+                                             alerte: NSNumber(value: 0))
+                == BatterieMaison(niveau: 99, charge: .horsCharge, alerte: false))
+        #expect(BatterieMaison.depuisHomeKit(niveau: nil, charge: NSNumber(value: 1), alerte: NSNumber(value: 1))
+                == BatterieMaison(charge: .enCharge, alerte: true))
+        #expect(BatterieMaison.depuisHomeKit(niveau: NSNumber(value: 100), charge: NSNumber(value: 2), alerte: nil)
+                == BatterieMaison(niveau: 100, charge: .nonRechargeable))
+        #expect(BatterieMaison.depuisHomeKit(niveau: NSNumber(value: 250), charge: NSNumber(value: 7),
+                                             alerte: NSNumber(value: 1))
+                == BatterieMaison(alerte: true), "hors bornes")
+        #expect(BatterieMaison.depuisHomeKit(niveau: "99", charge: nil, alerte: nil) == nil, "pas un nombre")
+        #expect(BatterieMaison.depuisHomeKit(niveau: nil, charge: nil, alerte: nil) == nil)
+    }
+
+    /// Demande de l'app au passeur : relue telle quelle, recente 2 min seulement.
+    @Test func demandePasseur() throws {
+        let t = Date(timeIntervalSince1970: 1_790_000_000)
+        let d = DemandePasseur(date: t)
+        #expect(try DemandePasseur.lire(try d.donnees()) == d)
+        #expect(d.estRecente(t.addingTimeInterval(119)))
+        #expect(!d.estRecente(t.addingTimeInterval(121)), "reste d'un passeur qui ne s'est pas lance")
+        #expect(DemandePasseur.fichier == "passeur-demande.json")
+    }
+
     @Test func priorite() throws {
         let halo = try #require(instantane.appareil("56B1E064401F74EF"))
         let f = "30FC8F95E0E1A385"
