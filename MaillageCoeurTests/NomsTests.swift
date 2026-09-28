@@ -13,6 +13,50 @@ struct NomsTests {
         #expect(ResolveurNoms().fabriqueApple(appareils: instantane.appareils) == nil, "sans Maison")
     }
 
+    @Test func noeudMatter() {
+        #expect(AccessoireMaison.noeud(nil) == nil)
+        #expect(AccessoireMaison.noeud(0) == nil, "accessoire non Matter")
+        #expect(AccessoireMaison.noeud(0x4F55E160) == "000000004F55E160")
+        #expect(AccessoireMaison.noeud(0xFEDCBA9876543210) == "FEDCBA9876543210")
+    }
+
+    /// Un pont porte plusieurs accessoires sur un seul noeud : le noeud prend
+    /// le nom du pont, sinon du premier par nom.
+    @Test func pont() throws {
+        let halo = try #require(instantane.appareil("561F9A6463953778"))
+        let f = "309BEA1CCA0C1569"
+        let noeud = try #require(halo.instances.first { $0.fabrique == f }?.noeud)
+        var maison = NomsMaison(date: Date(timeIntervalSince1970: 1_790_000_000), accessoires: [
+            AccessoireMaison(nom: "Lampe 2", noeudMatter: noeud),
+            AccessoireMaison(nom: "Pont Hue", categorie: "Bridge", noeudMatter: noeud, pont: true),
+            AccessoireMaison(nom: "Lampe 1", noeudMatter: noeud),
+        ])
+        #expect(ResolveurNoms(maison: maison).nom(appareil: halo, fabriqueApple: f) == "Pont Hue")
+        maison.accessoires[1].pont = nil
+        #expect(ResolveurNoms(maison: maison).nom(appareil: halo, fabriqueApple: f) == "Lampe 1")
+    }
+
+    /// Un `matterNodeID` a 0 (accessoire non Matter) n'identifie personne.
+    @Test func noeudNul() throws {
+        var b = Banc()
+        b.appareil("AAAA000000000001", noeud: 0, adresses: ["fd2d:3b27:72b8::11"])
+        let a = try #require(Instantane(annonces: b.annonces).appareil("AAAA000000000001"))
+        let n = ResolveurNoms(maison: NomsMaison(date: Date(timeIntervalSince1970: 1_790_000_000), accessoires: [
+            AccessoireMaison(nom: "Camera IP", noeudMatter: "0000000000000000"),
+        ]))
+        #expect(n.fabriqueApple(appareils: [a]) == nil)
+        #expect(n.accessoire(de: a, fabriqueApple: "309BEA1CCA0C1569") == nil)
+        #expect(n.nom(appareil: a, fabriqueApple: "309BEA1CCA0C1569") == "AAAA000000000001")
+    }
+
+    /// `pont` est facultatif : un fichier sans ce champ se lit.
+    @Test func contratSansPont() throws {
+        let json = #"{"accessoires":[{"nom":"Halo","noeudMatter":"00000000000002E9"}],"date":"2026-09-28T12:00:00.000Z","statut":"ok","version":1}"#
+        let n = try NomsMaison.lire(Data(json.utf8))
+        #expect(n.accessoires.first?.pont == nil)
+        #expect(n.accessoires.first?.noeudMatter == "00000000000002E9")
+    }
+
     @Test func priorite() throws {
         let halo = try #require(instantane.appareil("561F9A6463953778"))
         let f = "309BEA1CCA0C1569"
