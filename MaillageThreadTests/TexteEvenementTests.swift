@@ -12,7 +12,7 @@ struct TexteEvenementTests {
         return s
     }
 
-    @Test func textes() {
+    @Test func textes() throws {
         let t = ScenarioPanne.date(4, 14)
         for type in TypeEvenement.allCases {
             let e = Evenement(date: t, type: type, sujet: Sujet(id: "x", nom: "Nuki Ultra"), avant: "chef", apres: "routeur",
@@ -20,16 +20,21 @@ struct TexteEvenementTests {
             #expect(!TexteEvenement.titre(e).isEmpty, "\(type)")
         }
         let s = Self.demo()
-        guard case .pertes(let pertes)? = s.lignesJournal.first else { return }
+        guard case .pertes(let pertes)? = s.lignesJournal.first else {
+            Issue.record("les pertes regroupees en tete du journal")
+            return
+        }
         let titre = TexteEvenement.titre(LigneJournal.pertes(pertes))
         #expect(titre.contains("5"))
         #expect(titre.contains(TexteEvenement.heure(ScenarioPanne.date(4, 20))))
-        let scission = s.evenements.first { $0.type == .reseauScinde }!
+        let scission = try #require(s.evenements.first { $0.type == .reseauScinde })
         #expect(TexteEvenement.isoles(scission) == "Aqara HubM100 #DFEB")
         let notification = TexteEvenement.notification(AlerteAEnvoyer(categorie: .pertes, identifiant: "p", evenements: pertes))
         #expect(notification.corps.contains("Prise bureau"))
-        #expect(Notifications.active(.scission, preferences: UserDefaults(suiteName: "vide-\(UUID())")!))
-        #expect(!Notifications.active(.informations, preferences: UserDefaults(suiteName: "vide-\(UUID())")!))
+        let vides = try #require(UserDefaults(suiteName: "vide-\(UUID())"))
+        #expect(Notifications.active(.scission, preferences: vides))
+        let videsAussi = try #require(UserDefaults(suiteName: "vide-\(UUID())"))
+        #expect(!Notifications.active(.informations, preferences: videsAussi))
     }
 
     /// Point de depart d'un reseau vu apres le lancement : le reseau est nomme.
