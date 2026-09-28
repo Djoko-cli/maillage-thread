@@ -59,6 +59,39 @@ struct SurveillanceTests {
         #expect(lue.date == ScenarioPanne.releves[11].date)
     }
 
+    /// Deux reseaux Thread : un appareil devenu sans adresse ne va qu'au reseau
+    /// de sa derniere partition, pas aussi au premier.
+    @Test func deuxReseaux() throws {
+        let debut = Releve20260928.annonces.date
+        func annonces(_ t: TimeInterval, adresse: Bool) -> Annonces {
+            var a = Releve20260928.annonces
+            a.date = debut.addingTimeInterval(t)
+            // Second reseau : un chef (autre xp, partition BBBBBBBB) qui publie son prefixe OMR.
+            a.routeurs.append(AnnonceService(instance: "Voisin", hote: "Voisin.local", port: 49153, txt: ChampsTXT([
+                "nn": Data("Voisin".utf8), "xp": Data([0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]),
+                "tv": Data("1.4.0".utf8), "pt": Data([0xBB, 0xBB, 0xBB, 0xBB]), "sb": Data([0, 0, 0x07, 0xB1]),
+                "omr": Data([0x40, 0xFD, 0x99, 0, 0, 0, 0, 0, 0x01]),
+            ])))
+            a.adresses["Voisin.local"] = ["fe80::99"]
+            a.matter.append(AnnonceService(instance: "30FC8F95E0E1A385-00000000000000BB", hote: "BBBB000000000001.local"))
+            a.adresses["BBBB000000000001.local"] = adresse ? ["fd99:0:0:1::5"] : []
+            return a
+        }
+        let s = Surveillance(mode: .direct, dossier: nil)
+        s.integrer(annonces(0, adresse: true))
+        s.integrer(annonces(60, adresse: false))
+        s.integrer(annonces(180, adresse: false))
+        let i = try #require(s.instantane)
+        #expect(i.reseaux.map(\.nom) == ["MyHome1482620090", "Voisin"])
+        #expect(i.appareil("BBBB000000000001")?.etat == .sansAdresse)
+        let maison = try #require(i.reseaux.first)
+        let voisin = try #require(i.reseaux.last)
+        #expect(!s.appareilsAffiches(pour: maison).contains { $0.id == "BBBB000000000001" }, "pas dans le premier reseau")
+        #expect(s.appareilsAffiches(pour: voisin).map(\.id) == ["BBBB000000000001"])
+        #expect(s.appareilsAffiches(pour: voisin).first?.partition == "BBBBBBBB")
+        #expect(s.resume?.appareils == 24, "le premier reseau ne compte pas l'appareil du voisin")
+    }
+
     @Test func veilleDuMac() {
         let s = Surveillance(mode: .direct, dossier: nil)
         s.integrer(ScenarioPanne.releves[0])

@@ -202,11 +202,14 @@ final class Surveillance {
     /// Appareils a dessiner pour un reseau : presents, puis disparus (a leur place).
     func appareilsAffiches(pour r: Reseau) -> [AppareilAffiche] {
         guard let i = instantane else { return [] }
-        let partitions = Set(r.partitions.map(\.id))
         let premier = i.reseaux.first?.id == r.id
         func appartient(_ a: Appareil) -> Bool {
             if let x = a.idReseau { return x == r.id }
-            if let p = suivi.dernieresPartitions[a.id], partitions.contains(p) { return true }
+            // Derniere partition connue : l'appareil va au reseau qui la contient, et a lui seul.
+            if let p = suivi.dernieresPartitions[a.id],
+               let proprio = i.reseaux.first(where: { $0.partitions.contains { $0.id == p } }) {
+                return proprio.id == r.id
+            }
             return premier
         }
         func affiche(_ a: Appareil, _ etat: EtatAffiche) -> AppareilAffiche {
