@@ -80,8 +80,12 @@ struct MenuBarre: View {
     private var entete: some View {
         let alerte = surveillance.alerte
         HStack(spacing: 8) {
-            Image(systemName: alerte ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(alerte ? .orange : .green)
+            if muet != nil {
+                Image(systemName: "wifi.slash").foregroundStyle(.secondary)
+            } else {
+                Image(systemName: alerte ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(alerte ? .orange : .green)
+            }
             Text(titre).font(.headline)
         }
         if let r = surveillance.resume {
@@ -95,8 +99,14 @@ struct MenuBarre: View {
         }
     }
 
+    /// Le Mac n'entend plus rien depuis cette date ; le resume montre le dernier etat connu.
+    private var muet: Date? {
+        surveillance.instantane == nil ? nil : surveillance.rienVuDepuis
+    }
+
     private var titre: String {
         if surveillance.instantane == nil { return String(localized: "Écoute du réseau local…") }
+        if let d = muet { return String(localized: "Rien de visible sur le réseau local depuis \(TexteEvenement.heure(d))") }
         guard let r = surveillance.reseau else { return String(localized: "Aucun réseau Thread visible") }
         if r.estScinde { return String(localized: "Réseau scindé") }
         return surveillance.alerte ? String(localized: "Alerte dans l'heure") : String(localized: "Réseau Thread normal")

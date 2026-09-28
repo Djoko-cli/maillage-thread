@@ -1105,6 +1105,22 @@
         }
       }
     },
+    "Rien de visible sur le réseau local depuis %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing visible on the local network since %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rien de visible sur le réseau local depuis %@"
+          }
+        }
+      }
+    },
     "Routeur de bordure" : {
       "localizations" : {
         "en" : {
