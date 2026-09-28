@@ -5,8 +5,10 @@ public enum StatutPasseur: String, Codable, Hashable, Sendable {
     case ok
     /// L'utilisateur a refuse l'acces a Maison.
     case refuse
-    /// HomeKit indisponible (capacite absente de la signature).
+    /// HomeKit indisponible : garde pour la compatibilite, le passeur ne
+    /// l'ecrit pas aujourd'hui.
     case indisponible
+    /// Echec du releve (aucun domicile, Maison sans reponse) ; `message` le detaille.
     case erreur
 }
 
@@ -44,8 +46,9 @@ public struct AccessoireMaison: Codable, Hashable, Sendable {
     }
 }
 
-/// Contrat du fichier `noms.json`, ecrit d'un coup par le passeur (Mac
-/// Catalyst) dans le conteneur partage, lu par l'app.
+/// Contrat du fichier `noms.json`, ecrit d'un coup par le passeur (app iOS
+/// lancee sur le Mac) dans un dossier choisi une fois, sans App Group, et lu
+/// par l'app.
 public struct NomsMaison: Codable, Hashable, Sendable {
     public static let versionActuelle = 1
 

@@ -93,8 +93,9 @@ targets:
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_ENTITLEMENTS: Passeur/Passeur.entitlements
-        # HomeKit exige un profil : signature automatique avec l'equipe de
-        # Local.xcconfig (equipe gratuite : app iOS « concue pour iPad »).
+        # HomeKit exige un profil : signature automatique ; l'equipe est donnee
+        # par outils/passeur.sh (DEVELOPMENT_TEAM en ligne de commande) ; ne pas
+        # creer Local.xcconfig : il signerait aussi l'app.
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: Apple Development
         SUPPORTS_MACCATALYST: NO
