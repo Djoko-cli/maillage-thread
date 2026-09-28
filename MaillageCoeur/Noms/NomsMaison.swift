@@ -12,6 +12,60 @@ public enum StatutPasseur: String, Codable, Hashable, Sendable {
     case erreur
 }
 
+/// Batterie d'un accessoire de Maison : service Batterie de HomeKit, lu par le passeur.
+public struct BatterieMaison: Codable, Hashable, Sendable {
+    /// `HMCharacteristicTypeChargingState`.
+    public enum Charge: String, Codable, Hashable, Sendable {
+        case horsCharge
+        case enCharge
+        case nonRechargeable
+    }
+
+    /// Niveau, en %, a partir duquel la batterie est dite faible si
+    /// l'accessoire ne le signale pas lui-meme.
+    public static let seuilFaible = 20
+
+    /// `HMCharacteristicTypeBatteryLevel`, de 0 a 100 ; absent quand
+    /// l'accessoire ne donne que l'alerte.
+    public var niveau: Int?
+    public var charge: Charge?
+    /// `HMCharacteristicTypeStatusLowBattery` : l'accessoire signale lui-meme
+    /// sa batterie faible.
+    public var alerte: Bool?
+
+    public init(niveau: Int? = nil, charge: Charge? = nil, alerte: Bool? = nil) {
+        self.niveau = niveau
+        self.charge = charge
+        self.alerte = alerte
+    }
+
+    /// Faible : l'accessoire le signale, ou son niveau est au plus au seuil.
+    public var faible: Bool {
+        alerte == true || niveau.map { $0 <= Self.seuilFaible } == true
+    }
+
+    /// Depuis les valeurs de HomeKit (NSNumber) : niveau de 0 a 100 ; charge
+    /// 0 (hors charge), 1 (en charge) ou 2 (non rechargeable) ; alerte 0 ou 1.
+    /// Une valeur hors de ces bornes est ignoree ; nil si aucune n'est lisible.
+    public static func depuisHomeKit(niveau: Any?, charge: Any?, alerte: Any?) -> BatterieMaison? {
+        func entier(_ v: Any?) -> Int? { (v as? NSNumber)?.intValue }
+        var b = BatterieMaison()
+        if let n = entier(niveau), (0...100).contains(n) { b.niveau = n }
+        switch entier(charge) {
+        case 0: b.charge = .horsCharge
+        case 1: b.charge = .enCharge
+        case 2: b.charge = .nonRechargeable
+        default: break
+        }
+        switch entier(alerte) {
+        case 0: b.alerte = false
+        case 1: b.alerte = true
+        default: break
+        }
+        return b == BatterieMaison() ? nil : b
+    }
+}
+
 /// Accessoire de Maison, tel que le passeur le releve.
 public struct AccessoireMaison: Codable, Hashable, Sendable {
     public var nom: String
@@ -26,9 +80,12 @@ public struct AccessoireMaison: Codable, Hashable, Sendable {
     /// Accessoire de categorie pont : il donne son nom au noeud qu'il partage
     /// avec les accessoires qu'il porte (absent des fichiers anciens).
     public var pont: Bool?
+    /// Batterie, pour un accessoire qui en a une (absent des fichiers anciens).
+    public var batterie: BatterieMaison?
 
     public init(nom: String, piece: String? = nil, fabricant: String? = nil, modele: String? = nil,
-                firmware: String? = nil, categorie: String? = nil, noeudMatter: String? = nil, pont: Bool? = nil) {
+                firmware: String? = nil, categorie: String? = nil, noeudMatter: String? = nil, pont: Bool? = nil,
+                batterie: BatterieMaison? = nil) {
         self.nom = nom
         self.piece = piece
         self.fabricant = fabricant
@@ -37,6 +94,7 @@ public struct AccessoireMaison: Codable, Hashable, Sendable {
         self.categorie = categorie
         self.noeudMatter = noeudMatter
         self.pont = pont
+        self.batterie = batterie
     }
 
     /// `matterNodeID` en 16 hexa majuscules ; nil pour un accessoire non Matter (absent ou 0).
@@ -78,6 +136,34 @@ public struct NomsMaison: Codable, Hashable, Sendable {
         let n = try CodageJSON.decodeur().decode(NomsMaison.self, from: donnees)
         guard n.version <= versionActuelle else { throw Erreur.versionTropRecente(n.version) }
         return n
+    }
+
+    public func donnees() throws -> Data {
+        try CodageJSON.encodeur(lisible: true).encode(self)
+    }
+}
+
+/// Demande de l'app au passeur, deposee dans le dossier des noms avant de le
+/// lancer en arriere-plan : il ecrit `noms.json`, retire la demande et se
+/// ferme aussitot, sans compte a rebours. Lance a la main, il n'en trouve pas.
+/// (Le passeur se croit toujours au premier plan : il ne peut pas le deviner.)
+public struct DemandePasseur: Codable, Hashable, Sendable {
+    public static let fichier = "passeur-demande.json"
+    /// Au-dela, une demande est un reste (passeur qui ne s'est pas lance) : ignoree.
+    public static let validite: TimeInterval = 120
+
+    public var date: Date
+
+    public init(date: Date) {
+        self.date = date
+    }
+
+    public func estRecente(_ maintenant: Date) -> Bool {
+        abs(maintenant.timeIntervalSince(date)) <= Self.validite
+    }
+
+    public static func lire(_ donnees: Data) throws -> DemandePasseur {
+        try CodageJSON.decodeur().decode(DemandePasseur.self, from: donnees)
     }
 
     public func donnees() throws -> Data {
