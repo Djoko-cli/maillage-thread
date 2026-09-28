@@ -57,6 +57,18 @@ struct NomsTests {
         #expect(n.accessoires.first?.noeudMatter == "00000000000002E9")
     }
 
+    /// `firmware` est facultatif : un fichier ancien, sans ce champ, se lit ;
+    /// un fichier qui l'a le garde.
+    @Test func contratFirmware() throws {
+        let ancien = #"{"accessoires":[{"nom":"Halo","noeudMatter":"00000000000002E9"}],"date":"2026-09-28T12:00:00.000Z","statut":"ok","version":1}"#
+        #expect(try NomsMaison.lire(Data(ancien.utf8)).accessoires.first?.firmware == nil)
+        let avec = #"{"accessoires":[{"firmware":"1.4.2","nom":"Halo","noeudMatter":"00000000000002E9"}],"date":"2026-09-28T12:00:00.000Z","statut":"ok","version":1}"#
+        #expect(try NomsMaison.lire(Data(avec.utf8)).accessoires.first?.firmware == "1.4.2")
+        let n = NomsMaison(date: Date(timeIntervalSince1970: 1_790_000_000),
+                           accessoires: [AccessoireMaison(nom: "Halo", modele: "Halo", firmware: "1.4.2")])
+        #expect(try NomsMaison.lire(try n.donnees()) == n)
+    }
+
     @Test func priorite() throws {
         let halo = try #require(instantane.appareil("56B1E064401F74EF"))
         let f = "30FC8F95E0E1A385"

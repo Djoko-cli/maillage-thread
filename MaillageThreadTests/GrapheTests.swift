@@ -23,3 +23,22 @@ struct GrapheTests {
         #expect(abs(c2.x - 510) < 1e-9 && abs(c2.y - 415) < 1e-9)
     }
 }
+
+@MainActor
+@Suite("Fiche d'un appareil")
+struct FicheTests {
+    /// Piece, fabricant (sinon modele HomeKit), modele, puis firmware quand Maison le donne.
+    @Test func ligneDescription() {
+        let maison = AccessoireMaison(nom: "Capteur", piece: "Salon", fabricant: "Acme", modele: "Capteur 2",
+                                      firmware: "1.4.2")
+        #expect(FicheNoeud.ligneDescription(maison: maison, modeleHomeKit: nil)
+                == "Salon · Acme · Capteur 2 · firmware 1.4.2")
+        var sansFirmware = maison
+        sansFirmware.firmware = nil
+        #expect(FicheNoeud.ligneDescription(maison: sansFirmware, modeleHomeKit: nil) == "Salon · Acme · Capteur 2")
+        sansFirmware.firmware = ""
+        #expect(FicheNoeud.ligneDescription(maison: sansFirmware, modeleHomeKit: nil) == "Salon · Acme · Capteur 2")
+        #expect(FicheNoeud.ligneDescription(maison: nil, modeleHomeKit: "Eve Door") == "Eve Door")
+        #expect(FicheNoeud.ligneDescription(maison: nil, modeleHomeKit: nil) == "")
+    }
+}

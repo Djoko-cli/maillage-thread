@@ -43,8 +43,7 @@ struct FicheNoeud: View {
         let maison = surveillance.accessoire(a)
         VStack(alignment: .leading, spacing: 4) {
             Text(surveillance.nom(a)).font(.title3.weight(.semibold))
-            let description = [maison?.piece, maison?.fabricant ?? a.hap?.modele, maison?.modele]
-                .compactMap { $0 }.joined(separator: " · ")
+            let description = Self.ligneDescription(maison: maison, modeleHomeKit: a.hap?.modele)
             if !description.isEmpty {
                 Text(description).foregroundStyle(.secondary)
             }
@@ -69,6 +68,13 @@ struct FicheNoeud: View {
         }
         colonneJournal(partition: a.partition ?? surveillance.suivi.dernieresPartitions[a.id], prefixe: a.prefixe,
                        incertaine: surveillance.instantane?.partitionIncertaine(a) == true)
+    }
+
+    /// Piece, fabricant (sinon modele HomeKit), modele, et firmware quand Maison le donne.
+    static func ligneDescription(maison: AccessoireMaison?, modeleHomeKit: String?) -> String {
+        let firmware = maison?.firmware.flatMap { $0.isEmpty ? nil : String(localized: "firmware \($0)") }
+        return [maison?.piece, maison?.fabricant ?? modeleHomeKit, maison?.modele, firmware]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 
     private func etat(_ a: Appareil, disparu: Bool) -> String {

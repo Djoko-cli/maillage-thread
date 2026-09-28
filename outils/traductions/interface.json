@@ -126,6 +126,7 @@
   "endormi (réveil %lld s)": "sleepy (wakes every %lld s)",
   "enfant": "child",
   "entre %@ et %@ (Mac en veille)": "between %1$@ and %2$@ (Mac asleep)",
+  "firmware %@": "firmware %@",
   "illisible : préfixes tirés des adresses": "unreadable: prefixes taken from addresses",
   "inconnu": "unknown",
   "isolé (partition coupée)": "isolated (split partition)",
