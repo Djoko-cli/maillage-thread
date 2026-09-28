@@ -60,6 +60,7 @@ targets:
         PRODUCT_NAME: Maillage Thread
         PRODUCT_MODULE_NAME: MaillageThread
         PRODUCT_BUNDLE_IDENTIFIER: fr.djoko.maillage
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_ENTITLEMENTS: MaillageThread/Droits.entitlements
@@ -90,6 +91,7 @@ targets:
         PRODUCT_NAME: Passeur Noms
         PRODUCT_MODULE_NAME: Passeur
         PRODUCT_BUNDLE_IDENTIFIER: fr.djoko.maillage.passeur
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_ENTITLEMENTS: Passeur/Passeur.entitlements
