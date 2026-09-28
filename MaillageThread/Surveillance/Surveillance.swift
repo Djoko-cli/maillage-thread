@@ -35,6 +35,10 @@ final class Surveillance {
     /// Journal : evenements gardes (90 jours) puis ceux de la session, du plus ancien au plus recent.
     private(set) var evenements: [Evenement] = []
     private(set) var dernierReleve: Annonces?
+    /// Date du premier releve vide recu alors qu'un instantane existe (le Mac
+    /// n'entend plus rien : reseau local coupe, acces refuse) ; nil des qu'un
+    /// releve non vide arrive.
+    private(set) var rienVuDepuis: Date?
     private(set) var routesLisibles: Bool?
     private(set) var erreurJournal: String?
     var noms: ResolveurNoms
@@ -109,10 +113,16 @@ final class Surveillance {
         recenseur?.rafraichir()
     }
 
-    /// Integre un releve : evenements, journal, notifications.
+    /// Integre un releve : evenements, journal, notifications. Un releve vide ne
+    /// change pas l'instantane (voir `Suivi`) : il est seulement note (`rienVuDepuis`).
     func integrer(_ a: Annonces) {
         dernierReleve = a
         routesLisibles = mode == .demo ? true : recenseur?.routesLisibles
+        if !a.estVide {
+            rienVuDepuis = nil
+        } else if instantane != nil && rienVuDepuis == nil {
+            rienVuDepuis = a.date
+        }
         let nouveaux = suivi.integrer(a, noms: noms)
         ajouter(nouveaux)
     }

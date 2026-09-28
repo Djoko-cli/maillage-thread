@@ -98,10 +98,10 @@ struct FicheNoeud: View {
         return f.localizedString(for: d, relativeTo: reference)
     }
 
-    /// Present : le dernier releve ; disparu : sa premiere absence.
+    /// Present : l'instantane integre (un releve vide ne compte pas) ; disparu : sa premiere absence.
     private func vuLe(_ a: Appareil, disparu: Bool) -> Date? {
         if disparu { return surveillance.evenements(de: a.id).first { $0.type == .appareilDisparu }?.date }
-        return surveillance.dernierReleve?.date
+        return surveillance.instantane?.date
     }
 
     private func genre(_ a: Appareil) -> String {

@@ -99,4 +99,27 @@ struct SurveillanceTests {
         #expect(s.evenements.last?.type == .veille)
         #expect(s.evenements.last?.periode?.duration == 0, "fin avant le debut : ramenee au debut")
     }
+
+    /// Le Mac n'entend plus rien : aucun evenement, l'instantane reste, et la
+    /// date du premier releve vide est gardee jusqu'au prochain releve non vide.
+    @Test func reseauLocalMuet() throws {
+        let s = Surveillance(mode: .direct, dossier: nil)
+        s.integrer(Annonces(date: ScenarioPanne.debut))
+        #expect(s.rienVuDepuis == nil, "pas encore d'instantane")
+        s.integrer(ScenarioPanne.releves[0])
+        let evenements = s.evenements
+        let date = try #require(s.instantane?.date)
+        let muet = ScenarioPanne.releves[0].date.addingTimeInterval(300)
+        s.integrer(Annonces(date: muet))
+        #expect(s.evenements == evenements, "aucun evenement")
+        #expect(s.rienVuDepuis == muet)
+        #expect(s.instantane?.date == date)
+        #expect(s.dernierReleve?.date == muet, "le dernier releve recu, pour le diagnostic")
+        s.integrer(Annonces(date: muet.addingTimeInterval(60)))
+        #expect(s.rienVuDepuis == muet, "date du premier releve vide")
+        var retour = ScenarioPanne.releves[0]
+        retour.date = muet.addingTimeInterval(120)
+        s.integrer(retour)
+        #expect(s.rienVuDepuis == nil)
+    }
 }
