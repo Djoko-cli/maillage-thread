@@ -64,6 +64,42 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_ENTITLEMENTS: MaillageThread/Droits.entitlements
         ENABLE_HARDENED_RUNTIME: YES
+  Passeur:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Passeur
+      - path: MaillageCoeur/Noms/NomsMaison.swift
+      - path: MaillageCoeur/Annonces/CodageJSON.swift
+    info:
+      path: Passeur/Info.plist
+      properties:
+        CFBundleDisplayName: Passeur Noms
+        NSHomeKitUsageDescription: "Passeur Noms lit les noms, pièces et fabricants de vos accessoires Maison pour Maillage Thread. Rien ne sort de ce Mac."
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+    settings:
+      base:
+        PRODUCT_NAME: Passeur Noms
+        PRODUCT_MODULE_NAME: Passeur
+        PRODUCT_BUNDLE_IDENTIFIER: fr.djoko.maillage.passeur
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_ENTITLEMENTS: Passeur/Passeur.entitlements
+        # HomeKit exige un profil : signature automatique avec l'equipe de
+        # Local.xcconfig (equipe gratuite : app iOS « concue pour iPad »).
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
   MaillageCoeurTests:
     type: bundle.unit-test
     platform: macOS
@@ -107,3 +143,9 @@ schemes:
         - MaillageThreadTests
     archive:
       config: Release
+  Passeur:
+    build:
+      targets:
+        Passeur: all
+    run:
+      config: Debug
