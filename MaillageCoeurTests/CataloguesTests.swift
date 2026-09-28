@@ -3,8 +3,7 @@ import Testing
 
 /// Catalogues de textes de l'app, lus dans le depot. Ces tests vivent ici (et
 /// non dans MaillageThreadTests) : les tests de l'app tournent dans l'app
-/// sandboxee, qui ne peut pas lire le depot. L'alignement avec le code vient
-/// a la tache 18.
+/// sandboxee, qui ne peut pas lire le depot.
 enum Catalogues {
     static let racine = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()  // MaillageCoeurTests
@@ -17,6 +16,43 @@ enum Catalogues {
         let d = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: chemin)) as? [String: Any])
         let cles = try #require(d["strings"] as? [String: [String: Any]])
         return (d["sourceLanguage"] as? String ?? "", cles)
+    }
+
+    /// Dossier des produits (`.../Build/Products/Debug`) : celui de ce paquet de test.
+    private final class Ancre {}
+    static var produits: URL { Bundle(for: Ancre.self).bundleURL.deletingLastPathComponent() }
+
+    /// `.stringsdata` de l'app : `Build/Intermediates.noindex/MaillageThread.build/<config>/MaillageThread.build/Objects-normal/<arch>/`.
+    static var stringsdata: [URL] {
+        let config = produits.lastPathComponent
+        let objets = produits.deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Intermediates.noindex/MaillageThread.build")
+            .appendingPathComponent(config)
+            .appendingPathComponent("MaillageThread.build/Objects-normal")
+        let fm = FileManager.default
+        var fichiers: [URL] = []
+        for arch in (try? fm.contentsOfDirectory(at: objets, includingPropertiesForKeys: nil)) ?? [] {
+            for f in (try? fm.contentsOfDirectory(at: arch, includingPropertiesForKeys: nil)) ?? []
+            where f.pathExtension == "stringsdata" {
+                fichiers.append(f)
+            }
+        }
+        return fichiers
+    }
+
+    static var stringsdataDisponibles: Bool { !stringsdata.isEmpty }
+
+    /// Cles extraites du code de l'app (table Localizable).
+    static func clesExtraites() throws -> Set<String> {
+        var cles = Set<String>()
+        for f in stringsdata {
+            let d = try JSONSerialization.jsonObject(with: Data(contentsOf: f)) as? [String: Any]
+            let tables = d?["tables"] as? [String: [[String: Any]]] ?? [:]
+            for e in tables["Localizable"] ?? [] {
+                if let k = e["key"] as? String { cles.insert(k) }
+            }
+        }
+        return cles
     }
 
     /// Specificateurs d'un format, sans leur position (`%1$@` -> `@`), dans l'ordre.
@@ -58,5 +94,17 @@ struct CataloguesTests {
                         "specificateurs differents : \(cle) -> \(valeur)")
             }
         }
+    }
+
+    /// Le code et le catalogue vont ensemble : aucune cle du code ne manque,
+    /// aucune cle du catalogue n'est morte (apres un changement de texte :
+    /// outils/synchroniser-textes.sh puis outils/traduire.py).
+    @Test(.enabled(if: Catalogues.stringsdataDisponibles, "produits de compilation introuvables"))
+    func codeEtCatalogueAlignes() throws {
+        let extraites = try Catalogues.clesExtraites()
+        let catalogue = Set(try Catalogues.entrees(Catalogues.textes).cles.keys)
+        #expect(!extraites.isEmpty)
+        #expect(extraites.subtracting(catalogue).sorted() == [], "absentes du catalogue")
+        #expect(catalogue.subtracting(extraites).sorted() == [], "inutilisees")
     }
 }
