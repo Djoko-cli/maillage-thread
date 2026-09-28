@@ -152,6 +152,53 @@ struct SuiviTests {
         #expect(s.integrer(retour.annonces).map(\.type) == [.routeurApparu, .prefixeNouveau, .appareilRevenu])
     }
 
+    /// Un reseau deja vu qui se tait au-dela du sursis (le Mac entend toujours le
+    /// reste), puis revient scinde : sa scission est constatee, comme au
+    /// lancement ; ses membres ont leurs evenements habituels.
+    @Test func reseauQuiRevientScinde() throws {
+        var s = Self.demarre()
+        var b = Self.banc(Self.t0 + 60)
+        Self.ajouterVoisin(&b)
+        #expect(s.integrer(b.annonces).map(\.type) == [.surveillanceDemarree])
+        var sans = Self.banc(Self.t0 + 120)
+        #expect(s.integrer(sans.annonces).isEmpty)
+        sans.date = Self.t0 + 180
+        #expect(s.integrer(sans.annonces).isEmpty)
+        sans.date = Self.t0 + 240
+        #expect(s.integrer(sans.annonces).map(\.type) == [.routeurDisparu, .prefixeRetire, .appareilDisparu])
+        var retour = Self.banc(Self.t0 + 300)
+        Self.ajouterVoisin(&retour, scinde: true)
+        let ev = s.integrer(retour.annonces)
+        #expect(ev.map(\.type) == [.reseauScinde, .routeurApparu, .routeurApparu, .prefixeNouveau, .prefixeNouveau,
+                                   .appareilRevenu])
+        let scission = try #require(ev.first { $0.type == .reseauScinde })
+        #expect(scission.constate)
+        #expect(scission.date == Self.t0 + 300)
+        #expect(scission.reseau == Self.xpVoisin)
+        #expect(scission.sujet == Sujet(id: Self.xpVoisin, nom: "Voisin"))
+        #expect(scission.apres == "2", "comme au lancement : le nombre de partitions")
+        #expect(scission.details == ["BBBBBBBB": "Voisin", "CCCCCCCC": "Voisin isole"])
+    }
+
+    /// Le meme retour, sans scission : pas de scission constatee, meme si le reseau
+    /// etait scinde a sa decouverte (seul compte l'etat au retour).
+    @Test func reseauQuiRevientSansScission() {
+        var s = Self.demarre()
+        var b = Self.banc(Self.t0 + 60)
+        Self.ajouterVoisin(&b, scinde: true)
+        #expect(s.integrer(b.annonces).map(\.type) == [.surveillanceDemarree, .reseauScinde])
+        var sans = Self.banc(Self.t0 + 120)
+        #expect(s.integrer(sans.annonces).isEmpty)
+        sans.date = Self.t0 + 180
+        #expect(s.integrer(sans.annonces).isEmpty)
+        sans.date = Self.t0 + 240
+        #expect(s.integrer(sans.annonces).map(\.type)
+                == [.routeurDisparu, .routeurDisparu, .prefixeRetire, .prefixeRetire, .appareilDisparu])
+        var retour = Self.banc(Self.t0 + 300)
+        Self.ajouterVoisin(&retour)
+        #expect(s.integrer(retour.annonces).map(\.type) == [.routeurApparu, .prefixeNouveau, .appareilRevenu])
+    }
+
     /// Un point de depart (reseau vu peu apres un reveil) garde sa date : la
     /// surveillance de ce reseau commence au releve, pas pendant la veille.
     @Test func departApresUnReveil() {

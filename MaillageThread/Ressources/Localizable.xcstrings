@@ -1297,22 +1297,6 @@
         }
       }
     },
-    "Réseau %@ scindé (constaté au lancement)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Network %@ split (found at launch)"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réseau %@ scindé (constaté au lancement)"
-          }
-        }
-      }
-    },
     "Réseau %@ scindé en %@ partitions" : {
       "localizations" : {
         "en" : {
@@ -1325,6 +1309,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Réseau %1$@ scindé en %2$@ partitions"
+          }
+        }
+      }
+    },
+    "Réseau %@ trouvé scindé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network %@ found split"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réseau %@ trouvé scindé"
           }
         }
       }
