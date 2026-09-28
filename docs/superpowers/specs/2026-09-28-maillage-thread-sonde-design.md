@@ -7,6 +7,11 @@
 >
 > Un essai sur la carte précède le plan 3a (section 7). Le plan 2 (les noms
 > de Maison, spec de l'étape 1, section 5) passe avant.
+>
+> **Révision du 29/09 après l'essai** (section 8) : les routeurs de bordure
+> d'Apple ne répondent pas au diagnostic. La tournée (section 4) en tient
+> compte : les liens et les enfants viennent des routeurs qui répondent, et
+> les enfants des routeurs muets se trouvent par balayage de leurs RLOC16.
 
 ## 0. Contexte, but, décisions
 
@@ -63,6 +68,20 @@ dessiner, les noter au journal et garder l'historique des qualités.
 - **La sonde ne voit que sa propre partition**, celle d'Apple en pratique. Une
   partition isolée (l'Aqara) reste connue par les annonces, comme à l'étape 1.
 
+**Faits de l'essai (29/09),** détaillés en section 8 :
+- **Les routeurs de bordure d'Apple sont muets.** Ils ne répondent jamais au
+  `DIAG_GET`.
+- **Les autres routeurs répondent en 40 à 120 ms.** Ce sont des appareils
+  Matter à puce EFR32 ; le chef du réseau en fait partie.
+- **Les enfants répondent** quand on les vise à leur RLOC, même endormis, en
+  0,2 à 5 s.
+- **Le diagnostic ne passe que par les adresses du réseau maillé :** RLOC,
+  ALOC, ML-EID ou lien-local. L'adresse OMR ne marche pas.
+- **Les TLV fabricant, modèle et version logicielle (25 à 27) sont vides.**
+  Seule la version de la pile (28) est remplie.
+- **L'ExtMac d'un appareil Matter est son nom d'hôte mDNS.** On l'identifie
+  donc directement par l'instantané de l'étape 1.
+
 ## 1. Architecture (validée)
 
 1. **`sonde/`, le firmware.**
@@ -98,11 +117,12 @@ Sans sonde, l'app marche exactement comme à l'étape 1.
 - **Dans Maison,** un interrupteur « Sonde maillage » (prise On/Off), allumé
   par défaut. Éteint, la sonde refuse les requêtes de diagnostic et répond
   « suspendue » : on peut ainsi vérifier qu'elle n'influe sur rien.
-- **Limites :**
-  - une requête à la fois ;
-  - délai de 3 s vers un routeur, de 60 s vers un appareil endormi (il répond
-    à son prochain réveil) ;
-  - lignes USB de 4 Ko au plus.
+- **Limites (révisées le 29/09) :**
+  - jusqu'à 8 requêtes en vol, repérées par leur `id` ; les réponses peuvent
+    arriver dans le désordre ;
+  - délai par requête donné par l'app, 45 s par défaut ;
+  - lignes USB de 4 Ko au plus. Une réponse fait au plus 142 octets à
+    l'essai.
 
 ## 3. Protocole USB (validée)
 
@@ -116,9 +136,10 @@ sinon le C6 peut redémarrer, c'est le piège décrit dans benq.
   n'est pas encore appairé ;
 - `etat` : l'état de la sonde dans le réseau ;
 - `voisins` : ce que la sonde entend ;
-- `diag <cible> <tlv,tlv,…> <id>` : `<cible>` est un RLOC16 en 4 hexa (la
-  sonde forme l'adresse RLOC à partir du préfixe du réseau maillé) ou une
-  adresse IPv6.
+- `diag <cible> <tlv,tlv,…> <id> [<délai ms>]` : `<cible>` est un RLOC16 en
+  4 hexa (la sonde forme l'adresse RLOC à partir du préfixe du réseau maillé)
+  ou une adresse IPv6 du réseau maillé. Le délai borne l'attente d'une
+  réponse ; au-delà, la requête échoue en `delai`.
 
 **Messages de la sonde :**
 - `bonjour` :
@@ -130,7 +151,7 @@ sinon le C6 peut redémarrer, c'est le piège décrit dans benq.
 - `diag`, en cas de succès :
   `{"v":1,"t":"diag","id":7,"cible":"4800","ok":true,"ms":123,"tlv":"<hexa>"}`
 - `diag`, en cas d'échec : `"ok":false` et `"erreur"` valant `delai`,
-  `suspendue`, `occupee` ou `envoi`.
+  `suspendue`, `occupee` (8 requêtes déjà en vol) ou `envoi`.
 
 **Choix du port.** L'app n'ouvre **aucun port qu'on ne lui a pas désigné**.
 Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
@@ -139,46 +160,74 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
 - **Vérification :** une sonde répond à `bonjour` avec
   `"produit":"sonde-maillage"`, sinon le port est refusé.
 
-## 4. Tournée (validée)
+## 4. Tournée (révisée le 29/09 après l'essai)
 
-**Quand :** toutes les 5 minutes, au bouton rafraîchir, et quand `etat`
-montre un autre chef ou une autre partition.
+**Quand :**
+- la tournée courte, toutes les 5 minutes, au bouton rafraîchir, et quand
+  `etat` montre un autre chef ou une autre partition ;
+- le balayage, toutes les 30 minutes, et quand l'ensemble des routeurs muets
+  change.
 
-**Déroulé :**
-1. `etat` de la sonde : partition, chef, préfixe du réseau maillé.
-2. **Au chef :** Route64 (5) et Leader Data (6), pour la liste des routeurs
-   actifs.
-3. **À chaque routeur** (RLOC16 = identifiant << 10) :
-   - à chaque tournée : Ext MAC (0), Address16 (1), Route64 (5), Child Table
-     (16), IPv6 Address List (8), Version (24) ;
-   - **une fois** : Vendor Name (25), Vendor Model (26), Vendor SW Version
-     (27), Thread Stack Version (28).
-4. **Aux enfants nouveaux seulement,** pour les identifier une fois : Ext MAC
-   (0), IPv6 Address List (8), Mode (2), TLV fabricant (25 à 28).
+**Tournée courte :**
+1. `etat` de la sonde : partition, chef, préfixe du réseau maillé, parent
+   (RLOC16 et ExtMac).
+2. **Liste des routeurs :** Route64 (5) et Leader Data (6) au chef. S'il est
+   muet, à un routeur qui a déjà répondu.
+3. **Rôles :** Network Data (7) à un routeur qui répond. On y lit :
+   - les routeurs de bordure (préfixes, routes, service SRP) ;
+   - le BBR principal (service 01) ;
+   - celui qui publie l'OMR.
+4. **À chaque routeur qui répond** (RLOC16 = identifiant << 10) :
+   - Ext MAC (0), Address16 (1), Route64 (5), Child Table (16), IPv6 Address
+     List (8), Version (24) ;
+   - une fois, les TLV 25 à 28 : on garde la version de la pile (28), et les
+     autres s'ils ne sont pas vides.
+5. **Routeur muet :** un routeur qui ne répond pas deux tournées de suite est
+   marqué muet, et on ne l'interroge plus qu'une fois par heure. Les routeurs
+   de bordure d'Apple le sont tous.
 
-**Appareils endormis** (Mode : récepteur coupé au repos) : **jamais
-réinterrogés**. Leur lien se lit dans la Child Table de leur parent, sans les
-réveiller. Un enfant qui change de parent change de RLOC16 et sera identifié à
-nouveau.
+**Balayage des enfants des routeurs muets :**
+- **Cibles :** pour chaque routeur muet, les RLOC16 d'enfant de 1 à 32, avec
+  Ext MAC (0), Address16 (1) et Mode (2). On s'arrête 8 numéros après le
+  dernier qui a répondu.
+- **Cadence :** 8 requêtes en vol et 8 s de délai. Les endormis répondent à
+  leur réveil ; ceux de l'essai l'ont fait en 1,5 à 5 s.
+- **Charge :** environ 160 requêtes, 2 à 3 minutes.
+- **Résultat :** l'enfant et son parent (le RLOC16 le donne), sans qualité de
+  lien ; le routeur muet ne dit rien.
+- **Entre deux balayages,** les enfants trouvés sont gardés.
+
+**Appareils endormis :** seul le balayage les interroge, et seulement sous les
+routeurs muets. Sous un routeur qui répond, leur lien se lit dans sa Child
+Table, sans les réveiller.
 
 **Rapprochement :**
-- routeur Thread et routeur de bordure : l'Ext MAC égale le `xa` du TXT
-  `_meshcop._udp` ;
-- autre routeur (appareil qui relaie) ou enfant, et appareil Matter : une
-  adresse OMR commune entre sa liste d'adresses et celles de l'instantané ;
-- sinon « non identifié ».
+- **Appareil Matter :** son ExtMac est son nom d'hôte mDNS, donc
+  l'identifiant de l'appareil dans l'instantané.
+- **Routeur de bordure et ExtMac :** l'ExtMac est le `xa` de son TXT
+  `_meshcop._udp`. Mais un routeur muet ne donne pas son ExtMac. Son
+  RLOC16 se relie à son `xa` :
+  - s'il est le parent de la sonde : `etat` donne les deux. La paire est
+    retenue, et la sonde en apprend d'autres quand elle change de parent ;
+  - s'il est le BBR principal : les Network Data donnent son RLOC16, et le
+    bit `bbrPrimaire` de `sb` désigne son annonce.
 
-**Charge :** une dizaine de requêtes par tournée.
+  Sinon, il s'affiche « Routeur de bordure · B400 ».
+- **Autre appareil** (HomeKit sur Thread, par exemple) : une adresse OMR
+  commune entre sa liste d'adresses et celles de l'instantané.
+- Sinon, « non identifié ».
 
 **Sonde muette :** le dernier maillage reste affiché 15 min, marqué
 « ancien », puis on revient aux pointillés.
 
 **Sortie :** un instantané de maillage daté, comprenant :
 - la partition ;
-- les routeurs : RLOC16, Ext MAC, identité, fabricant, modèle, version ;
-- les liens entre routeurs, avec la qualité dans chaque sens (lue aux deux
-  bouts) ;
-- les enfants : parent, qualité, délai, endormi ou non, identité ;
+- les routeurs : RLOC16, Ext MAC s'il est connu, identité, rôle (bordure,
+  BBR principal, chef), muet ou non, version, pile ;
+- les liens entre routeurs, avec la qualité dans chaque sens, lue aux deux
+  bouts ou à un seul ;
+- les enfants : parent, qualité (inconnue sous un routeur muet), délai,
+  endormi ou non, identité ;
 - les nœuds non identifiés.
 
 ## 5. Affichage (plan 3a, validée)
@@ -189,7 +238,9 @@ nouveau.
 - **Anneau extérieur :** les enfants, rangés près de leur parent.
 - **Traits pleins entre routeurs :** épaisseur et couleur selon la qualité
   (3 vert, 2 jaune, 1 orange).
-- **Traits pleins fins** de l'enfant vers son parent.
+- **Traits pleins fins** de l'enfant vers son parent. Sous un routeur muet,
+  la qualité est inconnue : trait fin gris.
+- **Lien entre deux routeurs muets :** inconnu, jamais dessiné.
 - **Pointillés vers le chef** pour ce que la sonde ne voit pas : autre
   partition, appareil sans parent connu. Sans sonde, tout est comme à
   l'étape 1.
@@ -240,8 +291,10 @@ nouveau.
 
 ## 7. Tests, permissions, essai préalable (validée)
 
-**Tests.** Les réponses brutes capturées pendant l'essai deviennent les
-données de test : décodage des TLV, reconstruction du maillage, tournée
+**Tests.** Les réponses brutes capturées pendant l'essai, **anonymisées**,
+deviennent les données de test (décision de Djoko, 29/09). Les ExtMac, les
+préfixes (réseau maillé, OMR), les adresses et le `xp` sont remplacés par des
+valeurs inventées, de façon cohérente d'une réponse à l'autre. Elles servent à : décodage des TLV, reconstruction du maillage, tournée
 (qui interroger, appareils endormis), rapprochement, et pour 3b les écarts du
 journal et l'historique. Le firmware est vérifié par sa compilation, puis sur
 la carte avec Djoko.
@@ -258,16 +311,43 @@ comme Halo Compagnon. Il n'y a rien de nouveau côté réseau.
 
 Le plan 3a s'écrit ensuite à partir de ces faits.
 
-## 8. À vérifier à l'essai
+## 8. Résultats de l'essai (nuit du 28 au 29/09)
 
-- **Réponse des routeurs Apple :** acceptent-ils un `DIAG_GET` envoyé depuis
-  un port CoAP d'application, et non depuis le port TMF ?
-- **TLV présents :** fabricant et modèle (25 à 28), Version (24), Child Table
-  (16) ; lesquels répondent ?
-- **Taille des réponses :** tiennent-elles dans des lignes de 4 Ko ?
-- **Appareils endormis :** délai réel de réponse d'un appareil endormi à qui
-  l'on écrit.
-- **Deux C6 en USB :** l'app ne touche jamais au port du pont Halo.
+**Montage.** Troisième carte : ESP32-C6FH4, 4 Mo, sur `/dev/cu.usbmodem11301`
+(port désigné par Djoko). Firmware d'essai : branche `essai-sonde`, dossier
+`sonde/`. Appairée à Maison avec le code d'essai. Mode `rn` (MED) dès le
+premier démarrage.
+
+**Réseau vu.**
+- Partition `46CBEBCD`, canal 25.
+- 7 routeurs actifs.
+- Chef : le routeur 24 (`6000`), un appareil Matter EFR32.
+- 5 routeurs de bordure, `0400`, `AC00`, `B400`, `CC00` et `E400`, identifiés
+  par les Network Data : route `fc00::/7` et service SRP pour tous. `B400`
+  publie en plus l'OMR, le NAT64 et le BBR.
+
+**Réponses aux questions posées avant l'essai :**
+- **Les routeurs d'Apple répondent-ils à un `DIAG_GET` venu d'un port CoAP
+  d'application ?** Non, et à aucune forme essayée : ni par RLOC, ni en
+  lien-local, ni avec une seule TLV.
+  - Les routeurs EFR32 (pile SL-OpenThread 2.5.1) répondent en 40 à 120 ms,
+    et à la première requête vers eux en 2,8 s.
+  - Les TLV 29 à 31 (Thread 1.4) ne reviennent pas.
+- **Quels TLV sont présents ?**
+  - Ext MAC, Address16, Route64, Child Table, IPv6, Version (5, soit
+    Thread 1.4), Network Data et Connectivity.
+  - 25 à 27 : présents mais vides. 28 : rempli, par exemple
+    « SL-OPENTHREAD/2.5.1.0 … EFR32 ».
+- **Taille des réponses :** 142 octets au plus, loin des 4 Ko.
+- **Appareils endormis :** ils répondent à leur RLOC en 0,2 à 5 s.
+- **Adresse OMR :** jamais de réponse ; le diagnostic TMF n'accepte que les
+  adresses du réseau maillé.
+- **Balayage sous `AC00` :** 6 enfants endormis, de `AC03` à `AC08`, ont donné
+  leur ExtMac. Un numéro vide échoue en 35 à 45 s, d'où le délai court et les
+  requêtes en parallèle de la section 4.
+- **Parent de la sonde :** elle en change seule (`E400` à −76 dBm, puis `AC00`
+  à −89 dBm). Les requêtes lancées pendant le changement échouent en `delai`.
+- **Deux C6 en USB :** non vérifié, le pont Halo n'était pas branché au Mac.
 
 ## 9. Suite prévue : vue spatiale (souhait de Djoko, 28/09)
 
