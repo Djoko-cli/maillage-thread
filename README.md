@@ -20,7 +20,7 @@ The Mac has no Thread radio: the app only **listens** to the local network.
 | Source | Gives |
 |---|---|
 | `_meshcop._udp` (TXT) | border routers: network name and id (`nn`, `xp`), partition (`pt`), role (Thread 1.4 and later, `sb` bits 9-10), BBR, active dataset, published OMR prefix |
-| `_matter._tcp` | one instance per device and fabric (`<fabric>-<node>`), grouped by host; `ICD`, or `SII` of 5 s or more: sleepy device |
+| `_matter._tcp` | one instance per device and fabric (`<fabric>-<node>`), grouped by host; `ICD`, or `SII` above 2 s: sleepy device |
 | `_hap._udp` | HomeKit accessories (their name) |
 | host addresses | OMR prefix → partition; local network → IP device; none → "no address" |
 | Mac routing table | which border router routes which OMR prefix |
