@@ -32,6 +32,9 @@ public struct Alertes: Sendable {
     public static let seuilPertes = 3
 
     private var debutFenetre: Date?
+    /// Identifiant de la notification groupee, fixe a l'ouverture de la fenetre
+    /// (d'apres sa premiere perte) : une perte datee plus tot ne le change pas.
+    private var identifiantPertes: String?
     private var pertes: [Evenement] = []
 
     public init() {}
@@ -46,6 +49,7 @@ public struct Alertes: Sendable {
                     debutFenetre = min(d, e.date)
                 } else {
                     debutFenetre = e.date
+                    identifiantPertes = "pertes-\(Int(e.date.timeIntervalSince1970))"
                     pertes = [e]
                 }
                 pertesModifiees = true
@@ -62,8 +66,8 @@ public struct Alertes: Sendable {
                 }
             }
         }
-        if pertesModifiees, let d = debutFenetre, pertes.count >= Self.seuilPertes {
-            sortie.append(AlerteAEnvoyer(categorie: .pertes, identifiant: "pertes-\(Int(d.timeIntervalSince1970))",
+        if pertesModifiees, let identifiant = identifiantPertes, pertes.count >= Self.seuilPertes {
+            sortie.append(AlerteAEnvoyer(categorie: .pertes, identifiant: identifiant,
                                          evenements: pertes.sorted { $0.date < $1.date }))
         }
         return sortie

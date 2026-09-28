@@ -89,6 +89,22 @@ struct ScenarioPanneTests {
         #expect(CategorieAlerte.allCases.filter(\.parDefaut) == [.scission, .routeurDisparu, .pertes])
     }
 
+    /// L'identifiant de la notification groupee est fixe a l'ouverture de sa
+    /// fenetre : une perte arrivee apres, mais datee avant, la met a jour sur place.
+    @Test func identifiantDesPertesFige() throws {
+        let t = D.date(4, 0)
+        func perte(_ secondes: TimeInterval, _ id: String) -> Evenement {
+            Evenement(date: t.addingTimeInterval(secondes), type: .appareilDisparu, sujet: Sujet(id: id, nom: id))
+        }
+        var alertes = Alertes()
+        let premieres = alertes.traiter([perte(0, "a"), perte(10, "b"), perte(20, "c")])
+        let x = try #require(premieres.first { $0.categorie == .pertes }).identifiant
+        let suite = alertes.traiter([perte(-90, "d")])
+        #expect(suite.map(\.categorie) == [.pertes])
+        #expect(suite.first?.identifiant == x, "la meme notification, remplacee")
+        #expect(suite.first?.evenements.count == 4)
+    }
+
     @Test func regroupementSepareLesFenetres() {
         let t = D.date(4, 0)
         func perte(_ minutes: Double) -> Evenement {
