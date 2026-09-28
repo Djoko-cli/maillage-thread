@@ -62,6 +62,9 @@ struct MenuBarre: View {
                 Button("Journal…") { ouvrir("journal") }
                 if surveillance.mode == .direct {
                     Button("Rafraîchir les noms de Maison") { nomsMaison.lancerPasseur() }
+                    if let p = nomsMaison.probleme {
+                        Text(p).font(.caption).foregroundStyle(.red)
+                    }
                 }
                 Toggle("Ouvrir à la connexion", isOn: Binding(get: { ouverture.active }, set: { ouverture.basculer($0) }))
                     .toggleStyle(.checkbox)

@@ -17,6 +17,22 @@
         }
       }
     },
+    "%@ (profil de 7 jours expiré ? relance outils/passeur.sh)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (7-day profile expired? Run outils/passeur.sh again)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (profil de 7 jours expiré ? relance outils/passeur.sh)"
+          }
+        }
+      }
+    },
     "%@ : nouvelle adresse de lien (redémarrage probable)" : {
       "localizations" : {
         "en" : {
@@ -257,18 +273,18 @@
         }
       }
     },
-    "Accès à Maison refusé au passeur." : {
+    "Accès à Maison refusé au passeur : Réglages Système › Confidentialité et sécurité › Maison." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The name bridge was denied access to Home."
+            "value" : "Passeur Noms was denied access to Home: System Settings › Privacy & Security › Home."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Accès à Maison refusé au passeur."
+            "value" : "Accès à Maison refusé au passeur : Réglages Système › Confidentialité et sécurité › Maison."
           }
         }
       }
@@ -689,6 +705,38 @@
         }
       }
     },
+    "Dossier des noms inaccessible : choisis-le de nouveau (Réglages › Noms de Maison)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Names folder not accessible: choose it again (Settings › Home names)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dossier des noms inaccessible : choisis-le de nouveau (Réglages › Noms de Maison)."
+          }
+        }
+      }
+    },
+    "Dossier des noms introuvable : choisis-le de nouveau (Réglages › Noms de Maison)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Names folder not found: choose it again (Settings › Home names)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dossier des noms introuvable : choisis-le de nouveau (Réglages › Noms de Maison)."
+          }
+        }
+      }
+    },
     "Dossier où le passeur écrit noms.json, hors iCloud et hors du dépôt (par exemple « Maillage Thread » dans ton dossier personnel)." : {
       "localizations" : {
         "en" : {
@@ -893,6 +941,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Langue"
+          }
+        }
+      }
+    },
+    "Le passeur a échoué : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms failed: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le passeur a échoué : %@"
           }
         }
       }

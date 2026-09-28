@@ -19,7 +19,9 @@ struct MaillageThreadApp: App {
     init() {
         let s = Surveillance(mode: Self.demo ? .demo : .direct, dossier: Self.demo ? nil : Surveillance.dossierParDefaut)
         let o = OuvertureSession()
-        let d = DossierNoms(cache: Self.demo ? nil : Surveillance.dossierParDefaut.appendingPathComponent("noms-maison.json"))
+        // Sans memoire en demo et sous tests : ni les vraies preferences ni le vrai signet.
+        let d = DossierNoms(cache: Self.demo || Surveillance.sousTests
+                            ? nil : Surveillance.dossierParDefaut.appendingPathComponent("noms-maison.json"))
         _surveillance = State(initialValue: s)
         _ouverture = State(initialValue: o)
         _nomsMaison = State(initialValue: d)

@@ -31,7 +31,9 @@ final class DossierNoms {
     private(set) var dossier: URL?
     /// Derniers noms lus avec succes.
     private(set) var noms: NomsMaison?
-    /// Dernier probleme : acces refuse par Maison, fichier absent ou illisible, passeur introuvable.
+    /// Dernier probleme : acces refuse par Maison, dossier introuvable ou
+    /// inaccessible, fichier absent ou illisible, passeur introuvable ou qui ne
+    /// se lance pas.
     private(set) var probleme: String?
     /// Appele a chaque changement des noms retenus.
     @ObservationIgnored var surNoms: ((NomsMaison?) -> Void)?
@@ -40,12 +42,13 @@ final class DossierNoms {
     @ObservationIgnored private let cache: URL?
     @ObservationIgnored private var observateurs: [NSObjectProtocol] = []
 
-    /// `cache` : ou garder les derniers noms (nil : nulle part, mode demo).
+    /// `cache` : ou garder les derniers noms ; nil (mode demo, tests) : ni
+    /// memoire, ni preferences, ni signet.
     init(preferences: UserDefaults = .standard, cache: URL?) {
         self.preferences = preferences
         self.cache = cache
         noms = cache.flatMap { try? NomsMaison.lire(Data(contentsOf: $0)) }
-        dossier = Self.resoudre(preferences.data(forKey: Self.cleSignet))
+        resoudre()
     }
 
     /// Donne les noms gardes, relit le dossier, puis le relit quand le passeur
@@ -66,8 +69,9 @@ final class DossierNoms {
         })
     }
 
-    /// Choix du dossier ou le passeur ecrit `noms.json`.
+    /// Choix du dossier ou le passeur ecrit `noms.json` (jamais en mode demo).
     func choisir() {
+        guard cache != nil else { return }
         let panneau = NSOpenPanel()
         panneau.canChooseDirectories = true
         panneau.canChooseFiles = false
@@ -79,21 +83,24 @@ final class DossierNoms {
         do {
             let signet = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
             preferences.set(signet, forKey: Self.cleSignet)
-            dossier = Self.resoudre(signet)
             lire()
         } catch {
             probleme = error.localizedDescription
         }
     }
 
-    /// Relit `noms.json` dans le dossier choisi.
+    /// Relit `noms.json` dans le dossier choisi. Le signet est resolu a chaque
+    /// lecture : l'app, qui tourne des semaines, suit un dossier deplace ou un
+    /// volume monte apres son lancement.
     func lire() {
+        resoudre()
         guard let dossier else { return }
+        // Lire meme sans acces ouvert : un dossier du conteneur n'en a pas besoin.
         let acces = dossier.startAccessingSecurityScopedResource()
         defer { if acces { dossier.stopAccessingSecurityScopedResource() } }
         switch Self.lire(dans: dossier) {
         case .success(let n): integrer(n)
-        case .failure(let e): probleme = e.errorDescription
+        case .failure(let e): probleme = Self.problemeDeLecture(e, acces: acces)
         }
     }
 
@@ -122,19 +129,34 @@ final class DossierNoms {
         }
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, erreur in
             guard let erreur else { return }
-            let m = erreur.localizedDescription
+            // Cause la plus probable apres quelques jours : le profil gratuit a expire.
+            let m = String(localized: "\(erreur.localizedDescription) (profil de 7 jours expiré ? relance outils/passeur.sh)")
             Task { @MainActor in self?.probleme = m }
         }
     }
 
-    /// Un releve reussi remplace les noms ; un echec les garde et dit pourquoi.
+    /// Un releve reussi remplace les noms ; un echec les garde et dit pourquoi,
+    /// avec les textes de l'app : le message du passeur (en francais seulement)
+    /// n'est que le detail d'une erreur.
     nonisolated static func retenir(_ nouveau: NomsMaison, ancien: NomsMaison?) -> (NomsMaison?, String?) {
         switch nouveau.statut {
         case .ok: (nouveau, nil)
-        case .refuse: (ancien, nouveau.message ?? String(localized: "Accès à Maison refusé au passeur."))
-        case .indisponible: (ancien, nouveau.message ?? String(localized: "HomeKit indisponible pour le passeur."))
-        case .erreur: (ancien, nouveau.message ?? String(localized: "Le passeur a échoué."))
+        case .refuse:
+            (ancien, String(localized: "Accès à Maison refusé au passeur : Réglages Système › Confidentialité et sécurité › Maison."))
+        case .indisponible: (ancien, String(localized: "HomeKit indisponible pour le passeur."))
+        case .erreur:
+            (ancien, nouveau.message.map { String(localized: "Le passeur a échoué : \($0)") }
+                ?? String(localized: "Le passeur a échoué."))
         }
+    }
+
+    /// Echec de lecture : sans acces ouvert, un fichier absent veut dire un
+    /// dossier inaccessible (le choisir de nouveau), pas un passeur a lancer.
+    nonisolated static func problemeDeLecture(_ e: ErreurNoms, acces: Bool) -> String? {
+        if case .absent = e, !acces {
+            return String(localized: "Dossier des noms inaccessible : choisis-le de nouveau (Réglages › Noms de Maison).")
+        }
+        return e.errorDescription
     }
 
     /// Noms de plus de 7 jours : le profil gratuit du passeur a expire.
@@ -152,10 +174,29 @@ final class DossierNoms {
         }
     }
 
-    private static func resoudre(_ signet: Data?) -> URL? {
-        guard let signet else { return nil }
+    /// Resout le signet du dossier. Introuvable : le probleme est dit. Perime
+    /// (dossier deplace ou renomme) : il est renouvele pendant que l'acces est
+    /// ouvert. Sans memoire (mode demo, tests), ni preferences ni signet.
+    private func resoudre() {
+        guard cache != nil, let signet = preferences.data(forKey: Self.cleSignet) else {
+            dossier = nil
+            return
+        }
         var perime = false
-        return try? URL(resolvingBookmarkData: signet, options: .withSecurityScope, relativeTo: nil,
-                        bookmarkDataIsStale: &perime)
+        guard let url = try? URL(resolvingBookmarkData: signet, options: .withSecurityScope, relativeTo: nil,
+                                 bookmarkDataIsStale: &perime) else {
+            dossier = nil
+            probleme = String(localized: "Dossier des noms introuvable : choisis-le de nouveau (Réglages › Noms de Maison).")
+            return
+        }
+        if perime {
+            let acces = url.startAccessingSecurityScopedResource()
+            defer { if acces { url.stopAccessingSecurityScopedResource() } }
+            if let nouveau = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil,
+                                                   relativeTo: nil) {
+                preferences.set(nouveau, forKey: Self.cleSignet)
+            }
+        }
+        dossier = url
     }
 }

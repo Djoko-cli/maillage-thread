@@ -8,17 +8,47 @@ import Testing
 struct DossierNomsTests {
     static let date = Date(timeIntervalSince1970: 1_790_000_000)
 
-    static func noms(_ statut: StatutPasseur = .ok, nom: String = "Halo") -> NomsMaison {
-        NomsMaison(date: date, statut: statut, message: statut == .ok ? nil : "Accès refusé",
+    static func noms(_ statut: StatutPasseur = .ok, nom: String = "Halo", message: String? = nil) -> NomsMaison {
+        NomsMaison(date: date, statut: statut, message: message,
                    accessoires: statut == .ok ? [AccessoireMaison(nom: nom, noeudMatter: "00000000000002E9")] : [])
     }
 
-    /// Un releve reussi remplace les noms ; un echec du passeur les garde et dit pourquoi.
+    /// Preferences jetables : un domaine unique, a effacer apres le test.
+    static func preferences() throws -> (UserDefaults, String) {
+        let domaine = "maillage-tests-noms-\(UUID().uuidString)"
+        return (try #require(UserDefaults(suiteName: domaine)), domaine)
+    }
+
+    /// Dossier temporaire unique, a effacer apres le test.
+    static func dossierTemporaire() throws -> URL {
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("noms-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
+        return dossier
+    }
+
+    static func signet(_ dossier: URL) throws -> Data {
+        try dossier.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+    }
+
+    /// Textes de l'app, dans la langue de l'hote des tests.
+    static let refus = String(localized: "Accès à Maison refusé au passeur : Réglages Système › Confidentialité et sécurité › Maison.")
+    static let introuvable = String(localized: "Dossier des noms introuvable : choisis-le de nouveau (Réglages › Noms de Maison).")
+
+    /// Un releve reussi remplace les noms ; un echec du passeur les garde et dit
+    /// pourquoi, avec les textes de l'app : le message du passeur (en francais
+    /// seulement) n'est que le detail d'une erreur.
     @Test func echecGardeLesNoms() {
         let ancien = Self.noms(nom: "Halo")
-        let (garde, probleme) = DossierNoms.retenir(Self.noms(.refuse), ancien: ancien)
+        let (garde, probleme) = DossierNoms.retenir(Self.noms(.refuse, message: "Accès refusé"), ancien: ancien)
         #expect(garde == ancien)
-        #expect(probleme == "Accès refusé")
+        #expect(probleme == Self.refus)
+        let (_, indisponible) = DossierNoms.retenir(Self.noms(.indisponible, message: "Capacité absente"), ancien: ancien)
+        #expect(indisponible == String(localized: "HomeKit indisponible pour le passeur."))
+        let (gardeAussi, erreur) = DossierNoms.retenir(Self.noms(.erreur, message: "Aucun domicile dans Maison"), ancien: ancien)
+        #expect(gardeAussi == ancien)
+        #expect(erreur == String(localized: "Le passeur a échoué : \("Aucun domicile dans Maison")"))
+        let (_, sansDetail) = DossierNoms.retenir(Self.noms(.erreur), ancien: nil)
+        #expect(sansDetail == String(localized: "Le passeur a échoué."))
         let (neuf, rien) = DossierNoms.retenir(Self.noms(nom: "Pont"), ancien: ancien)
         #expect(neuf?.accessoires.first?.nom == "Pont")
         #expect(rien == nil)
@@ -31,8 +61,7 @@ struct DossierNomsTests {
     }
 
     @Test func lectureDansUnDossier() throws {
-        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("noms-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
+        let dossier = try Self.dossierTemporaire()
         defer { try? FileManager.default.removeItem(at: dossier) }
         guard case .failure(.absent) = DossierNoms.lire(dans: dossier) else {
             Issue.record("sans noms.json : absent")
@@ -61,10 +90,84 @@ struct DossierNomsTests {
         var recus: [NomsMaison?] = []
         d.surNoms = { recus.append($0) }
         d.integrer(Self.noms())
-        d.integrer(Self.noms(.refuse))
+        d.integrer(Self.noms(.refuse, message: "Accès refusé"))
         #expect(d.noms == Self.noms(), "l'echec n'efface pas les noms")
-        #expect(d.probleme == "Accès refusé")
+        #expect(d.probleme == Self.refus)
         #expect(recus == [Self.noms()], "un seul changement")
         #expect(DossierNoms(preferences: preferences, cache: cache).noms == Self.noms(), "relus au lancement")
+    }
+
+    /// Un signet qui ne se resout plus : le probleme est dit, au lancement et a
+    /// chaque lecture, et les derniers noms gardes restent.
+    @Test func signetInvalide() throws {
+        let (preferences, domaine) = try Self.preferences()
+        defer { preferences.removePersistentDomain(forName: domaine) }
+        let racine = try Self.dossierTemporaire()
+        defer { try? FileManager.default.removeItem(at: racine) }
+        let cache = racine.appendingPathComponent("noms-maison.json")
+        try Self.noms().donnees().write(to: cache)
+        preferences.set(Data("pas un signet".utf8), forKey: DossierNoms.cleSignet)
+
+        let d = DossierNoms(preferences: preferences, cache: cache)
+        #expect(d.dossier == nil)
+        #expect(d.probleme == Self.introuvable)
+        #expect(d.noms == Self.noms(), "les noms gardes restent")
+        d.lire()
+        #expect(d.probleme == Self.introuvable, "dit encore a la lecture")
+        #expect(d.noms == Self.noms())
+    }
+
+    /// Un dossier renomme : le signet le suit, il est renouvele, et les noms s'y lisent.
+    @Test func dossierDeplace() throws {
+        let (preferences, domaine) = try Self.preferences()
+        defer { preferences.removePersistentDomain(forName: domaine) }
+        let racine = try Self.dossierTemporaire()
+        defer { try? FileManager.default.removeItem(at: racine) }
+        let avant = racine.appendingPathComponent("avant")
+        let apres = racine.appendingPathComponent("apres")
+        try FileManager.default.createDirectory(at: avant, withIntermediateDirectories: true)
+        try Self.noms().donnees().write(to: avant.appendingPathComponent(DossierNoms.fichier))
+        let signet = try Self.signet(avant)
+        preferences.set(signet, forKey: DossierNoms.cleSignet)
+        try FileManager.default.moveItem(at: avant, to: apres)
+
+        let d = DossierNoms(preferences: preferences, cache: racine.appendingPathComponent("noms-maison.json"))
+        #expect(d.dossier?.lastPathComponent == "apres")
+        let renouvele = try #require(preferences.data(forKey: DossierNoms.cleSignet))
+        #expect(renouvele != signet, "signet perime renouvele")
+        var perime = true
+        let url = try URL(resolvingBookmarkData: renouvele, options: .withSecurityScope, relativeTo: nil,
+                          bookmarkDataIsStale: &perime)
+        #expect(url.lastPathComponent == "apres")
+        #expect(!perime)
+        d.lire()
+        #expect(d.noms == Self.noms())
+        #expect(d.probleme == nil)
+    }
+
+    /// Sans acces au dossier, un noms.json absent veut dire un dossier
+    /// inaccessible (le choisir de nouveau), pas un passeur a lancer.
+    @Test func dossierInaccessible() {
+        #expect(DossierNoms.problemeDeLecture(.absent, acces: false)
+                == String(localized: "Dossier des noms inaccessible : choisis-le de nouveau (Réglages › Noms de Maison)."))
+        #expect(DossierNoms.problemeDeLecture(.absent, acces: true) == DossierNoms.ErreurNoms.absent.errorDescription)
+        #expect(DossierNoms.problemeDeLecture(.illisible("x"), acces: false)
+                == DossierNoms.ErreurNoms.illisible("x").errorDescription)
+    }
+
+    /// Mode demo (sans memoire) : ni preferences ni signet, meme valide.
+    @Test func modeDemo() throws {
+        let (preferences, domaine) = try Self.preferences()
+        defer { preferences.removePersistentDomain(forName: domaine) }
+        let dossier = try Self.dossierTemporaire()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        try Self.noms().donnees().write(to: dossier.appendingPathComponent(DossierNoms.fichier))
+        preferences.set(try Self.signet(dossier), forKey: DossierNoms.cleSignet)
+
+        let d = DossierNoms(preferences: preferences, cache: nil)
+        #expect(d.dossier == nil, "le vrai dossier n'est pas montre en demo")
+        d.lire()
+        #expect(d.noms == nil)
+        #expect(d.probleme == nil)
     }
 }
