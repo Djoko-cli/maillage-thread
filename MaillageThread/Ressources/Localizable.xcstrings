@@ -209,6 +209,22 @@
         }
       }
     },
+    "%lld %%" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%%"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld %%"
+          }
+        }
+      }
+    },
     "%lld accessoires · %@" : {
       "localizations" : {
         "en" : {
@@ -1921,6 +1937,38 @@
         }
       }
     },
+    "batterie OK" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "battery OK"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "batterie OK"
+          }
+        }
+      }
+    },
+    "batterie faible" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "low battery"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "batterie faible"
+          }
+        }
+      }
+    },
     "chef" : {
       "localizations" : {
         "en" : {
@@ -1985,6 +2033,22 @@
         }
       }
     },
+    "en charge" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "charging"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "en charge"
+          }
+        }
+      }
+    },
     "endormi" : {
       "localizations" : {
         "en" : {
@@ -2045,6 +2109,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "entre %1$@ et %2$@ (Mac en veille)"
+          }
+        }
+      }
+    },
+    "faible" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "low"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "faible"
           }
         }
       }
@@ -2177,6 +2257,22 @@
         }
       }
     },
+    "non rechargeable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "not rechargeable"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "non rechargeable"
+          }
+        }
+      }
+    },
     "partition inconnue" : {
       "localizations" : {
         "en" : {
@@ -2257,6 +2353,22 @@
         }
       }
     },
+    "sur batterie" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "on battery"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sur batterie"
+          }
+        }
+      }
+    },
     "· %@" : {
       "localizations" : {
         "en" : {
@@ -2269,6 +2381,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "· %@"
+          }
+        }
+      }
+    },
+    "· relevé %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· updated %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· relevé %@"
           }
         }
       }
