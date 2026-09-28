@@ -2391,7 +2391,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `Annonces`, `Instantane`, `ResolveurNoms`, `Banc` (tests).
-- Produces: `TypeEvenement` (19 cas, `gravite` par défaut) ; `Gravite` (`info` < `attention` < `alerte`) ; `Sujet(id:nom:)` ; `Evenement(date:type:gravite:reseau:sujet:avant:apres:periode:constate:details:)` (Codable tolérant, `id`) ; `MemoireAnnonces` (interne : `sursis = 120`, `completer(_:)`, `abandons`, `adressesAbandonnees`) ; `Suivi` (`init()`, `integrer(_:noms:) -> [Evenement]`, `noterVeille(_: DateInterval) -> [Evenement]`, `instantane`, `disparus: [String: Appareil]`, `dernieresPartitions: [String: String]`, `Suivi.apresReveil = 240`).
+- Produces: `TypeEvenement` (18 cas, `gravite` par défaut) ; `Gravite` (`info` < `attention` < `alerte`) ; `Sujet(id:nom:)` ; `Evenement(date:type:gravite:reseau:sujet:avant:apres:periode:constate:details:)` (Codable tolérant, `id`) ; `MemoireAnnonces` (interne : `sursis = 120`, `completer(_:)`, `abandons`, `adressesAbandonnees`) ; `Suivi` (`init()`, `integrer(_:noms:) -> [Evenement]`, `noterVeille(_: DateInterval) -> [Evenement]`, `instantane`, `disparus: [String: Appareil]`, `dernieresPartitions: [String: String]`, `Suivi.apresReveil = 240`).
 
 - [ ] **Step 1: Écrire le test**
 
@@ -7097,3 +7097,22 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | 5. Noms : contrat de `noms.json`, fabrique d'Apple, surnoms | 6 (modèle), 13, 15 (surnoms) ; passeur : plan 2 |
 | 6. Permissions, erreurs visibles, tests sur relevés, panne rejouée, captures, mode démo, projet | 1, 12, 13, 15, 17, 18, 19 |
 | 8. Faits réels du 28/09 | 4 (capture réelle), 5, 8 |
+
+## Écarts d'exécution
+
+Plan exécuté en sous-agents le 28/09/2026, sur la branche `etape-1`, relu
+tâche par tâche puis dans son ensemble, et vérifié sur le vrai réseau avec
+Djoko (tâche 19). Les blocs de code des tâches ci-dessus sont ceux du plan ;
+ces commits les ont modifiés ensuite, chacun avec ses tests :
+
+| Où | Écart | Commits |
+|---|---|---|
+| Tâche 1 | ligne `Co-Authored-By` du commit corrigée | `6aca310` |
+| Tâche 12 | `rafraichir()` : nouvelle résolution différée au prochain relevé, sans effet avant la mise en route | `06c862f` |
+| Tâche 13 | un appareil sans réseau va au réseau de sa dernière partition connue (deux réseaux Thread visibles) | `fab25e7` |
+| Tâche 14 | refus et échecs des notifications consignés (`Logger`) | `0ecdbf7` |
+| Tâche 17 | erreur d'une capture impossible à sérialiser affichée | `fab9f15` |
+| Relecture finale | jamais d'instance non résolue dans un relevé, dernière cible gardée ; relevés vides ignorés ; point de départ propre à chaque réseau découvert ; premier relevé quand l'écoute est prête ; « Rien de visible sur le réseau local » ; identifiant figé des pertes groupées ; notifications au premier plan ; légende des pointillés ; test des textes sans sortie silencieuse | `e92a93d` à `05e1de7` |
+| Tâche 19 | préfixe OMR partagé par deux partitions ; calme des annonces avant le premier relevé ; inscription à l'ouverture de session quand le système ne connaît pas l'app, case relue à l'affichage ; une notification par scission constatée (décision de Djoko) ; scission d'un réseau qui revient, texte « trouvé scindé » ; sursis repris au réveil | `871b74d` à `31f5154` |
+
+À la fin : 82 tests (framework, 13 suites) et 21 tests (app, 10 suites).
