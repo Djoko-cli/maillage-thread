@@ -7,10 +7,13 @@ import os
 /// Une categorie se coupe dans les reglages ; une notification de meme
 /// identifiant remplace la precedente (pertes groupees). Un refus ou un echec
 /// du systeme est consigne dans le journal du Mac (Console, sous-systeme
-/// fr.djoko.maillage), jamais perdu en silence.
+/// fr.djoko.maillage), jamais perdu en silence. Presentees aussi quand une
+/// fenetre de l'app est au premier plan.
 @MainActor
 final class Notifications {
     nonisolated static let journal = Logger(subsystem: "fr.djoko.maillage", category: "notifications")
+    /// Delegue du centre de notifications, retenu ici : le centre ne le garde qu'en reference faible.
+    private let presentation = PresentationAuPremierPlan()
 
     static func cle(_ c: CategorieAlerte) -> String { "notification.\(c.rawValue)" }
 
@@ -19,6 +22,7 @@ final class Notifications {
     }
 
     func demanderAutorisation() {
+        UNUserNotificationCenter.current().delegate = presentation
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { accordee, erreur in
             if let erreur {
                 Self.journal.error("autorisation des notifications : \(erreur.localizedDescription, privacy: .public)")
@@ -43,5 +47,15 @@ final class Notifications {
                 }
             }
         }
+    }
+}
+
+/// Sans delegue, macOS tait les notifications tant qu'une fenetre de l'app a
+/// le focus : celui-ci les presente toujours (banniere, son, centre de notifications).
+@MainActor
+final class PresentationAuPremierPlan: NSObject, UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .list]
     }
 }
