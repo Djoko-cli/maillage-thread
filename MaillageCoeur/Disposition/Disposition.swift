@@ -26,15 +26,18 @@ public struct AppareilAffiche: Hashable, Sendable, Identifiable {
     public var partition: String?
     public var etat: EtatAffiche
     public var endormi: Bool
+    /// Batterie selon Maison, pour un appareil qui en a une.
+    public var batterie: BatterieMaison?
 
     public init(id: String, nom: String, piece: String? = nil, partition: String?, etat: EtatAffiche,
-                endormi: Bool = false) {
+                endormi: Bool = false, batterie: BatterieMaison? = nil) {
         self.id = id
         self.nom = nom
         self.piece = piece
         self.partition = partition
         self.etat = etat
         self.endormi = endormi
+        self.batterie = batterie
     }
 }
 

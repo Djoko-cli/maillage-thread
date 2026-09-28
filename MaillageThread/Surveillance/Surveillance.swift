@@ -245,8 +245,10 @@ final class Surveillance {
             return premier
         }
         func affiche(_ a: Appareil, _ etat: EtatAffiche) -> AppareilAffiche {
-            AppareilAffiche(id: a.id, nom: nom(a), piece: accessoire(a)?.piece,
-                            partition: a.partition ?? suivi.dernieresPartitions[a.id], etat: etat, endormi: a.endormi)
+            let maison = accessoire(a)
+            return AppareilAffiche(id: a.id, nom: nom(a), piece: maison?.piece,
+                                   partition: a.partition ?? suivi.dernieresPartitions[a.id], etat: etat,
+                                   endormi: a.endormi, batterie: maison?.batterie)
         }
         var liste = i.appareils.filter(appartient).map { a in
             let etat: EtatAffiche = switch a.etat {
