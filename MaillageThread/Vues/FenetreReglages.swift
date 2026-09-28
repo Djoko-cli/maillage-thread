@@ -78,7 +78,7 @@ struct FenetreReglages: View {
                 if let p = nomsMaison.probleme {
                     Text(p).font(.caption).foregroundStyle(.red)
                 }
-                Button("Rafraîchir les noms de Maison") { nomsMaison.lancerPasseur() }
+                Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
                     .disabled(surveillance.mode == .demo)
             }
             Section("Diagnostic") {

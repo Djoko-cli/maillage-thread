@@ -10,6 +10,7 @@ struct NoeudChoisi: Identifiable {
 /// bandeau d'alerte, legende des pointilles et fiche flottent par-dessus, en verre.
 struct FenetreGraphe: View {
     @Environment(Surveillance.self) private var surveillance
+    @Environment(DossierNoms.self) private var nomsMaison
     @Environment(\.colorScheme) private var apparence
     /// `--args -selection <id>` : fiche ouverte au lancement (captures d'ecran).
     @State private var selection: String? = UserDefaults.standard.string(forKey: "selection")
@@ -48,6 +49,13 @@ struct FenetreGraphe: View {
         }
         .frame(minWidth: 820, minHeight: 560)
         .sheet(item: $aRenommer) { FeuilleRenommer(id: $0.id) }
+        .task {
+            // Batteries de Maison a jour tant que le graphe est ouvert.
+            while !Task.isCancelled {
+                nomsMaison.rafraichirSiAncien()
+                try? await Task.sleep(for: .seconds(3600))
+            }
+        }
         .fenetreDeLApp()
     }
 

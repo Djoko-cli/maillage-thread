@@ -61,7 +61,7 @@ struct MenuBarre: View {
                 Button("Ouvrir le graphe") { ouvrir("graphe") }
                 Button("Journal…") { ouvrir("journal") }
                 if surveillance.mode == .direct {
-                    Button("Rafraîchir les noms de Maison") { nomsMaison.lancerPasseur() }
+                    Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
                     if let p = nomsMaison.probleme {
                         Text(p).font(.caption).foregroundStyle(.red)
                     }
