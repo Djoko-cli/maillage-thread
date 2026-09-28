@@ -63,6 +63,7 @@ struct FenetreReglages: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Button("Choisir…") { nomsMaison.choisir() }
+                            .disabled(surveillance.mode == .demo)
                     }
                 }
                 if let n = nomsMaison.noms {
