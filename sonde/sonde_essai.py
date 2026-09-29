@@ -29,7 +29,7 @@ refus (5 datagrammes sans enveloppe vers le port : DELAI attendu, avec ou sans
 cle ; REFUS voudrait dire qu'un ICMPv6 « port injoignable » est revenu).
 Prerequis Mac : route IPv6 vers le prefixe OMR (assistant halo-routes de benq).
 """
-import fcntl, hashlib, hmac, ipaddress, json, os, select, socket, struct, subprocess, sys, termios, time
+import fcntl, hashlib, hmac, ipaddress, json, os, re, select, socket, struct, subprocess, sys, termios, time
 
 PORT_RESEAU = int(os.environ.get("SONDE_PORT") or 5480)
 SERVICE_TROUSSEAU = "fr.djoko.maillage.sonde"
@@ -50,26 +50,66 @@ def ouvrir(chemin):
     return fd
 
 
-def masquer(m):
-    """Le message sans la cle (reponse a cle nouvelle) : pour l'ecran et la capture."""
-    if "cle" not in m:
-        return m
-    m = dict(m)
-    m["cle"] = "(masquee)"
-    return m
+MASQUE = "********"
+HEXA_16 = re.compile(r"[0-9A-Fa-f]{16,}")
+CHAMP_CLE = re.compile(r'("cle"\s*:\s*")[0-9A-Fa-f]+')
+TYPES_DONNEES = frozenset({"bonjour", "etat", "voisins", "routeurs", "diag", "erreur", "oubli"})
+
+
+def masquer_strict(texte):
+    """Texte recu affiche tel quel (ligne abimee, fragment, journal de la carte) : le champ "cle" meme sans
+    guillemet fermant, et toute suite de 16 hexa ou plus, masques (comme masquerCleStricte de benq). Une
+    cle coupee par un journal n'y laisse rien de long. Jamais sur un message decode : un ExtMac ou un nom
+    d'hote SRP fait 16 hexa. Masquer d'abord, couper ensuite."""
+    if isinstance(texte, (bytes, bytearray)):
+        texte = texte.decode("ascii", "replace")
+    return HEXA_16.sub(MASQUE, CHAMP_CLE.sub(lambda x: x.group(1) + MASQUE, texte))
+
+
+def _sans_hexa_long(v, limite):
+    """Valeur JSON, noms de champ compris, sans suite de plus de `limite` hexa."""
+    motif = re.compile(r"[0-9A-Fa-f]{%d,}" % (limite + 1))
+
+    def nettoyer(x):
+        if isinstance(x, str):
+            return motif.sub(MASQUE, x)
+        if isinstance(x, list):
+            return [nettoyer(y) for y in x]
+        if isinstance(x, dict):
+            return {nettoyer(k): nettoyer(y) for k, y in x.items()}
+        return x
+
+    return nettoyer(v)
+
+
+def sans_cle(m):
+    """Le message decode sans rien de la cle, pour l'ecran et la capture : champ cle masque. Reponse de cle
+    (t "cle") ou type inconnu (ligne abimee mais lisible) : en plus, aucune suite de plus de 16 hexa, dans
+    les valeurs comme dans les noms de champ (un nom de champ abime peut porter la cle ; le nom d'hote SRP
+    fait 16 hexa, l'empreinte 8). Les messages de donnees (ExtMac, TLV) restent entiers."""
+    if "cle" in m:
+        m = dict(m, cle="(masquee)")
+    t = m.get("t")
+    return m if isinstance(t, str) and t in TYPES_DONNEES else _sans_hexa_long(m, 16)
+
+
+def texte_affiche(m):
+    return json.dumps(sans_cle(m), ensure_ascii=False)
 
 
 def capturer(capture, m):
     with open(capture, "a") as f:
-        f.write(json.dumps({"heure": time.strftime("%Y-%m-%dT%H:%M:%S"), **masquer(m)}) + "\n")
+        f.write(json.dumps({"heure": time.strftime("%Y-%m-%dT%H:%M:%S"), **sans_cle(m)}) + "\n")
 
 
 class Lecteur:
     def __init__(self, fd, capture):
         self.fd, self.capture, self.tampon = fd, capture, b""
 
-    def lignes(self, jusqua):
-        """Lignes machine decodees jusqu'a l'echeance ; les autres sont affichees telles quelles."""
+    def lignes(self, jusqua, silencieux=False):
+        """Lignes machine decodees jusqu'a l'echeance. La ligne machine commence au dernier RS (comme benq et
+        l'app) ; ce qui le precede, et toute ligne sans RS ou illisible, s'affiche masque (masquer_strict),
+        ou pas du tout si silencieux (cle nouvelle). Rien d'autre que les messages decodes n'est capture."""
         while time.time() < jusqua:
             r, _, _ = select.select([self.fd], [], [], 0.1)
             if r:
@@ -80,16 +120,22 @@ class Lecteur:
             while b"\n" in self.tampon:
                 brut, self.tampon = self.tampon.split(b"\n", 1)
                 brut = brut.rstrip(b"\r")
-                if brut.startswith(b"\x1e"):
-                    try:
-                        m = json.loads(brut[1:].decode("ascii"))
-                    except (ValueError, UnicodeDecodeError):
-                        print("?? ligne machine illisible :", brut[:120])
-                        continue
-                    capturer(self.capture, m)
-                    yield m
-                elif brut.strip():
-                    print("   |", brut.decode("ascii", "replace")[:160])
+                i = brut.rfind(b"\x1e")
+                avant = brut if i < 0 else brut[:i]
+                if avant.strip() and not silencieux:
+                    print("   |", masquer_strict(avant)[:160])
+                if i < 0:
+                    continue
+                try:
+                    m = json.loads(brut[i + 1:].decode("ascii"))
+                except (ValueError, UnicodeDecodeError):
+                    m = None
+                if not isinstance(m, dict):
+                    if not silencieux:
+                        print("?? ligne machine illisible :", masquer_strict(brut[i + 1:])[:120])
+                    continue
+                capturer(self.capture, m)
+                yield m
 
 
 def nom_tlv(t):
@@ -144,7 +190,7 @@ def decoder(hexa):
 
 
 def afficher(m):
-    m = masquer(m)
+    m = sans_cle(m)
     if m.get("t") == "diag" and m.get("ok") and "tlv" in m:
         print(f"<< diag {m['cible']} : {m['ms']} ms, code {m.get('code')}, {len(m['tlv']) // 2} octets")
         for ligne in decoder(m["tlv"]):
@@ -155,7 +201,7 @@ def afficher(m):
             print(f"      id {r['id']:2} {r['rloc16']} ext {r['ext'] or '-':16} lq {r['lqIn']}/{r['lqOut']}"
                   f" age {r['age']:3} {'lien' if r['lien'] else '-'}")
     else:
-        print("<<", json.dumps(m, ensure_ascii=False))
+        print("<<", texte_affiche(m))
 
 
 def attente(c):
@@ -260,20 +306,27 @@ def cle_nouvelle_usb(fd, lecteur):
     ident = 1 + int.from_bytes(os.urandom(3), "big") % 999999
     print(f">> cle nouvelle <alea de 32 octets> {ident}")
     os.write(fd, f"cle nouvelle {alea} {ident}\n".encode("ascii"))
-    for m in lecteur.lignes(time.time() + 5):
+    # Lecture silencieuse : ici, rien de recu ne s'affiche tel quel (une ligne abimee porterait la cle) ;
+    # seuls le code d'erreur, l'empreinte verifiee et un nom d'hote bien forme sont imprimes.
+    for m in lecteur.lignes(time.time() + 5, silencieux=True):
         if m.get("t") == "erreur":
-            afficher(m)
-            raise SystemExit(f"cle nouvelle refusee : {m.get('erreur')} (rien n'a change)")
+            code = m.get("erreur")
+            code = code if isinstance(code, str) and re.fullmatch(r"[a-z_ ]{1,32}", code) else "?"
+            raise SystemExit(f"cle nouvelle refusee : {code} (rien n'a change)")
         if m.get("t") == "cle" and m.get("id") == ident:
             try:
                 cle = bytes.fromhex(m.get("cle") or "")
-            except ValueError:
+            except (TypeError, ValueError):
                 cle = b""
             if len(cle) != 32 or empreinte(cle) != m.get("empreinte"):
                 raise SystemExit("reponse incoherente (cle illisible ou empreinte fausse) : cle non rangee")
             ranger_cle(chemin, cle.hex().upper())
-            afficher(m)
-            print(f"cle rangee dans {chemin} (empreinte {m['empreinte']}, hote {m.get('hote')})")
+            hote = m.get("hote")
+            hote = hote if isinstance(hote, str) and re.fullmatch(r"[A-Za-z0-9-]{1,63}", hote) else None
+            msg = m.get("msg")
+            print(f"cle rangee dans {chemin} (empreinte {m['empreinte']}, hote {hote})")
+            if isinstance(msg, str) and re.fullmatch(r"[a-z :'_,.-]{1,64}", msg):
+                print(f"   ({msg})")
             return
     raise SystemExit("aucune reponse en 5 s. Si la sonde a quand meme change de cle, 'cle' montre une autre "
                      "empreinte : relancer 'cle nouvelle'.")
@@ -295,6 +348,9 @@ def essai_usb(port, capture, commandes):
                 continue
             if c.split() == ["cle", "nouvelle"]:
                 cle_nouvelle_usb(fd, lecteur)
+                continue
+            if c.split()[:2] == ["cle", "nouvelle"]:
+                print("cle nouvelle : sans argument, l'outil tire l'alea et range la cle (SONDE_CLE)")
                 continue
             if c == "refus":
                 print("refus : par le reseau seulement (udp:<hote>)")
@@ -493,7 +549,7 @@ def essai_reseau(hote, capture, commandes):
                 while time.time() < jusqua:
                     charge = session.recevoir(jusqua - time.time())
                     if charge is not None:
-                        print(f"   (hors requete) {charge[:160]!r}")
+                        print("   (hors requete)", masquer_strict(charge)[:160])
                 continue
             rid += 1
             attendu, diag_id = attente(c)
@@ -522,7 +578,9 @@ def essai_reseau(hote, capture, commandes):
                 try:
                     m = json.loads(ligne.decode("ascii"))
                 except (ValueError, UnicodeDecodeError):
-                    print("?? ligne illisible :", ligne[:120])
+                    m = None
+                if not isinstance(m, dict):
+                    print("?? ligne illisible :", masquer_strict(ligne)[:120])
                     continue
                 capturer(capture, m)
                 afficher(m)
