@@ -126,6 +126,24 @@ struct CanalReseauTests {
         await s.fermer()
     }
 
+    /// `routeurs` sur plusieurs lignes par le reseau (meme rid, `suite`) : chaque ligne traverse
+    /// le canal, et `SondeUSB.routeurs()` rend la table entiere, dans l'ordre (ExtMac inventees).
+    @Test func routeursSurPlusieursLignesParLeReseau() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk) { charge in
+            guard let (rid, commande) = Self.decouper(charge), commande == "routeurs" else { return Self.sonde(charge) }
+            return [CanalRejoue.routeurs([("0400", nil), ("AC00", "E0000000000000AC")], suite: true),
+                    CanalRejoue.routeurs([("E400", "E0000000000000E4")], suite: true),
+                    CanalRejoue.routeurs([("F000", nil)], suite: false)].map { "\(rid) \($0)" }
+        }
+        let s = SondeUSB(canal: try await Self.canal(carte))
+        try await s.demarrer {}
+        let table = try await s.routeurs()
+        #expect(table.map(\.rloc16) == ["0400", "AC00", "E400", "F000"])
+        #expect(table.map(\.ext) == [nil, "E0000000000000AC", "E0000000000000E4", nil])
+        #expect(Set(carte.recues.compactMap(Self.decouper).map(\.commande)) == ["routeurs"])
+        await s.fermer()
+    }
+
     /// Sans aucune reponse, la commande repart avec le meme rid a 2 s puis 4 s (ici 100 et
     /// 200 ms), et plus ensuite.
     @Test func renvoisDuMemeRid() async throws {
