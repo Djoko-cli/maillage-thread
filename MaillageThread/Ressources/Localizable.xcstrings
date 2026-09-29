@@ -49,6 +49,22 @@
         }
       }
     },
+    "%@ : port occupé (pio device monitor ou une autre app le tient)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: port busy (pio device monitor or another app holds it)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ : port occupé (pio device monitor ou une autre app le tient)"
+          }
+        }
+      }
+    },
     "%@ : rôle %@ → %@" : {
       "localizations" : {
         "en" : {
@@ -669,6 +685,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Choisir…"
+          }
+        }
+      }
+    },
+    "DTR et RTS à 0 (TIOCMSET)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DTR and RTS to 0 (TIOCMSET)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DTR et RTS à 0 (TIOCMSET)"
           }
         }
       }
@@ -1921,6 +1953,22 @@
         }
       }
     },
+    "accès exclusif (TIOCEXCL)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "exclusive access (TIOCEXCL)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "accès exclusif (TIOCEXCL)"
+          }
+        }
+      }
+    },
     "active" : {
       "localizations" : {
         "en" : {
@@ -1985,6 +2033,22 @@
         }
       }
     },
+    "chemin %@ : /dev/cu.* attendu" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "path %@: /dev/cu.* expected"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "chemin %@ : /dev/cu.* attendu"
+          }
+        }
+      }
+    },
     "disparu" : {
       "localizations" : {
         "en" : {
@@ -1997,6 +2061,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "disparu"
+          }
+        }
+      }
+    },
+    "débit (cfsetspeed)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "speed (cfsetspeed)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "débit (cfsetspeed)"
           }
         }
       }
@@ -2209,6 +2289,54 @@
         }
       }
     },
+    "lecture de DTR et RTS (TIOCMGET)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "reading DTR and RTS (TIOCMGET)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lecture de DTR et RTS (TIOCMGET)"
+          }
+        }
+      }
+    },
+    "lecture des réglages (tcgetattr)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "reading settings (tcgetattr)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lecture des réglages (tcgetattr)"
+          }
+        }
+      }
+    },
+    "lecture impossible : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cannot read: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lecture impossible : %@"
+          }
+        }
+      }
+    },
     "lue" : {
       "localizations" : {
         "en" : {
@@ -2273,6 +2401,22 @@
         }
       }
     },
+    "ouverture de %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "opening %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ouverture de %@"
+          }
+        }
+      }
+    },
     "partition inconnue" : {
       "localizations" : {
         "en" : {
@@ -2285,6 +2429,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "partition inconnue"
+          }
+        }
+      }
+    },
+    "port fermé (EOF) : la sonde a peut-être redémarré" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "port closed (EOF): the probe may have restarted"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "port fermé (EOF) : la sonde a peut-être redémarré"
+          }
+        }
+      }
+    },
+    "port fermé par l'app" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "port closed by the app"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "port fermé par l'app"
           }
         }
       }
@@ -2317,6 +2493,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "routeur"
+          }
+        }
+      }
+    },
+    "réglages (tcsetattr)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "settings (tcsetattr)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "réglages (tcsetattr)"
           }
         }
       }
@@ -2445,6 +2637,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Écoute du réseau local…"
+          }
+        }
+      }
+    },
+    "écriture impossible : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cannot write: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "écriture impossible : %@"
           }
         }
       }
