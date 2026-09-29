@@ -33,6 +33,9 @@ final class SondeMaillage {
     /// Nom de la sonde (« SONDE-01 »), mis a jour a chaque `bonjour` ; nil si le firmware
     /// n'en donne pas (1.0.0) ou sans sonde retenue.
     private(set) var nom: String?
+    /// Numero de serie USB du port que l'etat concerne (connexion, connexion etablie, refus,
+    /// erreur) ; nil sans sonde ou la sonde retenue absente.
+    private(set) var serieEtat: String?
     private(set) var etatSonde: EtatSonde?
     /// Reception du dernier maillage (fin de sa tournee).
     private(set) var derniereTournee: Date?
@@ -82,6 +85,16 @@ final class SondeMaillage {
         self.horloge = horloge
         serie = actif ? preferences.string(forKey: Self.cleSerie) : nil
         nom = actif ? preferences.string(forKey: Self.cleNom) : nil
+    }
+
+    /// Nom de la sonde retenue pour l'etat qui la concerne : absente, ou connexion, connexion
+    /// etablie, refus ou erreur de son port ; nil pour un autre port choisi, ou sans sonde.
+    var nomEtat: String? {
+        switch etat {
+        case .sansSonde: nil
+        case .absente: nom
+        case .connexion, .connectee, .refusee, .erreur: serie != nil && serieEtat == serie ? nom : nil
+        }
     }
 
     /// Nom montre pour la sonde : le sien, sinon « Sonde ».
@@ -149,7 +162,7 @@ final class SondeMaillage {
     /// `deconnecter` pendant une attente, elle ferme sa liaison (en l'attendant)
     /// et sort sans toucher a l'etat, a la sonde, ni au numero de serie retenu.
     func connecter(_ port: PortUSB, choisi: Bool) async {
-        deconnecter(.connexion)
+        deconnecter(.connexion, port: port)
         let n = essai
         // Tant que l'ancienne liaison tient le port, TIOCEXCL refuse de le rouvrir.
         await fermetures?.value
@@ -199,7 +212,7 @@ final class SondeMaillage {
     /// est fermee et `etat` passe a `.connexion` tout de suite ; un `deconnecter`
     /// d'ici au depart de la tache (oublier, autre choix, port retire) l'annule.
     private func lancerConnexion(_ port: PortUSB, choisi: Bool) {
-        deconnecter(.connexion)
+        deconnecter(.connexion, port: port)
         let n = essai
         Task {
             guard n == essai else { return }
@@ -213,8 +226,9 @@ final class SondeMaillage {
     }
 
     /// Ferme sans attendre la liaison connectee et celle d'une connexion en
-    /// cours, qui devient perimee ; `connecter` attend ces fermetures.
-    private func deconnecter(_ nouveau: Etat) {
+    /// cours, qui devient perimee ; `connecter` attend ces fermetures. `port` :
+    /// celui que le nouvel etat concerne (connexion).
+    private func deconnecter(_ nouveau: Etat, port: PortUSB? = nil) {
         essai += 1
         boucle?.cancel()
         boucle = nil
@@ -228,6 +242,7 @@ final class SondeMaillage {
         sonde = nil
         enConnexion = nil
         cheminConnecte = nil
+        serieEtat = port?.serie
         etat = nouveau
     }
 

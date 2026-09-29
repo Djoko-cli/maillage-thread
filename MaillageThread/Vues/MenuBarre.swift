@@ -106,14 +106,15 @@ struct MenuBarre: View {
         }
         if surveillance.mode == .demo {
             Text("Mode démo : panne du 27/09 rejouée").font(.caption).foregroundStyle(.secondary)
-        } else if let t = Self.ligneSonde(sonde.etat, nom: sonde.nom, derniere: sonde.derniereTournee,
+        } else if let t = Self.ligneSonde(sonde.etat, nom: sonde.nomEtat, derniere: sonde.derniereTournee,
                                           avancement: sonde.avancement, maintenant: Date()) {
             Text(t).font(.caption).foregroundStyle(.secondary)
         }
     }
 
-    /// Ligne de la sonde, sous son nom (« Sonde » tant qu'il n'est pas connu) ; pendant une
-    /// tournee, son etape et son compteur. Rien tant qu'aucune sonde n'est choisie.
+    /// Ligne de la sonde, sous le nom donne (celui de la sonde retenue quand l'etat la concerne,
+    /// `SondeMaillage.nomEtat`), sinon « Sonde » ; pendant une tournee, son etape et son
+    /// compteur. Rien tant qu'aucune sonde n'est choisie.
     static func ligneSonde(_ e: SondeMaillage.Etat, nom: String?, derniere: Date?, avancement: AvancementTournee?,
                            maintenant: Date) -> String? {
         let n = SondeMaillage.nomAffiche(nom)

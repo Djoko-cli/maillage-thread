@@ -94,8 +94,7 @@ struct FenetreReglages: View {
                             Text(verbatim: Self.libellePort(p, serieRetenue: sonde.serie, nom: sonde.nom)).tag(p.chemin)
                         }
                     }
-                    // Sous le nom de la sonde (« Sonde » tant qu'il n'est pas connu).
-                    LabeledContent(SondeMaillage.nomAffiche(sonde.nom), value: Self.texteEtatSonde(sonde.etat))
+                    LabeledContent("État", value: Self.texteEtatSonde(sonde.etat, nom: sonde.nomEtat))
                     if case .connectee(let b) = sonde.etat {
                         LabeledContent("Firmware", value: b.version)
                         let qr = b.qr.flatMap { $0.isEmpty ? nil : $0 }
@@ -162,15 +161,19 @@ struct FenetreReglages: View {
         .onAppear { ouverture.actualiser() }
     }
 
-    /// Libelle d'un port dans le choix : la sonde retenue sous son nom ; tout autre port, ou
-    /// la sonde retenue sans nom connu (firmware 1.0.0), sous un libelle neutre.
+    /// Libelle d'un port dans le choix : la sonde retenue sous son nom seul ; tout autre port,
+    /// ou la sonde retenue sans nom connu (firmware 1.0.0), sous son nom de port et son numero
+    /// de serie USB (la MAC d'un C6), qui seul distingue la sonde du pont Halo avant la
+    /// premiere connexion.
     static func libellePort(_ p: PortUSB, serieRetenue: String?, nom: String?) -> String {
         if let nom, let serie = p.serie, serie == serieRetenue { return nom }
-        return "ESP32-C6 · " + p.nomCourt
+        return p.libelle
     }
 
-    static func texteEtatSonde(_ e: SondeMaillage.Etat) -> String {
-        switch e {
+    /// Etat de la sonde, precede du nom de la sonde retenue quand il la concerne
+    /// (« SONDE-01 · connectée ») ; seul pour un autre port choisi ou sans nom connu.
+    static func texteEtatSonde(_ e: SondeMaillage.Etat, nom: String?) -> String {
+        let texte = switch e {
         case .sansSonde: String(localized: "aucune sonde choisie")
         case .absente: String(localized: "absente (débranchée ?)")
         case .connexion: String(localized: "connexion…")
@@ -178,6 +181,8 @@ struct FenetreReglages: View {
         case .refusee(let m): String(localized: "refusée : \(m)")
         case .erreur(let m): String(localized: "erreur : \(m)")
         }
+        guard let nom else { return texte }
+        return String(localized: "\(nom) · \(texte)")
     }
 
     private var etatEcoute: String {

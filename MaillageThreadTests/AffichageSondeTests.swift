@@ -78,8 +78,9 @@ struct AffichageSondeTests {
         #expect(!FicheNoeud.renommable("rloc:5000", dans: s), "ni la sonde ni l'instantane : « Ce nœud n'est plus visible. »")
     }
 
-    /// Ligne du menu : le nom de la sonde a la place de « Sonde » quand il est connu ;
-    /// pendant une tournee, son etape et son compteur.
+    /// Ligne du menu : le nom de la sonde a la place de « Sonde » quand il est donne (celui de la
+    /// sonde retenue, quand l'etat la concerne : `SondeMaillage.nomEtat`) ; pendant une tournee,
+    /// son etape et son compteur. Etat des Reglages : « SONDE-01 · connectee », l'etat seul sans nom.
     @Test func menuEtReglages() {
         let t = Date(timeIntervalSince1970: 1_790_000_000)
         let sonde = String(localized: "Sonde")
@@ -108,11 +109,20 @@ struct AffichageSondeTests {
         let rien = AvancementTournee(etape: .identites, fait: 0, total: 0)
         #expect(MenuBarre.ligneSonde(.connectee(b), nom: nil, derniere: nil, avancement: rien, maintenant: t)
                 == String(localized: "\(sonde) : \(TexteTournee.etape(.identites))…"))
-        #expect(FenetreReglages.texteEtatSonde(.refusee("pas une sonde")) == String(localized: "refusée : \("pas une sonde")"))
+        #expect(FenetreReglages.texteEtatSonde(.connectee(b), nom: "SONDE-01")
+                == String(localized: "\("SONDE-01") · \(String(localized: "connectée"))"))
+        #expect(FenetreReglages.texteEtatSonde(.absente, nom: "SONDE-01")
+                == String(localized: "\("SONDE-01") · \(String(localized: "absente (débranchée ?)"))"))
+        #expect(FenetreReglages.texteEtatSonde(.connectee(b), nom: nil) == String(localized: "connectée"))
+        #expect(FenetreReglages.texteEtatSonde(.refusee("pas une sonde"), nom: nil)
+                == String(localized: "refusée : \("pas une sonde")"))
+        #expect(FenetreReglages.texteEtatSonde(.sansSonde, nom: nil) == String(localized: "aucune sonde choisie"))
     }
 
-    /// Choix du port : la sonde retenue sous son nom ; un autre port, un port sans numero de
-    /// serie ou la sonde retenue sans nom connu (firmware 1.0.0), sous un libelle neutre.
+    /// Choix du port : la sonde retenue sous son nom seul ; un autre port, un port sans numero
+    /// de serie ou la sonde retenue sans nom connu (firmware 1.0.0), sous son nom de port et son
+    /// numero de serie USB (la MAC) : seul moyen de distinguer la sonde du pont Halo avant la
+    /// premiere connexion. Un port Espressif n'est pas forcement un C6 : rien ne l'affirme.
     @Test func libellesDesPorts() {
         let retenue = PortUSB(chemin: "/dev/cu.usbmodem11301", vid: 0x303A, pid: 0x1001, serie: "A0:00:00:00:00:01",
                               produit: nil)
@@ -120,12 +130,13 @@ struct AffichageSondeTests {
                             produit: nil)
         let sansSerie = PortUSB(chemin: "/dev/cu.usbmodemFACTICE03", vid: 0x303A, pid: 0x1001, serie: nil, produit: nil)
         #expect(FenetreReglages.libellePort(retenue, serieRetenue: "A0:00:00:00:00:01", nom: "SONDE-01") == "SONDE-01")
-        #expect(FenetreReglages.libellePort(retenue, serieRetenue: "A0:00:00:00:00:01", nom: nil) == "ESP32-C6 · usbmodem11301")
+        #expect(FenetreReglages.libellePort(retenue, serieRetenue: "A0:00:00:00:00:01", nom: nil)
+                == "usbmodem11301 · A0:00:00:00:00:01")
         #expect(FenetreReglages.libellePort(autre, serieRetenue: "A0:00:00:00:00:01", nom: "SONDE-01")
-                == "ESP32-C6 · usbmodemFACTICE02")
-        #expect(FenetreReglages.libellePort(retenue, serieRetenue: nil, nom: "SONDE-01") == "ESP32-C6 · usbmodem11301",
+                == "usbmodemFACTICE02 · B0:00:00:00:00:02")
+        #expect(FenetreReglages.libellePort(retenue, serieRetenue: nil, nom: "SONDE-01") == "usbmodem11301 · A0:00:00:00:00:01",
                 "aucune sonde retenue")
-        #expect(FenetreReglages.libellePort(sansSerie, serieRetenue: nil, nom: "SONDE-01") == "ESP32-C6 · usbmodemFACTICE03")
+        #expect(FenetreReglages.libellePort(sansSerie, serieRetenue: nil, nom: "SONDE-01") == "usbmodemFACTICE03")
     }
 
     /// Textes de l'avancement : libelles d'etape distincts ; « etape · fait/total », l'etape

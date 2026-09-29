@@ -528,6 +528,47 @@ struct SondeMaillageTests {
         s.oublier()
     }
 
+    /// Le nom de la sonde retenue va a l'etat qui la concerne (connectee, absente) ; pas au
+    /// refus d'un autre port choisi, ni a la connexion d'un autre port, ni sans sonde.
+    @Test(.timeLimit(.minutes(1))) func nomSeulementPourLaSondeRetenue() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let halo = #"{"v":1,"t":"bonjour","produit":"pont-halo","version":"0.4.0","mac":null,"appairee":true,"code":null,"qr":null}"#
+        let pont = PortUSB(chemin: "/dev/cu.usbmodemFACTICE02", vid: 0x303A, pid: 0x1001, serie: "B0:00:00:00:00:02",
+                           produit: nil)
+        let troisieme = PortUSB(chemin: "/dev/cu.usbmodemFACTICE03", vid: 0x303A, pid: 0x1001, serie: "C0:00:00:00:00:03",
+                                produit: nil)
+        let journal = JournalCanaux()
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { chemin in
+            if chemin == Self.port.chemin {
+                return CanalRejoue { l in
+                    l == "bonjour\n" ? [CanalRejoue.bonjourNomme] : l == "etat\n" ? [CanalRejoue.etatDetache] : []
+                }
+            }
+            if chemin == pont.chemin { return CanalRejoue { _ in [halo] } }
+            return CanalTemoin("3", journal: journal, retenirBonjour: true)
+        })
+        #expect(s.nomEtat == nil, "aucune sonde")
+        await s.connecter(Self.port, choisi: true)
+        #expect(s.nomEtat == "SONDE-01")
+        await s.connecter(pont, choisi: true)
+        guard case .refusee = s.etat else {
+            Issue.record("etat \(s.etat)")
+            return
+        }
+        #expect(s.nom == "SONDE-01", "la sonde reste retenue")
+        #expect(s.nomEtat == nil, "refus d'un autre port")
+        s.portsChanges([pont])
+        #expect(s.etat == .absente)
+        #expect(s.nomEtat == "SONDE-01", "la sonde retenue est absente")
+        s.choisir(troisieme)
+        await journal.attendre("bonjour 3")
+        #expect(s.etat == .connexion)
+        #expect(s.nomEtat == nil, "connexion d'un autre port")
+        s.oublier()
+        #expect(s.nomEtat == nil)
+    }
+
     /// Le nom suit chaque bonjour : un firmware sans nom (1.0.0) l'efface.
     @Test func nomSuitLeBonjour() async throws {
         let (p, domaine) = try Self.preferences()
