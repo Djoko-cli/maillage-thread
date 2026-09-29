@@ -74,6 +74,15 @@ final class CanalRejoue: CanalSonde {
     }
 }
 
+/// Canal d'un port qui ne s'ouvre pas (tenu par une autre app, retire entre-temps).
+struct CanalEnPanne: CanalSonde {
+    struct Panne: Error {}
+
+    func ouvrir() throws -> AsyncStream<Data> { throw Panne() }
+    func envoyer(_ ligne: String) {}
+    func fermer() {}
+}
+
 /// Horloge des tests, avancee a la main (ou par un canal, pendant une tournee).
 final class HorlogeFactice: Sendable {
     private let t: Mutex<Date>
@@ -567,6 +576,31 @@ struct SondeMaillageTests {
         #expect(s.nomEtat == nil, "connexion d'un autre port")
         s.oublier()
         #expect(s.nomEtat == nil)
+    }
+
+    /// La sonde retenue elle-meme, reprise au branchement (sans choix dans les Reglages) : son
+    /// nom aussi pendant sa connexion, et apres une erreur de son port.
+    @Test(.timeLimit(.minutes(1))) func nomDeLaSondeRetenueEnConnexionEtEnErreur() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
+        p.set("SONDE-01", forKey: SondeMaillage.cleNom)
+        let journal = JournalCanaux()
+        var canaux = 0
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ -> any CanalSonde in
+            canaux += 1
+            // D'abord un bonjour qui tarde (connexion en cours), puis un port qui ne s'ouvre pas.
+            return canaux == 1 ? CanalTemoin("1", journal: journal, retenirBonjour: true) : CanalEnPanne()
+        })
+        s.portsChanges([Self.port])
+        await journal.attendre("bonjour 1")
+        #expect(s.etat == .connexion)
+        #expect(s.nomEtat == "SONDE-01", "connexion de la sonde retenue")
+        s.portsChanges([])
+        s.portsChanges([Self.port])
+        await Self.attendre { if case .erreur = s.etat { true } else { false } }
+        #expect(s.nomEtat == "SONDE-01", "erreur de la sonde retenue")
+        s.oublier()
     }
 
     /// Le nom suit chaque bonjour : un firmware sans nom (1.0.0) l'efface.
