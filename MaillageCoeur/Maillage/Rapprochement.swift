@@ -16,8 +16,8 @@ public struct NoeudSonde: Hashable, Sendable, Identifiable {
     /// Routeur de bordure (Network Data).
     public let bordure: Bool
     /// Routeur de bordure non identifie : instances des annonces de sa partition qu'aucun
-    /// routeur n'a reprises et qui peuvent etre la sienne (son ExtMac, si elle est connue,
-    /// n'est pas leur `xa`), dans l'ordre de la partition ; vide sinon.
+    /// routeur n'a reprises et qui peuvent etre la sienne (sauf si son ExtMac et leur `xa` sont
+    /// connus tous deux et differents), dans l'ordre de la partition ; vide sinon.
     public let candidats: [String]
     /// Reconnu par elimination : seul routeur de bordure non identifie de la partition pour
     /// une seule annonce non reprise.
@@ -70,11 +70,14 @@ public struct MaillageAffiche: Hashable, Sendable {
     ///   BBR principal des Network Data est celui dont `sb` le dit ;
     /// - autre routeur ou enfant : son ExtMac est l'hote de l'appareil ; a defaut
     ///   (enfant), une adresse commune ;
+    /// - chef du maillage, routeur de bordure encore non identifie : l'annonce dont le role
+    ///   (bits 9-10 de `sb`, Thread 1.4) est chef ;
     /// - par elimination : le seul routeur de bordure non identifie est la seule annonce
-    ///   de la partition qu'aucun routeur n'a reprise (si son ExtMac, connue, n'est pas un
-    ///   autre `xa`) ;
+    ///   de la partition qu'aucun routeur n'a reprise ;
     /// - sinon "rloc:XXXX", inconnu de l'instantane ; un routeur de bordure y garde ses
     ///   candidats, les annonces non reprises qui peuvent etre la sienne.
+    /// Ces trois dernieres regles ecartent une annonce dont le `xa` et l'ExtMac du routeur sont
+    /// connus tous deux et differents.
     public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil]) {
         partition = maillage.partition
         date = maillage.date
@@ -101,11 +104,19 @@ public struct MaillageAffiche: Hashable, Sendable {
                 reconnus[r.id] = i
             }
         }
-        // Annonces qu'aucun routeur n'a reprises ; routeurs de bordure non identifies. Une annonce
-        // peut etre celle d'un routeur si l'ExtMac de l'un ou le `xa` de l'autre manque.
+        // Une annonce peut etre celle d'un routeur si l'ExtMac de l'un ou le `xa` de l'autre manque
+        // (connus tous deux, ils sont differents : la regle du `xa` les aurait rapproches).
+        func possible(_ r: RouteurMaillage, _ a: RouteurBordure) -> Bool { r.extMac == nil || a.adresseEtendue == nil }
+        // Chef du maillage, routeur de bordure non identifie : l'annonce de role chef de la
+        // partition (Thread 1.4, bits 9-10 de `sb`), comme pour le BBR principal.
+        if let r = maillage.routeurs.first(where: { $0.chef && $0.bordure && reconnus[$0.id] == nil }),
+           let a = bordures.first(where: { $0.role == .chef && !pris.contains($0.instance) }), possible(r, a) {
+            reconnus[r.id] = a.instance
+            pris.insert(a.instance)
+        }
+        // Annonces qu'aucun routeur n'a reprises ; routeurs de bordure non identifies.
         let restantes = bordures.filter { !pris.contains($0.instance) }
         let nonIdentifies = maillage.routeurs.filter { $0.bordure && reconnus[$0.id] == nil }
-        func possible(_ r: RouteurMaillage, _ a: RouteurBordure) -> Bool { r.extMac == nil || a.adresseEtendue == nil }
         var deduit: Int?
         if nonIdentifies.count == 1, restantes.count == 1, let r = nonIdentifies.first, let a = restantes.first,
            possible(r, a) {

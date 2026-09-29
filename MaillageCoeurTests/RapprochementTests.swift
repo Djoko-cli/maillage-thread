@@ -204,23 +204,47 @@ struct RapprochementTests {
         #expect(Disposition(reseau: r, appareils: [], maillage: m).noeud("HomePod avant") != nil)
     }
 
-    /// Le centre de la zone (le chef, ici sans identite) peut etre candidat ; il reste dessine,
-    /// au centre. L'autre annonce candidate, non.
-    @Test func centreCandidat() throws {
+    /// Mini-maillage de deux routeurs de bordure sans ExtMac (0400, le chef, et 0800) ;
+    /// `ext` : ExtMac connue du chef ; `chefBordure` : le chef est-il un routeur de bordure.
+    static func deuxRouteurs(_ i: Instantane, ext: String? = nil, chefBordure: Bool = true) throws -> MaillageAffiche {
+        var c = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
+        c.routeurs(Route64(sequence: 0, routes: (1...2).map { RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1) }),
+                   chef: 1)
+        if let ext { c.identite(ext, routeur: 1) }
+        c.marquer(1, bordure: chefBordure)
+        c.marquer(2, bordure: true)
+        return MaillageAffiche(maillage: c.maillage(), reseau: try #require(i.reseaux.first), appareils: i.appareils)
+    }
+
+    /// Regle du chef, comme celle du BBR principal : le chef du maillage, routeur de bordure non
+    /// identifie, est l'annonce de role chef de sa partition (Thread 1.4, bits 9-10 de `sb`) ; le
+    /// dernier routeur l'est alors par elimination. Pas si l'ExtMac du chef, connue, n'est pas le
+    /// `xa` de l'annonce, ni si le chef n'est pas un routeur de bordure.
+    @Test func regleDuChef() throws {
         var b = Banc()
         b.routeur("Centre", partition: "46CBEBCD", role: .chef, lien: "fe80::1", xa: "E0000000000000C1")
         b.routeur("HomePod avant", partition: "46CBEBCD", lien: "fe80::2", xa: "E0000000000000D1")
         let i = Instantane(annonces: b.annonces)
+        let m = try Self.deuxRouteurs(i)
+        #expect(m.routeurs[1] == NoeudSonde(id: "Centre", rloc16: 0x0400, genre: .routeur, reconnu: true, bordure: true))
+        #expect(m.routeurs[2]?.id == "HomePod avant" && m.routeurs[2]?.deduit == true)
+        #expect(m.annoncesCandidates.isEmpty)
+        #expect(try Self.deuxRouteurs(i, ext: "E0000000000000F0").routeurs[1]?.reconnu == false, "ExtMac et xa differents")
+        #expect(try Self.deuxRouteurs(i, chefBordure: false).routeurs[1]?.reconnu == false, "chef hors des routeurs de bordure")
+    }
+
+    /// Le centre de la zone peut etre candidat (ici le premier par nom : annonces Thread 1.3, sans
+    /// role) ; il reste dessine, au centre. L'autre annonce candidate, non.
+    @Test func centreCandidat() throws {
+        var b = Banc()
+        b.routeur("Alpha", partition: "46CBEBCD", role: nil, lien: "fe80::1", xa: "E0000000000000C1")
+        b.routeur("HomePod avant", partition: "46CBEBCD", role: nil, lien: "fe80::2", xa: "E0000000000000D1")
+        let i = Instantane(annonces: b.annonces)
         let r = try #require(i.reseaux.first)
-        var c = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
-        c.routeurs(Route64(sequence: 0, routes: (1...2).map { RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1) }),
-                   chef: 1)
-        c.marquer(1, bordure: true)
-        c.marquer(2, bordure: true)
-        let m = MaillageAffiche(maillage: c.maillage(), reseau: r, appareils: i.appareils)
-        #expect(m.routeurs[1]?.candidats == ["Centre", "HomePod avant"] && m.routeurs[2]?.candidats == ["Centre", "HomePod avant"])
+        let m = try Self.deuxRouteurs(i)
+        #expect(m.routeurs[1]?.candidats == ["Alpha", "HomePod avant"] && m.routeurs[2]?.candidats == ["Alpha", "HomePod avant"])
         let d = Disposition(reseau: r, appareils: [], maillage: m)
-        #expect(d.noeud("Centre")?.genre == .centre)
+        #expect(d.noeud("Alpha")?.genre == .centre)
         #expect(d.noeud("HomePod avant") == nil)
         #expect(Self.interieur(d) == ["rloc:0400", "rloc:0800"])
     }
