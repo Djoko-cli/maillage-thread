@@ -156,6 +156,10 @@ public struct ResultatDiag: Hashable, Sendable, Codable {
 
     /// TLV decodees d'une reponse reussie.
     public var reponse: ReponseDiagnostic? { ok ? tlv.flatMap { ReponseDiagnostic(hexa: $0) } : nil }
+
+    /// Reponse trop longue pour le reseau (`trop_long` : la carte limite une reponse a 1100
+    /// octets, a distance seulement) : la cible a repondu, ce n'est pas un silence.
+    public var tropLong: Bool { !ok && erreur == "trop_long" }
 }
 
 /// Message d'une ligne machine.

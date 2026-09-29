@@ -188,8 +188,23 @@ public enum Tournee {
         let reponsesRouteurs = try await parallele(aInterroger, {
             try await sonde.diag(rloc16($0), tlvRouteur, delaiMs: delaiRouteur)
         }, apresChacune: { n, _, _ in signaler(.routeurs, n, aInterroger.count) })
+        // Reponse trop longue pour le reseau : le routeur a repondu. Sa requete est refaite une
+        // fois, en deux moities de TLV, reunies ; une moitie encore trop longue (ou sans reponse)
+        // est laissee : ce qu'on a est garde, sans echec.
+        let aCouper = reponsesRouteurs.filter { $0.1.tropLong }.flatMap { r in moities(tlvRouteur).map { (r.0, $0) } }
+        var reunies: [Int: String] = [:]
+        if !aCouper.isEmpty {
+            let total = aInterroger.count + aCouper.count
+            signaler(.routeurs, aInterroger.count, total)
+            let reponsesMoities = try await parallele(aCouper, {
+                try await sonde.diag(rloc16($0.0), $0.1, delaiMs: delaiRouteur)
+            }, apresChacune: { n, _, _ in signaler(.routeurs, aInterroger.count + n, total) })
+            for ((id, _), r) in reponsesMoities {
+                if let t = r.tlv, r.reponse != nil { reunies[id, default: ""] += t }
+            }
+        }
         for (id, r) in reponsesRouteurs {
-            if let rep = r.reponse {
+            if let rep = r.tropLong ? ReponseDiagnostic(hexa: reunies[id] ?? "") : r.reponse {
                 c.reponse(rep, routeur: id)
                 mem.echecs[id] = 0
                 mem.muetInterroge[id] = nil
@@ -291,6 +306,12 @@ public enum Tournee {
     }
 
     static func rloc16(_ routeur: Int) -> UInt16 { UInt16(routeur) << 10 }
+
+    /// Une requete coupee en deux moities de TLV (reponse trop longue pour le reseau).
+    static func moities(_ tlv: [UInt8]) -> [[UInt8]] {
+        let milieu = tlv.count / 2
+        return [Array(tlv[..<milieu]), Array(tlv[milieu...])].filter { !$0.isEmpty }
+    }
 
     /// Route64 quand ni le chef ni les secours ne l'ont donnee (chef muet des le lancement) :
     /// les autres identifiants de routeur, de 0 a 62, par groupes de 8 dans l'ordre croissant ;

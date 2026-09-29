@@ -26,8 +26,9 @@ final class ReleveAvancement: Sendable {
     }
 }
 
-/// Sonde rejouee : repond avec les TLV de la capture, echoue en `delai` pour le reste,
-/// et note ses requetes.
+/// Sonde rejouee : repond avec les TLV de la capture, echoue en `delai` pour le reste (ou en
+/// `trop_long`, reponse de plus de 1100 octets par le reseau, pour `tropLongs`), et note ses
+/// requetes.
 struct SondeRejouee: InterlocuteurSonde {
     actor Registre {
         /// Requetes `diag`, "<cible>|<tlv,...>".
@@ -46,6 +47,8 @@ struct SondeRejouee: InterlocuteurSonde {
     let reponses: [String: String]
     /// Table des routeurs de la sonde ; nil : elle ne la rend pas.
     var table: [RouteurSonde]? = []
+    /// "<cible>|<tlv,...>" dont la reponse est trop longue pour le reseau.
+    var tropLongs: Set<String> = []
     let registre = Registre()
 
     func etat() async throws -> EtatSonde { etatSonde }
@@ -69,6 +72,9 @@ struct SondeRejouee: InterlocuteurSonde {
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
         let cle = String(format: "%04X|", cible) + tlv.map(String.init).joined(separator: ",")
         await registre.noter(cle)
+        if tropLongs.contains(cle) {
+            return ResultatDiag(id: 0, cible: String(format: "%04X", cible), ok: false, erreur: "trop_long")
+        }
         guard let t = reponses[cle] else {
             return ResultatDiag(id: 0, cible: String(format: "%04X", cible), ok: false, ms: delaiMs, erreur: "delai")
         }
@@ -78,7 +84,7 @@ struct SondeRejouee: InterlocuteurSonde {
     /// Etat de la capture apres le changement de parent : AC09, enfant de AC00 (muet) ; `table` :
     /// celle des routeurs de la sonde, sans ExtMac par defaut (la capture vient d'une sonde en MED).
     static func capture(chef: Int = 24, reponsesEnPlus: [String: String] = [:],
-                        table: [RouteurSonde]? = SondeRejouee.table()) throws -> SondeRejouee {
+                        table: [RouteurSonde]? = SondeRejouee.table(), tropLongs: Set<String> = []) throws -> SondeRejouee {
         let base = #"{"v":1,"t":"etat","role":"child","rloc16":"AC09","mode":"rn","parent":{"rloc16":"AC00","ext":"E000000000000007","lqIn":3,"lqOut":3,"rssi":-89},"partition":"46CBEBCD","chef":\#(chef),"canal":25,"prefixeMaille":"FD00111122220C87","xp":"A0A1A2A3A4A5A6A7","suspendue":false}"#
         guard case .etat(let e)? = MessageSonde.lire(Data(base.utf8)) else { throw CaptureSonde.ErreurCapture(id: 0) }
         var r: [String: String] = [
@@ -95,12 +101,12 @@ struct SondeRejouee: InterlocuteurSonde {
         ]
         for (n, id) in zip(3...8, 503...508) { r[String(format: "AC%02X|0,1,2,8", n)] = try CaptureSonde.tlv(id) }
         r.merge(reponsesEnPlus) { _, b in b }
-        return SondeRejouee(etatSonde: e, reponses: r, table: table)
+        return SondeRejouee(etatSonde: e, reponses: r, table: table, tropLongs: tropLongs)
     }
 
     /// La meme sonde, avec seulement les reponses dont la cle est gardee ; registre neuf.
     func filtree(_ garder: (String) -> Bool) -> SondeRejouee {
-        SondeRejouee(etatSonde: etatSonde, reponses: reponses.filter { garder($0.key) }, table: table)
+        SondeRejouee(etatSonde: etatSonde, reponses: reponses.filter { garder($0.key) }, table: table, tropLongs: tropLongs)
     }
 }
 
@@ -251,6 +257,66 @@ struct TourneeTests {
         #expect(mem3.estMuet(20))
         #expect(mem3.muetsBalayes == [1, 20, 43, 45, 51, 57], "muet : balaye")
         #expect(await sans20.registre.requetes.contains("5001|0,1,2,8"))
+    }
+
+    /// TLV (hexa) d'une reponse dont le type est dans `types`, dans leur ordre : une moitie de
+    /// la reponse entiere.
+    static func garder(_ hexa: String, _ types: Set<UInt8>) throws -> String {
+        let o = [UInt8](try #require(Data(hexa: hexa)))
+        var i = 0, gardees: [UInt8] = []
+        while i + 2 <= o.count {
+            let fin = i + 2 + Int(o[i + 1])
+            if types.contains(o[i]) { gardees += o[i..<fin] }
+            i = fin
+        }
+        return Data(gardees).hexa
+    }
+
+    /// Reponse du routeur 20 trop longue pour le reseau (`trop_long` : plus de 1100 octets) : il a
+    /// repondu. Sa requete est refaite une fois en deux moities de TLV, reunies : le maillage et
+    /// la memoire sont ceux d'une reponse entiere ; ni echec, ni balayage de ses enfants.
+    @Test func tropLongEnDeuxMoities() async throws {
+        let (m0, mem0) = try #require(try await Tournee.complete(try SondeRejouee.capture(), memoire: MemoireTournee(),
+                                                                  maintenant: Self.t0))
+        let entiere = try CaptureSonde.tlv(104)
+        let sonde = try SondeRejouee.capture(reponsesEnPlus: ["5000|0,1,5": try Self.garder(entiere, [0, 1, 5]),
+                                                              "5000|16,8,24": try Self.garder(entiere, [16, 8, 24])],
+                                             tropLongs: ["5000|0,1,5,16,8,24"])
+        let releve = ReleveAvancement()
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               avancement: { releve.noter($0) }))
+        #expect(m == m0)
+        #expect(mem == mem0)
+        #expect(m.routeur(20)?.muet == false)
+        let routeurs = releve.de(.routeurs)
+        #expect(ReleveAvancement.croissants(routeurs))
+        #expect(routeurs.last == AvancementTournee(etape: .routeurs, fait: 9, total: 9), "7 routeurs, puis 2 moities")
+        let requetes = await sonde.registre.requetes
+        #expect(requetes.filter { $0.hasPrefix("5000|") && $0 != "5000|7" && $0 != "5000|25,26,27,28" }
+                == ["5000|0,1,5,16,8,24", "5000|0,1,5", "5000|16,8,24"], "une seule fois")
+        #expect(!requetes.contains("5001|0,1,2,8"), "pas de balayage de ses enfants")
+    }
+
+    /// Une moitie encore trop longue : ce qu'on a est garde (ExtMac, liens), sans nouveau
+    /// decoupage, et le routeur n'est ni muet, ni en echec, ni balaye.
+    @Test func tropLongUneMoitieTropLongue() async throws {
+        let (m0, _) = try #require(try await Tournee.complete(try SondeRejouee.capture(), memoire: MemoireTournee(),
+                                                               maintenant: Self.t0))
+        let entiere = try CaptureSonde.tlv(104)
+        let sonde = try SondeRejouee.capture(reponsesEnPlus: ["5000|0,1,5": try Self.garder(entiere, [0, 1, 5])],
+                                             tropLongs: ["5000|0,1,5,16,8,24", "5000|16,8,24"])
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(m.routeur(20)?.muet == false)
+        #expect(m.routeur(20)?.extMac == "E000000000000002")
+        #expect(m.liens == m0.liens, "liens de sa Route64, dans la moitie gardee")
+        #expect(m.enfants(de: 20).isEmpty, "table des enfants dans la moitie trop longue")
+        #expect(mem.echecs[20] == 0)
+        #expect(mem.repondants == [20, 24])
+        #expect(!mem.muetsBalayes.contains(20))
+        let requetes = await sonde.registre.requetes
+        #expect(requetes.filter { $0.hasPrefix("5000|0,1,5") || $0.hasPrefix("5000|16,8") }
+                == ["5000|0,1,5,16,8,24", "5000|0,1,5", "5000|16,8,24"], "pas de troisieme decoupage")
+        #expect(!requetes.contains("5001|0,1,2,8"))
     }
 
     /// Aucun routeur ne repond a sa requete (sonde occupee...) : les secours de la
