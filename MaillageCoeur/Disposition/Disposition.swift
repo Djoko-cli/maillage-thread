@@ -48,6 +48,11 @@ public struct AppareilAffiche: Hashable, Sendable, Identifiable {
 /// (tries par piece puis par nom), et un lien de chaque noeud vers le centre
 /// (rattachement, pas un lien radio). Les appareils sans partition connue vont
 /// dans une zone sans centre, sous la principale.
+///
+/// Avec la sonde, dans sa partition : les appareils qui routent et les routeurs
+/// inconnus rejoignent l'anneau interieur, les enfants se rangent pres de leur
+/// parent, et les liens sont ceux de la sonde (radio entre routeurs, enfant vers
+/// parent) ; un noeud sans lien connu garde son rattachement.
 public struct Disposition: Hashable, Sendable {
     public enum Genre: String, Hashable, Sendable {
         case centre, routeur, appareil
@@ -79,8 +84,20 @@ public struct Disposition: Hashable, Sendable {
     }
 
     public struct Lien: Hashable, Sendable {
+        public enum Genre: String, Hashable, Sendable {
+            /// Pointille vers le centre : rattachement suppose, pas un lien radio.
+            case rattachement
+            /// Lien radio entre deux routeurs, vu par la sonde.
+            case radio
+            /// De l'enfant vers son parent, vu par la sonde.
+            case parent
+        }
+
         public var de: String
         public var vers: String
+        public var genre: Genre = .rattachement
+        /// De 0 a 3 ; nil : inconnue.
+        public var qualite: Int?
     }
 
     public static let rayonInterieur = 90.0
@@ -95,7 +112,7 @@ public struct Disposition: Hashable, Sendable {
     public private(set) var noeuds: [Noeud] = []
     public private(set) var liens: [Lien] = []
 
-    public init(reseau: Reseau, appareils: [AppareilAffiche]) {
+    public init(reseau: Reseau, appareils: [AppareilAffiche], maillage: MaillageAffiche? = nil) {
         let connues = Set(reseau.partitions.map(\.id))
         let parZone = Dictionary(grouping: appareils) { a in
             a.partition.flatMap { connues.contains($0) ? $0 : nil } ?? ""
@@ -111,8 +128,30 @@ public struct Disposition: Hashable, Sendable {
             return rayonAppareils(apps) + Self.marge
         }
 
+        // Anneaux de chaque zone : routeurs (hors centre) a l'interieur, appareils a l'exterieur.
+        struct Anneaux {
+            var interieur: [(id: String, genre: Genre, rayon: Double)] = []
+            var exterieur: [String] = []
+            var sonde: MaillageAffiche?
+        }
+        let anneaux = reseau.partitions.map { p -> Anneaux in
+            let apps = tries(parZone[p.id] ?? [])
+            var a = Anneaux()
+            a.interieur = p.routeurs.dropFirst().map { ($0.instance, Genre.routeur, 15.0) }
+            guard let m = maillage, m.partition == p.id else {
+                a.exterieur = apps.map(\.id)
+                return a
+            }
+            a.sonde = m
+            let routeurs = m.idsRouteurs
+            a.interieur += apps.filter { routeurs.contains($0.id) }.map { ($0.id, Genre.appareil, 9.0) }
+            a.interieur += m.inconnus.filter { $0.genre == .routeur }.map { ($0.id, Genre.routeur, 12.0) }
+            a.exterieur = apps.filter { !routeurs.contains($0.id) }.map(\.id) + m.inconnus.filter { $0.genre == .enfant }.map(\.id)
+            return a
+        }
+
         // Rayons, puis centres : la principale en (0, 0), les autres en colonne a droite.
-        let rayons = reseau.partitions.map { rayonZone($0.routeurs.count, parZone[$0.id]?.count ?? 0) }
+        let rayons = zip(reseau.partitions, anneaux).map { rayonZone($0.routeurs.count, $1.exterieur.count) }
         let r0 = rayons.first ?? Self.rayonZoneSeule
         let secondaires = Array(rayons.dropFirst())
         var y = -(secondaires.reduce(0) { $0 + 2 * $1 } + Self.ecart * Double(max(secondaires.count - 1, 0))) / 2
@@ -128,17 +167,40 @@ public struct Disposition: Hashable, Sendable {
                               prefixesPartages: p.prefixesPartages))
             guard let premier = p.routeurs.first else { continue }
             noeuds.append(Noeud(id: premier.instance, genre: .centre, zone: p.id, position: centre, rayon: 22))
-            let autres = Array(p.routeurs.dropFirst())
-            for (i, r) in autres.enumerated() {
-                noeuds.append(Noeud(id: r.instance, genre: .routeur, zone: p.id,
-                                    position: Self.surAnneau(centre, Self.rayonInterieur, i, autres.count), rayon: 15))
-                liens.append(Lien(de: r.instance, vers: premier.instance))
+            let a = anneaux[k]
+            var positions = [premier.instance: centre]
+            for (i, r) in a.interieur.enumerated() {
+                let pos = Self.surAnneau(centre, Self.rayonInterieur, i, a.interieur.count)
+                positions[r.id] = pos
+                noeuds.append(Noeud(id: r.id, genre: r.genre, zone: p.id, position: pos, rayon: r.rayon))
             }
-            let apps = tries(parZone[p.id] ?? [])
-            for (j, a) in apps.enumerated() {
-                noeuds.append(Noeud(id: a.id, genre: .appareil, zone: p.id,
-                                    position: Self.surAnneau(centre, rayonAppareils(apps.count), j, apps.count), rayon: 7))
-                liens.append(Lien(de: a.id, vers: premier.instance))
+            // Avec la sonde, chaque enfant pres de son parent : par angle du parent, puis dans l'ordre des appareils.
+            var exterieur = a.exterieur
+            if let m = a.sonde {
+                // Les enfants du centre en fin d'anneau : ils ne se melent pas a ceux du premier routeur.
+                func angle(_ id: String) -> Double {
+                    guard let pere = m.parent(de: id), let pos = positions[pere] else { return 10 }
+                    if pere == premier.instance { return 3 * .pi / 2 }
+                    let t = atan2(pos.y - centre.y, pos.x - centre.x)
+                    return t < -.pi / 2 ? t + 2 * .pi : t
+                }
+                let rang = Dictionary(exterieur.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+                exterieur.sort { (angle($0), rang[$0] ?? 0) < (angle($1), rang[$1] ?? 0) }
+            }
+            for (j, id) in exterieur.enumerated() {
+                let pos = Self.surAnneau(centre, rayonAppareils(exterieur.count), j, exterieur.count)
+                positions[id] = pos
+                noeuds.append(Noeud(id: id, genre: .appareil, zone: p.id, position: pos, rayon: 7))
+            }
+            // Liens : ceux de la sonde entre noeuds de la zone ; le rattachement au centre pour les autres.
+            var relies: Set<String> = [premier.instance]
+            for l in a.sonde?.liens ?? [] where positions[l.de] != nil && positions[l.vers] != nil {
+                liens.append(Lien(de: l.de, vers: l.vers, genre: l.genre == .radio ? .radio : .parent, qualite: l.qualite))
+                relies.insert(l.de)
+                relies.insert(l.vers)
+            }
+            for id in a.interieur.map(\.id) + exterieur where !relies.contains(id) {
+                liens.append(Lien(de: id, vers: premier.instance))
             }
         }
 

@@ -15,10 +15,10 @@ struct Banc {
         self.date = date
     }
 
-    /// Routeur de bordure ; `role` nil : Thread 1.3 (role inconnu).
+    /// Routeur de bordure ; `role` nil : Thread 1.3 (role inconnu) ; `xa` : son ExtMac.
     mutating func routeur(_ nom: String, partition: String = "73586B68", role: RoleThread? = .routeur,
                           primaire: Bool = false, lien: String, omr: String? = nil,
-                          xp: String = "4B36A2B7FEFB200B", nn: String = "MyHome1482620090") {
+                          xp: String = "4B36A2B7FEFB200B", nn: String = "MyHome1482620090", xa: String? = nil) {
         let bitsRole: UInt32 = switch role {
         case .detache?: 0
         case .enfant?: 1
@@ -33,6 +33,7 @@ struct Banc {
             "at": Data([0x00, 0x00, 0x66, 0xCE, 0xC7, 0x00, 0x00, 0x00]),
         ]
         if let omr, let p = PrefixeIPv6(omr) { txt["omr"] = Data([64] + p.octets) }
+        if let xa { txt["xa"] = Data(hexa: xa)! }
         let hote = nom.replacingOccurrences(of: " ", with: "-") + ".local"
         routeurs.append(AnnonceService(instance: nom, hote: hote, port: 49153, txt: ChampsTXT(txt)))
         adresses[hote] = [lien]
