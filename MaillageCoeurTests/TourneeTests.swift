@@ -1,0 +1,175 @@
+import Foundation
+import Testing
+@testable import MaillageCoeur
+
+/// Sonde rejouee : repond avec les TLV de la capture, echoue en `delai` pour le reste,
+/// et note ses requetes.
+struct SondeRejouee: InterlocuteurSonde {
+    actor Registre {
+        var requetes: [String] = []
+        func noter(_ r: String) { requetes.append(r) }
+    }
+
+    let etatSonde: EtatSonde
+    /// "<cible>|<tlv,...>" -> TLV hexa.
+    let reponses: [String: String]
+    let registre = Registre()
+
+    func etat() async throws -> EtatSonde { etatSonde }
+
+    func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
+        let cle = String(format: "%04X|", cible) + tlv.map(String.init).joined(separator: ",")
+        await registre.noter(cle)
+        guard let t = reponses[cle] else {
+            return ResultatDiag(id: 0, cible: String(format: "%04X", cible), ok: false, ms: delaiMs, erreur: "delai")
+        }
+        return ResultatDiag(id: 0, cible: String(format: "%04X", cible), ok: true, ms: 50, code: "2.04", tlv: t)
+    }
+
+    /// Etat de la capture apres le changement de parent : AC09, enfant de AC00 (muet).
+    static func capture(chef: Int = 24, reponsesEnPlus: [String: String] = [:]) throws -> SondeRejouee {
+        let base = #"{"v":1,"t":"etat","role":"child","rloc16":"AC09","mode":"rn","parent":{"rloc16":"AC00","ext":"E000000000000007","lqIn":3,"lqOut":3,"rssi":-89},"partition":"46CBEBCD","chef":\#(chef),"canal":25,"prefixeMaille":"FD00111122220C87","xp":"A0A1A2A3A4A5A6A7","suspendue":false}"#
+        guard case .etat(let e)? = MessageSonde.lire(Data(base.utf8)) else { throw CaptureSonde.ErreurCapture(id: 0) }
+        var r: [String: String] = [
+            "6000|5,6": try CaptureSonde.tlv(204),
+            "5000|0,1,5,16,8,24": try CaptureSonde.tlv(104),
+            "6000|0,1,5,16,8,24": try CaptureSonde.tlv(106),
+            "5000|25,26,27,28": try CaptureSonde.tlv(105),
+            "6000|25,26,27,28": try CaptureSonde.tlv(107),
+            "5000|7": try CaptureSonde.tlv(206),
+            "AC01|0,1,2,8": try CaptureSonde.tlv(411),
+            "5004|0,8": try CaptureSonde.tlv(116),
+            "5001|0,8": try CaptureSonde.tlv(117),
+            "6003|0,8": try CaptureSonde.tlv(118),
+        ]
+        for (n, id) in zip(3...8, 503...508) { r[String(format: "AC%02X|0,1,2,8", n)] = try CaptureSonde.tlv(id) }
+        r.merge(reponsesEnPlus) { _, b in b }
+        return SondeRejouee(etatSonde: e, reponses: r)
+    }
+}
+
+@Suite("Tournee de la sonde")
+struct TourneeTests {
+    static let t0 = Date(timeIntervalSince1970: 1_790_000_000)
+
+    /// Premiere tournee : routeurs, roles, liens, enfants des tables et du balayage, memoire.
+    @Test func premiere() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (m, mem) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(m.partition == "46CBEBCD")
+        #expect(m.routeurs.map(\.id) == [1, 20, 24, 43, 45, 51, 57])
+        #expect(m.chef?.id == 24)
+        #expect(m.routeurs.filter(\.muet).map(\.id) == [1, 43, 45, 51, 57])
+        #expect(m.routeurs.filter(\.bordure).map(\.id) == [1, 43, 45, 51, 57])
+        #expect(m.routeur(45)?.bbrPrincipal == true)
+        #expect(m.routeur(43)?.extMac == "E000000000000007", "parent de la sonde")
+        #expect(m.routeur(20)?.pile?.hasPrefix("SL-OPENTHREAD") == true)
+        #expect(m.liens.count == 7)
+        #expect(m.enfants(de: 43).map(\.rloc16) == [0xAC01, 0xAC03, 0xAC04, 0xAC05, 0xAC06, 0xAC07, 0xAC08, 0xAC09])
+        #expect(m.enfants(de: 43).last?.source == .sonde)
+        #expect(m.enfants.count == 14)
+        let de20 = m.enfants(de: 20)
+        #expect(de20.map(\.extMac) == ["E000000000000005", "E000000000000004"], "tables : identifies une fois")
+        #expect(de20.first?.adresses.count == 4)
+        #expect(m.enfants(de: 24).filter { $0.extMac == nil }.map(\.rloc16) == [0x6002, 0x6005, 0x6006], "sans reponse")
+        #expect(mem.echecs[43] == 1)
+        #expect(!mem.estMuet(43), "muet a partir de 2 echecs de suite")
+        #expect(mem.repondants == [20, 24])
+        #expect(mem.identites[0xAC00] == "E000000000000007")
+        #expect(mem.identites[0x5000] == "E000000000000002")
+        #expect(mem.dernierBalayage == Self.t0)
+        #expect(mem.muetsBalayes == [1, 43, 45, 51, 57])
+        let requetes = await sonde.registre.requetes
+        #expect(requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48, "AC00 : 1 a 17 sauf 9 ; les autres : 1 a 8")
+        #expect(requetes.filter { $0.hasSuffix("|25,26,27,28") }.count == 2)
+        #expect(requetes.filter { $0.hasSuffix("|0,8") }.count == 6, "les 6 enfants des tables")
+        #expect(mem.identifies.count == 3)
+    }
+
+    /// Deuxieme tournee (5 min) : les muets le deviennent ; pas de nouveau balayage ;
+    /// pile deja connue. Troisieme (10 min) : les muets ne sont plus interroges.
+    @Test func suivantes() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let avant2 = await sonde.registre.requetes.count
+        let (m2, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem1, maintenant: Self.t0 + 300))
+        let requetes2 = await sonde.registre.requetes.dropFirst(avant2)
+        #expect(requetes2.count == 12, "chef, 7 routeurs, Network Data, 3 enfants toujours inconnus")
+        #expect(mem2.estMuet(43))
+        #expect(mem2.muetInterroge[43] == Self.t0 + 300)
+        #expect(m2.enfants(de: 43).count == 8, "enfants du balayage garde")
+
+        let avant3 = await sonde.registre.requetes.count
+        let (m3, _) = try #require(try await Tournee.executer(sonde, memoire: mem2, maintenant: Self.t0 + 600))
+        let requetes3 = Array(await sonde.registre.requetes.dropFirst(avant3))
+        #expect(requetes3.first == "6000|5,6", "la liste des routeurs d'abord")
+        #expect(requetes3.sorted() == ["5000|0,1,5,16,8,24", "5000|7", "6000|0,1,5,16,8,24", "6000|5,6",
+                                       "6002|0,8", "6005|0,8", "6006|0,8"], "en parallele : dans le desordre")
+        #expect(m3.routeurs.filter(\.muet).map(\.id) == [1, 43, 45, 51, 57])
+        #expect(m3.enfants.count == 14)
+    }
+
+    /// Balayage de nouveau apres 30 min.
+    @Test func balayageDu() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let avant = await sonde.registre.requetes.count
+        _ = try await Tournee.executer(sonde, memoire: mem1, maintenant: Self.t0 + 1800)
+        let requetes = await sonde.registre.requetes.dropFirst(avant)
+        #expect(requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48)
+        #expect(requetes.filter { $0.hasSuffix("|0,8") }.count == 6, "identites revues avec le balayage")
+    }
+
+    /// Chef muet : Route64 d'un routeur qui a repondu a la tournee precedente.
+    @Test func chefMuet() async throws {
+        let sonde = try SondeRejouee.capture(chef: 45, reponsesEnPlus: ["5000|5,6": try CaptureSonde.tlv(104)])
+        var mem = MemoireTournee()
+        mem.echecs[45] = 2
+        mem.repondants = [20]
+        let (m, _) = try #require(try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0))
+        #expect(m.routeurs.count == 7)
+        #expect(m.chef?.id == 45)
+        #expect(await sonde.registre.requetes.first == "5000|5,6")
+    }
+
+    /// Autre partition (panne, fusion) : les identifiants de routeur y sont
+    /// redistribues ; ce qui etait retenu de l'ancienne ne sert plus.
+    @Test func autrePartition() async throws {
+        let sonde = try SondeRejouee.capture()
+        var mem = MemoireTournee()
+        mem.partition = "73586B68"
+        mem.identites[0xB400] = "E0000000000000EE"
+        mem.echecs[20] = 2
+        mem.muetInterroge[20] = Self.t0
+        mem.dernierBalayage = Self.t0
+        mem.muetsBalayes = [1, 43, 45, 51, 57]
+        let (m, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0 + 60))
+        #expect(mem2.partition == "46CBEBCD")
+        #expect(m.routeur(45)?.extMac == nil, "B400 : pas l'ExtMac retenu dans l'autre partition")
+        #expect(m.routeur(20)?.muet == false, "5000 interroge de nouveau")
+        #expect(mem2.dernierBalayage == Self.t0 + 60, "balayage refait")
+    }
+
+    /// Sonde suspendue (interrupteur eteint dans Maison) : pas de tournee, aucune requete.
+    @Test func suspendue() async throws {
+        let base = #"{"v":1,"t":"etat","role":"child","rloc16":"AC09","mode":"rn","parent":null,"partition":"46CBEBCD","chef":24,"canal":25,"prefixeMaille":null,"xp":null,"suspendue":true}"#
+        guard case .etat(let e)? = MessageSonde.lire(Data(base.utf8)) else {
+            Issue.record("etat illisible")
+            return
+        }
+        let sonde = SondeRejouee(etatSonde: e, reponses: [:])
+        #expect(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0) == nil)
+        #expect(await sonde.registre.requetes.isEmpty)
+    }
+
+    /// Sonde pas encore dans le reseau.
+    @Test func nonAttachee() async throws {
+        let base = #"{"v":1,"t":"etat","role":"disabled","rloc16":"FFFE","mode":"rn","parent":null,"partition":null,"chef":null,"canal":11,"prefixeMaille":null,"xp":null,"suspendue":false}"#
+        guard case .etat(let e)? = MessageSonde.lire(Data(base.utf8)) else {
+            Issue.record("etat illisible")
+            return
+        }
+        let sonde = SondeRejouee(etatSonde: e, reponses: [:])
+        #expect(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0) == nil)
+    }
+}
