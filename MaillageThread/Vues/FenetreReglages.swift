@@ -171,7 +171,7 @@ struct FenetreReglages: View {
     }
 
     /// Etat de la sonde, precede du nom de la sonde retenue quand il la concerne
-    /// (« SONDE-01 · connectée ») ; seul pour un autre port choisi ou sans nom connu.
+    /// (« SONDE-01 · connectee ») ; seul pour un autre port choisi ou sans nom connu.
     static func texteEtatSonde(_ e: SondeMaillage.Etat, nom: String?) -> String {
         let texte = switch e {
         case .sansSonde: String(localized: "aucune sonde choisie")
