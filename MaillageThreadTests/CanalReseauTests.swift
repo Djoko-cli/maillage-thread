@@ -162,6 +162,70 @@ struct CanalReseauTests {
         c.fermer()
     }
 
+    /// Charges arrivees a la carte, avec leur heure.
+    final class Arrivees: Sendable {
+        private let liste = Mutex<[(charge: String, quand: ContinuousClock.Instant)]>([])
+
+        func noter(_ charge: String) {
+            liste.withLock { $0.append((charge, .now)) }
+        }
+
+        var toutes: [(charge: String, quand: ContinuousClock.Instant)] { liste.withLock { $0 } }
+    }
+
+    /// Carte simulee qui note ses arrivees ; `repondre` donne les reponses.
+    static func carteNotee(_ arrivees: Arrivees, repondre: @escaping @Sendable (String) -> [String]) -> CarteSimulee {
+        CarteSimulee(cle: VecteursH1.psk) { charge in
+            arrivees.noter(charge)
+            return repondre(charge)
+        }
+    }
+
+    /// Cadence de la carte (20 commandes par seconde glissante et par session, au-dela rien) :
+    /// 30 commandes emises d'un coup partent dans l'ordre, 18 nouvelles par seconde au plus,
+    /// etalees sur plus d'une seconde.
+    @Test(.timeLimit(.minutes(1))) func cadenceDesNouvellesCommandes() async throws {
+        let arrivees = Arrivees()
+        let carte = Self.carteNotee(arrivees, repondre: Self.sonde)
+        let c = try await Self.canal(carte)
+        let lignes = RecueilLignes(try c.ouvrir())
+        for _ in 0..<30 { c.envoyer("etat\n") }
+        #expect(await attendreQue { lignes.liste.count == 30 })
+        let a = arrivees.toutes
+        let rids = a.compactMap { Self.decouper($0.charge)?.rid }
+        #expect(rids.count == 30 && rids == rids.sorted() && Set(rids).count == 30, "dans l'ordre, sans renvoi")
+        let t = a.map(\.quand)
+        #expect(t.count == 30 && t[18] - t[0] >= .milliseconds(950), "la 19e attend la fenetre d'une seconde")
+        #expect(t.count == 30 && t[29] - t[0] > .seconds(1), "etalees sur plus d'une seconde")
+        c.fermer()
+    }
+
+    /// Les renvois ne comptent pas dans la cadence et partent a l'heure, meme quand des
+    /// nouvelles commandes l'attendent (ici renvois a 300 et 600 ms, carte muette).
+    @Test(.timeLimit(.minutes(1))) func renvoisHorsCadence() async throws {
+        let arrivees = Arrivees()
+        let carte = Self.carteNotee(arrivees) { _ in [] }
+        var reglages = Self.rapides()
+        reglages.renvois = [.milliseconds(300), .milliseconds(600)]
+        let c = try await Self.canal(carte, reglages: reglages)
+        _ = RecueilLignes(try c.ouvrir())
+        let debut = ContinuousClock.now
+        for _ in 0..<30 { c.envoyer("etat\n") }
+        #expect(await attendreQue { arrivees.toutes.count == 90 }, "30 commandes, deux renvois chacune")
+        let a = arrivees.toutes
+        let premiere = try #require(a.first?.charge)
+        let envois = a.filter { $0.charge == premiere }.map { $0.quand - debut }
+        #expect(envois.count == 3)
+        #expect(envois.count == 3 && envois[1] >= .milliseconds(300) && envois[1] < .milliseconds(800), "renvoi de 300 ms a l'heure")
+        #expect(envois.count == 3 && envois[2] >= .milliseconds(600) && envois[2] < .milliseconds(900), "renvoi de 600 ms a l'heure")
+        var nouvelles: [String] = []
+        for x in a where !nouvelles.contains(x.charge) { nouvelles.append(x.charge) }
+        let dixNeuvieme = try #require(nouvelles.count == 30 ? nouvelles[18] : nil)
+        let quand = try #require(a.first { $0.charge == dixNeuvieme }?.quand) - debut
+        #expect(quand >= .milliseconds(950) && quand < .milliseconds(1400), "les renvois ne retardent pas la 19e")
+        c.fermer()
+    }
+
     /// Renvois de l'app, comptes depuis le premier envoi : 2 et 4 s ; pour un `diag`, qui reste
     /// muet cote carte tant qu'il est en vol (son delai, lu dans la commande), ensuite 1 s apres
     /// la fin du vol puis tous les 3 s, le dernier au plus tard 1 s avant l'echeance de

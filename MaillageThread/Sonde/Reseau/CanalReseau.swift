@@ -8,6 +8,9 @@ import Synchronization
 ///   renvoie la reponse gardee (ou se tait, `diag` encore en vol). Un `diag` repart ensuite
 ///   1 s apres la fin de son vol, puis tous les 3 s, jusqu'a 1 s avant l'echeance de
 ///   `SondeUSB` : sa reponse perdue apres le vol se redemande.
+/// - Au plus 18 nouvelles commandes par seconde glissante (la carte en accepte 20 par session,
+///   au-dela elle se tait) : les suivantes attendent, dans l'ordre ; les renvois ne comptent
+///   pas et partent a l'heure.
 /// - Chaque reponse `<rid> <ligne JSON>` passe a `SondeUSB` sans le rid, comme une ligne du
 ///   canal serie ; un doublon (meme rid, meme ligne) est ecarte.
 /// - Apres 10 s sans aucune ligne, un `etat` de veille, dont la reponse reste ici : sans
@@ -38,6 +41,12 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         var attenteVeille: Duration = .seconds(6)
         /// Doublons : lignes des derniers rid gardees.
         var memoireDoublons = 256
+        /// Cadence de la carte : 20 commandes par seconde glissante et par session, au-dela rien
+        /// (le renvoi de 2 s rattrape). L'app envoie au plus `cadence` nouveaux rid par
+        /// `fenetreCadence` glissante, dans l'ordre ; les renvois ne comptent pas et partent a
+        /// l'heure.
+        var cadence = 18
+        var fenetreCadence: Duration = .seconds(1)
 
         /// Pas de la garde (veille, et silence qui suit) : 1 s au plus, plus court pour des
         /// reglages de test rapides.
@@ -88,6 +97,20 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         var raison: String?
         /// Garde (veille) ; la lecture des charges, elle, finit avec le transport.
         var garde: Task<Void, Never>?
+        /// Nouvelles commandes qui attendent la cadence, dans l'ordre.
+        var file: [(rid: Int, charge: Data, renvois: [Duration])] = []
+        /// Premiers envois (nouveaux rid, veilles comprises) de la derniere fenetre de cadence,
+        /// du plus ancien au plus recent.
+        var envois: [ContinuousClock.Instant] = []
+        /// Tache qui vide `file` au rythme de la cadence ; nil quand la file est vide.
+        var videur: Task<Void, Never>?
+    }
+
+    /// Un pas du videur de la file.
+    private enum PasCadence {
+        case envoyer(rid: Int, charge: Data, renvois: [Duration])
+        case attendre(Duration)
+        case fin
     }
 
     private let etat = Mutex(Etat())
@@ -167,21 +190,30 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         return lignes
     }
 
+    /// Nouvelle commande : elle prend son rid tout de suite et part des que la cadence le permet,
+    /// sans rien attendre ici (seul l'envoi suivant attend).
     func envoyer(_ ligne: String) {
         let commande = ligne.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !commande.isEmpty, !Self.estCommandeCle(commande) else { return }
         let rid = Self.prochainRid()
-        emettre(rid, Data("\(rid) \(commande)".utf8), renvois: reglages.renvois(pour: commande))
+        let charge = Data("\(rid) \(commande)".utf8), renvois = reglages.renvois(pour: commande)
+        etat.withLock { e in
+            guard !e.ferme else { return }
+            e.file.append((rid, charge, renvois))
+            if e.videur == nil { e.videur = Task { [weak self] in await self?.vider() } }
+        }
     }
 
-    /// Ferme la session ; la fin du flux des lignes suit.
+    /// Ferme la session ; la fin du flux des lignes suit. Les commandes qui attendaient la
+    /// cadence ne partent pas.
     func fermer() {
         let taches = etat.withLock { e -> [Task<Void, Never>] in
             guard !e.ferme else { return [] }
             e.ferme = true
             // La lecture, elle, finit avec le transport (fin des lignes).
-            let t = Array(e.attendus.values) + [e.garde].compactMap { $0 }
+            let t = Array(e.attendus.values) + [e.garde, e.videur].compactMap { $0 }
             e.attendus.removeAll()
+            e.file.removeAll()
             return t
         }
         taches.forEach { $0.cancel() }
@@ -205,6 +237,37 @@ final class CanalReseau: CanalSonde, CauseFermeture {
     }
 
     // MARK: - Envoi et renvois
+
+    /// Vide la file des nouvelles commandes, dans l'ordre : au plus `cadence` premiers envois par
+    /// `fenetreCadence` glissante ; au-dela, attend que le plus ancien sorte de la fenetre. S'arrete
+    /// file vide (sous le verrou d'`envoyer` : une commande ajoutee relance un videur).
+    private func vider() async {
+        let cadence = reglages.cadence, fenetre = reglages.fenetreCadence
+        while !Task.isCancelled {
+            let pas = etat.withLock { e -> PasCadence in
+                guard !e.ferme, !e.file.isEmpty else {
+                    e.videur = nil
+                    return .fin
+                }
+                let maintenant = ContinuousClock.now
+                e.envois.removeAll { maintenant - $0 >= fenetre }
+                if e.envois.count >= cadence, let plusAncien = e.envois.first {
+                    return .attendre(fenetre - (maintenant - plusAncien))
+                }
+                e.envois.append(maintenant)
+                let c = e.file.removeFirst()
+                return .envoyer(rid: c.rid, charge: c.charge, renvois: c.renvois)
+            }
+            switch pas {
+            case .envoyer(let rid, let charge, let renvois):
+                emettre(rid, charge, renvois: renvois)
+            case .attendre(let duree):
+                try? await Task.sleep(for: duree)
+            case .fin:
+                return
+            }
+        }
+    }
 
     /// Premier envoi, puis `renvois` (comptes depuis lui) tant qu'aucune reponse n'est arrivee.
     private func emettre(_ rid: Int, _ charge: Data, renvois: [Duration]) {
@@ -277,6 +340,8 @@ final class CanalReseau: CanalSonde, CauseFermeture {
             e.attendus.values.forEach { $0.cancel() }
             e.attendus.removeAll()
             e.garde?.cancel()
+            e.videur?.cancel()
+            e.file.removeAll()
             return s
         }
         suite?.finish()
@@ -311,6 +376,10 @@ final class CanalReseau: CanalSonde, CauseFermeture {
             guard maintenant - e.dernierRecu >= reglages.veille else { return .rien }
             let rid = Self.prochainRid()
             e.veille = (rid, maintenant)
+            // Un rid neuf : il compte dans la cadence (a l'heure reelle), sans attendre la file.
+            let reel = ContinuousClock.now
+            e.envois.removeAll { reel - $0 >= reglages.fenetreCadence }
+            e.envois.append(reel)
             return .veiller(rid)
         }
         switch action {
