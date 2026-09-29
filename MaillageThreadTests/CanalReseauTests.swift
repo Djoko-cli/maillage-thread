@@ -241,6 +241,29 @@ struct CanalReseauTests {
         #expect(await attendreQue { lignes.liste == ["fin"] })
     }
 
+    /// Reglages de l'app : la veille part apres 10 s de silence, comme le ping de Halo, bien avant
+    /// les 30 s au-dela desquelles la carte donne la place d'une session muette a un autre client ;
+    /// pas de la garde de 1 s, reponse a la veille attendue 6 s. Les pas de la garde sont joues ici
+    /// a 9,9 s puis a 10 s du dernier recu (l'ouverture), sans attendre.
+    @Test func veilleApresDixSecondes() async throws {
+        let r = CanalReseau.Reglages()
+        #expect(r.veille == .seconds(10))
+        #expect(r.attenteVeille == .seconds(6))
+        #expect(r.pasGarde == .seconds(1))
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let c = try await Self.canal(carte, reglages: r)
+        let lignes = RecueilLignes(try c.ouvrir())
+        let ouverture = ContinuousClock.now
+        #expect(c.surveiller(maintenant: ouverture + .milliseconds(9900)))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(carte.recues.isEmpty, "pas de veille avant 10 s")
+        #expect(c.surveiller(maintenant: ouverture + .seconds(10)))
+        #expect(await attendreQue(.seconds(1)) { !carte.recues.isEmpty })
+        #expect(carte.recues.compactMap(Self.decouper).map(\.commande) == ["etat"], "la veille, a 10 s")
+        #expect(lignes.liste.isEmpty)
+        c.fermer()
+    }
+
     /// La veille et ses renvois perdus, mais une autre reponse arrive ensuite : la sonde est
     /// vivante, le canal reste ouvert.
     @Test func veillePerdueMaisSondeVivante() async throws {

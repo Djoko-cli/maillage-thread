@@ -8,9 +8,10 @@ import Synchronization
 ///   renvoie la reponse gardee (ou se tait, `diag` encore en vol).
 /// - Chaque reponse `<rid> <ligne JSON>` passe a `SondeUSB` sans le rid, comme une ligne du
 ///   canal serie ; un doublon (meme rid, meme ligne) est ecarte.
-/// - Apres 30 s sans aucune ligne, un `etat` de veille, dont la reponse reste ici : sans
+/// - Apres 10 s sans aucune ligne, un `etat` de veille, dont la reponse reste ici : sans
 ///   reponse (sonde debranchee, redemarree, hors de portee), le canal se ferme, et l'app se
-///   reconnecte (nouvelle poignee de main).
+///   reconnecte (nouvelle poignee de main). La session de l'app ne reste ainsi jamais muette
+///   30 s, au-dela desquelles la carte donne sa place a un autre client.
 /// - La cle ne passe jamais par le reseau : les commandes `cle ...` ne partent pas.
 /// - Fermee, il garde la cause (`raisonFermeture`), montree comme dans Halo :
 ///   « Connexion réseau perdue : <cause> ».
@@ -18,12 +19,18 @@ final class CanalReseau: CanalSonde, CauseFermeture {
     struct Reglages: Sendable {
         /// Renvois d'une commande sans reponse, comptes depuis son premier envoi.
         var renvois: [Duration] = [.seconds(2), .seconds(4)]
-        /// Silence (aucune ligne recue) avant une veille.
-        var veille: Duration = .seconds(30)
+        /// Silence (aucune ligne recue) avant une veille : 10 s, comme le ping de Halo. La carte
+        /// donne a un nouveau client la place d'une session muette depuis 30 s : la veille garde
+        /// celle de l'app.
+        var veille: Duration = .seconds(10)
         /// Reponse a la veille, ses renvois compris : au plus.
         var attenteVeille: Duration = .seconds(6)
         /// Doublons : lignes des derniers rid gardees.
         var memoireDoublons = 256
+
+        /// Pas de la garde (veille, et silence qui suit) : 1 s au plus, plus court pour des
+        /// reglages de test rapides.
+        var pasGarde: Duration { min(.seconds(1), veille / 4, attenteVeille / 4) }
     }
 
     private let transport: TransportUDP
@@ -113,7 +120,7 @@ final class CanalReseau: CanalSonde, CauseFermeture {
             // Session fermee (par l'app, la veille, ou perdue) : fin des lignes.
             self?.finir()
         }
-        let pas = min(.seconds(1), reglages.veille / 4, reglages.attenteVeille / 4)
+        let pas = reglages.pasGarde
         let garde = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: pas)
@@ -251,10 +258,10 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         case arret
     }
 
-    /// Un pas de la garde (interne pour les tests) : veille apres un silence ; sans reponse a la
-    /// veille, fermeture. Faux : la garde s'arrete (canal ferme).
-    func surveiller() -> Bool {
-        let maintenant = ContinuousClock.now
+    /// Un pas de la garde (interne pour les tests, qui peuvent le jouer a un instant donne) :
+    /// veille apres un silence ; sans reponse a la veille, fermeture. Faux : la garde s'arrete
+    /// (canal ferme).
+    func surveiller(maintenant: ContinuousClock.Instant = .now) -> Bool {
         let action = etat.withLock { e -> Garde in
             guard !e.ferme else { return .arret }
             if let v = e.veille {
