@@ -15,7 +15,8 @@
 //  - Cadence : 20 commandes par seconde glissante et par session au plus
 //    (Cadence, copie de celle du pont Halo) ; au-dela, rien (l'app renvoie).
 //
-//  Pur et sans Arduino : teste sur l'hote.
+//  Pur et sans Arduino : teste sur l'hote par sonde/test/test_distant.cpp ;
+//  lancer : sh sonde/test/lancer.sh (clang, ASan et UBSan, avec le test H1).
 // ===========================================================================
 #include <stddef.h>
 #include <stdint.h>

@@ -18,7 +18,8 @@
 //  en MAJUSCULES seulement, ctr en decimal sans zero de tete (1..4294967295).
 //  Toute autre forme est refusee a la lecture.
 //
-//  Pur et sans Arduino : teste sur l'hote (benq tools/host_tests/test_h1.cpp).
+//  Pur et sans Arduino : teste sur l'hote par sonde/test/test_h1.cpp (repris
+//  de benq tools/host_tests/test_h1.cpp ; lancer : sh sonde/test/lancer.sh).
 //  Le HMAC et le SHA-256 viennent de la plateforme : mbedTLS (SHA materiel du
 //  C6, h1_crypto.cpp) sur la carte, CommonCrypto dans les tests.
 // ===========================================================================
