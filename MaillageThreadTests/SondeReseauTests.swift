@@ -261,6 +261,50 @@ struct SondeReseauTests {
         }
     }
 
+    /// Pendant une tournee, pas de demande de cle : une ligne `erreur` sans id lui serait attribuee.
+    @Test(.timeLimit(.minutes(1))) func pasDeCleNouvellePendantUneTournee() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        let bonjour = Self.bonjour()
+        // Sonde attachee dont la liste des routeurs ne revient que quand le test la rend.
+        let canal = CanalRejoue { l in
+            journal.noter(l.trimmingCharacters(in: .newlines))
+            if l == "bonjour\n" { return [bonjour] }
+            if l.hasPrefix("diag 0000 5,6 ") { return [] }
+            if l.hasPrefix("cle nouvelle ") { return [CleReseauTests.reponse(Int(l.split(separator: " ").last?.dropLast() ?? "") ?? 0)] }
+            return CanalRejoue.reseauMinimal(l)
+        }
+        let s = Self.sondeMaillage(p, usb: { _ in canal }, trousseau: TrousseauMemoire())
+        await s.connecter(Self.port, choisi: true)
+        await journal.attendre(SondeMaillageTests.listeRetenue)
+        #expect(s.tourneeEnCours)
+        #expect(!s.peutAutoriser)
+        await s.autoriserAccesReseau()
+        #expect(!canal.envoyes.contains { $0.hasPrefix("cle") }, "aucune demande de cle")
+        canal.emettre(CanalRejoue.reseauMinimal(SondeMaillageTests.listeRetenue + "\n"))
+        await SondeMaillageTests.attendre { !s.tourneeEnCours }
+        #expect(s.peutAutoriser, "apres la tournee")
+        s.oublier()
+    }
+
+    /// Liaison USB : `connecterReseau` ne ferme rien et ne touche pas a l'etat.
+    @Test func connecterReseauEnUSBNeFermeRien() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = try Self.prete(p, liaison: .usb)
+        let journal = JournalCanaux()
+        let reseau = ReseauFactice([.success(Self.sonde())])
+        let s = Self.sondeMaillage(p, usb: { _ in CanalTemoin("usb", journal: journal) }, trousseau: t, reseau: reseau)
+        await s.connecter(Self.port, choisi: true)
+        #expect(Self.connecteeParUSB(s))
+        await s.connecterReseau()
+        #expect(Self.connecteeParUSB(s), "rien de ferme : \(s.etat)")
+        #expect(journal.cycle == ["ouvrir usb"])
+        #expect(reseau.appels.isEmpty)
+        s.oublier()
+    }
+
     /// Sans cle pour la sonde retenue, le reseau ne se choisit pas.
     @Test func reseauSansCle() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()

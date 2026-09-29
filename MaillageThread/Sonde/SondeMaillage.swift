@@ -143,9 +143,10 @@ final class SondeMaillage {
     /// Le reseau se choisit : nom d'hote connu, et cle de ce Mac pour lui.
     var reseauDisponible: Bool { hote != nil && empreinteAcces != nil }
 
-    /// « Autoriser l'acces reseau » possible : la sonde retenue connectee par son port USB.
+    /// « Autoriser l'acces reseau » possible : la sonde retenue connectee par son port USB, hors
+    /// tournee (une ligne `erreur`, sans id, serait attribuee a la demande de cle).
     var peutAutoriser: Bool {
-        guard liaison == .usb, !autorisationEnCours, case .connectee = etat else { return false }
+        guard liaison == .usb, !autorisationEnCours, !tourneeEnCours, case .connectee = etat else { return false }
         return serie != nil && serieEtat == serie
     }
 
@@ -377,6 +378,8 @@ final class SondeMaillage {
     /// la connexion reprise seule (1, 2, 5, 10 s, puis toutes les 30 s), sauf sans cle (il faut
     /// l'USB). Perimee par un `deconnecter`, elle ferme sa liaison et sort sans rien toucher.
     func connecterReseau() async {
+        // Liaison USB : rien a fermer ni a changer.
+        guard actif, liaison == .reseau else { return }
         deconnecter(.connexion)
         serieEtat = serie
         let n = essai
