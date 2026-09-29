@@ -303,6 +303,11 @@ demande l'USB.
   vol n'y tombent plus (la file de la carte n'a que 4 places).
 - Une ligne identique sous le même rid (réponse renvoyée) est écartée ; les
   lignes différentes d'une même réponse passent toutes.
+- **Cadence :** la carte accepte 20 commandes par seconde glissante et par
+  session, et se tait au-delà (le renvoi de 2 s rattrape). L'app envoie au
+  plus 18 nouveaux rid par seconde glissante, dans l'ordre : les suivants
+  attendent dans une file, sans rien bloquer d'autre que l'envoi suivant. Les
+  renvois ne comptent pas et partent à l'heure ; la veille compte.
 - `SondeUSB` attend une réponse 6 s par le réseau, au-delà du renvoi de 4 s,
   et 3 s en USB, comme Halo ; chaque attente a sa propre échéance.
 - **Veille :** après 10 s sans aucune ligne, le canal envoie un `etat` de
