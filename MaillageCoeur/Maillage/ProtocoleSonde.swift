@@ -67,6 +67,34 @@ public struct VoisinSonde: Hashable, Sendable, Codable {
     public let routeur: Bool
 }
 
+/// Routeur de la partition dans la table de la sonde (`routeurs`, firmware 1.0.2, en FED) :
+/// tous les routeurs de la partition y sont, par leur RLOC16 ; l'ExtMac, seulement pour ceux
+/// que la sonde entend (a qui elle demande un lien), jamais pour son parent (`etat` la donne).
+public struct RouteurSonde: Hashable, Sendable, Codable {
+    /// Identifiant de routeur, de 0 a 62.
+    public let id: Int
+    public let rloc16: String
+    /// ExtMac, 16 hexa ; nil pour un routeur que la sonde n'a pas entendu.
+    public let ext: String?
+    /// Qualites du lien et age (secondes depuis la derniere annonce entendue ; sans
+    /// signification pour un routeur jamais entendu) : lus, pas utilises par l'app.
+    public let lqIn: Int?
+    public let lqOut: Int?
+    public let age: Int?
+    /// Lien etabli avec ce routeur.
+    public let lien: Bool?
+
+    public var rloc16Valeur: UInt16? { UInt16(rloc16, radix: 16) }
+}
+
+/// Une ligne de `routeurs` : une partie de la table (`suite` : d'autres lignes suivent, la
+/// derniere a `suite` faux), ou l'erreur (`occupee` : verrou d'OpenThread refuse).
+public struct PartieRouteurs: Hashable, Sendable {
+    public let liste: [RouteurSonde]
+    public let suite: Bool
+    public let erreur: String?
+}
+
 /// Reponse a `diag` : les TLV en hexa, ou l'erreur (`delai`, `suspendue`, `occupee`, `envoi`...).
 public struct ResultatDiag: Hashable, Sendable, Codable {
     public let id: Int
@@ -97,6 +125,8 @@ public enum MessageSonde: Hashable, Sendable {
     case bonjour(Bonjour)
     case etat(EtatSonde)
     case voisins([VoisinSonde])
+    /// Une ligne de la table des routeurs (`SondeUSB` reunit les lignes d'une meme reponse).
+    case routeurs(PartieRouteurs)
     case diag(ResultatDiag)
     case erreur(String)
     /// Type inconnu (version plus recente de la sonde) : ignore.
@@ -111,6 +141,18 @@ public enum MessageSonde: Hashable, Sendable {
         let liste: [VoisinSonde]
     }
 
+    private struct Routeurs: Decodable {
+        let liste: [RouteurSonde]?
+        let suite: Bool?
+        let erreur: String?
+
+        /// L'erreur, ou la liste (sans `suite` : derniere ligne) ; nil sans l'une ni l'autre.
+        var partie: PartieRouteurs? {
+            if let erreur { return PartieRouteurs(liste: [], suite: false, erreur: erreur) }
+            return liste.map { PartieRouteurs(liste: $0, suite: suite ?? false, erreur: nil) }
+        }
+    }
+
     private struct Erreur: Decodable {
         let erreur: String
     }
@@ -123,6 +165,7 @@ public enum MessageSonde: Hashable, Sendable {
         case "bonjour": return (try? d.decode(Bonjour.self, from: json)).map { .bonjour($0) }
         case "etat": return (try? d.decode(EtatSonde.self, from: json)).map { .etat($0) }
         case "voisins": return (try? d.decode(Voisins.self, from: json)).map { .voisins($0.liste) }
+        case "routeurs": return (try? d.decode(Routeurs.self, from: json))?.partie.map { .routeurs($0) }
         case "diag": return (try? d.decode(ResultatDiag.self, from: json)).map { .diag($0) }
         case "erreur": return (try? d.decode(Erreur.self, from: json)).map { .erreur($0.erreur) }
         default: return .inconnu(e.t)
@@ -135,6 +178,8 @@ public enum CommandeSonde: Hashable, Sendable {
     case bonjour
     case etat
     case voisins
+    /// Table des routeurs de la sonde (firmware 1.0.2).
+    case routeurs
     /// `diag <RLOC16> <t,t,...> <id> [<delai ms>]`
     case diag(cible: UInt16, tlv: [UInt8], id: Int, delaiMs: Int?)
 
@@ -144,6 +189,7 @@ public enum CommandeSonde: Hashable, Sendable {
         case .bonjour: return "bonjour\n"
         case .etat: return "etat\n"
         case .voisins: return "voisins\n"
+        case .routeurs: return "routeurs\n"
         case .diag(let cible, let tlv, let id, let delai):
             var l = String(format: "diag %04X ", cible) + tlv.map(String.init).joined(separator: ",") + " \(id)"
             if let delai { l += " \(delai)" }

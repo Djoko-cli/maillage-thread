@@ -4,6 +4,10 @@ import Foundation
 /// rejouee dans les tests.
 public protocol InterlocuteurSonde: Sendable {
     func etat() async throws -> EtatSonde
+    /// Table des routeurs de la sonde (`routeurs`, lignes `suite` reunies) : tous les routeurs
+    /// de la partition par leur RLOC16, l'ExtMac de ceux qu'elle entend. Requete locale, sans
+    /// delai reseau.
+    func routeurs() async throws -> [RouteurSonde]
     /// `DIAG_GET` vers un RLOC16 : la reponse, ou l'echec (`delai`, `occupee`...).
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag
 }

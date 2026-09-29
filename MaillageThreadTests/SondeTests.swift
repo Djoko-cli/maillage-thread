@@ -55,16 +55,29 @@ final class CanalRejoue: CanalSonde {
         #"{"v":1,"t":"diag","id":\#(id),"cible":"\#(cible)","ms":40,"ok":true,"code":"2.04","tlv":"\#(tlv)"}"#
     }
 
+    /// Ligne `routeurs` (firmware 1.0.2) : chaque routeur par son RLOC16, avec son ExtMac s'il
+    /// est entendu (lien etabli, qualites 3) ; `suite` : d'autres lignes suivent.
+    static func routeurs(_ table: [(rloc16: String, ext: String?)], suite: Bool) -> String {
+        let liste = table.map { r in
+            let id = (UInt16(r.rloc16, radix: 16) ?? 0) >> 10
+            let lq = r.ext == nil ? 0 : 3
+            return #"{"id":\#(id),"rloc16":"\#(r.rloc16)","ext":\#(r.ext.map { "\"\($0)\"" } ?? "null"),"lqIn":\#(lq),"lqOut":\#(lq),"age":4,"lien":\#(r.ext != nil)}"#
+        }
+        return #"{"v":1,"t":"routeurs","liste":[\#(liste.joined(separator: ","))],"suite":\#(suite)}"#
+    }
+
     /// Sonde attachee (valeurs inventees) : enfant 0001 du routeur 0, qui est le chef.
     static let etatAttache = #"{"v":1,"t":"etat","role":"child","rloc16":"0001","mode":"rn","parent":null,"partition":"0000000A","chef":0,"canal":25,"prefixeMaille":"FD00000000000000","xp":null,"suspendue":false}"#
 
     /// Reseau d'un seul routeur, le chef 0, qui ne donne que sa Route64 : la tournee
     /// aboutit (maillage d'un routeur muet, sans enfant). `diag <cible> <tlv> <id> <ms>` :
-    /// la Route64 a la demande de la liste des routeurs, `delai` a toute autre requete.
+    /// la Route64 a la demande de la liste des routeurs, `delai` a toute autre requete ;
+    /// `routeurs` : le chef seul, parent de la sonde, donc sans ExtMac.
     static func reseauMinimal(_ ligne: String) -> [String] {
         switch ligne {
         case "bonjour\n": return [bonjour]
         case "etat\n": return [etatAttache]
+        case "routeurs\n": return [routeurs([("0000", nil)], suite: false)]
         default: break
         }
         let mots = ligne.trimmingCharacters(in: .newlines).split(separator: " ").map(String.init)
@@ -257,6 +270,45 @@ struct SondeUSBTests {
         await #expect(throws: SondeUSB.Erreur.fermee) { _ = try await s.etat() }
         try await Task.sleep(for: .milliseconds(50))
         #expect(fermee.withLock { $0 })
+    }
+
+    /// `routeurs` sur deux lignes (la table coupee, `suite`) : les deux parties reunies, dans
+    /// l'ordre ; puis une table d'une ligne (ExtMac inventees).
+    @Test func routeursSurPlusieursLignes() async throws {
+        let canal = CanalRejoue { l in
+            guard l == "routeurs\n" else { return [] }
+            return [CanalRejoue.routeurs([("0400", nil), ("AC00", nil)], suite: true),
+                    CanalRejoue.routeurs([("E400", "E0000000000000E4")], suite: false)]
+        }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        let table = try await s.routeurs()
+        #expect(table.map(\.rloc16) == ["0400", "AC00", "E400"])
+        #expect(table.map(\.ext) == [nil, nil, "E0000000000000E4"])
+        #expect(canal.envoyes == ["routeurs\n"])
+        #expect(try await s.routeurs().count == 3, "une nouvelle table, sans reste de la precedente")
+    }
+
+    /// La sonde n'a pas le verrou d'OpenThread (`occupee`) : pas de table, sans attendre le delai.
+    @Test(.timeLimit(.minutes(1))) func routeursOccupee() async throws {
+        let s = SondeUSB(canal: CanalRejoue { l in
+            l == "routeurs\n" ? [#"{"v":1,"t":"routeurs","erreur":"occupee"}"#] : []
+        })
+        try await s.demarrer {}
+        let debut = ContinuousClock.now
+        await #expect(throws: SondeUSB.Erreur.sansReponse("routeurs")) { _ = try await s.routeurs() }
+        #expect(ContinuousClock.now - debut < SondeUSB.delaiCommande)
+    }
+
+    /// Liaison fermee pendant l'attente de la table : l'attente est liberee.
+    @Test(.timeLimit(.minutes(1))) func routeursFermeture() async throws {
+        let canal = CanalRejoue { _ in [] }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        let requete = Task { try await s.routeurs() }
+        try await Task.sleep(for: .milliseconds(50))
+        canal.fermer()
+        await #expect(throws: SondeUSB.Erreur.fermee) { _ = try await requete.value }
     }
 
     /// Un bonjour non demande : la sonde vient de redemarrer.

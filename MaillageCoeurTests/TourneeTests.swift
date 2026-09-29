@@ -30,16 +30,41 @@ final class ReleveAvancement: Sendable {
 /// et note ses requetes.
 struct SondeRejouee: InterlocuteurSonde {
     actor Registre {
+        /// Requetes `diag`, "<cible>|<tlv,...>".
         var requetes: [String] = []
+        /// Demandes de la table des routeurs (`routeurs`).
+        var tables = 0
         func noter(_ r: String) { requetes.append(r) }
+        func noterTable() { tables += 1 }
     }
+
+    /// La sonde ne rend pas sa table (firmware sans `routeurs`, verrou d'OpenThread refuse).
+    struct SansTable: Error {}
 
     let etatSonde: EtatSonde
     /// "<cible>|<tlv,...>" -> TLV hexa.
     let reponses: [String: String]
+    /// Table des routeurs de la sonde ; nil : elle ne la rend pas.
+    var table: [RouteurSonde]? = []
     let registre = Registre()
 
     func etat() async throws -> EtatSonde { etatSonde }
+
+    func routeurs() async throws -> [RouteurSonde] {
+        await registre.noterTable()
+        guard let table else { throw SansTable() }
+        return table
+    }
+
+    /// Table des 7 routeurs de la capture, telle qu'une sonde en FED la donne : tous par leur
+    /// RLOC16 ; l'ExtMac des seuls routeurs `entendus` (RLOC16 -> ExtMac inventee).
+    static func table(entendus: [UInt16: String] = [:]) -> [RouteurSonde] {
+        [0x0400, 0x5000, 0x6000, 0xAC00, 0xB400, 0xCC00, 0xE400].map { (r: UInt16) in
+            let ext = entendus[r]
+            return RouteurSonde(id: Int(r >> 10), rloc16: String(format: "%04X", r), ext: ext, lqIn: ext == nil ? 0 : 3,
+                                lqOut: ext == nil ? 0 : 3, age: 4, lien: ext != nil)
+        }
+    }
 
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
         let cle = String(format: "%04X|", cible) + tlv.map(String.init).joined(separator: ",")
@@ -50,8 +75,10 @@ struct SondeRejouee: InterlocuteurSonde {
         return ResultatDiag(id: 0, cible: String(format: "%04X", cible), ok: true, ms: 50, code: "2.04", tlv: t)
     }
 
-    /// Etat de la capture apres le changement de parent : AC09, enfant de AC00 (muet).
-    static func capture(chef: Int = 24, reponsesEnPlus: [String: String] = [:]) throws -> SondeRejouee {
+    /// Etat de la capture apres le changement de parent : AC09, enfant de AC00 (muet) ; `table` :
+    /// celle des routeurs de la sonde, sans ExtMac par defaut (la capture vient d'une sonde en MED).
+    static func capture(chef: Int = 24, reponsesEnPlus: [String: String] = [:],
+                        table: [RouteurSonde]? = SondeRejouee.table()) throws -> SondeRejouee {
         let base = #"{"v":1,"t":"etat","role":"child","rloc16":"AC09","mode":"rn","parent":{"rloc16":"AC00","ext":"E000000000000007","lqIn":3,"lqOut":3,"rssi":-89},"partition":"46CBEBCD","chef":\#(chef),"canal":25,"prefixeMaille":"FD00111122220C87","xp":"A0A1A2A3A4A5A6A7","suspendue":false}"#
         guard case .etat(let e)? = MessageSonde.lire(Data(base.utf8)) else { throw CaptureSonde.ErreurCapture(id: 0) }
         var r: [String: String] = [
@@ -68,12 +95,12 @@ struct SondeRejouee: InterlocuteurSonde {
         ]
         for (n, id) in zip(3...8, 503...508) { r[String(format: "AC%02X|0,1,2,8", n)] = try CaptureSonde.tlv(id) }
         r.merge(reponsesEnPlus) { _, b in b }
-        return SondeRejouee(etatSonde: e, reponses: r)
+        return SondeRejouee(etatSonde: e, reponses: r, table: table)
     }
 
     /// La meme sonde, avec seulement les reponses dont la cle est gardee ; registre neuf.
     func filtree(_ garder: (String) -> Bool) -> SondeRejouee {
-        SondeRejouee(etatSonde: etatSonde, reponses: reponses.filter { garder($0.key) })
+        SondeRejouee(etatSonde: etatSonde, reponses: reponses.filter { garder($0.key) }, table: table)
     }
 }
 

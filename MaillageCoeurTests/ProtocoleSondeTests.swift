@@ -87,9 +87,36 @@ struct ProtocoleSondeTests {
         #expect(MessageSonde.lire(Data("pas du json".utf8)) == nil)
     }
 
+    /// `routeurs` (firmware 1.0.2, en FED) : une partie de la table par ligne, `suite` sur chaque
+    /// ligne sauf la derniere ; `ext` nul pour un routeur jamais entendu (le parent compris) ;
+    /// l'erreur `occupee` quand le verrou d'OpenThread est refuse (ExtMac inventees).
+    @Test func routeurs() {
+        let ligne = #"{"v":1,"t":"routeurs","liste":[{"id":43,"rloc16":"AC00","ext":null,"lqIn":0,"lqOut":0,"age":12,"lien":false},{"id":57,"rloc16":"E400","ext":"E0000000000000E4","lqIn":3,"lqOut":3,"age":4,"lien":true}],"suite":false}"#
+        let e400 = RouteurSonde(id: 57, rloc16: "E400", ext: "E0000000000000E4", lqIn: 3, lqOut: 3, age: 4, lien: true)
+        guard case .routeurs(let p)? = MessageSonde.lire(Data(ligne.utf8)) else {
+            Issue.record("routeurs illisible")
+            return
+        }
+        #expect(p.liste.count == 2)
+        #expect(p.liste.first?.ext == nil, "le parent : jamais d'ExtMac dans la table")
+        #expect(p.liste.last == e400)
+        #expect(p.liste.last?.rloc16Valeur == 0xE400)
+        #expect(!p.suite && p.erreur == nil)
+        let coupee = #"{"v":1,"t":"routeurs","liste":[{"id":1,"rloc16":"0400","ext":null,"lqIn":0,"lqOut":0,"age":200,"lien":false}],"suite":true}"#
+        guard case .routeurs(let debut)? = MessageSonde.lire(Data(coupee.utf8)) else {
+            Issue.record("routeurs coupe illisible")
+            return
+        }
+        #expect(debut.suite && debut.liste.map(\.rloc16) == ["0400"])
+        #expect(MessageSonde.lire(Data(#"{"v":1,"t":"routeurs","erreur":"occupee"}"#.utf8))
+                == .routeurs(PartieRouteurs(liste: [], suite: false, erreur: "occupee")))
+        #expect(MessageSonde.lire(Data(#"{"v":1,"t":"routeurs","suite":false}"#.utf8)) == nil, "ni liste ni erreur")
+    }
+
     @Test func commandes() {
         #expect(CommandeSonde.bonjour.ligne == "bonjour\n")
         #expect(CommandeSonde.etat.ligne == "etat\n")
+        #expect(CommandeSonde.routeurs.ligne == "routeurs\n")
         #expect(CommandeSonde.diag(cible: 0x5000, tlv: [0, 1, 5, 16, 8, 24], id: 12, delaiMs: 6000).ligne
                 == "diag 5000 0,1,5,16,8,24 12 6000\n")
         #expect(CommandeSonde.diag(cible: 0x0400, tlv: [7], id: 3, delaiMs: nil).ligne == "diag 0400 7 3\n")
