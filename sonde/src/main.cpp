@@ -1,5 +1,5 @@
 // ===========================================================================
-//  Sonde de maillage Thread, firmware 1.0.0 (spec de la sonde, sections 2 et 3)
+//  Sonde de maillage Thread, firmware 1.0.1 (spec de la sonde, sections 2 et 3)
 //
 //  Noeud Matter sur Thread, en MED : il recoit en permanence mais ne relaie
 //  rien, et ne devient jamais le parent de personne. Maison lui donne les
@@ -13,8 +13,13 @@
 //
 //  USB : une commande par ligne ; chaque reponse est une ligne machine,
 //  RS (0x1E) + JSON compact en ASCII + LF, 4096 octets au plus.
-//    bonjour                          produit, version, appairage (code tant
-//                                     que la sonde n'est pas dans Maison)
+//    bonjour                          produit, version, nom, MAC, appairage,
+//                                     code d'appairage et charge du QR code
+//                                     (toujours, meme dans Maison)
+//    nom <texte>                      change le nom et le garde : 1 a 32
+//                                     caracteres (lettres ASCII, chiffres,
+//                                     - _ .) ; repond par un bonjour a jour,
+//                                     sinon erreur « syntaxe »
 //    etat                             role, RLOC16, ExtMac, parent, partition...
 //    voisins                          table des voisins (le parent, pour un MED)
 //    diag <cible> <t,t,...> <id> [ms] DIAG_GET vers <cible> : RLOC16 en 4 hexa
@@ -25,7 +30,8 @@
 //
 //  Dans Maison : un interrupteur « Sonde maillage », allume par defaut.
 //  Eteint, la sonde refuse les requetes (erreur « suspendue »). Son etat est
-//  garde d'un demarrage a l'autre.
+//  garde d'un demarrage a l'autre, comme le nom de la sonde (« SONDE-01 » par
+//  defaut) : il suit la carte d'un Mac a l'autre.
 // ===========================================================================
 
 #include <Arduino.h>
@@ -42,7 +48,7 @@
 #include <openthread/thread.h>
 #include <stdarg.h>
 
-static const char *const kVersion = "1.0.0";
+static const char *const kVersion = "1.0.1";
 
 // ---------------------------------------------------------------------------
 //  MED des l'init de Thread (repris du pont Halo, benq matter_bridge.cpp) :
@@ -77,6 +83,25 @@ static const char *const kCleInterrupteur = "interrupteur";
 static volatile bool sSuspendue = false;  // pose par demarrerMatter(), puis par le rappel
 static bool sThreadPret = false;  // pile Thread creee par Matter.begin()
 static char sMac[13] = "?";
+// Nom de la sonde, garde dans la NVS a cote de l'interrupteur (commande `nom`).
+static const char *const kCleNom = "nom";
+static const char *const kNomDefaut = "SONDE-01";
+static constexpr size_t kNomMax = 32;
+static char sNom[kNomMax + 1] = "SONDE-01";
+
+// 1 a 32 caracteres parmi les lettres ASCII, les chiffres, « - », « _ » et « . » :
+// rien a echapper dans le JSON.
+static bool nomValide(const char *s) {
+  const size_t n = strlen(s);
+  if (n == 0 || n > kNomMax) return false;
+  for (size_t i = 0; i < n; i++) {
+    const char c = s[i];
+    const bool permis = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' ||
+                        c == '_' || c == '.';
+    if (!permis) return false;
+  }
+  return true;
+}
 
 // Verrou OpenThread, delai total borne. REGLE (benq) : sous ce verrou, aucun
 // appel Matter/CHIP ; la tache CHIP prend le verrou OT en tenant le sien.
@@ -149,6 +174,9 @@ static void demarrerMatter() {
   // Etat garde de l'interrupteur (allume au premier demarrage) : la sonde reste
   // suspendue apres un redemarrage si « Sonde maillage » est eteint dans Maison.
   sPreferences.begin("sonde", false);
+  // Nom garde (« SONDE-01 » au premier demarrage, ou s'il etait illisible).
+  const String nom = sPreferences.getString(kCleNom, kNomDefaut);
+  if (nomValide(nom.c_str())) snprintf(sNom, sizeof(sNom), "%s", nom.c_str());
   const bool allume = sPreferences.getBool(kCleInterrupteur, true);
   sSuspendue = !allume;
   sInterrupteur.begin(allume);
@@ -171,22 +199,52 @@ static void demarrerMatter() {
 //  Commandes simples
 // ---------------------------------------------------------------------------
 
+// Chaine JSON, ou null si elle est vide (code que Matter n'a pas pu former).
+static void chaineOuNull(const char *cle, const String &valeur) {
+  if (valeur.length()) {
+    ajoute(",\"%s\":\"%s\"", cle, valeur.c_str());
+  } else {
+    ajoute(",\"%s\":null", cle);
+  }
+}
+
+// Code d'appairage et QR code toujours, appairee ou non : Maillage Thread les
+// montre dans ses Reglages (Matter les forme une fois, au demarrage).
 static void cmdBonjour() {
   const bool appairee = Matter.isDeviceCommissioned();
+  // L'URL du QR code porte la charge utile « MT:... » apres « data= ».
+  const String url = Matter.getOnboardingQRCodeUrl();
+  const int i = url.indexOf("data=");
+  String qr = i >= 0 ? url.substring(i + 5) : url;
+  qr.replace("%3A", ":");
   debut("bonjour");
-  ajoute(",\"produit\":\"sonde-maillage\",\"version\":\"%s\",\"mac\":\"%s\",\"appairee\":%s", kVersion, sMac,
-         appairee ? "true" : "false");
-  if (appairee) {
-    ajoute(",\"code\":null,\"qr\":null");
-  } else {
-    // L'URL du QR code porte la charge utile « MT:... » apres « data= ».
-    String url = Matter.getOnboardingQRCodeUrl();
-    const int i = url.indexOf("data=");
-    String qr = i >= 0 ? url.substring(i + 5) : url;
-    qr.replace("%3A", ":");
-    ajoute(",\"code\":\"%s\",\"qr\":\"%s\"", Matter.getManualPairingCode().c_str(), qr.c_str());
-  }
+  ajoute(",\"produit\":\"sonde-maillage\",\"version\":\"%s\",\"nom\":\"%s\",\"mac\":\"%s\",\"appairee\":%s", kVersion,
+         sNom, sMac, appairee ? "true" : "false");
+  chaineOuNull("code", Matter.getManualPairingCode());
+  chaineOuNull("qr", qr);
   fin();
+}
+
+// nom <texte> : change le nom et le garde ; repond par un bonjour a jour. Nom
+// refuse : erreur « syntaxe » ; NVS qui refuse l'ecriture : « ecriture ».
+static void cmdNom(char *texte) {
+  while (*texte == ' ') texte++;
+  size_t n = strlen(texte);
+  while (n > 0 && texte[n - 1] == ' ') texte[--n] = 0;
+  const char *erreur = nullptr;
+  if (!nomValide(texte)) {
+    erreur = "syntaxe";
+  } else if (sPreferences.putString(kCleNom, texte) == 0) {
+    erreur = "ecriture";
+  }
+  if (erreur) {
+    debut("erreur");
+    ajoute(",\"erreur\":\"%s\"", erreur);
+    fin();
+    return;
+  }
+  snprintf(sNom, sizeof(sNom), "%s", texte);
+  cmdBonjour();
 }
 
 static void cmdEtat() {
@@ -432,6 +490,8 @@ static size_t sCmdLong = 0;
 static void executer(char *c) {
   while (*c == ' ') c++;
   if (!strcmp(c, "bonjour")) return cmdBonjour();
+  // « nom » seul : nom vide, refuse (syntaxe).
+  if (!strcmp(c, "nom") || !strncmp(c, "nom ", 4)) return cmdNom(c + 3);
   if (!strcmp(c, "etat")) return cmdEtat();
   if (!strcmp(c, "voisins")) return cmdVoisins();
   if (!strncmp(c, "diag ", 5)) return cmdDiag(c + 5);

@@ -28,8 +28,10 @@ d'un C6 est son adresse MAC (`ioreg -p IOUSB -l | grep "USB Serial Number"`).
 ## Appairer à Maison
 
 Au démarrage, et à la commande `bonjour`, la sonde donne son code
-d'appairage tant qu'elle n'est pas dans Maison. Maillage Thread l'affiche aussi,
-dans Réglages › Sonde.
+d'appairage et la charge de son QR code (`MT:…`), même une fois dans Maison
+(depuis la 1.0.1 ; la 1.0.0 ne les donnait qu'avant l'appairage). Maillage
+Thread les montre dans Réglages › Sonde : le QR code, et le code mis en forme
+4-3-4 (par exemple `1234-567-8901`).
 1. Dans Maison sur l'iPhone : « + » › Ajouter un accessoire › Plus d'options.
 2. Saisir le code, ou scanner le QR code.
 3. Maison dit « accessoire non certifié » : ajouter quand même.
@@ -41,6 +43,15 @@ après un redémarrage ou un débranchement.
 
 `oubli` la désappaire et la redémarre.
 
+## Nom
+
+La sonde a un nom, « SONDE-01 » par défaut, gardé dans sa mémoire (NVS, à
+côté de l'état de l'interrupteur) : il suit la carte d'un Mac à l'autre.
+Maillage Thread le montre à la place du port (« SONDE-01 » plutôt que
+« usbmodem11301 »). `nom <texte>` le change : 1 à 32 caractères parmi les
+lettres ASCII, les chiffres, `-`, `_` et `.`. L'app n'a pas encore de quoi le
+changer.
+
 ## Protocole USB
 
 Une commande par ligne. En retour, des lignes machine : RS (0x1E), JSON
@@ -49,7 +60,8 @@ le C6, il faut mettre DTR et RTS à 0 dans un seul appel (voir benq).
 
 | Commande | Réponse |
 |---|---|
-| `bonjour` | produit (`sonde-maillage`), version, MAC, appairée ou non, code d'appairage |
+| `bonjour` | produit (`sonde-maillage`), version, nom, MAC, appairée ou non, code d'appairage (`code`) et charge du QR code (`qr`, `MT:…`), toujours |
+| `nom <texte>` | change le nom et le garde ; un `bonjour` à jour, ou l'erreur `syntaxe` (nom refusé) ou `ecriture` (mémoire qui refuse l'écriture) |
 | `etat` | rôle, RLOC16, ExtMac, mode, parent (RLOC16, ExtMac, qualités, RSSI), partition, chef, canal, préfixe du réseau maillé, `xp`, suspendue |
 | `voisins` | voisins entendus (le parent, pour un MED) |
 | `diag <cible> <t,t,…> <id> [<délai ms>]` | TLV de la réponse en hexa, ou l'erreur : `delai`, `suspendue`, `occupee` (8 requêtes en vol), `envoi…` |
