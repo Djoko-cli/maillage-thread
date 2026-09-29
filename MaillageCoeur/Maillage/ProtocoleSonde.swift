@@ -14,10 +14,14 @@ public enum ProtocoleSonde {
 public struct Bonjour: Hashable, Sendable, Codable {
     public let produit: String
     public let version: String
+    /// Nom de la sonde, garde par la carte (« SONDE-01 » par defaut) ; firmware 1.0.1 et suivants.
+    public let nom: String?
     public let mac: String?
     public let appairee: Bool
-    /// Code d'appairage manuel, tant que la sonde n'est pas dans Maison.
+    /// Code d'appairage manuel : toujours (firmware 1.0.1 et suivants), avant seulement tant
+    /// que la sonde n'etait pas dans Maison.
     public let code: String?
+    /// Charge du QR code Matter (« MT:... »), comme `code`.
     public let qr: String?
 
     public var estSonde: Bool { produit == ProtocoleSonde.produit }

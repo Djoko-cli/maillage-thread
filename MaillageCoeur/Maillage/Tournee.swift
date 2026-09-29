@@ -8,6 +8,42 @@ public protocol InterlocuteurSonde: Sendable {
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag
 }
 
+/// Avancement d'une tournee : l'etape en cours, ses requetes revenues et le total prevu a
+/// ce moment. Au cours d'une etape, `fait` monte de un a chaque requete revenue et le total
+/// ne baisse jamais. Liste des routeurs : le chef et les secours, puis, s'il faut chercher,
+/// tous les autres identifiants ; l'etape s'arrete a la premiere Route64, souvent avant son
+/// total. Balayage : pour chaque routeur, les numeros jusqu'a 8 apres le dernier enfant
+/// trouve ; le total grandit quand un enfant repond loin, et finit egal aux requetes envoyees.
+public struct AvancementTournee: Hashable, Sendable {
+    /// Etapes d'une tournee, dans l'ordre.
+    public enum Etape: CaseIterable, Hashable, Sendable {
+        /// `etat` de la sonde.
+        case etatSonde
+        /// Route64 : au chef, aux secours, puis recherche.
+        case listeRouteurs
+        /// Interrogation des routeurs.
+        case routeurs
+        /// Pile (une fois par routeur qui repond) et Network Data.
+        case pileEtReseau
+        /// Balayage des enfants des routeurs muets.
+        case balayage
+        /// Identite des enfants des tables.
+        case identites
+    }
+
+    public let etape: Etape
+    /// Requetes de l'etape revenues.
+    public let fait: Int
+    /// Requetes prevues pour l'etape a ce moment ; 0 : rien a faire.
+    public let total: Int
+
+    public init(etape: Etape, fait: Int, total: Int) {
+        self.etape = etape
+        self.fait = fait
+        self.total = total
+    }
+}
+
 /// Ce que la tournee retient d'une fois sur l'autre (spec de la sonde, section 4).
 public struct MemoireTournee: Hashable, Sendable {
     /// Echecs de suite, par routeur : muet a partir de 2.
@@ -69,10 +105,18 @@ public enum Tournee {
     /// ou suspendue dans Maison (ses requetes echoueraient toutes : aucun routeur
     /// ne doit passer pour muet), ou si aucun routeur n'a donne la liste des routeurs
     /// (Route64). La memoire n'est alors pas rendue : l'appelant garde la sienne.
-    public static func executer(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee,
-                                maintenant: Date) async throws -> (maillage: Maillage, memoire: MemoireTournee)? {
+    /// `avancement` est appele au debut de chaque etape atteinte, puis a chaque requete
+    /// revenue (voir `AvancementTournee`), depuis la tache de la tournee.
+    public static func executer(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,
+                                avancement: (@Sendable (AvancementTournee) -> Void)? = nil)
+        async throws -> (maillage: Maillage, memoire: MemoireTournee)? {
+        func signaler(_ etape: AvancementTournee.Etape, _ fait: Int, _ total: Int) {
+            avancement?(AvancementTournee(etape: etape, fait: fait, total: total))
+        }
         var mem = memoire
+        signaler(.etatSonde, 0, 1)
         let etat = try await sonde.etat()
+        signaler(.etatSonde, 1, 1)
         guard etat.estAttachee, !etat.suspendue, let partition = etat.partition, let chef = etat.chef,
               let moi = etat.rloc16Valeur else { return nil }
         // Autre partition : les identifiants de routeur y sont redistribues, rien ne vaut plus.
@@ -89,13 +133,20 @@ public enum Tournee {
         let secours = mem.repondants.filter { $0 != chef }
         let essais = mem.estMuet(chef) ? secours + [chef] : [chef] + secours
         var route64: Route64?
-        for id in essais {
-            if let r = try await sonde.diag(rloc16(id), tlvChef, delaiMs: delaiRouteur).reponse?.route64 {
-                route64 = r
+        signaler(.listeRouteurs, 0, essais.count)
+        for (n, id) in essais.enumerated() {
+            let r = try await sonde.diag(rloc16(id), tlvChef, delaiMs: delaiRouteur)
+            signaler(.listeRouteurs, n + 1, essais.count)
+            if let r64 = r.reponse?.route64 {
+                route64 = r64
                 break
             }
         }
-        if route64 == nil { route64 = try await chercherRoute64(sonde, sauf: essais) }
+        if route64 == nil {
+            route64 = try await chercherRoute64(sonde, sauf: essais) { faites, prevues in
+                signaler(.listeRouteurs, essais.count + faites, essais.count + prevues)
+            }
+        }
         guard let route64 else { return nil }
         c.routeurs(route64, chef: chef)
 
@@ -104,8 +155,12 @@ public enum Tournee {
             guard mem.estMuet(id), let quand = mem.muetInterroge[id] else { return true }
             return maintenant.timeIntervalSince(quand) >= periodeMuet
         }
+        signaler(.routeurs, 0, aInterroger.count)
         var repondants: [Int] = []
-        for (id, r) in try await parallele(aInterroger, { try await sonde.diag(rloc16($0), tlvRouteur, delaiMs: delaiRouteur) }) {
+        let reponsesRouteurs = try await parallele(aInterroger, {
+            try await sonde.diag(rloc16($0), tlvRouteur, delaiMs: delaiRouteur)
+        }, apresChacune: { n, _, _ in signaler(.routeurs, n, aInterroger.count) })
+        for (id, r) in reponsesRouteurs {
             if let rep = r.reponse {
                 c.reponse(rep, routeur: id)
                 mem.echecs[id] = 0
@@ -127,18 +182,21 @@ public enum Tournee {
         }
 
         // 3. Pile, une fois ; Network Data, a un routeur qui repond.
-        for id in repondants where mem.piles[id] == nil {
-            if let rep = try await sonde.diag(rloc16(id), tlvPile, delaiMs: delaiRouteur).reponse {
-                mem.piles[id] = rep.pile ?? ""
-            }
+        let sansPile = repondants.filter { mem.piles[$0] == nil }
+        let totalPile = sansPile.count + (repondants.isEmpty ? 0 : 1)
+        signaler(.pileEtReseau, 0, totalPile)
+        for (n, id) in sansPile.enumerated() {
+            let r = try await sonde.diag(rloc16(id), tlvPile, delaiMs: delaiRouteur)
+            signaler(.pileEtReseau, n + 1, totalPile)
+            if let rep = r.reponse { mem.piles[id] = rep.pile ?? "" }
         }
         for id in repondants {
             c.pile(mem.piles[id].flatMap { $0.isEmpty ? nil : $0 }, routeur: id)
         }
-        if let id = repondants.first,
-           let brutes = try await sonde.diag(rloc16(id), tlvReseau, delaiMs: delaiRouteur).reponse?.donneesReseau,
-           let d = DonneesReseau(brutes) {
-            c.reseau(d)
+        if let id = repondants.first {
+            let r = try await sonde.diag(rloc16(id), tlvReseau, delaiMs: delaiRouteur)
+            signaler(.pileEtReseau, totalPile, totalPile)
+            if let brutes = r.reponse?.donneesReseau, let d = DonneesReseau(brutes) { c.reseau(d) }
         }
 
         // 4. Balayage des enfants des routeurs sans reponse qui sont muets (deux echecs de
@@ -148,13 +206,27 @@ public enum Tournee {
         let aBalayer = muets.filter { mem.estMuet($0) || !mem.dejaRepondu.contains($0) }
         let du = mem.dernierBalayage.map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
         if du || (!aBalayer.isEmpty && aBalayer != mem.muetsBalayes) {
+            let routeurs = aBalayer.sorted()
+            // Total courant : les numeros prevus de chaque routeur a ce moment (voir `AvancementTournee`).
+            var prevues = routeurs.map { numerosPrevus(routeur: $0, dernier: dernierConnu(routeur: $0, sauf: moi), sauf: moi) }
+            var faitesAvant = 0
+            signaler(.balayage, 0, prevues.reduce(0, +))
             var trouves: [UInt16: EnfantMaillage] = [:]
-            for m in aBalayer.sorted() {
-                for e in try await balayer(sonde, routeur: m, sauf: moi) { trouves[e.rloc16] = e }
+            for (i, m) in routeurs.enumerated() {
+                var faites = 0
+                let enfants = try await balayer(sonde, routeur: m, sauf: moi) { f, p in
+                    faites = f
+                    prevues[i] = p
+                    signaler(.balayage, faitesAvant + f, prevues.reduce(0, +))
+                }
+                for e in enfants { trouves[e.rloc16] = e }
+                faitesAvant += faites
             }
             mem.balayes = trouves
             mem.dernierBalayage = maintenant
             mem.muetsBalayes = aBalayer
+        } else {
+            signaler(.balayage, 0, 0)
         }
         for e in mem.balayes.values.sorted(by: { $0.rloc16 < $1.rloc16 }) where muets.contains(e.parent) {
             c.enfant(e)
@@ -167,7 +239,11 @@ public enum Tournee {
             mem.identiteDemandee[cible].map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
         }
         for cible in aIdentifier { mem.identiteDemandee[cible] = maintenant }
-        for (cible, r) in try await parallele(aIdentifier, { try await sonde.diag($0, tlvIdentite, delaiMs: delaiEnfant) }) {
+        signaler(.identites, 0, aIdentifier.count)
+        let identites = try await parallele(aIdentifier, {
+            try await sonde.diag($0, tlvIdentite, delaiMs: delaiEnfant)
+        }, apresChacune: { n, _, _ in signaler(.identites, n, aIdentifier.count) })
+        for (cible, r) in identites {
             guard let rep = r.reponse else { continue }
             mem.identifies[cible] = EnfantMaillage(rloc16: cible, extMac: rep.extMac, adresses: rep.adresses, source: .tableEnfants)
         }
@@ -181,41 +257,73 @@ public enum Tournee {
 
     /// Route64 quand ni le chef ni les secours ne l'ont donnee (chef muet des le lancement) :
     /// les autres identifiants de routeur, de 0 a 62, par groupes de 8 dans l'ordre croissant ;
-    /// au premier groupe ou l'un la donne, celle du plus petit.
-    static func chercherRoute64(_ sonde: some InterlocuteurSonde, sauf essayes: [Int]) async throws -> Route64? {
+    /// au premier groupe ou l'un la donne, celle du plus petit. `suivi` : requetes revenues
+    /// et prevues (tous ces identifiants), au debut puis a chaque requete revenue.
+    static func chercherRoute64(_ sonde: some InterlocuteurSonde, sauf essayes: [Int],
+                                suivi: (_ faites: Int, _ prevues: Int) -> Void = { _, _ in }) async throws -> Route64? {
         let ids = (0...62).filter { !essayes.contains($0) }
+        suivi(0, ids.count)
         for debut in stride(from: 0, to: ids.count, by: enVol) {
             let groupe = Array(ids[debut..<min(debut + enVol, ids.count)])
-            for (_, r) in try await parallele(groupe, { try await sonde.diag(rloc16($0), tlvChef, delaiMs: delaiRouteur) }) {
+            let resultats = try await parallele(groupe, {
+                try await sonde.diag(rloc16($0), tlvChef, delaiMs: delaiRouteur)
+            }, apresChacune: { n, _, _ in suivi(debut + n, ids.count) })
+            for (_, r) in resultats {
                 if let route64 = r.reponse?.route64 { return route64 }
             }
         }
         return nil
     }
 
+    /// Dernier numero d'enfant connu sous un routeur avant son balayage : celui de la
+    /// sonde si elle est son enfant (elle compte, sans etre interrogee).
+    static func dernierConnu(routeur m: Int, sauf moi: UInt16) -> Int {
+        moi >> 10 == UInt16(m) ? Int(moi & 0x1FF) : 0
+    }
+
+    /// Requetes prevues sous un routeur : de 1 a 8 numeros apres le dernier trouve (32 au
+    /// plus), la sonde exceptee.
+    static func numerosPrevus(routeur m: Int, dernier: Int, sauf moi: UInt16) -> Int {
+        (1...min(numerosMax, dernier + apresDernier)).count(where: { rloc16(m) | UInt16($0) != moi })
+    }
+
     /// Enfants d'un routeur muet, numero par numero, 8 en vol : de 1 a 32, en
     /// s'arretant 8 numeros apres le dernier trouve (la sonde compte, sans etre interrogee).
-    static func balayer(_ sonde: some InterlocuteurSonde, routeur m: Int, sauf moi: UInt16) async throws -> [EnfantMaillage] {
+    /// `suivi` : requetes revenues et prevues sous ce routeur, a chaque requete revenue ; un
+    /// enfant qui repond loin repousse la fin tout de suite.
+    static func balayer(_ sonde: some InterlocuteurSonde, routeur m: Int, sauf moi: UInt16,
+                        suivi: (_ faites: Int, _ prevues: Int) -> Void = { _, _ in }) async throws -> [EnfantMaillage] {
         var trouves: [EnfantMaillage] = []
-        var dernier = moi >> 10 == UInt16(m) ? Int(moi & 0x1FF) : 0
+        var dernier = dernierConnu(routeur: m, sauf: moi)
         var debut = 1
+        var faites = 0
         while debut <= min(numerosMax, dernier + apresDernier) {
             let fin = min(debut + enVol - 1, numerosMax, dernier + apresDernier)
             let cibles = (debut...fin).map { rloc16(m) | UInt16($0) }.filter { $0 != moi }
-            for (cible, r) in try await parallele(cibles, { try await sonde.diag($0, tlvBalayage, delaiMs: delaiBalayage) }) {
+            let avant = faites
+            let resultats = try await parallele(cibles, {
+                try await sonde.diag($0, tlvBalayage, delaiMs: delaiBalayage)
+            }, apresChacune: { n, cible, r in
+                if r.reponse != nil { dernier = max(dernier, Int(cible & 0x1FF)) }
+                suivi(avant + n, numerosPrevus(routeur: m, dernier: dernier, sauf: moi))
+            })
+            for (cible, r) in resultats {
                 guard let rep = r.reponse else { continue }
                 trouves.append(EnfantMaillage(rloc16: cible, extMac: rep.extMac, endormi: rep.mode?.endormi,
                                               adresses: rep.adresses, source: .balayage))
-                dernier = max(dernier, Int(cible & 0x1FF))
             }
+            faites += cibles.count
             debut = fin + 1
         }
         return trouves
     }
 
     /// Au plus `enVol` requetes a la fois ; resultats dans l'ordre des elements.
+    /// `apresChacune` : a chaque requete revenue, le nombre de revenues, l'element et son resultat.
     static func parallele<E: Sendable>(_ elements: [E],
-                                       _ requete: @escaping @Sendable (E) async throws -> ResultatDiag) async throws -> [(E, ResultatDiag)] {
+                                       _ requete: @escaping @Sendable (E) async throws -> ResultatDiag,
+                                       apresChacune: (_ faites: Int, _ element: E, _ resultat: ResultatDiag) -> Void = { _, _, _ in })
+        async throws -> [(E, ResultatDiag)] {
         var resultats: [(Int, E, ResultatDiag)] = []
         try await withThrowingTaskGroup(of: (Int, E, ResultatDiag).self) { groupe in
             var suivant = 0
@@ -228,6 +336,7 @@ public enum Tournee {
             while suivant < min(enVol, elements.count) { lancer() }
             while let r = try await groupe.next() {
                 resultats.append(r)
+                apresChacune(resultats.count, r.1, r.2)
                 if suivant < elements.count { lancer() }
             }
         }

@@ -17,6 +17,7 @@ struct ProtocoleSondeTests {
         #expect(bonjours.allSatisfy { $0.estSonde })
         #expect(bonjours.first?.version == "0.1.0-essai")
         #expect(bonjours.first?.appairee == false)
+        #expect(bonjours.allSatisfy { $0.nom == nil }, "firmware d'essai : pas de nom")
         let etats = m.compactMap { if case .etat(let e) = $0 { e } else { nil } }
         #expect(etats.count == 9)
         #expect(etats.filter(\.estAttachee).count == 4, "5 releves avant l'appairage")
@@ -42,6 +43,28 @@ struct ProtocoleSondeTests {
         }
         #expect(e1.ext == "E0000000000000FF")
         #expect(e1.suspendue)
+    }
+
+    /// bonjour du firmware 1.0.1 : nom, code et QR code, meme appairee (valeurs inventees) ;
+    /// celui de la 1.0.0 n'a pas de nom.
+    @Test func bonjourNom() {
+        let v101 = #"{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.1","nom":"SONDE-01","mac":"A00000000001","appairee":true,"code":"12345678901","qr":"MT:ABCDEFGHIJ0123456789"}"#
+        guard case .bonjour(let b)? = MessageSonde.lire(Data(v101.utf8)) else {
+            Issue.record("bonjour 1.0.1 illisible")
+            return
+        }
+        #expect(b.nom == "SONDE-01")
+        #expect(b.appairee)
+        #expect(b.code == "12345678901")
+        #expect(b.qr == "MT:ABCDEFGHIJ0123456789")
+        let v100 = #"{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.0","mac":"A00000000001","appairee":true,"code":null,"qr":null}"#
+        guard case .bonjour(let a)? = MessageSonde.lire(Data(v100.utf8)) else {
+            Issue.record("bonjour 1.0.0 illisible")
+            return
+        }
+        #expect(a.estSonde)
+        #expect(a.nom == nil)
+        #expect(a.code == nil && a.qr == nil)
     }
 
     /// Diag : reussi (TLV decodees) et echoue (delai, occupee).

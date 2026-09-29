@@ -1,6 +1,30 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import MaillageCoeur
+
+/// Avancements recus d'une tournee, dans l'ordre.
+final class ReleveAvancement: Sendable {
+    private let liste = Mutex<[AvancementTournee]>([])
+
+    func noter(_ a: AvancementTournee) {
+        liste.withLock { $0.append(a) }
+    }
+
+    var avancements: [AvancementTournee] { liste.withLock { $0 } }
+
+    /// Etapes dans l'ordre ou elles commencent (une etape revenue apres une autre y serait deux fois).
+    var etapes: [AvancementTournee.Etape] {
+        avancements.map(\.etape).reduce(into: []) { if $0.last != $1 { $0.append($1) } }
+    }
+
+    func de(_ e: AvancementTournee.Etape) -> [AvancementTournee] { avancements.filter { $0.etape == e } }
+
+    /// Compteurs croissants : `fait` monte de 0 ou 1 a chaque appel, le total ne baisse jamais.
+    static func croissants(_ a: [AvancementTournee]) -> Bool {
+        zip(a, a.dropFirst()).allSatisfy { p, s in (0...1).contains(s.fait - p.fait) && s.total >= p.total }
+    }
+}
 
 /// Sonde rejouee : repond avec les TLV de la capture, echoue en `delai` pour le reste,
 /// et note ses requetes.
@@ -237,6 +261,76 @@ struct TourneeTests {
         let sonde = SondeRejouee(etatSonde: e, reponses: [:])
         #expect(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0) == nil)
         #expect(await sonde.registre.requetes.isEmpty)
+    }
+
+    /// Avancement de la premiere tournee : les six etapes dans l'ordre, chacune annoncee a 0
+    /// puis une requete a la fois jusqu'a son total, connu des son debut ici. Les totaux sont
+    /// les requetes envoyees : 48 pour le balayage.
+    @Test func avancementPremiere() async throws {
+        let sonde = try SondeRejouee.capture()
+        let releve = ReleveAvancement()
+        _ = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                   avancement: { releve.noter($0) }))
+        #expect(releve.etapes == AvancementTournee.Etape.allCases)
+        let totaux: [AvancementTournee.Etape: Int] = [.etatSonde: 1, .listeRouteurs: 1, .routeurs: 7, .pileEtReseau: 3,
+                                                       .balayage: 48, .identites: 6]
+        for (etape, total) in totaux {
+            let a = releve.de(etape)
+            #expect(a.map(\.fait) == Array(0...total), "\(etape)")
+            #expect(a.allSatisfy { $0.total == total }, "\(etape)")
+        }
+        let requetes = await sonde.registre.requetes
+        #expect(requetes.count == totaux.values.reduce(0, +) - 1, "une requete diag par pas, hors etat de la sonde")
+        #expect(requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48)
+    }
+
+    /// Deuxieme tournee (5 min) : la liste des routeurs s'arrete au chef, avant son total
+    /// (le chef et un secours) ; piles connues : Network Data seules ; le balayage (pas du)
+    /// et les identites (demandees il y a 5 min) sont annonces sans rien a faire.
+    @Test func avancementSuivante() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let releve = ReleveAvancement()
+        _ = try #require(try await Tournee.executer(sonde, memoire: mem1, maintenant: Self.t0 + 300,
+                                                   avancement: { releve.noter($0) }))
+        #expect(releve.etapes == AvancementTournee.Etape.allCases)
+        #expect(releve.de(.listeRouteurs) == [AvancementTournee(etape: .listeRouteurs, fait: 0, total: 2),
+                                              AvancementTournee(etape: .listeRouteurs, fait: 1, total: 2)])
+        #expect(releve.de(.pileEtReseau).last == AvancementTournee(etape: .pileEtReseau, fait: 1, total: 1))
+        #expect(releve.de(.balayage) == [AvancementTournee(etape: .balayage, fait: 0, total: 0)])
+        #expect(releve.de(.identites) == [AvancementTournee(etape: .identites, fait: 0, total: 0)])
+        #expect(ReleveAvancement.croissants(releve.de(.routeurs)))
+    }
+
+    /// Chef muet des le lancement : le total de la liste des routeurs grandit quand la
+    /// recherche commence (le chef, puis les 62 autres identifiants) ; elle s'arrete au
+    /// groupe du 20, avant son total, apres 25 requetes.
+    @Test func avancementRecherche() async throws {
+        let sonde = try SondeRejouee.capture(chef: 45, reponsesEnPlus: ["5000|5,6": try CaptureSonde.tlv(104)])
+        let releve = ReleveAvancement()
+        _ = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                   avancement: { releve.noter($0) }))
+        let liste = releve.de(.listeRouteurs)
+        #expect(Array(liste.prefix(3)) == [AvancementTournee(etape: .listeRouteurs, fait: 0, total: 1),
+                                           AvancementTournee(etape: .listeRouteurs, fait: 1, total: 1),
+                                           AvancementTournee(etape: .listeRouteurs, fait: 1, total: 63)])
+        #expect(liste.last == AvancementTournee(etape: .listeRouteurs, fait: 25, total: 63))
+        #expect(ReleveAvancement.croissants(liste))
+        #expect(await sonde.registre.requetes.filter { $0.hasSuffix("|5,6") }.count == 25)
+    }
+
+    /// Un enfant repond loin sous un routeur muet (le numero 8 du routeur 1) : le total du
+    /// balayage grandit de 8 numeros sans jamais baisser, et finit sur les requetes envoyees.
+    @Test func avancementBalayageQuiGrandit() async throws {
+        let sonde = try SondeRejouee.capture(reponsesEnPlus: ["0408|0,1,2,8": try CaptureSonde.tlv(503)])
+        let releve = ReleveAvancement()
+        _ = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                   avancement: { releve.noter($0) }))
+        let balayage = releve.de(.balayage)
+        #expect(balayage.first == AvancementTournee(etape: .balayage, fait: 0, total: 48))
+        #expect(balayage.last == AvancementTournee(etape: .balayage, fait: 56, total: 56))
+        #expect(ReleveAvancement.croissants(balayage))
+        #expect(await sonde.registre.requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 56)
     }
 
     /// Sonde pas encore dans le reseau.
