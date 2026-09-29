@@ -26,10 +26,10 @@ The Mac has no Thread radio: the app only **listens** to the local network.
 | Mac routing table | which border router routes which OMR prefix |
 
 "Reachable" means *announced with a Thread address in the main partition*,
-not "answers": the app never probes. A disappearance is only kept after 2
-minutes of absence and is dated from the first absence. Real links (child →
-parent, router ↔ router, link quality) come from the probe, an ESP32-C6
-plugged into the Mac (see "Probe" below).
+not "answers": reachability never comes from the probe. A disappearance is
+only kept after 2 minutes of absence and is dated from the first absence.
+Real links (child → parent, router ↔ router, link quality) come from the
+probe, an ESP32-C6 plugged into the Mac (see "Probe" below).
 
 Devices are placed by the OMR prefix of their address. When two partitions
 announce the same OMR prefix (seen on September 28: an isolated hub had
@@ -169,20 +169,27 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
 - In Maillage Thread: Settings › Probe › Port. Only the chosen port is ever
   opened (the Halo bridge is also an ESP32-C6). The probe is remembered by its
   USB serial number; its pairing code shows there until it is in Home.
-- A tour every 5 minutes, and on refresh: the routers from the leader, then
-  every router that answers (links with the quality in both directions, its
-  children), the border routers from the Network Data, and each new child's
-  identity (a Matter device's ExtMac is its host name).
-- **Apple's border routers never answer diagnostics.** Their children are
-  found by scanning their possible RLOC16s, every 30 minutes; the quality of
-  those links stays unknown, and a link between two Apple routers is never
-  drawn.
-- In the graph, solid lines are radio links colored by quality (green 3,
-  yellow 2, orange 1, grey unknown); dotted lines stay for what the probe does
-  not see. Devices that route move to the inner ring, and children sit near
-  their parent. The card gives the parent and the quality, or a router's
-  neighbors and children. A mesh older than 6 minutes is marked old; after 15
-  minutes the graph goes back to dotted lines.
+- A tour every 5 minutes, and on refresh. The list of routers comes from the
+  leader; if it is silent, from a router that has already answered; otherwise
+  from a search over every router id. With no list there is no new mesh: the
+  last one gets older.
+- The tour then asks every router that answers for its links (with the
+  quality in both directions) and its children, reads the border routers from
+  the Network Data, and asks each child listed in a router's child table for
+  its identity (ExtMac, addresses) at most once every half hour, sleepy ones
+  included (a Matter device's ExtMac is its host name).
+- **Apple's border routers never answer diagnostics.** The scan of possible
+  child RLOC16s targets the routers that never answered (Apple's) or that
+  stayed silent two tours in a row, every 30 minutes or when that set changes;
+  the quality of those links stays unknown, and a link between two Apple
+  routers is never drawn.
+- In the graph, solid lines are radio links, colored and thickened by quality
+  (green 3, yellow 2, orange 1, grey unknown); a child's line to its parent
+  stays thin. Dotted lines stay for what the probe does not see. Devices that
+  route move to the inner ring, and children sit near their parent. The card
+  gives the parent and the quality, or a router's number of neighbors and
+  children. A mesh older than 6 minutes is marked old; after 15 minutes the
+  graph goes back to dotted lines.
 - Switching "Sonde maillage" off in Home suspends the probe: no tour.
 - Probe captures hold the home network's addresses:
   `outils/anonymiser-sonde.py` rewrites them consistently before they become

@@ -27,10 +27,10 @@ Le Mac n'a pas de radio Thread : l'app **écoute** seulement le réseau local.
 | table de routage du Mac | quel routeur de bordure route quel préfixe OMR |
 
 « Joignable » veut dire *annoncé avec une adresse Thread dans la partition
-principale*, pas « répond » : l'app ne sonde jamais. Une disparition n'est
-retenue qu'après 2 minutes d'absence et datée de la première absence. Les
-vrais liens (enfant → parent, routeur ↔ routeur, qualité) viennent de la
-sonde, un ESP32-C6 branché au Mac (voir « Sonde » plus bas).
+principale*, pas « répond » : la joignabilité ne vient jamais de la sonde. Une
+disparition n'est retenue qu'après 2 minutes d'absence et datée de la première
+absence. Les vrais liens (enfant → parent, routeur ↔ routeur, qualité)
+viennent de la sonde, un ESP32-C6 branché au Mac (voir « Sonde » plus bas).
 
 Les appareils sont placés d'après le préfixe OMR de leur adresse. Quand deux
 partitions annoncent le même préfixe OMR (vu le 28 septembre : un hub isolé
@@ -176,22 +176,28 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   choisi (le pont Halo est aussi un ESP32-C6). La sonde est retenue par son
   numéro de série USB ; son code d'appairage s'y affiche tant qu'elle n'est pas
   dans Maison.
-- Une tournée toutes les 5 minutes, et au rafraîchissement : les routeurs, par
-  le chef, puis chaque routeur qui répond (ses liens avec la qualité dans
-  chaque sens, ses enfants), les routeurs de bordure par les Network Data, et
-  l'identité de chaque nouvel enfant (l'ExtMac d'un appareil Matter est son nom
-  d'hôte).
-- **Les routeurs de bordure d'Apple ne répondent jamais au diagnostic.** Leurs
-  enfants se trouvent en balayant leurs RLOC16 possibles, toutes les 30
-  minutes ; la qualité de ces liens reste inconnue, et un lien entre deux
-  routeurs Apple n'est jamais dessiné.
-- Dans le graphe, les traits pleins sont les liens radio, colorés par la
-  qualité (vert 3, jaune 2, orange 1, gris inconnue) ; les pointillés restent
-  pour ce que la sonde ne voit pas. Les appareils qui routent passent sur
-  l'anneau intérieur, les enfants se rangent près de leur parent. La fiche donne
-  le parent et la qualité, ou les voisins et les enfants d'un routeur. Un
-  maillage de plus de 6 minutes est marqué ancien ; après 15 minutes, le graphe
-  revient aux pointillés.
+- Une tournée toutes les 5 minutes, et au rafraîchissement. La liste des
+  routeurs vient du chef ; s'il se tait, d'un routeur qui a déjà répondu ;
+  sinon d'une recherche sur tous les identifiants de routeur. Sans liste, pas
+  de nouveau maillage : le dernier vieillit.
+- La tournée demande ensuite à chaque routeur qui répond ses liens (avec la
+  qualité dans chaque sens) et ses enfants, lit les routeurs de bordure dans
+  les Network Data, et demande à chaque enfant listé dans la table d'un
+  routeur son identité (ExtMac, adresses), au plus une fois par demi-heure,
+  endormis compris (l'ExtMac d'un appareil Matter est son nom d'hôte).
+- **Les routeurs de bordure d'Apple ne répondent jamais au diagnostic.** Le
+  balayage des RLOC16 d'enfant possibles vise les routeurs qui n'ont jamais
+  répondu (ceux d'Apple) ou qui se sont tus deux tournées de suite, toutes les
+  30 minutes ou quand cet ensemble change ; la qualité de ces liens reste
+  inconnue, et un lien entre deux routeurs Apple n'est jamais dessiné.
+- Dans le graphe, les traits pleins sont les liens radio, colorés et épaissis
+  par la qualité (vert 3, jaune 2, orange 1, gris inconnue) ; le trait d'un
+  enfant vers son parent reste fin. Les pointillés restent pour ce que la
+  sonde ne voit pas. Les appareils qui routent passent sur l'anneau
+  intérieur, les enfants se rangent près de leur parent. La fiche donne le
+  parent et la qualité, ou le nombre de voisins et d'enfants d'un routeur. Un
+  maillage de plus de 6 minutes est marqué ancien ; après 15 minutes, le
+  graphe revient aux pointillés.
 - Éteindre « Sonde maillage » dans Maison suspend la sonde : pas de tournée.
 - Les captures de la sonde contiennent les adresses du réseau de la maison :
   `outils/anonymiser-sonde.py` les réécrit de façon cohérente avant qu'elles ne

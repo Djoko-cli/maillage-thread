@@ -10,6 +10,13 @@
 >
 > **Plan 3a :** `docs/superpowers/plans/2026-09-29-maillage-thread-plan3a-sonde.md`.
 >
+> **Révision du 29/09 pendant l'exécution du plan 3a :** des relectures ont
+> corrigé plusieurs comportements par rapport au texte du plan (BBR principal,
+> trame, liste des routeurs, balayage, identités des enfants, connexion à la
+> sonde, épaisseur des liens). Les sections 3 et 4 en tiennent compte ;
+> chaque correction est listée dans la section « Écarts d'exécution (29/09) »
+> du plan.
+>
 > **Révision du 29/09 après l'essai** (section 8) : les routeurs de bordure
 > d'Apple ne répondent pas au diagnostic. La tournée (section 4) en tient
 > compte : les liens et les enfants viennent des routeurs qui répondent, et
@@ -130,8 +137,11 @@ Sans sonde, l'app marche exactement comme à l'étape 1.
 
 **Trame.** Celle du pont Halo : RS (0x1E), JSON compact, fin de ligne ;
 ASCII imprimable seulement ; 4096 octets au plus ; `v` (version) et `t`
-(type) en tête. À l'ouverture du port, régler DTR et RTS **d'un seul coup** :
-sinon le C6 peut redémarrer, c'est le piège décrit dans benq.
+(type) en tête. La ligne machine est retrouvée au dernier RS de la ligne,
+comme le récepteur du pont Halo : ce qui le précède (queue d'un journal sans
+fin de ligne, invite, ligne coupée) est abandonné. À l'ouverture du port,
+régler DTR et RTS **d'un seul coup** : sinon le C6 peut redémarrer, c'est le
+piège décrit dans benq.
 
 **Commandes du Mac** (texte, une par ligne) :
 - `bonjour` : produit, version, état d'appairage, code d'appairage s'il
@@ -162,46 +172,74 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
 - **Vérification :** une sonde répond à `bonjour` avec
   `"produit":"sonde-maillage"`, sinon le port est refusé.
 
-## 4. Tournée (révisée le 29/09 après l'essai)
+## 4. Tournée (révisée le 29/09 : après l'essai, puis à l'exécution du plan 3a)
 
 **Quand :**
-- la tournée courte, toutes les 5 minutes, au bouton rafraîchir, et quand
-  `etat` montre un autre chef ou une autre partition ;
-- le balayage, toutes les 30 minutes, et quand l'ensemble des routeurs muets
-  change.
+- la tournée courte, toutes les 5 minutes et au bouton rafraîchir. `etat`
+  n'est pas surveillé entre deux tournées : un autre chef ou une autre
+  partition est vu à la tournée suivante. Une autre partition remet à zéro la
+  mémoire de la tournée, car les identifiants de routeur y sont redistribués ;
+- le balayage, toutes les 30 minutes, et quand l'ensemble des routeurs à
+  balayer change.
 
 **Tournée courte :**
 1. `etat` de la sonde : partition, chef, préfixe du réseau maillé, parent
    (RLOC16 et ExtMac).
-2. **Liste des routeurs :** Route64 (5) et Leader Data (6) au chef. S'il est
-   muet, à un routeur qui a déjà répondu.
+2. **Liste des routeurs :** Route64 (5) et Leader Data (6), demandés jusqu'à
+   ce que l'un réponde avec une Route64 :
+   - au chef, sauf s'il est muet : il passe alors après les autres ;
+   - aux routeurs qui ont répondu à la dernière tournée où l'un a répondu, un
+     à un ;
+   - sinon, aux autres identifiants de routeur, de 0 à 62, par groupes de 8
+     dans l'ordre croissant. Au premier groupe où l'un donne une Route64, on
+     prend celle du plus petit identifiant et on s'arrête ;
+   - **sans Route64, pas de nouveau maillage :** la tournée ne rend rien, la
+     mémoire d'avant est gardée, et le dernier maillage reste affiché en
+     vieillissant (« Sonde muette », plus bas). Si rien ne répond, la
+     recherche coûte au plus 63 requêtes, de l'ordre d'une minute, à chaque
+     tournée.
 3. **Rôles :** Network Data (7) à un routeur qui répond. On y lit :
    - les routeurs de bordure (préfixes, routes, service SRP) ;
-   - le BBR principal (service 01) ;
+   - le BBR principal (service 01), choisi comme OpenThread : l'entrée du
+     chef d'abord, puis le numéro de séquence le plus haut (comparaison
+     simple), puis le RLOC16 le plus haut. Un serveur dont les données font
+     moins de 7 octets est ignoré ;
    - celui qui publie l'OMR.
 4. **À chaque routeur qui répond** (RLOC16 = identifiant << 10) :
    - Ext MAC (0), Address16 (1), Route64 (5), Child Table (16), IPv6 Address
      List (8), Version (24) ;
-   - une fois, les TLV 25 à 28 : on garde la version de la pile (28), et les
-     autres s'ils ne sont pas vides.
+   - une fois, les TLV 25 à 28 : on ne garde que la version de la pile (28) ;
+     25 à 27 étaient vides à l'essai (écart 1 du plan).
 5. **Routeur muet :** un routeur qui ne répond pas deux tournées de suite est
-   marqué muet, et on ne l'interroge plus qu'une fois par heure. Les routeurs
-   de bordure d'Apple le sont tous.
+   muet, et on ne l'interroge plus qu'une fois par heure. Les routeurs de
+   bordure d'Apple le sont tous. L'affichage marque « muet » tout routeur sans
+   réponse à la tournée, dès le premier échec.
+6. **Identité des enfants des tables :** Ext MAC (0) et IPv6 Address List (8),
+   demandés à chaque enfant lu dans une Child Table, au plus une fois par
+   demi-heure (voir « Appareils endormis »).
 
-**Balayage des enfants des routeurs muets :**
-- **Cibles :** pour chaque routeur muet, les RLOC16 d'enfant de 1 à 32, avec
-  Ext MAC (0), Address16 (1) et Mode (2). On s'arrête 8 numéros après le
-  dernier qui a répondu.
+**Balayage des enfants des routeurs qui ne répondent pas :**
+- **Cibles :** les routeurs sans réponse à la tournée qui sont muets (deux
+  tournées de suite) ou n'ont jamais répondu depuis le début de la mémoire,
+  comme ceux d'Apple dès la première tournée. Un routeur qui rate une seule
+  tournée n'est pas balayé. Pour chacun, les RLOC16 d'enfant de 1 à 32, avec
+  Ext MAC (0), Address16 (1), Mode (2) et IPv6 Address List (8). On s'arrête 8
+  numéros après le dernier qui a répondu.
 - **Cadence :** 8 requêtes en vol et 8 s de délai. Les endormis répondent à
   leur réveil ; ceux de l'essai l'ont fait en 1,5 à 5 s.
 - **Charge :** environ 160 requêtes, 2 à 3 minutes.
 - **Résultat :** l'enfant et son parent (le RLOC16 le donne), sans qualité de
   lien ; le routeur muet ne dit rien.
-- **Entre deux balayages,** les enfants trouvés sont gardés.
+- **Entre deux balayages,** les enfants trouvés sont gardés, et affichés sous
+  leur parent tant qu'il ne répond pas.
 
-**Appareils endormis :** seul le balayage les interroge, et seulement sous les
-routeurs muets. Sous un routeur qui répond, leur lien se lit dans sa Child
-Table, sans les réveiller.
+**Appareils endormis :** le balayage les interroge sous les routeurs qui ne
+répondent pas. Sous un routeur qui répond, leur lien (parent, qualité) se lit
+dans sa Child Table, mais elle ne donne pas leur ExtMac : l'identité de chaque
+enfant des tables (ExtMac, adresses) est donc demandée au plus une fois par
+demi-heure, endormis compris. C'est un écart assumé à « sans les réveiller » :
+au plus deux réveils par heure et par appareil endormi. Une identité obtenue
+est gardée jusqu'à une nouvelle réponse.
 
 **Rapprochement :**
 - **Appareil Matter :** son ExtMac est son nom d'hôte mDNS, donc
@@ -219,8 +257,8 @@ Table, sans les réveiller.
   commune entre sa liste d'adresses et celles de l'instantané.
 - Sinon, « non identifié ».
 
-**Sonde muette :** le dernier maillage reste affiché 15 min, marqué
-« ancien », puis on revient aux pointillés.
+**Sonde muette, ou tournée sans Route64 :** le dernier maillage reste affiché
+15 min, marqué « ancien » au bout de 6 min, puis on revient aux pointillés.
 
 **Sortie :** un instantané de maillage daté, comprenant :
 - la partition ;

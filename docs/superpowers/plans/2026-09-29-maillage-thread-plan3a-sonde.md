@@ -3450,9 +3450,9 @@ import Testing
 struct LiaisonSerieTests {
     /// Seuls les /dev/cu.* s'ouvrent : un /dev/tty.* attendrait DCD.
     @Test func cheminCu() {
-        #expect(throws: ErreurPort.self) { try PortSerie.ouvrir("/dev/tty.usbmodem11301") }
+        #expect(throws: ErreurPort.self) { try PortSerie.ouvrir("/dev/tty.maillage-inexistant") }
         do {
-            _ = try PortSerie.ouvrir("/dev/tty.usbmodem11301")
+            _ = try PortSerie.ouvrir("/dev/tty.maillage-inexistant")
         } catch {
             #expect("\(error)".contains("/dev/cu.*"))
         }
@@ -5750,3 +5750,36 @@ Commit : `git add docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design
 | 6. Journal des parents, historique des qualités | plan 3b |
 | 7. Données de test anonymisées ; autorisation `device.serial` ; firmware vérifié par compilation puis sur la carte | 1, 9, 8, 12 |
 | 9. Vue spatiale 3D | plus tard |
+
+## Écarts d'exécution (29/09)
+
+Des relectures ont corrigé plusieurs comportements pendant l'exécution, par rapport au texte de ce plan. **Les blocs de code des tâches 3, 4, 5, 6, 7, 9, 10 et 11, et les textes des README de la tâche 12, sont donc dépassés par les commits ci-dessous : le dépôt fait foi.** (Les corrections des tâches 3 et 10 touchent aussi des fichiers des tâches 5 et 9.) Les effectifs de tests attendus ont aussi changé : à la fin, le cœur compte 142 tests en 20 suites et l'app 63 en 17 suites, au lieu de 122 et 55.
+
+- **Tâche 3, BBR principal** (`f875378`, qui touche aussi `Maillage.swift` et `MaillageTests.swift`, de la tâche 5).
+  - Défaut : `bbr` gardait l'ordre des Network Data alors que `ConstructionMaillage.reseau(_:)` en prenait le premier comme BBR principal, ce qui est faux dès qu'il y a deux entrées BBR.
+  - Fait : la règle d'OpenThread (l'entrée du chef d'abord, puis le numéro de séquence le plus haut, puis le RLOC16 le plus haut ; serveurs aux données de moins de 7 octets ignorés), avec le tri dans `DonneesReseau` et le chef pris en compte par `ConstructionMaillage.reseau(_:)` ; 8 tests.
+- **Tâche 4, ligne machine au dernier RS** (`10f6148`).
+  - Défaut : `DecoupeurLignes` ne reconnaissait une ligne machine que si le RS était le premier octet de la ligne : du texte sans fin de ligne avant le RS, ou une ligne coupée suivie d'une complète, faisait perdre la réponse (fausse erreur « délai », faux routeur muet).
+  - Fait : la ligne machine commence au dernier RS de la ligne, comme dans le récepteur du pont Halo (un RS recommence le tampon) ; 3 tests.
+- **Tâche 6, tournée** (`25e4769`), trois corrections :
+  - Route64 sans chef. Défaut : avec le chef muet et une mémoire neuve (lancement de l'app), la Route64 n'était jamais obtenue et la tournée n'aboutissait plus, une liste de répondants vide écrasant les secours. Fait : la Route64 vient du chef, puis des répondants de la dernière tournée, puis d'une recherche sur les identifiants 0 à 62 par groupes de 8 ; sans Route64, la tournée ne rend rien et le dernier maillage vieillit.
+  - Balayage des muets confirmés. Défaut : un routeur était traité en muet et balayé dès un seul échec, alors que la spec dit deux tournées de suite, d'où des balayages complets sous des routeurs qui répondent. Fait : balayage seulement sous les routeurs sans réponse qui sont muets (deux échecs de suite) ou n'ont jamais répondu (`dejaRepondu`).
+  - Identités des enfants, une fois par demi-heure. Défaut : l'identité des enfants des tables était redemandée à chaque tournée quand ils ne répondaient pas, et vidée à chaque balayage. Fait : elle est demandée au plus une fois par demi-heure et par enfant, qu'il ait répondu ou non, et gardée jusqu'à une nouvelle réponse ; écart assumé à la spec (« sans les réveiller »), car la Child Table ne donne pas l'ExtMac.
+  - 5 tests ajoutés, 2 adaptés.
+- **Tâche 7, tests du rangement des enfants** (`bba957d`).
+  - Défaut : aucune assertion ne distinguait le tri des enfants par parent (le test passait sans le tri), et le repli d'angle, le parent inconnu et les enfants du centre n'étaient pas couverts.
+  - Fait : des tests seulement (`RapprochementTests.swift`), une assertion discriminante et un mini-maillage construit à la main, avec le rouge prouvé en neutralisant le tri ; 4 tests ajoutés, code inchangé.
+- **Tâche 9, données de test inventées** (`603b55c`).
+  - Défaut : `LiaisonSerieTests.swift` portait ce qui semble être le numéro de série d'un écran branché au Mac et un chemin de port plausible.
+  - Fait : valeurs inventées (`ECRAN-FACTICE-01`, `/dev/cu.usbmodemECRAN0001`, `/dev/tty.maillage-inexistant`), dans le commit de la tâche avant son intégration et dans le bloc de test de la tâche 9 ci-dessus.
+- **Tâche 10, connexion sérialisée et fermeture attendue** (`6492daf`, qui touche aussi `LiaisonSerie.swift`, de la tâche 9).
+  - Défaut : `SondeMaillage.connecter` n'était pas sérialisé : deux changements de ports rapprochés ouvraient deux connexions, une connexion en cours échappait à `deconnecter` (« Oublier » ou un autre choix pouvait être annulé, le port rester ouvert, l'état contredire la liaison), et l'ancienne liaison se fermait sans être attendue, d'où un « port occupé » trompeur en rouvrant le même port.
+  - Fait : un numéro d'essai qu'incrémente `deconnecter` (une connexion périmée ferme sa liaison et sort sans toucher à l'état), `.connexion` posé avant de lancer la tâche, un choix du port déjà connecté sans effet, et `connecter` qui attend la fermeture réelle de l'ancienne liaison (`LiaisonSerie` finit son flux après `close(fd)`, `SondeUSB.fermer()` attend la fin de sa lecture) ; 6 tests.
+- **Tâche 11, épaisseur des liens, tests indépendants de la langue, « Renommer… »** (`da283d5`), trois corrections :
+  - Épaisseur. Défaut : l'épaisseur des liens radio ne dépendait pas de la qualité (spec, section 5). Fait : 3 pt pour la qualité 3, 2,2 pt pour 2, 1,4 pt pour 1 ou inconnue, et 1 pt de l'enfant à son parent, par une fonction pure testée (`GrapheCanvas.epaisseurLienSonde`).
+  - Langue. Défaut : `AffichageSondeTests` ne passait que sur un hôte en français. Fait : les attentes reprennent les mêmes clés interpolées que le code.
+  - « Renommer… ». Défaut : le bouton était inerte pour un nœud que seule la sonde connaît (surnom orphelin, indexé par un RLOC16 volatil). Fait : il est masqué pour un tel nœud (`FicheNoeud.renommable`).
+  - 2 tests ajoutés.
+- **Tâche 12, documentation** (`d8f067c`, puis le commit « Documenter la sonde telle qu'executee et noter les ecarts du plan 3a »).
+  - Défaut : la première passe laissait « l'app ne sonde jamais », faux depuis la sonde, et décrivait la tournée du plan plutôt que celle du code : identité de chaque nouvel enfant, liste des routeurs donnée par le chef seul, balayage sans la règle des routeurs qui n'ont jamais répondu ou sont muets deux tournées de suite.
+  - Fait : les README (les deux langues), la spec (en-tête, sections 3 et 4) et cette section disent ce que fait le code ; le bloc de test de la tâche 9 reprend les valeurs inventées.
