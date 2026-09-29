@@ -240,27 +240,29 @@ final class SondeMaillage {
     }
 
     /// Oublie la sonde retenue (numero de serie, nom, nom d'hote, cle de ce Mac pour elle :
-    /// la sonde garde la sienne) et ferme la liaison ; retour a l'USB. Si le trousseau refuse
-    /// d'effacer la cle, l'echec est montre et le nom d'hote reste (comme la cle) : « Oublier »
-    /// peut etre relance.
-    func oublier() {
+    /// la sonde garde la sienne) et ferme la liaison ; retour a l'USB. L'etat change tout de
+    /// suite, avant toute attente ; la cle s'efface ensuite hors de l'acteur principal, et le nom
+    /// d'hote part avec elle. Si le trousseau refuse d'effacer la cle, l'echec est montre et le
+    /// nom d'hote reste (comme la cle) : « Oublier » peut etre relance.
+    func oublier() async {
         preferences.removeObject(forKey: Self.cleSerie)
         serie = nil
         retenirNom(nil)
         erreurAcces = nil
-        if let hote {
-            do {
-                try trousseau.oublier(nom: hote)
-                retenirHote(nil)
-            } catch {
-                erreurAcces = String(localized: "Clé de \(hote).local non retirée du trousseau : \(error.localizedDescription)")
-            }
-        }
         liaison = .usb
         preferences.removeObject(forKey: Self.cleLiaison)
         reprise?.cancel()
         dernierePerte = nil
         deconnecter(.sansSonde)
+        guard let h = hote else { return }
+        let t = trousseau
+        do {
+            try await Self.horsActeurPrincipal { try t.oublier(nom: h) }
+            // Pendant l'effacement, la sonde choisie de nouveau a pu donner un autre nom d'hote : il reste.
+            if hote == h { retenirHote(nil) }
+        } catch {
+            erreurAcces = String(localized: "Clé de \(h).local non retirée du trousseau : \(error.localizedDescription)")
+        }
     }
 
     /// Nom d'hote de la sonde retenue, garde a cote de son numero de serie ; l'empreinte de la
@@ -424,7 +426,8 @@ final class SondeMaillage {
         var canal: (any CanalSonde)?
         do {
             guard let hote else { throw CleReseau.Erreur.sansNomDHote }
-            let c = try await ouvrirReseau(hote, try await Self.lireCle(trousseau, hote))
+            let t = trousseau
+            let c = try await ouvrirReseau(hote, try await Self.horsActeurPrincipal { try t.lire(nom: hote) })
             canal = c
             guard n == essai else {
                 c.fermer()
@@ -471,10 +474,13 @@ final class SondeMaillage {
         }
     }
 
-    /// Cle de ce Mac pour la sonde, lue hors de l'acteur principal : macOS peut d'abord demander
-    /// l'autorisation d'acceder au trousseau (fenetre modale), sans figer le menu.
-    private nonisolated static func lireCle(_ trousseau: any TrousseauCles, _ nom: String) async throws -> Data {
-        try await Task.detached(priority: .userInitiated) { try trousseau.lire(nom: nom) }.value
+    /// Operation du trousseau hors de l'acteur principal : macOS peut d'abord demander
+    /// l'autorisation d'acceder au trousseau (fenetre modale, signature ad hoc), sans figer le
+    /// menu. Pour la lecture de la cle comme pour les ecritures (ranger, oublier) ; la liste des
+    /// cles (attributs seulement, sans la cle) reste lue sur place.
+    private nonisolated static func horsActeurPrincipal<T: Sendable>(
+        _ operation: @escaping @Sendable () throws -> T) async throws -> T {
+        try await Task.detached(priority: .userInitiated) { try operation() }.value
     }
 
     private func tenirActivite() {
@@ -525,13 +531,15 @@ final class SondeMaillage {
             // La carte a adopte la cle : elle se range meme si la liaison s'est fermee depuis, sous
             // le nom d'hote de la reponse, sinon (nul ou vide) sous celui du `bonjour`.
             let nom = c.hote.flatMap { $0.isEmpty ? nil : $0 } ?? nomHote
-            try trousseau.ranger(nom: nom, cle: c.cle, empreinte: c.empreinte)
+            // Ecritures hors de l'acteur principal, comme la lecture de la cle.
+            let t = trousseau
+            try await Self.horsActeurPrincipal { try t.ranger(nom: nom, cle: c.cle, empreinte: c.empreinte) }
             retenirHote(nom)
             // Une seule sonde retenue : les cles d'autres noms d'hote (mise en service anterieure)
             // ne servent plus ; un echec est montre, la nouvelle cle reste rangee.
             for ancien in trousseau.lister() where ancien.nom != nom {
                 do {
-                    try trousseau.oublier(nom: ancien.nom)
+                    try await Self.horsActeurPrincipal { try t.oublier(nom: ancien.nom) }
                 } catch {
                     erreurAcces = String(localized: "Clé rangée ; l'ancienne clé de \(ancien.nom).local n'a pas pu être retirée du trousseau : \(error.localizedDescription)")
                 }

@@ -444,7 +444,7 @@ struct SondeMaillageTests {
         }
         #expect(b.version == "1.0.0")
         #expect(p.string(forKey: SondeMaillage.cleSerie) == "A0:00:00:00:00:01")
-        s.oublier()
+        await s.oublier()
         #expect(s.etat == .sansSonde)
         #expect(p.string(forKey: SondeMaillage.cleSerie) == nil)
     }
@@ -522,7 +522,7 @@ struct SondeMaillageTests {
         let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
         let connexion = Task { await s.connecter(Self.port, choisi: true) }
         await journal.attendre("bonjour 1")
-        s.oublier()
+        await s.oublier()
         // La reponse arrive apres coup : elle ne change plus rien.
         canal.libererBonjour()
         await connexion.value
@@ -548,7 +548,7 @@ struct SondeMaillageTests {
         await Self.attendre { Self.connectee(s) }
         #expect(canaux == 1)
         #expect(journal.cycle == ["ouvrir 1"])
-        s.oublier()
+        await s.oublier()
     }
 
     /// Choisir le port de la sonde deja connectee : rien n'est ferme ni rouvert.
@@ -570,7 +570,7 @@ struct SondeMaillageTests {
         #expect(canaux == 1)
         #expect(Self.connectee(s))
         #expect(journal.cycle == ["ouvrir 1"])
-        s.oublier()
+        await s.oublier()
     }
 
     /// Reconnexion : l'ancienne liaison est vraiment fermee (fin de son flux)
@@ -589,7 +589,7 @@ struct SondeMaillageTests {
         await s.connecter(Self.port, choisi: true)
         #expect(Self.connectee(s))
         #expect(journal.cycle == ["ouvrir 1", "fermer 1", "fin 1", "ouvrir 2"])
-        s.oublier()
+        await s.oublier()
     }
 
     /// Reseau minimal dans une partition donnee ; la table des routeurs donne l'ExtMac du chef 0
@@ -622,7 +622,7 @@ struct SondeMaillageTests {
             s.surMaillage = { m, _ in recu = m }
             await s.connecter(Self.port, choisi: true)
             await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
-            s.oublier()
+            await s.oublier()
             return recu
         }
         let m1 = await lancement(ext: "E0000000000000A0")
@@ -664,7 +664,7 @@ struct SondeMaillageTests {
         for await _ in fins { break }
         #expect(s.derniereTournee == nil, "pas de maillage")
         #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A0"]))
-        s.oublier()
+        await s.oublier()
     }
 
     /// Fichier des identites reecrit seulement quand elles changent : efface apres la premiere
@@ -696,7 +696,7 @@ struct SondeMaillageTests {
         s.rafraichir()
         _ = await tournees.next()
         #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A1"]))
-        s.oublier()
+        await s.oublier()
     }
 
     /// Ecriture du fichier des identites en echec (un fichier a la place de son dossier) : tracee,
@@ -724,7 +724,7 @@ struct SondeMaillageTests {
         _ = await tournees.next()
         #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A0"]),
                 "retentee, sans changement des identites")
-        s.oublier()
+        await s.oublier()
     }
 
     /// Fichier des identites : dans le dossier de l'app ; jamais en demo ni sous les tests (qui
@@ -762,7 +762,7 @@ struct SondeMaillageTests {
         #expect(s.nom == "SONDE-01")
         #expect(p.string(forKey: SondeMaillage.cleNom) == "SONDE-01")
         #expect(SondeMaillage(preferences: p, actif: true).nom == "SONDE-01", "relu au lancement")
-        s.oublier()
+        await s.oublier()
         #expect(s.nom == nil)
         #expect(p.string(forKey: SondeMaillage.cleNom) == nil)
     }
@@ -782,7 +782,7 @@ struct SondeMaillageTests {
         #expect(s.serie == nil)
         #expect(s.nom == nil)
         #expect(p.string(forKey: SondeMaillage.cleNom) == nil)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Le nom de la sonde retenue va a l'etat qui la concerne (connectee, absente) ; pas au
@@ -822,7 +822,7 @@ struct SondeMaillageTests {
         await journal.attendre("bonjour 3")
         #expect(s.etat == .connexion)
         #expect(s.nomEtat == nil, "connexion d'un autre port")
-        s.oublier()
+        await s.oublier()
         #expect(s.nomEtat == nil)
     }
 
@@ -848,7 +848,7 @@ struct SondeMaillageTests {
         s.portsChanges([Self.port])
         await Self.attendre { if case .erreur = s.etat { true } else { false } }
         #expect(s.nomEtat == "SONDE-01", "erreur de la sonde retenue")
-        s.oublier()
+        await s.oublier()
     }
 
     /// Le nom suit chaque bonjour : un firmware sans nom (1.0.0) l'efface.
@@ -867,7 +867,7 @@ struct SondeMaillageTests {
         #expect(Self.connectee(s))
         #expect(s.nom == nil)
         #expect(p.string(forKey: SondeMaillage.cleNom) == nil)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Pendant une tournee : son avancement (etape, fait, total) et l'heure de son debut ;
@@ -891,7 +891,7 @@ struct SondeMaillageTests {
         #expect(s.derniereTournee == t0)
         #expect(s.avancement == nil)
         #expect(s.debutTournee == nil)
-        s.oublier()
+        await s.oublier()
     }
 
     /// La liaison se ferme pendant une tournee (oubli, debranchement) : la tournee finit sans
@@ -904,7 +904,7 @@ struct SondeMaillageTests {
         await s.connecter(Self.port, choisi: true)
         await journal.attendre(Self.listeRetenue)
         await Self.attendre { s.avancement != nil }
-        s.oublier()
+        await s.oublier()
         await Self.attendre { !s.tourneeEnCours }
         #expect(s.avancement == nil)
         #expect(s.debutTournee == nil)
@@ -949,7 +949,7 @@ struct SondeMaillageTests {
         #expect(recus.first?.date == t0)
         #expect(recus.first?.recu == t0 + 90)
         #expect(s.derniereTournee == t0 + 90)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Rafraichir pendant une tournee (bouton du graphe) : ni seconde tournee, ni boucle
@@ -978,7 +978,7 @@ struct SondeMaillageTests {
         s.rafraichir()
         await Self.attendre { s.tourneeEnCours }
         #expect(s.boucle != boucle, "hors tournee : une tournee tout de suite")
-        s.oublier()
+        await s.oublier()
     }
 
     /// Marche normale : une tournee de 90 s, la pause de 5 min, une tournee de 10 s, la

@@ -42,20 +42,79 @@ final class CanalLent: CanalSonde {
     }
 }
 
-/// Trousseau en memoire qui peut refuser d'effacer (trousseau verrouille, acces refuse).
+/// Trousseau en memoire qui peut refuser d'effacer ou de ranger (trousseau verrouille, acces
+/// refuse).
 final class TrousseauRetif: TrousseauCles {
     static let refus = ErreurTrousseau.systeme(-25308)  // errSecInteractionNotAllowed
     let memoire = TrousseauMemoire()
     let refuserOubli = Mutex(true)
+    let refuserRangement = Mutex(false)
+
+    func lister() -> [SondeConnue] { memoire.lister() }
+    func lire(nom: String) throws -> Data { try memoire.lire(nom: nom) }
+
+    func ranger(nom: String, cle: Data, empreinte: String) throws {
+        if refuserRangement.withLock({ $0 }) { throw Self.refus }
+        try memoire.ranger(nom: nom, cle: cle, empreinte: empreinte)
+    }
+
+    func oublier(nom: String) throws {
+        if refuserOubli.withLock({ $0 }) { throw Self.refus }
+        try memoire.oublier(nom: nom)
+    }
+}
+
+/// Trousseau en memoire qui note chaque lecture de cle et chaque ecriture, dans l'ordre, et si
+/// elle s'est faite sur le fil principal : macOS peut d'abord y afficher une autorisation
+/// modale (signature ad hoc), qui figerait le menu.
+final class TrousseauTemoin: TrousseauCles {
+    let memoire = TrousseauMemoire()
+    /// « lire NOM », « ranger NOM » ou « oublier NOM », et le fil de l'operation.
+    let operations = Mutex<[(nom: String, filPrincipal: Bool)]>([])
+
+    func lister() -> [SondeConnue] { memoire.lister() }
+
+    func lire(nom: String) throws -> Data {
+        noter("lire \(nom)")
+        return try memoire.lire(nom: nom)
+    }
+
+    func ranger(nom: String, cle: Data, empreinte: String) throws {
+        noter("ranger \(nom)")
+        try memoire.ranger(nom: nom, cle: cle, empreinte: empreinte)
+    }
+
+    func oublier(nom: String) throws {
+        noter("oublier \(nom)")
+        try memoire.oublier(nom: nom)
+    }
+
+    private func noter(_ operation: String) {
+        let principal = Thread.isMainThread
+        operations.withLock { $0.append((operation, principal)) }
+    }
+}
+
+/// Trousseau en memoire dont chaque effacement attend que le test le libere, comme derriere une
+/// autorisation modale du trousseau.
+final class TrousseauLent: TrousseauCles {
+    let memoire = TrousseauMemoire()
+    /// Un effacement a commence.
+    let effacementCommence = Mutex(false)
+    private let feu = DispatchSemaphore(value: 0)
 
     func lister() -> [SondeConnue] { memoire.lister() }
     func lire(nom: String) throws -> Data { try memoire.lire(nom: nom) }
     func ranger(nom: String, cle: Data, empreinte: String) throws { try memoire.ranger(nom: nom, cle: cle, empreinte: empreinte) }
 
     func oublier(nom: String) throws {
-        if refuserOubli.withLock({ $0 }) { throw Self.refus }
+        effacementCommence.withLock { $0 = true }
+        feu.wait()
         try memoire.oublier(nom: nom)
     }
+
+    /// Laisse passer un effacement (en cours, ou le prochain).
+    func liberer() { feu.signal() }
 }
 
 /// Ouvertures de la liaison reseau demandees par `SondeMaillage` : nom d'hote et cle, et le
@@ -151,7 +210,7 @@ struct SondeReseauTests {
         #expect(!s.autorisationEnCours)
         let valeurs = (p.persistentDomain(forName: domaine) ?? [:]).values.map { "\($0)" }
         #expect(!valeurs.contains { $0.contains(CleReseauTests.hexaCle) }, "cle hors des preferences")
-        s.oublier()
+        await s.oublier()
     }
 
     /// Sans nom d'hote (Matter ne l'a pas encore enregistre), aucune cle n'est demandee.
@@ -166,7 +225,7 @@ struct SondeReseauTests {
         #expect(s.erreurAcces == CleReseau.Erreur.sansNomDHote.localizedDescription)
         #expect(!canal.envoyes.contains { $0.hasPrefix("cle") })
         #expect(t.lister().isEmpty)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Empreinte fausse, ou refus d'un firmware sans acces reseau : rien n'est range.
@@ -189,7 +248,7 @@ struct SondeReseauTests {
         #expect(s.erreurAcces == SondeUSB.Erreur.refusee("commande inconnue").localizedDescription)
         #expect(t.lister().isEmpty)
         #expect(s.empreinteAcces == nil)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Apres une nouvelle mise en service, le nom d'hote a change : la cle se range sous le nouveau
@@ -207,7 +266,7 @@ struct SondeReseauTests {
         await s.autoriserAccesReseau()
         let noms = t.lister().map { $0.nom }
         #expect(noms == [Self.hote])
-        s.oublier()
+        await s.oublier()
     }
 
     /// L'ancienne entree ne s'efface pas : la nouvelle cle est rangee, l'echec est montre.
@@ -222,7 +281,7 @@ struct SondeReseauTests {
         #expect(s.empreinteAcces == "630DCD29" && s.reseauDisponible)
         #expect(s.erreurAcces == String(localized: "Clé rangée ; l'ancienne clé de \("FEDCBA9876543210").local n'a pas pu être retirée du trousseau : \(TrousseauRetif.refus.localizedDescription)"))
         t.refuserOubli.withLock { $0 = false }
-        s.oublier()
+        await s.oublier()
     }
 
     /// « Oublier la sonde » quand le trousseau refuse d'effacer la cle : l'echec est montre, le nom
@@ -234,15 +293,80 @@ struct SondeReseauTests {
         let t = TrousseauRetif()
         try t.ranger(nom: Self.hote, cle: VecteursH1.psk, empreinte: "630DCD29")
         let s = Self.sondeMaillage(p, trousseau: t)
-        s.oublier()
+        await s.oublier()
         #expect(s.etat == .sansSonde && s.serie == nil && s.liaison == .usb)
         #expect(s.hote == Self.hote && s.empreinteAcces == "630DCD29", "nom d'hote garde : la cle est toujours la")
         #expect(p.string(forKey: SondeMaillage.cleHote) == Self.hote)
         #expect(s.erreurAcces == String(localized: "Clé de \(Self.hote).local non retirée du trousseau : \(TrousseauRetif.refus.localizedDescription)"))
         t.refuserOubli.withLock { $0 = false }
-        s.oublier()
+        await s.oublier()
         #expect(s.hote == nil && s.empreinteAcces == nil && s.erreurAcces == nil)
         #expect(t.lister().isEmpty)
+    }
+
+    /// Le trousseau refuse de ranger la cle : l'echec est montre, pas d'acces reseau.
+    @Test func autoriserCleNonRangee() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = TrousseauRetif()
+        t.refuserRangement.withLock { $0 = true }
+        let s = Self.sondeMaillage(p, trousseau: t)
+        await s.connecter(Self.port, choisi: true)
+        await s.autoriserAccesReseau()
+        #expect(s.erreurAcces == TrousseauRetif.refus.localizedDescription)
+        #expect(t.lister().isEmpty)
+        #expect(s.empreinteAcces == nil && !s.reseauDisponible)
+        #expect(!s.autorisationEnCours)
+        t.refuserOubli.withLock { $0 = false }
+        await s.oublier()
+    }
+
+    /// Lecture de la cle et ecritures du trousseau (ranger la cle, retirer l'ancienne, oublier
+    /// la sonde) hors du fil principal : macOS peut d'abord demander l'autorisation d'acceder au
+    /// trousseau (fenetre modale, signature ad hoc), qui figerait le menu.
+    @Test(.timeLimit(.minutes(1))) func trousseauHorsDuFilPrincipal() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = TrousseauTemoin()
+        try t.memoire.ranger(nom: "FEDCBA9876543210", cle: Data(repeating: 1, count: 32), empreinte: "11111111")
+        let s = Self.sondeMaillage(p, trousseau: t, reseau: ReseauFactice([.success(Self.sonde())]))
+        await s.connecter(Self.port, choisi: true)
+        await s.autoriserAccesReseau()
+        #expect(s.erreurAcces == nil && s.reseauDisponible)
+        s.choisirLiaison(.reseau)
+        await SondeMaillageTests.attendre { SondeMaillageTests.connectee(s) }
+        await s.oublier()
+        #expect(t.lister().isEmpty && s.hote == nil && s.erreurAcces == nil)
+        let operations = t.operations.withLock { $0 }
+        #expect(operations.map(\.nom) == ["ranger \(Self.hote)", "oublier FEDCBA9876543210", "lire \(Self.hote)",
+                                          "oublier \(Self.hote)"])
+        let principal = operations.filter(\.filPrincipal).map(\.nom)
+        #expect(principal.isEmpty, "sur le fil principal : \(principal)")
+    }
+
+    /// « Oublier la sonde » : l'etat change tout de suite ; pendant l'effacement de la cle
+    /// (autorisation modale du trousseau), la sonde choisie de nouveau donne un autre nom d'hote
+    /// (nouvelle mise en service) : l'oubli, fini ensuite, ne le retire pas.
+    @Test(.timeLimit(.minutes(1))) func nouveauNomDHotePendantLOubli() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        _ = try Self.prete(p, liaison: .usb)
+        let t = TrousseauLent()
+        try t.memoire.ranger(nom: Self.hote, cle: VecteursH1.psk, empreinte: "630DCD29")
+        let nouveau = "FEDCBA9876543210"
+        let s = Self.sondeMaillage(p, usb: { _ in Self.sonde(bonjour: Self.bonjour(hote: nouveau)) }, trousseau: t)
+        let oubli = Task { await s.oublier() }
+        #expect(await Self.sonder { t.effacementCommence.withLock { $0 } })
+        #expect(s.etat == .sansSonde && s.serie == nil && s.liaison == .usb)
+        await s.connecter(Self.port, choisi: true)
+        #expect(s.hote == nouveau)
+        t.liberer()
+        await oubli.value
+        #expect(t.lister().isEmpty, "cle de l'ancien nom d'hote effacee")
+        #expect(s.hote == nouveau && p.string(forKey: SondeMaillage.cleHote) == nouveau)
+        #expect(s.erreurAcces == nil)
+        t.liberer()
+        await s.oublier()
     }
 
     /// Nom d'hote de la reponse `cle` nul ou vide : la cle se range sous celui du `bonjour`.
@@ -257,7 +381,7 @@ struct SondeReseauTests {
             let noms = t.lister().map { $0.nom }
             #expect(noms == [Self.hote], "cle.hote \(String(describing: h))")
             #expect(s.hote == Self.hote)
-            s.oublier()
+            await s.oublier()
         }
     }
 
@@ -285,7 +409,7 @@ struct SondeReseauTests {
         canal.emettre(CanalRejoue.reseauMinimal(SondeMaillageTests.listeRetenue + "\n"))
         await SondeMaillageTests.attendre { !s.tourneeEnCours }
         #expect(s.peutAutoriser, "apres la tournee")
-        s.oublier()
+        await s.oublier()
     }
 
     /// Liaison USB : `connecterReseau` ne ferme rien et ne touche pas a l'etat.
@@ -302,7 +426,7 @@ struct SondeReseauTests {
         #expect(Self.connecteeParUSB(s), "rien de ferme : \(s.etat)")
         #expect(journal.cycle == ["ouvrir usb"])
         #expect(reseau.appels.isEmpty)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Sans cle pour la sonde retenue, le reseau ne se choisit pas.
@@ -317,7 +441,7 @@ struct SondeReseauTests {
         #expect(Self.connecteeParUSB(s))
         await Task.yield()
         #expect(reseau.appels.isEmpty)
-        s.oublier()
+        await s.oublier()
     }
 
     static func connecteeParUSB(_ s: SondeMaillage) -> Bool {
@@ -365,7 +489,7 @@ struct SondeReseauTests {
         s.portsChanges([Self.port])
         await Task.yield()
         #expect(canaux == 1, "branchee, la sonde n'est pas ouverte en USB")
-        s.oublier()
+        await s.oublier()
     }
 
     /// Au lancement, liaison reseau retenue : nom d'hote et empreinte relus ; connexion par le reseau.
@@ -384,7 +508,7 @@ struct SondeReseauTests {
         #expect(SondeMaillageTests.connectee(s))
         #expect(canaux == 0, "aucun port ouvert")
         #expect(reseau.appels.count == 1)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Echec de la session (sonde muette, pas de route) : erreur montree, reprise seule.
@@ -399,7 +523,7 @@ struct SondeReseauTests {
         #expect(s.nomEtat == "SONDE-01")
         await SondeMaillageTests.attendre { SondeMaillageTests.connectee(s) }
         #expect(reseau.appels.count == 3)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Cle absente du trousseau : erreur, sans reprise (il faut l'USB).
@@ -413,7 +537,7 @@ struct SondeReseauTests {
         #expect(s.etat == .erreur(ErreurTrousseau.absente(Self.hote).localizedDescription))
         try await Task.sleep(for: .milliseconds(100))
         #expect(reseau.appels.isEmpty)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Liaison reseau perdue (canal ferme : veille sans reponse, session perdue) : reconnexion.
@@ -428,7 +552,7 @@ struct SondeReseauTests {
         #expect(SondeMaillageTests.connectee(s))
         premiere.fermer()
         #expect(await Self.sonder { reseau.appels.count == 2 && SondeMaillageTests.connectee(s) })
-        s.oublier()
+        await s.oublier()
     }
 
     /// Session perdue (chemin perdu, veille sans reponse) : sa cause est montree, comme dans Halo
@@ -454,7 +578,7 @@ struct SondeReseauTests {
         connexions.toutes.last?.echouer(.pasDeRoute)
         await SondeMaillageTests.attendre { if case .erreur = s.etat { true } else { false } }
         #expect(s.etat == .erreur(TransportUDP.raisonPerte(.pasDeRoute)))
-        s.oublier()
+        await s.oublier()
     }
 
     /// La cause de la derniere session perdue reste dans Reglages › Sonde (« Dernière perte »)
@@ -488,7 +612,7 @@ struct SondeReseauTests {
         #expect(await Self.sonder { reseau.appels.count == 3 && SondeMaillageTests.connectee(s) })
         #expect(s.dernierePerte == nil)
         #expect(hauteur() == 0)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Une activite est tenue pendant une session reseau (App Nap retarderait la veille et les
@@ -508,7 +632,7 @@ struct SondeReseauTests {
         premiere.fermer()
         await SondeMaillageTests.attendre { if case .erreur = s.etat { true } else { false } }
         #expect(!s.activiteTenue, "session perdue")
-        s.oublier()
+        await s.oublier()
         #expect(!s.activiteTenue)
     }
 
@@ -530,7 +654,7 @@ struct SondeReseauTests {
         #expect(p.string(forKey: SondeMaillage.cleLiaison) == SondeMaillage.Liaison.usb.rawValue)
         await SondeMaillageTests.attendre { Self.connecteeParUSB(s) }
         #expect(journal.cycle == ["ouvrir reseau", "fermer reseau", "fin reseau", "ouvrir usb"])
-        s.oublier()
+        await s.oublier()
     }
 
     /// Reglages › Sonde : etat de l'acces reseau (les attentes reprennent les cles du code :
@@ -581,12 +705,12 @@ struct SondeReseauTests {
         await usb.autoriserAccesReseau()
         #expect(usb.erreurAcces != nil)
         #expect(hauteur(usb) > sansErreur, "ligne de l'erreur")
-        usb.oublier()
+        await usb.oublier()
         // Par le reseau : pas de bouton (la cle ne passe que par l'USB).
         let t = try Self.prete(p, liaison: .reseau)
         let reseau = Self.sondeMaillage(p, trousseau: t, reseau: ReseauFactice([.success(Self.sonde())]))
         #expect(hauteur(reseau) < sansErreur, "sans le bouton")
-        reseau.oublier()
+        await reseau.oublier()
     }
 
     /// Liaison reseau tombee (aucune sonde dans l'app) : un port branche, debranche, rebranche ne
@@ -612,7 +736,7 @@ struct SondeReseauTests {
         }
         #expect(canaux == 0)
         #expect(s.ports == [Self.port], "port liste pour les Reglages")
-        s.oublier()
+        await s.oublier()
     }
 
     /// Au lancement, liaison reseau retenue : `demarrer` se connecte par le reseau ; les ports
@@ -631,7 +755,7 @@ struct SondeReseauTests {
         #expect(await Self.sonder { SondeMaillageTests.connectee(s) }, "connectee par le reseau")
         #expect(reseau.appels.count == 1)
         #expect(canaux == 0)
-        s.oublier()
+        await s.oublier()
     }
 
     /// Par le reseau, `bonjour` et `etat` attendent au-dela du renvoi de 4 s du canal : la
@@ -645,7 +769,7 @@ struct SondeReseauTests {
         await s.connecterReseau()
         #expect(SondeMaillageTests.connectee(s), "bonjour a 4,2 s : \(s.etat)")
         #expect(await Self.sonder(delai: .seconds(10)) { s.etatSonde != nil }, "etat de la tournee a 4,2 s")
-        s.oublier()
+        await s.oublier()
     }
 
     /// En USB, rien ne change : 3 s, puis « ne répond pas ».
@@ -658,7 +782,7 @@ struct SondeReseauTests {
         await s.connecter(Self.port, choisi: true)
         #expect(s.etat == .refusee(SondeUSB.Erreur.sansReponse("bonjour").localizedDescription))
         #expect(ContinuousClock.now - debut < .seconds(4), "abandon a 3 s")
-        s.oublier()
+        await s.oublier()
     }
 
     /// Oublier la sonde : la cle de ce Mac part avec elle ; retour a l'USB.
@@ -668,7 +792,7 @@ struct SondeReseauTests {
         let t = try Self.prete(p, liaison: .reseau)
         let s = Self.sondeMaillage(p, trousseau: t, reseau: ReseauFactice([.success(Self.sonde())]))
         await s.connecterReseau()
-        s.oublier()
+        await s.oublier()
         #expect(s.etat == .sansSonde)
         #expect(t.lister().isEmpty)
         #expect(s.hote == nil && s.empreinteAcces == nil && s.liaison == .usb)

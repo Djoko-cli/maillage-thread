@@ -100,7 +100,7 @@ struct GrapheTests {
             let haut = hautDesTitres(marge: FenetreGraphe.margeHaut(scinde: estScinde, sondeRetenue: sonde.serie != nil))
             #expect(bas <= haut, "tournee, scinde \(estScinde) : en-tete jusqu'a \(bas), titres des \(haut)")
         }
-        sonde.oublier()
+        await sonde.oublier()
     }
 
     /// Pendant une tournee, la barre d'outils garde sa largeur : le bouton rafraichir ne bouge
@@ -130,7 +130,7 @@ struct GrapheTests {
         await SondeMaillageTests.attendre { sonde.avancement != nil }
         #expect(taille(BarreOutils()) == barre)
         #expect(pile().height > 30, "pendant la tournee : la ligne de l'indicateur")
-        sonde.oublier()
+        await sonde.oublier()
     }
 }
 

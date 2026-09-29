@@ -140,7 +140,7 @@ struct FenetreReglages: View {
                     // Le nom d'hote reste apres un oubli dont la cle n'a pas pu etre effacee.
                     if sonde.serie != nil || sonde.hote != nil {
                         AccesReseauSonde()
-                        Button("Oublier la sonde") { sonde.oublier() }
+                        Button("Oublier la sonde") { Task { await sonde.oublier() } }
                     }
                     Text("Seul le port choisi est ouvert. Le pont Halo est aussi un ESP32-C6 : ne le choisissez pas.")
                         .font(.caption)
