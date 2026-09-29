@@ -35,7 +35,9 @@ dans Réglages › Sonde.
 3. Maison dit « accessoire non certifié » : ajouter quand même.
 
 La sonde apparaît comme une prise « Sonde maillage », allumée par défaut.
-Éteinte, elle refuse les requêtes de diagnostic (`suspendue`).
+Éteinte, elle refuse les requêtes de diagnostic (`suspendue`). Son état est
+gardé d'un démarrage à l'autre : éteinte dans Maison, elle reste suspendue
+après un redémarrage ou un débranchement.
 
 `oubli` la désappaire et la redémarre.
 

@@ -24,11 +24,13 @@
 //    oubli                            desappaire la sonde et redemarre
 //
 //  Dans Maison : un interrupteur « Sonde maillage », allume par defaut.
-//  Eteint, la sonde refuse les requetes (erreur « suspendue »).
+//  Eteint, la sonde refuse les requetes (erreur « suspendue »). Son etat est
+//  garde d'un demarrage a l'autre.
 // ===========================================================================
 
 #include <Arduino.h>
 #include <Matter.h>
+#include <Preferences.h>
 #include <app/server/Server.h>
 #include <esp_mac.h>
 #include <esp_openthread.h>
@@ -68,7 +70,11 @@ __wrap__ZN4chip11DeviceLayer8Internal40GenericThreadStackManagerImpl_OpenThreadI
 // ---------------------------------------------------------------------------
 
 static MatterOnOffPlugin sInterrupteur;  // « Sonde maillage »
-static volatile bool sSuspendue = false;
+// Etat de l'interrupteur, garde dans la NVS comme dans l'exemple
+// MatterOnOffPlugin d'Arduino-ESP32 : relu au demarrage, allume par defaut.
+static Preferences sPreferences;
+static const char *const kCleInterrupteur = "interrupteur";
+static volatile bool sSuspendue = false;  // pose par demarrerMatter(), puis par le rappel
 static bool sThreadPret = false;  // pile Thread creee par Matter.begin()
 static char sMac[13] = "?";
 
@@ -126,8 +132,11 @@ static void hexa(const char *cle, const uint8_t *o, size_t n) {
 //  Matter
 // ---------------------------------------------------------------------------
 
+// Maison change l'interrupteur, ou updateAccessory() applique l'etat relu au
+// demarrage : l'etat est garde pour le prochain demarrage.
 static bool surInterrupteur(bool allume) {
   sSuspendue = !allume;
+  sPreferences.putBool(kCleInterrupteur, allume);
   return true;
 }
 
@@ -137,8 +146,14 @@ static void demarrerMatter() {
     snprintf(sMac, sizeof(sMac), "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   // Avant le premier begin() d'accessoire : c'est lui qui cree le noeud.
   if (!Matter.selectNetwork(MATTER_NETWORK_THREAD)) Serial.println("!! selectNetwork(THREAD) refuse");
-  sInterrupteur.begin(true);
-  sInterrupteur.onChangeOnOff(surInterrupteur);
+  // Etat garde de l'interrupteur (allume au premier demarrage) : la sonde reste
+  // suspendue apres un redemarrage si « Sonde maillage » est eteint dans Maison.
+  sPreferences.begin("sonde", false);
+  const bool allume = sPreferences.getBool(kCleInterrupteur, true);
+  sSuspendue = !allume;
+  sInterrupteur.begin(allume);
+  // onChange, et non onChangeOnOff : updateAccessory() n'appelle que ce rappel-la.
+  sInterrupteur.onChange(surInterrupteur);
   char serie[20];
   snprintf(serie, sizeof(serie), "SONDE-%s", sMac);
   Matter.setVendorName("Maillage Thread");
@@ -148,6 +163,8 @@ static void demarrerMatter() {
   Matter.begin();
   sThreadPret = chip::DeviceLayer::ThreadStackMgrImpl().OTInstance() != nullptr;
   if (!sThreadPret) Serial.println("!! pile Thread absente");
+  // Comme l'exemple officiel : l'etat relu passe par le rappel une fois Matter demarre.
+  sInterrupteur.updateAccessory();
 }
 
 // ---------------------------------------------------------------------------
