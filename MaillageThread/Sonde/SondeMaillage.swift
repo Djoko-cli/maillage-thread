@@ -30,6 +30,12 @@ final class SondeMaillage {
         case reseau
     }
 
+    /// Session reseau perdue : sa cause, telle que l'etat l'a montree, et son heure.
+    struct Perte: Equatable, Sendable {
+        let cause: String
+        let date: Date
+    }
+
     /// Journal du Mac (Console, sous-systeme fr.djoko.maillage) : jamais de donnees du reseau.
     nonisolated static let journal = Logger(subsystem: "fr.djoko.maillage", category: "sonde")
     /// Numero de serie USB de la sonde retenue (l'adresse MAC du C6).
@@ -74,6 +80,10 @@ final class SondeMaillage {
     /// Echec de la derniere operation sur l'acces reseau (autorisation, oubli de la cle) ; nil
     /// apres une reussite.
     private(set) var erreurAcces: String?
+    /// Derniere session reseau perdue, gardee jusqu'a la connexion suivante reussie (l'etat ne
+    /// montre sa cause qu'un instant, avant la reprise) ; effacee par un changement de liaison
+    /// ou l'oubli de la sonde.
+    private(set) var dernierePerte: Perte?
     /// Appele a chaque nouveau maillage, avec l'heure de sa reception (fin de la
     /// tournee) : la fraicheur affichee se compte depuis.
     @ObservationIgnored var surMaillage: ((Maillage, Date) -> Void)?
@@ -219,6 +229,7 @@ final class SondeMaillage {
         preferences.set(l.rawValue, forKey: Self.cleLiaison)
         reprise?.cancel()
         essaisReprise = 0
+        dernierePerte = nil
         switch l {
         case .reseau:
             lancerConnexionReseau()
@@ -248,6 +259,7 @@ final class SondeMaillage {
         liaison = .usb
         preferences.removeObject(forKey: Self.cleLiaison)
         reprise?.cancel()
+        dernierePerte = nil
         deconnecter(.sansSonde)
     }
 
@@ -373,10 +385,11 @@ final class SondeMaillage {
             deconnecter(.absente)
             return
         }
-        // Veille sans reponse (sonde debranchee, redemarree), session perdue : cause montree,
-        // puis reconnexion.
-        let cause = (canalReseau as? any CauseFermeture)?.raisonFermeture
-        deconnecter(.erreur(cause ?? String(localized: "liaison réseau perdue")))
+        // Veille sans reponse (sonde debranchee, redemarree), session perdue : cause montree, et
+        // gardee jusqu'a la connexion suivante reussie, puis reconnexion.
+        let cause = (canalReseau as? any CauseFermeture)?.raisonFermeture ?? String(localized: "liaison réseau perdue")
+        dernierePerte = Perte(cause: cause, date: horloge())
+        deconnecter(.erreur(cause))
         serieEtat = serie
         planifierReprise()
     }
@@ -440,6 +453,7 @@ final class SondeMaillage {
             canalReseau = c
             tenirActivite()
             etat = .connectee(b)
+            dernierePerte = nil
             essaisReprise = 0
             retenirNom(b.nom)
             lancerBoucle()

@@ -457,6 +457,40 @@ struct SondeReseauTests {
         s.oublier()
     }
 
+    /// La cause de la derniere session perdue reste dans Reglages › Sonde (« Dernière perte »)
+    /// pendant la reprise, meme quand un essai echoue a son tour, jusqu'a la connexion suivante
+    /// reussie ; l'heure est celle de la perte.
+    @Test(.timeLimit(.minutes(1))) func dernierePerteGardeeJusquALaReconnexion() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = try Self.prete(p, liaison: .reseau)
+        let horloge = HorlogeFactice(Date(timeIntervalSince1970: 1_790_000_000))
+        let premiere = Self.sonde()
+        let reseau = ReseauFactice([.success(premiere), .failure(ErreurReseau.aucunDefi), .success(Self.sonde())])
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in Self.sonde() }, trousseau: t,
+                              ouvrirReseau: { h, c in try reseau.ouvrir(h, c) },
+                              delaisReprise: [.milliseconds(200)], horloge: { horloge.maintenant })
+        func hauteur() -> CGFloat { NSHostingView(rootView: DernierePerteSonde().environment(s)).fittingSize.height }
+        await s.connecterReseau()
+        #expect(SondeMaillageTests.connectee(s))
+        #expect(s.dernierePerte == nil)
+        #expect(hauteur() == 0)
+        horloge.avancer(60)
+        premiere.fermer()
+        await SondeMaillageTests.attendre { s.dernierePerte != nil }
+        let perdue = SondeMaillage.Perte(cause: String(localized: "liaison réseau perdue"), date: horloge.maintenant)
+        #expect(s.dernierePerte == perdue)
+        #expect(hauteur() > 0, "montree dans les Reglages")
+        // Premiere reprise en echec : l'etat change, la perte reste.
+        #expect(await Self.sonder { reseau.appels.count == 2 && s.etat == .erreur(ErreurReseau.aucunDefi.localizedDescription) })
+        #expect(s.dernierePerte == perdue)
+        // Seconde reprise reussie : la perte s'efface.
+        #expect(await Self.sonder { reseau.appels.count == 3 && SondeMaillageTests.connectee(s) })
+        #expect(s.dernierePerte == nil)
+        #expect(hauteur() == 0)
+        s.oublier()
+    }
+
     /// Une activite est tenue pendant une session reseau (App Nap retarderait la veille et les
     /// tournees), relachee a sa fin ; rien de tel en USB.
     @Test(.timeLimit(.minutes(1))) func activitePendantLaSessionReseau() async throws {

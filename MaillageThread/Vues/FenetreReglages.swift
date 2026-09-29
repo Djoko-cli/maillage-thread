@@ -108,6 +108,7 @@ struct FenetreReglages: View {
                         }
                     }
                     LabeledContent("État", value: Self.texteEtatSonde(sonde.etat, nom: sonde.nomEtat))
+                    DernierePerteSonde()
                     if case .connectee(let b) = sonde.etat {
                         LabeledContent("Firmware", value: b.version)
                         let qr = b.qr.flatMap { $0.isEmpty ? nil : $0 }
@@ -283,6 +284,22 @@ struct AccesReseauSonde: View {
         Text("La clé passe par l'USB, sonde branchée, et reste dans le trousseau de ce Mac. Avec la liaison « Réseau Thread », la sonde peut être débranchée et alimentée ailleurs.")
             .font(.caption)
             .foregroundStyle(.secondary)
+    }
+}
+
+/// Derniere session reseau perdue (Reglages › Sonde) : depuis quand, et sa cause, gardees
+/// jusqu'a la connexion suivante reussie, quand l'etat est deja passe a la reprise (sonde
+/// promenee dans la maison). Rien en USB.
+struct DernierePerteSonde: View {
+    @Environment(SondeMaillage.self) private var sonde
+
+    var body: some View {
+        if sonde.liaison == .reseau, let perte = sonde.dernierePerte {
+            TimelineView(.periodic(from: perte.date, by: 1)) { contexte in
+                LabeledContent("Dernière perte", value: FicheNoeud.relatif(perte.date, contexte.date))
+            }
+            Text(perte.cause).font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 
