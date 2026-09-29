@@ -260,6 +260,53 @@ struct TourneeTests {
         #expect(mem2.identifies.count == 3)
     }
 
+    /// Table des routeurs de la sonde (FED) : les paires RLOC16 ↔ ExtMac des routeurs qu'elle
+    /// entend sont retenues comme celle de son parent, et donnent leur ExtMac aux routeurs
+    /// muets ; une demande par tournee. La sonde les entend ensuite moins (elle a bouge) : les
+    /// paires restent (ExtMac inventees).
+    @Test func routeursEntendus() async throws {
+        let entendus: [UInt16: String] = [0xE400: "E0000000000000E4", 0xCC00: "E0000000000000CC"]
+        let sonde = try SondeRejouee.capture(table: SondeRejouee.table(entendus: entendus))
+        let (m, mem) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(m.routeur(57)?.extMac == "E0000000000000E4")
+        #expect(m.routeur(51)?.extMac == "E0000000000000CC")
+        #expect(m.routeur(1)?.extMac == nil, "pas entendu")
+        #expect(m.routeur(43)?.extMac == "E000000000000007", "le parent, par etat")
+        #expect(mem.identites[0xE400] == "E0000000000000E4" && mem.identites[0xCC00] == "E0000000000000CC")
+        #expect(mem.identites[0xAC00] == "E000000000000007")
+        #expect(await sonde.registre.tables == 1)
+
+        let ailleurs = try SondeRejouee.capture(table: SondeRejouee.table(entendus: [0xE400: "E0000000000000E4"]))
+        let (m2, mem2) = try #require(try await Tournee.executer(ailleurs, memoire: mem, maintenant: Self.t0 + 300))
+        #expect(m2.routeur(51)?.extMac == "E0000000000000CC", "retenue d'une tournee a l'autre")
+        #expect(mem2.identites[0xCC00] == "E0000000000000CC")
+        #expect(await ailleurs.registre.tables == 1)
+    }
+
+    /// Pas de table (firmware sans `routeurs`, verrou d'OpenThread refuse) : la tournee continue,
+    /// sans ces paires.
+    @Test func sansTable() async throws {
+        let sonde = try SondeRejouee.capture(table: nil)
+        let (m, mem) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(m.routeurs.map(\.id) == [1, 20, 24, 43, 45, 51, 57])
+        #expect(mem.identites == [0xAC00: "E000000000000007", 0x5000: "E000000000000002", 0x6000: "E000000000000003"])
+        #expect(await sonde.registre.tables == 1)
+    }
+
+    /// Une ExtMac n'a qu'un RLOC16 : un routeur qui a change d'identifiant (redemarrage) perd
+    /// l'ancienne paire, qui ne donne plus son ExtMac a l'identifiant libere.
+    @Test func identiteDeplacee() async throws {
+        let sonde = try SondeRejouee.capture(table: SondeRejouee.table(entendus: [0xE400: "E0000000000000E4"]))
+        var mem = MemoireTournee()
+        mem.partition = "46CBEBCD"
+        mem.identites[0x0400] = "E0000000000000E4"
+        let (m, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0))
+        #expect(mem2.identites[0x0400] == nil)
+        #expect(mem2.identites[0xE400] == "E0000000000000E4")
+        #expect(m.routeur(1)?.extMac == nil)
+        #expect(m.routeur(57)?.extMac == "E0000000000000E4")
+    }
+
     /// Autre partition (panne, fusion) : les identifiants de routeur y sont
     /// redistribues ; ce qui etait retenu de l'ancienne ne sert plus.
     @Test func autrePartition() async throws {
@@ -288,18 +335,19 @@ struct TourneeTests {
         let sonde = SondeRejouee(etatSonde: e, reponses: [:])
         #expect(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0) == nil)
         #expect(await sonde.registre.requetes.isEmpty)
+        #expect(await sonde.registre.tables == 0, "ni la table des routeurs")
     }
 
     /// Avancement de la premiere tournee : les six etapes dans l'ordre, chacune annoncee a 0
     /// puis une requete a la fois jusqu'a son total, connu des son debut ici. Les totaux sont
-    /// les requetes envoyees : 48 pour le balayage.
+    /// les requetes envoyees : `etat` et `routeurs` pour la sonde, 48 pour le balayage.
     @Test func avancementPremiere() async throws {
         let sonde = try SondeRejouee.capture()
         let releve = ReleveAvancement()
         _ = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
                                                    avancement: { releve.noter($0) }))
         #expect(releve.etapes == AvancementTournee.Etape.allCases)
-        let totaux: [AvancementTournee.Etape: Int] = [.etatSonde: 1, .listeRouteurs: 1, .routeurs: 7, .pileEtReseau: 3,
+        let totaux: [AvancementTournee.Etape: Int] = [.etatSonde: 2, .listeRouteurs: 1, .routeurs: 7, .pileEtReseau: 3,
                                                        .balayage: 48, .identites: 6]
         for (etape, total) in totaux {
             let a = releve.de(etape)
@@ -307,7 +355,8 @@ struct TourneeTests {
             #expect(a.allSatisfy { $0.total == total }, "\(etape)")
         }
         let requetes = await sonde.registre.requetes
-        #expect(requetes.count == totaux.values.reduce(0, +) - 1, "une requete diag par pas, hors etat de la sonde")
+        #expect(requetes.count == totaux.values.reduce(0, +) - 2, "une requete diag par pas, hors etat et routeurs de la sonde")
+        #expect(await sonde.registre.tables == 1)
         #expect(requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48)
     }
 
@@ -368,6 +417,12 @@ struct TourneeTests {
             return
         }
         let sonde = SondeRejouee(etatSonde: e, reponses: [:])
-        #expect(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0) == nil)
+        let releve = ReleveAvancement()
+        #expect(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                           avancement: { releve.noter($0) }) == nil)
+        #expect(await sonde.registre.tables == 0, "pas de table hors d'une partition")
+        #expect(releve.avancements == [AvancementTournee(etape: .etatSonde, fait: 0, total: 2),
+                                       AvancementTournee(etape: .etatSonde, fait: 1, total: 2)],
+                "l'etape s'arrete avant son total")
     }
 }
