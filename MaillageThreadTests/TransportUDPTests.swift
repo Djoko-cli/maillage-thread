@@ -165,6 +165,22 @@ struct TransportUDPTests {
         #expect(ErreurReseau.pasDeRoute.localizedDescription.contains("halo-routes"))
     }
 
+    /// La vraie connexion (Network.framework), sur la boucle locale seulement, vers un port sans
+    /// ecoute (9, discard) : prete, trois SALUT partis, puis port injoignable (ICMPv6, parfois
+    /// seulement apres l'annulation : constat de Halo) ou aucun DEFI. Aucun trafic hors de ce Mac,
+    /// aucun port ouvert en ecoute (les tests tournent dans l'app sandboxee, sans droit de serveur).
+    @Test func connexionReelleSurLaBoucleLocale() async throws {
+        var r = Self.rapides()
+        r.port = 9
+        let t = TransportUDP(hote: "::1", cle: VecteursH1.psk, reglages: r)
+        do {
+            _ = try await t.ouvrir()
+            Issue.record("session sans pair ?")
+        } catch let e as ErreurReseau {
+            #expect(e == .portInjoignable || e == .aucunDefi, "\(e)")
+        }
+    }
+
     /// La cle du transport n'apparait pas dans un dump.
     @Test func cleMasquee() {
         let t = Self.transport(nil)
