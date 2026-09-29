@@ -1,5 +1,5 @@
 // ===========================================================================
-//  Sonde de maillage Thread : firmware D'ESSAI (spec sonde, section 7)
+//  Sonde de maillage Thread, firmware 1.0.0 (spec de la sonde, sections 2 et 3)
 //
 //  Noeud Matter sur Thread, en MED : il recoit en permanence mais ne relaie
 //  rien, et ne devient jamais le parent de personne. Maison lui donne les
@@ -9,18 +9,19 @@
 //  la sonde fabrique elle-meme la requete DIAG_GET (CoAP POST d/dg, TLV
 //  Type List) et l'envoie au port TMF 61631 du noeud vise. La reponse revient
 //  sur le port CoAP de la sonde ; ses TLV partent en hexa, sans decodage :
-//  c'est l'app qui decode.
+//  c'est l'app qui decode. Jusqu'a 8 requetes en vol, reperees par leur id.
 //
 //  USB : une commande par ligne ; chaque reponse est une ligne machine,
 //  RS (0x1E) + JSON compact en ASCII + LF, 4096 octets au plus.
-//    bonjour                     produit, version, appairage (code tant que
-//                                la sonde n'est pas dans Maison)
-//    etat                        role, RLOC16, parent, partition, chef...
-//    voisins                     table des voisins (le parent, pour un MED)
-//    diag <cible> <t,t,...> <id> DIAG_GET vers <cible> : RLOC16 en 4 hexa
-//                                (adresse RLOC formee sur le prefixe du
-//                                reseau maille) ou adresse IPv6
-//    oubli                       desappaire la sonde et redemarre
+//    bonjour                          produit, version, appairage (code tant
+//                                     que la sonde n'est pas dans Maison)
+//    etat                             role, RLOC16, ExtMac, parent, partition...
+//    voisins                          table des voisins (le parent, pour un MED)
+//    diag <cible> <t,t,...> <id> [ms] DIAG_GET vers <cible> : RLOC16 en 4 hexa
+//                                     (adresse RLOC formee sur le prefixe du
+//                                     reseau maille) ou adresse IPv6 ; delai de
+//                                     3 a 60 s, 45 s par defaut
+//    oubli                            desappaire la sonde et redemarre
 //
 //  Dans Maison : un interrupteur « Sonde maillage », allume par defaut.
 //  Eteint, la sonde refuse les requetes (erreur « suspendue »).
@@ -39,7 +40,7 @@
 #include <openthread/thread.h>
 #include <stdarg.h>
 
-static const char *const kVersion = "0.1.0-essai";
+static const char *const kVersion = "1.0.0";
 
 // ---------------------------------------------------------------------------
 //  MED des l'init de Thread (repris du pont Halo, benq matter_bridge.cpp) :
@@ -181,17 +182,17 @@ static void cmdEtat() {
   otInstance *ot = esp_openthread_get_instance();
   const otDeviceRole role = otThreadGetDeviceRole(ot);
   ajoute(",\"role\":\"%s\",\"rloc16\":\"%04X\"", otThreadDeviceRoleToString(role), otThreadGetRloc16(ot));
+  const otExtAddress *ext = otLinkGetExtendedAddress(ot);
+  if (ext) hexa("ext", ext->m8, sizeof(ext->m8));
   const otLinkModeConfig mode = otThreadGetLinkMode(ot);
   ajoute(",\"mode\":\"%s%s%s\"", mode.mRxOnWhenIdle ? "r" : "", mode.mDeviceType ? "d" : "", mode.mNetworkData ? "n" : "");
   otRouterInfo parent;
   if (role == OT_DEVICE_ROLE_CHILD && otThreadGetParentInfo(ot, &parent) == OT_ERROR_NONE) {
-    int8_t moyen = 0, dernier = 0;
+    int8_t moyen = 0;
     otThreadGetParentAverageRssi(ot, &moyen);
-    otThreadGetParentLastRssi(ot, &dernier);
     ajoute(",\"parent\":{\"rloc16\":\"%04X\"", parent.mRloc16);
     hexa("ext", parent.mExtAddress.m8, sizeof(parent.mExtAddress.m8));
-    ajoute(",\"lqIn\":%u,\"lqOut\":%u,\"rssi\":%d,\"rssiDernier\":%d,\"age\":%u}", parent.mLinkQualityIn,
-           parent.mLinkQualityOut, moyen, dernier, parent.mAge);
+    ajoute(",\"lqIn\":%u,\"lqOut\":%u,\"rssi\":%d}", parent.mLinkQualityIn, parent.mLinkQualityOut, moyen);
   } else {
     ajoute(",\"parent\":null");
   }
@@ -236,43 +237,59 @@ static void cmdVoisins() {
 }
 
 // ---------------------------------------------------------------------------
-//  DIAG_GET par CoAP
+//  DIAG_GET par CoAP, 8 en vol
 // ---------------------------------------------------------------------------
 
 static constexpr uint16_t kPortTmf = 61631;
 static constexpr uint8_t kTlvTypeList = 18;
 static constexpr size_t kTlvMax = 32;
+static constexpr size_t kEnVol = 8;
+static constexpr uint32_t kDelaiDefaut = 45000, kDelaiMin = 3000, kDelaiMax = 60000;
 
 static bool sCoapDemarre = false;
-static volatile bool sEnCours = false;  // une requete a la fois
-static volatile bool sFini = false;     // reponse (ou echec) a imprimer
 
-// Rempli par le rappel CoAP (tache OpenThread), lu par loop() quand sFini.
-static struct {
+// Un emplacement par requete en vol. `enVol` et `finie` passent de la tache
+// OpenThread (rappel CoAP) a celle de loop() ; le reste est ecrit avant.
+struct Requete {
+  volatile bool enVol;
+  volatile bool finie;
   uint32_t id;
   char cible[48];
   uint32_t debutMs, finMs;
   otError erreur;
   uint8_t code;  // code CoAP de la reponse
-  uint8_t charge[1800];
+  uint8_t charge[1024];
   uint16_t longueur;
   bool tronquee;
-} sDiag;
+};
+static Requete sRequetes[kEnVol];
 
-static void surReponse(void *, otMessage *msg, const otMessageInfo *, otError erreur) {
-  sDiag.finMs = millis();
-  sDiag.erreur = erreur;
-  sDiag.longueur = 0;
-  sDiag.tronquee = false;
+static void surReponse(void *contexte, otMessage *msg, const otMessageInfo *, otError erreur) {
+  Requete &r = sRequetes[(uintptr_t)contexte];
+  r.finMs = millis();
+  r.erreur = erreur;
+  r.longueur = 0;
+  r.tronquee = false;
   if (erreur == OT_ERROR_NONE && msg) {
-    sDiag.code = (uint8_t)otCoapMessageGetCode(msg);
+    r.code = (uint8_t)otCoapMessageGetCode(msg);
     const uint16_t debutCharge = otMessageGetOffset(msg);
     const uint16_t total = otMessageGetLength(msg) - debutCharge;
-    const uint16_t n = total > sizeof(sDiag.charge) ? sizeof(sDiag.charge) : total;
-    sDiag.longueur = otMessageRead(msg, debutCharge, sDiag.charge, n);
-    sDiag.tronquee = n < total;
+    const uint16_t n = total > sizeof(r.charge) ? sizeof(r.charge) : total;
+    r.longueur = otMessageRead(msg, debutCharge, r.charge, n);
+    r.tronquee = n < total;
   }
-  sFini = true;
+  r.finie = true;
+}
+
+// Reprises CoAP reglees pour que l'echec tombe au bout du delai demande :
+// attente totale = accuse x (2^(reprises+1) - 1), facteur aleatoire de 1.
+static otCoapTxParameters parametres(uint32_t delaiMs) {
+  const uint8_t reprises = delaiMs < 10000 ? 1 : 3;
+  const uint32_t facteur = (1u << (reprises + 1)) - 1;
+  uint32_t accuse = delaiMs / facteur;
+  if (accuse < 1000) accuse = 1000;  // plancher d'OpenThread
+  otCoapTxParameters p = {accuse, 1, 1, reprises};
+  return p;
 }
 
 static void repondreDiagErreur(uint32_t id, const char *cible, const char *erreur) {
@@ -281,18 +298,29 @@ static void repondreDiagErreur(uint32_t id, const char *cible, const char *erreu
   fin();
 }
 
-// diag <cible> <t,t,...> <id>
+// diag <cible> <t,t,...> <id> [<delai ms>]
 static void cmdDiag(char *args) {
   char *cible = strtok(args, " ");
   char *liste = strtok(nullptr, " ");
   char *idTexte = strtok(nullptr, " ");
+  char *delaiTexte = strtok(nullptr, " ");
   const uint32_t id = idTexte ? strtoul(idTexte, nullptr, 10) : 0;
-  if (!cible || !liste || !idTexte || strlen(cible) >= sizeof(sDiag.cible)) {
+  if (!cible || !liste || !idTexte || strlen(cible) >= sizeof(sRequetes[0].cible)) {
     repondreDiagErreur(id, "", "syntaxe");
     return;
   }
   if (sSuspendue) return repondreDiagErreur(id, cible, "suspendue");
-  if (sEnCours) return repondreDiagErreur(id, cible, "occupee");
+  uint32_t delai = delaiTexte ? strtoul(delaiTexte, nullptr, 10) : kDelaiDefaut;
+  if (delai < kDelaiMin) delai = kDelaiMin;
+  if (delai > kDelaiMax) delai = kDelaiMax;
+
+  size_t libre = kEnVol;
+  for (size_t i = 0; i < kEnVol; i++)
+    if (!sRequetes[i].enVol) {
+      libre = i;
+      break;
+    }
+  if (libre == kEnVol) return repondreDiagErreur(id, cible, "occupee");
 
   uint8_t types[kTlvMax];
   size_t nTypes = 0;
@@ -344,15 +372,15 @@ static void cmdDiag(char *args) {
     memset(&info, 0, sizeof(info));
     info.mPeerAddr = adresse;
     info.mPeerPort = kPortTmf;
-    // Accuse attendu 2 s, 3 reprises : 45 s au plus (un endormi repond a son reveil).
-    otCoapTxParameters p = {2000, 3, 2, 3};
-    sDiag.id = id;
-    snprintf(sDiag.cible, sizeof(sDiag.cible), "%s", cible);
-    sDiag.debutMs = millis();
-    sFini = false;
-    sEnCours = true;
-    e = otCoapSendRequestWithParameters(ot, msg, &info, surReponse, nullptr, &p);
-    if (e != OT_ERROR_NONE) sEnCours = false;
+    const otCoapTxParameters p = parametres(delai);
+    Requete &r = sRequetes[libre];
+    r.id = id;
+    snprintf(r.cible, sizeof(r.cible), "%s", cible);
+    r.debutMs = millis();
+    r.finie = false;
+    r.enVol = true;
+    e = otCoapSendRequestWithParameters(ot, msg, &info, surReponse, (void *)(uintptr_t)libre, &p);
+    if (e != OT_ERROR_NONE) r.enVol = false;
   }
   if (e != OT_ERROR_NONE && msg) otMessageFree(msg);
   libereOt();
@@ -363,17 +391,16 @@ static void cmdDiag(char *args) {
   }
 }
 
-static void imprimerDiag() {
+static void imprimerDiag(const Requete &r) {
   debut("diag");
-  ajoute(",\"id\":%lu,\"cible\":\"%s\",\"ms\":%lu", (unsigned long)sDiag.id, sDiag.cible,
-         (unsigned long)(sDiag.finMs - sDiag.debutMs));
-  if (sDiag.erreur == OT_ERROR_NONE) {
-    ajoute(",\"ok\":true,\"code\":\"%u.%02u\"", sDiag.code >> 5, sDiag.code & 0x1F);
-    hexa("tlv", sDiag.charge, sDiag.longueur);
-    if (sDiag.tronquee) ajoute(",\"tronquee\":true");
+  ajoute(",\"id\":%lu,\"cible\":\"%s\",\"ms\":%lu", (unsigned long)r.id, r.cible, (unsigned long)(r.finMs - r.debutMs));
+  if (r.erreur == OT_ERROR_NONE) {
+    ajoute(",\"ok\":true,\"code\":\"%u.%02u\"", r.code >> 5, r.code & 0x1F);
+    hexa("tlv", r.charge, r.longueur);
+    if (r.tronquee) ajoute(",\"tronquee\":true");
   } else {
     ajoute(",\"ok\":false,\"erreur\":\"%s\"",
-           sDiag.erreur == OT_ERROR_RESPONSE_TIMEOUT ? "delai" : otThreadErrorToString(sDiag.erreur));
+           r.erreur == OT_ERROR_RESPONSE_TIMEOUT ? "delai" : otThreadErrorToString(r.erreur));
   }
   fin();
 }
@@ -421,10 +448,12 @@ void loop() {
       sCommande[sCmdLong++] = (char)o;
     }
   }
-  if (sFini) {
-    sFini = false;
-    imprimerDiag();
-    sEnCours = false;
+  for (Requete &r : sRequetes) {
+    if (r.enVol && r.finie) {
+      imprimerDiag(r);
+      r.finie = false;
+      r.enVol = false;
+    }
   }
   delay(5);
 }
