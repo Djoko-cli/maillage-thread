@@ -1457,34 +1457,34 @@
         }
       }
     },
-    "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Autoriser l'accès réseau »)." : {
+    "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Régénérer une clé »)." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The probe does not answer: powered off, not yet in the Thread network, or a key different from this Mac's (plug it in over USB, then “Allow Network Access”)."
+            "value" : "The probe does not answer: powered off, not yet in the Thread network, or a key different from this Mac's (plug it in over USB, then “Regenerate Key”)."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Autoriser l'accès réseau »)."
+            "value" : "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Régénérer une clé »)."
           }
         }
       }
     },
-    "La sonde refuse l'accès réseau : la brancher en USB, puis « Autoriser l'accès réseau »." : {
+    "La sonde refuse l'accès réseau : la brancher en USB, puis « Régénérer une clé »." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The probe refuses network access: plug it in over USB, then “Allow Network Access”."
+            "value" : "The probe refuses network access: plug it in over USB, then “Regenerate Key”."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La sonde refuse l'accès réseau : la brancher en USB, puis « Autoriser l'accès réseau »."
+            "value" : "La sonde refuse l'accès réseau : la brancher en USB, puis « Régénérer une clé »."
           }
         }
       }

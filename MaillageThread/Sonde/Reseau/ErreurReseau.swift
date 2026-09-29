@@ -38,9 +38,9 @@ enum ErreurReseau: Error, Sendable, Equatable, LocalizedError {
         case .nomIntrouvable(let hote):
             String(localized: "Sonde introuvable (\(hote)) : éteinte, hors du réseau Thread, ou routeurs de bordure injoignables.")
         case .portInjoignable:
-            String(localized: "La sonde refuse l'accès réseau : la brancher en USB, puis « Autoriser l'accès réseau ».")
+            String(localized: "La sonde refuse l'accès réseau : la brancher en USB, puis « Régénérer une clé ».")
         case .aucunDefi:
-            String(localized: "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Autoriser l'accès réseau »).")
+            String(localized: "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Régénérer une clé »).")
         case .cheminPerdu(let raison):
             String(localized: "Connexion réseau perdue : \(raison)")
         case .autre(let raison):
