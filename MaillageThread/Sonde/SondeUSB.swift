@@ -33,8 +33,44 @@ struct CanalSerie: CanalSonde {
     func fermer() { liaison.fermer() }
 }
 
+/// Attentes d'une commande sans id (`bonjour`, `etat`, `routeurs`) : les reponses les servent
+/// dans l'ordre. Chaque attente a son jeton : son echeance n'expire qu'elle, et plus rien une
+/// fois qu'elle est servie (par le reseau, une reponse lente ne fait plus echouer la requete
+/// suivante).
+private struct FileAttentes<Valeur: Sendable> {
+    private var attentes: [(jeton: Int, suite: CheckedContinuation<Valeur?, Never>)] = []
+
+    var estVide: Bool { attentes.isEmpty }
+
+    mutating func ajouter(_ jeton: Int, _ suite: CheckedContinuation<Valeur?, Never>) {
+        attentes.append((jeton, suite))
+    }
+
+    /// La premiere attente recoit `valeur` ; rien sans attente.
+    mutating func servir(_ valeur: Valeur?) {
+        guard !attentes.isEmpty else { return }
+        attentes.removeFirst().suite.resume(returning: valeur)
+    }
+
+    /// Echeance de l'attente `jeton` : nil pour elle si elle attend encore. Rend son rang dans
+    /// la file (0 : la premiere), nil si elle est deja servie.
+    @discardableResult
+    mutating func expirer(_ jeton: Int) -> Int? {
+        guard let i = attentes.firstIndex(where: { $0.jeton == jeton }) else { return nil }
+        attentes.remove(at: i).suite.resume(returning: nil)
+        return i
+    }
+
+    /// Liaison fermee : toutes recoivent nil.
+    mutating func liberer() {
+        attentes.forEach { $0.suite.resume(returning: nil) }
+        attentes = []
+    }
+}
+
 /// Sonde branchee en USB : envoie les commandes et apparie les reponses, par
 /// ordre pour `bonjour`, `etat` et `routeurs`, par id pour `diag` (8 en vol, dans le desordre).
+/// Chaque requete a sa propre echeance.
 actor SondeUSB: InterlocuteurSonde {
     enum Erreur: Error, LocalizedError, Equatable {
         case fermee
@@ -62,10 +98,12 @@ actor SondeUSB: InterlocuteurSonde {
     private let marge: Duration
     let delaiCommande: Duration
     private var prochainId = 1
+    /// Jetons des attentes de `bonjour`, `etat` et `routeurs` (jamais envoyes a la sonde).
+    private var prochainJeton = 1
     private var attenteDiag: [Int: (cible: UInt16, suite: CheckedContinuation<ResultatDiag, Never>)] = [:]
-    private var attenteEtat: [CheckedContinuation<EtatSonde?, Never>] = []
-    private var attenteBonjour: [CheckedContinuation<Bonjour?, Never>] = []
-    private var attenteRouteurs: [CheckedContinuation<[RouteurSonde]?, Never>] = []
+    private var attenteEtat = FileAttentes<EtatSonde>()
+    private var attenteBonjour = FileAttentes<Bonjour>()
+    private var attenteRouteurs = FileAttentes<[RouteurSonde]>()
     /// Parties de la table des routeurs deja recues (lignes `suite`), en attendant la derniere.
     private var routeursRecus: [RouteurSonde] = []
     private var attenteCle: [(id: Int, suite: CheckedContinuation<Result<ReponseCle, Erreur>?, Never>)] = []
@@ -108,12 +146,13 @@ actor SondeUSB: InterlocuteurSonde {
 
     func bonjour() async throws -> Bonjour {
         guard !fermee else { throw Erreur.fermee }
+        let jeton = nouveauJeton()
         let b = await withCheckedContinuation { c in
-            attenteBonjour.append(c)
+            attenteBonjour.ajouter(jeton, c)
             canal.envoyer(CommandeSonde.bonjour.ligne)
             Task {
                 try? await Task.sleep(for: self.delaiCommande)
-                self.expirerBonjour()
+                self.attenteBonjour.expirer(jeton)
             }
         }
         guard let b else { throw fermee ? Erreur.fermee : Erreur.sansReponse("bonjour") }
@@ -122,12 +161,13 @@ actor SondeUSB: InterlocuteurSonde {
 
     func etat() async throws -> EtatSonde {
         guard !fermee else { throw Erreur.fermee }
+        let jeton = nouveauJeton()
         let e = await withCheckedContinuation { c in
-            attenteEtat.append(c)
+            attenteEtat.ajouter(jeton, c)
             canal.envoyer(CommandeSonde.etat.ligne)
             Task {
                 try? await Task.sleep(for: self.delaiCommande)
-                self.expirerEtat()
+                self.attenteEtat.expirer(jeton)
             }
         }
         guard let e else { throw fermee ? Erreur.fermee : Erreur.sansReponse("etat") }
@@ -138,16 +178,22 @@ actor SondeUSB: InterlocuteurSonde {
     /// pas : delai depasse (firmware sans `routeurs`), ou `occupee` (verrou d'OpenThread).
     func routeurs() async throws -> [RouteurSonde] {
         guard !fermee else { throw Erreur.fermee }
+        let jeton = nouveauJeton()
         let t = await withCheckedContinuation { c in
-            attenteRouteurs.append(c)
+            attenteRouteurs.ajouter(jeton, c)
             canal.envoyer(CommandeSonde.routeurs.ligne)
             Task {
                 try? await Task.sleep(for: self.delaiCommande)
-                self.expirerRouteurs()
+                self.expirerRouteurs(jeton)
             }
         }
         guard let t else { throw fermee ? Erreur.fermee : Erreur.sansReponse("routeurs") }
         return t
+    }
+
+    private func nouveauJeton() -> Int {
+        defer { prochainJeton += 1 }
+        return prochainJeton
     }
 
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
@@ -194,19 +240,10 @@ actor SondeUSB: InterlocuteurSonde {
         attenteCle.remove(at: i).suite.resume(returning: nil)
     }
 
-    private func expirerBonjour() {
-        if !attenteBonjour.isEmpty { attenteBonjour.removeFirst().resume(returning: nil) }
-    }
-
-    private func expirerEtat() {
-        if !attenteEtat.isEmpty { attenteEtat.removeFirst().resume(returning: nil) }
-    }
-
-    /// Delai depasse : la table en cours de reception est abandonnee avec son attente.
-    private func expirerRouteurs() {
-        guard !attenteRouteurs.isEmpty else { return }
-        attenteRouteurs.removeFirst().resume(returning: nil)
-        routeursRecus = []
+    /// Delai de la requete `jeton` depasse : si elle attend encore et que la table en cours de
+    /// reception lui revenait (premiere de la file), cette table est abandonnee avec elle.
+    private func expirerRouteurs(_ jeton: Int) {
+        if attenteRouteurs.expirer(jeton) == 0 { routeursRecus = [] }
     }
 
     /// Partie de la table : gardee jusqu'a la derniere (`suite` faux), qui rend la table entiere
@@ -219,7 +256,7 @@ actor SondeUSB: InterlocuteurSonde {
         }
         let table = p.erreur == nil ? routeursRecus : nil
         routeursRecus = []
-        if !attenteRouteurs.isEmpty { attenteRouteurs.removeFirst().resume(returning: table) }
+        attenteRouteurs.servir(table)
     }
 
     private func expirerDiag(_ id: Int) {
@@ -232,14 +269,14 @@ actor SondeUSB: InterlocuteurSonde {
         case .diag(let r)?:
             attenteDiag.removeValue(forKey: r.id)?.suite.resume(returning: r)
         case .etat(let e)?:
-            if !attenteEtat.isEmpty { attenteEtat.removeFirst().resume(returning: e) }
+            attenteEtat.servir(e)
         case .routeurs(let p)?:
             recevoirRouteurs(p)
         case .bonjour(let b)?:
-            if attenteBonjour.isEmpty {
+            if attenteBonjour.estVide {
                 bonjourSpontane = b
             } else {
-                attenteBonjour.removeFirst().resume(returning: b)
+                attenteBonjour.servir(b)
             }
         case .cle(let c)?:
             if let i = attenteCle.firstIndex(where: { $0.id == c.id }) { attenteCle.remove(at: i).suite.resume(returning: .success(c)) }
@@ -258,12 +295,9 @@ actor SondeUSB: InterlocuteurSonde {
             a.suite.resume(returning: ResultatDiag(id: id, cible: String(format: "%04X", a.cible), ok: false, erreur: "fermee"))
         }
         attenteDiag = [:]
-        attenteEtat.forEach { $0.resume(returning: nil) }
-        attenteEtat = []
-        attenteBonjour.forEach { $0.resume(returning: nil) }
-        attenteBonjour = []
-        attenteRouteurs.forEach { $0.resume(returning: nil) }
-        attenteRouteurs = []
+        attenteEtat.liberer()
+        attenteBonjour.liberer()
+        attenteRouteurs.liberer()
         routeursRecus = []
         attenteCle.forEach { $0.suite.resume(returning: nil) }
         attenteCle = []

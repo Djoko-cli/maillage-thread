@@ -95,6 +95,24 @@ struct CanalReseauTests {
         await s.fermer()
     }
 
+    /// Deux `etat` lents de suite par le reseau, comme au debut d'une tournee (`SondeMaillage`,
+    /// puis `Tournee`) : chacun n'est servi qu'au second renvoi. L'echeance du premier, deja
+    /// servi, n'expire pas le second, qui aboutit dans son propre delai (ici renvois a 0,4 et
+    /// 0,8 s, attente de 1,2 s : l'app divisee par 5, renvois a 2 et 4 s, attente de 6 s).
+    @Test(.timeLimit(.minutes(1))) func deuxEtatLentsDeSuite() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        var reglages = Self.rapides()
+        reglages.renvois = [.milliseconds(400), .milliseconds(800)]
+        let s = SondeUSB(canal: try await Self.canal(carte, reglages: reglages), delaiCommande: .milliseconds(1200))
+        try await s.demarrer {}
+        carte.perdre(2)
+        #expect(try await s.etat().estAttachee)
+        carte.perdre(2)
+        #expect(try await s.etat().estAttachee, "le second, servi apres l'echeance du premier")
+        #expect(carte.perdus == 4)
+        await s.fermer()
+    }
+
     /// Une tournee entiere par le reseau : le maillage du reseau minimal, table des routeurs
     /// comprise (la carte simulee repond a `routeurs`, sans attente du delai).
     @Test func tourneeParLeReseau() async throws {

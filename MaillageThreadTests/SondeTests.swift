@@ -360,6 +360,37 @@ struct SondeUSBTests {
         await #expect(throws: SondeUSB.Erreur.fermee) { try await s.demarrer {} }
         #expect(journal.cycle.isEmpty)
     }
+
+    /// L'echeance d'une requete deja servie n'expire pas la suivante : la premiere est servie
+    /// tard (a 0,45 s, delai de 0,8 s), la seconde part aussitot et sa reponse arrive a 0,9 s,
+    /// apres l'echeance de la premiere (0,8 s) et avant la sienne (1,25 s).
+    @Test(.timeLimit(.minutes(1)), arguments: ["bonjour", "etat", "routeurs"])
+    func echeanceDUneRequeteServie(_ commande: String) async throws {
+        let canal = CanalRejoue { _ in [] }
+        let s = SondeUSB(canal: canal, delaiCommande: .milliseconds(800))
+        try await s.demarrer {}
+        let reponse = switch commande {
+        case "bonjour": CanalRejoue.bonjour
+        case "etat": CanalRejoue.etatDetache
+        default: CanalRejoue.routeurs([("0400", nil)], suite: false)
+        }
+        @Sendable func requete() async throws {
+            switch commande {
+            case "bonjour": _ = try await s.bonjour()
+            case "etat": _ = try await s.etat()
+            default: _ = try await s.routeurs()
+            }
+        }
+        let premiere = Task { try await requete() }
+        try await Task.sleep(for: .milliseconds(450))
+        canal.emettre([reponse])
+        try await premiere.value
+        let seconde = Task { try await requete() }
+        try await Task.sleep(for: .milliseconds(450))
+        canal.emettre([reponse])
+        try await seconde.value
+        #expect(canal.envoyes == [commande + "\n", commande + "\n"])
+    }
 }
 
 @MainActor
