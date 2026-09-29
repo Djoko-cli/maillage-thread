@@ -129,6 +129,18 @@ struct BarreOutils: View {
         mode == .direct && dossierChoisi
     }
 
+    /// Aide du bouton rafraichir : ce qu'il lancera vraiment. Le reseau toujours ; une tournee
+    /// si la sonde est connectee et libre (`SondeMaillage.tourneeAuRafraichir`) ; les noms de
+    /// Maison si le passeur sera lance (`lancePasseur`).
+    static func aideRafraichir(tournee: Bool, passeur: Bool) -> String {
+        switch (tournee, passeur) {
+        case (true, true): String(localized: "Rafraîchir : réseau, tournée de la sonde et noms de Maison")
+        case (true, false): String(localized: "Rafraîchir : réseau et tournée de la sonde")
+        case (false, true): String(localized: "Rafraîchir : réseau et noms de Maison")
+        case (false, false): String(localized: "Rafraîchir : réseau")
+        }
+    }
+
     var body: some View {
         GlassEffectContainer(spacing: 8) {
             HStack(spacing: 6) {
@@ -164,7 +176,9 @@ struct BarreOutils: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.glass)
-                .help("Rafraîchir : réseau, tournée de la sonde et noms de Maison")
+                .help(Self.aideRafraichir(tournee: sonde.tourneeAuRafraichir,
+                                          passeur: Self.lancePasseur(mode: surveillance.mode,
+                                                                     dossierChoisi: nomsMaison.dossier != nil)))
             }
         }
     }

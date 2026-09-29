@@ -97,6 +97,11 @@ final class SondeMaillage {
         }
     }
 
+    /// `rafraichir` lancerait une tournee : sonde connectee, pas de tournee en cours.
+    var tourneeAuRafraichir: Bool {
+        if case .connectee = etat { !tourneeEnCours } else { false }
+    }
+
     /// Nom montre pour la sonde : le sien, sinon « Sonde ».
     static func nomAffiche(_ nom: String?) -> String {
         nom ?? String(localized: "Sonde")
@@ -141,7 +146,7 @@ final class SondeMaillage {
     /// Tournee tout de suite (bouton rafraichir) ; rien pendant une tournee : relancer la
     /// boucle ne ferait que repousser la suivante de 5 min apres ce clic.
     func rafraichir() {
-        guard sonde != nil, !tourneeEnCours else { return }
+        guard tourneeAuRafraichir else { return }
         lancerBoucle()
     }
 

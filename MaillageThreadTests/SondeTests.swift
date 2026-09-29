@@ -713,9 +713,11 @@ struct SondeMaillageTests {
         let journal = JournalCanaux()
         let canal = Self.canalRetenu(journal)
         let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        #expect(!s.tourneeAuRafraichir, "sans sonde connectee")
         await s.connecter(Self.port, choisi: true)
         await journal.attendre(Self.listeRetenue)
         #expect(s.tourneeEnCours)
+        #expect(!s.tourneeAuRafraichir, "pendant une tournee")
         let boucle = try #require(s.boucle)
         s.rafraichir()
         await Task.yield()
@@ -724,6 +726,7 @@ struct SondeMaillageTests {
         #expect(canal.envoyes.filter { $0 == "etat\n" }.count == 2, "une seule tournee : etat, puis celui de la tournee")
         canal.emettre(CanalRejoue.reseauMinimal(Self.listeRetenue + "\n"))
         await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        #expect(s.tourneeAuRafraichir, "connectee et libre")
         s.rafraichir()
         await Self.attendre { s.tourneeEnCours }
         #expect(s.boucle != boucle, "hors tournee : une tournee tout de suite")

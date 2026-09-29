@@ -36,6 +36,18 @@ struct GrapheTests {
         #expect(!BarreOutils.lancePasseur(mode: .demo, dossierChoisi: false))
     }
 
+    /// L'aide du bouton rafraichir dit ce qu'il lancera vraiment : le reseau toujours, une
+    /// tournee si la sonde est connectee et libre, les noms de Maison si le passeur sera lance.
+    @Test func aideDuBoutonRafraichir() {
+        #expect(BarreOutils.aideRafraichir(tournee: true, passeur: true)
+                == String(localized: "Rafraîchir : réseau, tournée de la sonde et noms de Maison"))
+        #expect(BarreOutils.aideRafraichir(tournee: true, passeur: false)
+                == String(localized: "Rafraîchir : réseau et tournée de la sonde"))
+        #expect(BarreOutils.aideRafraichir(tournee: false, passeur: true)
+                == String(localized: "Rafraîchir : réseau et noms de Maison"))
+        #expect(BarreOutils.aideRafraichir(tournee: false, passeur: false) == String(localized: "Rafraîchir : réseau"))
+    }
+
     /// Pendant une tournee, la barre d'outils garde sa largeur : le bouton rafraichir ne bouge
     /// pas sous le pointeur. L'indicateur est sur sa propre ligne, qui ne prend aucune place
     /// hors tournee (pas meme l'espacement de la pile).
