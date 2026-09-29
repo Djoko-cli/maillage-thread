@@ -2737,6 +2737,22 @@
         }
       }
     },
+    "canal réseau déjà ouvert" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "network channel already open"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "canal réseau déjà ouvert"
+          }
+        }
+      }
+    },
     "chef" : {
       "localizations" : {
         "en" : {

@@ -17,8 +17,10 @@ struct TransportUDPTests {
 
     /// Transport vers la carte ; `connexions` recoit chaque connexion creee.
     static func transport(_ carte: CarteSimulee?, depart: ConnexionSimulee.Depart = .prete, cle: Data = VecteursH1.psk,
-                          connexions: ConnexionsSimulees? = nil) -> TransportUDP {
-        TransportUDP(hote: "0123456789ABCDEF.local", cle: cle, reglages: rapides()) { hote, port in
+                          attentePret: Duration? = nil, connexions: ConnexionsSimulees? = nil) -> TransportUDP {
+        var reglages = rapides()
+        if let attentePret { reglages.attentePret = attentePret }
+        return TransportUDP(hote: "0123456789ABCDEF.local", cle: cle, reglages: reglages) { hote, port in
             let c = ConnexionSimulee(hote: hote, port: port, carte: carte, depart: depart)
             connexions?.ajouter(c)
             return c
@@ -74,10 +76,10 @@ struct TransportUDPTests {
     /// Sans route, abandon tout de suite : la connexion en attente ne repartirait pas seule au
     /// retour de la route (banc du 25/09 de Halo) ; la reconnexion reessaie a son rythme.
     @Test func sansRouteAbandonneAvantOuverture() async throws {
-        let t = Self.transport(CarteSimulee(cle: VecteursH1.psk), depart: .attente(.pasDeRoute))
+        let t = Self.transport(CarteSimulee(cle: VecteursH1.psk), depart: .attente(.pasDeRoute), attentePret: .seconds(10))
         let debut = ContinuousClock.now
         await #expect(throws: ErreurReseau.pasDeRoute) { _ = try await t.ouvrir() }
-        #expect(ContinuousClock.now - debut < .milliseconds(250), "avant la fin de attentePret")
+        #expect(ContinuousClock.now - debut < .seconds(5), "bien avant la fin de attentePret")
         #expect(TransportUDP.abandonAvantOuverture(.pasDeRoute))
         #expect(!TransportUDP.abandonAvantOuverture(.reseauLocalRefuse))
         #expect(!TransportUDP.abandonAvantOuverture(.nomIntrouvable("x.local")))

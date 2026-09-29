@@ -169,6 +169,7 @@
   "aucune sonde choisie": "no probe chosen",
   "batterie OK": "battery OK",
   "batterie faible": "low battery",
+  "canal réseau déjà ouvert": "network channel already open",
   "chef": "leader",
   "chemin %@ : /dev/cu.* attendu": "path %@: /dev/cu.* expected",
   "connectée": "connected",

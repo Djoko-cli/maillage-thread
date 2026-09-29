@@ -1,0 +1,229 @@
+import Foundation
+import MaillageCoeur
+import Synchronization
+import Testing
+@testable import MaillageThread
+
+/// Lignes d'un canal, notees au fil de l'eau, puis `fin` a la fin du flux.
+final class RecueilLignes: Sendable {
+    private let lignes = Mutex<[String]>([])
+
+    init(_ flux: AsyncStream<Data>) {
+        Task { [self] in
+            for await l in flux { noter(String(decoding: l, as: UTF8.self)) }
+            noter("fin")
+        }
+    }
+
+    private func noter(_ s: String) {
+        lignes.withLock { $0.append(s) }
+    }
+
+    var liste: [String] { lignes.withLock { $0 } }
+}
+
+/// Canal reseau de la sonde (contrat 1.0.2) : rid, renvois, doublons, veille ; sur la carte
+/// simulee, sans trafic reseau.
+@Suite("Canal reseau de la sonde")
+struct CanalReseauTests {
+    static let hote = "0123456789ABCDEF"
+
+    /// Renvois a 100 et 200 ms ; veille lointaine (hors des tests qui la visent).
+    static func rapides(veille: Duration = .seconds(60), attenteVeille: Duration = .seconds(1)) -> CanalReseau.Reglages {
+        var r = CanalReseau.Reglages()
+        r.renvois = [.milliseconds(100), .milliseconds(200)]
+        r.veille = veille
+        r.attenteVeille = attenteVeille
+        return r
+    }
+
+    static func canal(_ carte: CarteSimulee, reglages: CanalReseau.Reglages = rapides(),
+                      connexions: ConnexionsSimulees? = nil) async throws -> CanalReseau {
+        try await CanalReseau.connecter(hote: hote, cle: VecteursH1.psk, reglages: reglages,
+                                        reglagesTransport: TransportUDPTests.rapides()) { h, p in
+            let c = ConnexionSimulee(hote: h, port: p, carte: carte)
+            connexions?.ajouter(c)
+            return c
+        }
+    }
+
+    /// `<rid> <commande>` -> rid et commande.
+    static func decouper(_ charge: String) -> (rid: Int, commande: String)? {
+        guard let espace = charge.firstIndex(of: " "), let rid = Int(charge[..<espace]) else { return nil }
+        return (rid, String(charge[charge.index(after: espace)...]))
+    }
+
+    /// Une sonde du reseau minimal (`CanalRejoue.reseauMinimal`), chaque reponse precedee du rid.
+    static func sonde(_ charge: String) -> [String] {
+        guard let (rid, commande) = decouper(charge) else { return [] }
+        return CanalRejoue.reseauMinimal(commande + "\n").map { "\(rid) \($0)" }
+    }
+
+    /// Chaque commande part en `<rid> <commande>`, rid croissants ; `SondeUSB` recoit les
+    /// lignes JSON seules, comme par le canal serie ; la connexion vise `<hote>.local:5480`.
+    @Test func ridEtLignesSeules() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let connexions = ConnexionsSimulees()
+        let s = SondeUSB(canal: try await Self.canal(carte, connexions: connexions))
+        try await s.demarrer {}
+        #expect(try await s.bonjour().version == "1.0.0")
+        #expect(try await s.etat().estAttachee)
+        let recues = carte.recues.compactMap(Self.decouper)
+        let commandes = recues.map { $0.commande }
+        #expect(commandes == ["bonjour", "etat"])
+        #expect(recues.count == 2 && recues[0].rid < recues[1].rid)
+        let visees = connexions.toutes.map { "\($0.hote):\($0.port)" }
+        #expect(visees == ["0123456789ABCDEF.local:5480"])
+        await s.fermer()
+    }
+
+    /// Une tournee entiere par le reseau : le maillage du reseau minimal.
+    @Test func tourneeParLeReseau() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let s = SondeUSB(canal: try await Self.canal(carte))
+        try await s.demarrer {}
+        let r = try await Tournee.executer(s, memoire: MemoireTournee(), maintenant: Date(timeIntervalSince1970: 1_790_000_000))
+        let routeurs = r?.maillage.routeurs.map { $0.id }
+        #expect(routeurs == [0])
+        await s.fermer()
+    }
+
+    /// Sans aucune reponse, la commande repart avec le meme rid a 2 s puis 4 s (ici 100 et
+    /// 200 ms), et plus ensuite.
+    @Test func renvoisDuMemeRid() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk)  // ne repond a rien
+        let c = try await Self.canal(carte)
+        _ = RecueilLignes(try c.ouvrir())
+        c.envoyer("etat\n")
+        #expect(await attendreQue { carte.recues.count == 3 })
+        try await Task.sleep(for: .milliseconds(300))
+        let recues = carte.recues
+        #expect(recues.count == 3, "premier envoi et deux renvois, pas plus")
+        #expect(Set(recues).count == 1, "meme rid, meme commande")
+        let ctrs = carte.ctrsRecus
+        #expect(ctrs == ctrs.sorted() && Set(ctrs).count == 3, "ctr neuf a chaque envoi")
+        c.fermer()
+    }
+
+    /// Premier envoi perdu : le renvoi passe, la reponse arrive, et plus rien ne repart.
+    @Test func renvoiApresUnePerte() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        var reglages = Self.rapides()
+        reglages.renvois = [.milliseconds(100), .milliseconds(600)]
+        let c = try await Self.canal(carte, reglages: reglages)
+        let lignes = RecueilLignes(try c.ouvrir())
+        carte.perdre(1)
+        c.envoyer("etat\n")
+        #expect(await attendreQue { lignes.liste == [CanalRejoue.etatAttache] })
+        try await Task.sleep(for: .milliseconds(700))
+        #expect(carte.recues.count == 1, "le renvoi seul arrive ; aucun autre apres la reponse")
+        c.fermer()
+    }
+
+    /// Doublons ecartes (meme rid, meme ligne : reponse renvoyee par la carte) ; plusieurs
+    /// lignes d'une meme reponse (`routeurs`, `suite`) passent toutes.
+    @Test func doublonsEcartes() async throws {
+        let l1 = #"{"v":1,"t":"routeurs","liste":[],"suite":true}"#
+        let l2 = #"{"v":1,"t":"routeurs","liste":[],"suite":false}"#
+        let carte = CarteSimulee(cle: VecteursH1.psk) { charge in
+            guard let (rid, commande) = Self.decouper(charge) else { return [] }
+            if commande == "routeurs" { return ["\(rid) \(l1)", "\(rid) \(l1)", "\(rid) \(l2)", "\(rid) \(l2)"] }
+            return Self.sonde(charge)
+        }
+        let c = try await Self.canal(carte)
+        let lignes = RecueilLignes(try c.ouvrir())
+        c.envoyer("routeurs\n")
+        c.envoyer("etat\n")
+        #expect(await attendreQue { lignes.liste.count == 3 })
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(lignes.liste == [l1, l2, CanalRejoue.etatAttache])
+        c.fermer()
+    }
+
+    /// Charge sans rid, rid illisible ou ligne vide : ecartee.
+    @Test func chargesIllisiblesEcartees() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let c = try await Self.canal(carte)
+        let lignes = RecueilLignes(try c.ouvrir())
+        c.envoyer("etat\n")  // ouvre la session cote carte (adresse de reponse)
+        #expect(await attendreQue { lignes.liste.count == 1 })
+        for charge in [CanalRejoue.bonjour, "x " + CanalRejoue.bonjour, "12", "12 ", "-3 " + CanalRejoue.bonjour] {
+            carte.envoyer(charge)
+        }
+        carte.envoyer("99 " + CanalRejoue.bonjour)
+        #expect(await attendreQue { lignes.liste.count == 2 })
+        #expect(lignes.liste == [CanalRejoue.etatAttache, CanalRejoue.bonjour])
+        c.fermer()
+    }
+
+    /// La cle ne passe jamais par le reseau : `cle ...` n'est pas envoye (la carte le
+    /// refuserait ; l'alea n'a rien a faire sur le reseau).
+    @Test func jamaisDeCleParLeReseau() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let c = try await Self.canal(carte)
+        let lignes = RecueilLignes(try c.ouvrir())
+        c.envoyer(CommandeSonde.cleNouvelle(alea: Data(repeating: 0xAB, count: 32), id: 3).ligne)
+        c.envoyer("cle\n")
+        c.envoyer("etat\n")
+        #expect(await attendreQue { lignes.liste.count == 1 })
+        let commandes = carte.recues.compactMap(Self.decouper).map { $0.commande }
+        #expect(commandes == ["etat"])
+        c.fermer()
+    }
+
+    /// Silence : un `etat` de veille, dont la reponse n'est pas transmise ; le canal reste ouvert.
+    @Test func veille() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let c = try await Self.canal(carte, reglages: Self.rapides(veille: .milliseconds(150), attenteVeille: .seconds(2)))
+        let lignes = RecueilLignes(try c.ouvrir())
+        #expect(await attendreQue { carte.recues.count >= 2 }, "une veille apres chaque silence")
+        let veilles = carte.recues.compactMap(Self.decouper).allSatisfy { $0.commande == "etat" }
+        #expect(veilles)
+        #expect(lignes.liste.isEmpty, "reponses de veille gardees par le canal")
+        c.fermer()
+        #expect(await attendreQue { lignes.liste == ["fin"] })
+    }
+
+    /// Sonde debranchee : la veille reste sans reponse, le canal se ferme (fin du flux).
+    @Test func veilleSansReponseFermeLeCanal() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let connexions = ConnexionsSimulees()
+        let c = try await Self.canal(carte, reglages: Self.rapides(veille: .milliseconds(100), attenteVeille: .milliseconds(300)),
+                                     connexions: connexions)
+        let lignes = RecueilLignes(try c.ouvrir())
+        carte.eteindre()
+        #expect(await attendreQue { lignes.liste == ["fin"] })
+        let annulees = connexions.toutes.allSatisfy { $0.annulee }
+        #expect(annulees, "transport ferme")
+    }
+
+    /// Fermeture par l'app, ou session perdue : fin du flux des lignes.
+    @Test func fermetures() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let connexions = ConnexionsSimulees()
+        let c = try await Self.canal(carte, connexions: connexions)
+        let lignes = RecueilLignes(try c.ouvrir())
+        c.fermer()
+        #expect(await attendreQue { lignes.liste == ["fin"] })
+        #expect(throws: (any Error).self) { _ = try c.ouvrir() }
+        let d = try await Self.canal(carte, connexions: connexions)
+        let lignesD = RecueilLignes(try d.ouvrir())
+        connexions.toutes.last?.echouer(.pasDeRoute)
+        #expect(await attendreQue { lignesD.liste == ["fin"] })
+    }
+
+    /// Fermee avant d'etre ouverte (connexion abandonnee) : flux fini aussitot.
+    @Test func fermeeAvantOuverture() async throws {
+        let c = try await Self.canal(CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde))
+        c.fermer()
+        let lignes = RecueilLignes(try c.ouvrir())
+        #expect(await attendreQue { lignes.liste == ["fin"] })
+    }
+
+    /// Carte muette ou autre cle : la connexion echoue (aucun DEFI).
+    @Test func connexionSansReponse() async throws {
+        await #expect(throws: ErreurReseau.aucunDefi) {
+            _ = try await Self.canal(CarteSimulee(cle: VecteursH1.psk, mode: .muette))
+        }
+    }
+}
