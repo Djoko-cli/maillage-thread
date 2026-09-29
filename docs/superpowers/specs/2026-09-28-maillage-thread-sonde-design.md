@@ -693,6 +693,28 @@ premier démarrage.
   à −89 dBm). Les requêtes lancées pendant le changement échouent en `delai`.
 - **Deux C6 en USB :** non vérifié, le pont Halo n'était pas branché au Mac.
 
+**Vérifié avec Djoko les 29 et 30/09** (plan 3a ; firmwares 1.0.0, 1.0.1 puis
+1.0.2, flashés sans effacement sur `/dev/cu.usbmodem11301`, l'interrupteur
+« Sonde maillage » allumé avant chaque flash) :
+- **Liaison USB :** sonde choisie une fois dans Réglages › Sonde, puis reprise
+  seule après un débranchement, sans « port occupé » ; nom « SONDE-01 » et QR
+  code Matter affichés (1.0.1).
+- **Maillage :** 7 routeurs, dont 5 muets (les routeurs de bordure d'Apple) ;
+  7 liens radio, tous mesurés par les deux routeurs qui répondent (`5000`, et
+  `6000`, le chef). Les liens entre deux routeurs d'Apple restent inconnus.
+- **Identités (1.0.2, FED) :** la sonde, alimentée ailleurs et promenée d'une
+  pièce à l'autre par la liaison réseau, a donné l'ExtMac des 7 routeurs ; les
+  5 routeurs de bordure sont rapprochés de leur annonce, sans doublon ni
+  candidat restant. Signal vu par la sonde posée contre l'appareil : `AC00` à
+  −41 dBm, `0400` à −39 dBm (devenu son parent), `B400` à −27 dBm à 10 cm.
+- **Accès réseau (1.0.2) :** clé créée par « Autoriser l'accès réseau » ; sonde
+  jointe par son adresse OMR (route de l'assistant `halo-routes`) ; commandes
+  interdites refusées à distance ; silence total face à des datagrammes sans
+  enveloppe ; clé gardée au redémarrage.
+- **Suspension :** « Sonde maillage » éteint, la sonde est suspendue, encore
+  après un redémarrage ; rallumé, les tournées reprennent (une tournée
+  ordinaire dure moins d'une seconde par l'USB).
+
 ## 9. Suite prévue : vue spatiale (souhait de Djoko, 28/09)
 
 Après le plan 3a : une représentation du réseau **par pièce et par étage**,
