@@ -202,8 +202,11 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   local. Le Mac doit avoir la route IPv6 vers le préfixe OMR : l'assistant
   `halo-routes` de benq la tient. « Oublier la sonde » retire la clé de ce Mac.
   Limites : pas de fin de session (une place de la carte reste prise 30 s,
-  la reprise automatique le répare), une ligne `routeurs` perdue donne une
-  table partielle ; détails dans la spec (section 3 bis).
+  la reprise automatique le répare) ; la file de réception de la carte n'a
+  que 4 places (un envoi groupé de 8 `diag` peut en voir attendre le renvoi à
+  2 s) ; une ligne `routeurs` perdue donne une table partielle, ou aucune si
+  la dernière (`"suite":false`) se perd ; détails dans la spec (section
+  3 bis).
 - Une tournée toutes les 5 minutes, et au rafraîchissement : le bouton
   rafraîchir du graphe relit le réseau, lance une tournée (sauf s'il y en a
   déjà une) et Passeur Noms ; son aide dit lesquels il lancera vraiment.

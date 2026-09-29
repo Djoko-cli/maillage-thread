@@ -195,8 +195,10 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   Mac needs the IPv6 route to the OMR prefix: the `halo-routes` helper from
   benq keeps it. "Forget the probe" removes this Mac's key. Limits: no end of
   session (a place on the board stays taken 30 s, the automatic retry fixes
-  it), a lost `routeurs` line gives a partial table; details in the spec
-  (section 3 bis).
+  it); the board's receive queue has only 4 places (a batch of 8 `diag` may
+  see some of them wait for the 2 s resend); a lost `routeurs` line gives a
+  partial table, or none if the last one (`"suite":false`) is lost; details
+  in the spec (section 3 bis).
 - A tour every 5 minutes, and on refresh: the refresh button of the graph
   rereads the network, starts a tour (unless one is running) and launches
   Passeur Noms; its help tag says which of these it will actually start. While
