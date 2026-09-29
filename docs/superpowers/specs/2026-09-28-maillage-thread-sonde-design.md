@@ -227,11 +227,12 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
    - sinon, aux autres identifiants de routeur, de 0 à 62, par groupes de 8
      dans l'ordre croissant. Au premier groupe où l'un donne une Route64, on
      prend celle du plus petit identifiant et on s'arrête ;
-   - **sans Route64, pas de nouveau maillage :** la tournée ne rend rien, la
-     mémoire d'avant est gardée, et le dernier maillage reste affiché en
-     vieillissant (« Sonde muette », plus bas). Si rien ne répond, la
-     recherche coûte au plus 63 requêtes, de l'ordre d'une minute, à chaque
-     tournée.
+   - **sans Route64, pas de nouveau maillage :** la mémoire d'avant est
+     gardée (remise à zéro dans une autre partition), avec les identités
+     apprises au point 1 (parent, table des routeurs) : une sonde promenée ne
+     les perd pas. Le dernier maillage reste affiché en vieillissant (« Sonde
+     muette », plus bas). Si rien ne répond, la recherche coûte au plus 63
+     requêtes, de l'ordre d'une minute, à chaque tournée.
 3. **Rôles :** Network Data (7) à un routeur qui répond. On y lit :
    - les routeurs de bordure (préfixes, routes, service SRP) ;
    - le BBR principal (service 01), choisi comme OpenThread : l'entrée du
@@ -239,6 +240,13 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
      simple), puis le RLOC16 le plus haut. Un serveur dont les données font
      moins de 7 octets est ignoré ;
    - celui qui publie l'OMR.
+
+   Les dernières Network Data lues sont gardées dans la mémoire de la
+   tournée (remise à zéro dans une autre partition). Quand la requête échoue,
+   ou qu'aucun routeur ne répond, elles marquent encore les routeurs de
+   bordure et le BBR principal, pour les seuls routeurs de la liste : sans
+   elles, ces routeurs et leurs candidats disparaîtraient d'une tournée à
+   l'autre.
 4. **À chaque routeur qui répond** (RLOC16 = identifiant << 10) :
    - Ext MAC (0), Address16 (1), Route64 (5), Child Table (16), IPv6 Address
      List (8), Version (24) ;
@@ -291,12 +299,19 @@ est gardée jusqu'à une nouvelle réponse.
     sonde finit par entendre tous les routeurs ;
   - s'il est le BBR principal : les Network Data donnent son RLOC16, et le
     bit `bbrPrimaire` de `sb` désigne son annonce ;
+  - s'il est le chef, routeur de bordure encore non identifié : `etat` donne
+    son identifiant, et le rôle (bits 9-10 de `sb`, Thread 1.4) désigne
+    l'annonce du chef dans la même partition. Les routeurs de bordure
+    d'Apple remplissent ce rôle (relevé du 28/09 : l'Apple TV est chef) ;
   - **par élimination :** s'il reste exactement un routeur de bordure non
     identifié dans le maillage et exactement une annonce de routeur de
-    bordure non reprise dans la même partition, c'est le même, sauf si
-    l'ExtMac du routeur est connue et n'est pas le `xa` de l'annonce. Cette
+    bordure non reprise dans la même partition, c'est le même. Cette
     déduction n'est pas retenue : elle se refait à chaque affichage. La fiche
     du routeur dit qu'il est reconnu par élimination.
+
+  La règle du chef, l'élimination et les candidats (plus bas) écartent une
+  annonce si l'ExtMac du routeur et le `xa` de l'annonce sont connus tous
+  deux et différents.
 
   **Mémoire des identités :** les paires retenues (parent de la sonde,
   routeurs qui répondent, routeurs entendus) sont gardées d'un lancement à
@@ -304,20 +319,29 @@ est gardée jusqu'à une nouvelle réponse.
   l'app. Elles ne sont jamais lues ni écrites en démo, ni sous les tests
   hors d'un dossier temporaire. Une autre partition les efface à la première
   tournée, comme le reste de la mémoire. Une ExtMac n'a qu'un RLOC16 : un
-  routeur qui change d'identifiant perd l'ancienne paire.
+  routeur qui change d'identifiant perd l'ancienne paire. Dès que la tournée
+  a la Route64, les paires des routeurs sortis de la liste (routeur disparu,
+  identifiant libéré) sont oubliées. Un échec d'écriture du fichier est
+  consigné dans le journal du Mac (Console, sous-système
+  `fr.djoko.maillage`, sans données du réseau) ; les identités restent en
+  mémoire et l'écriture est retentée à la tournée suivante.
 
   **Affichage honnête** d'un routeur de bordure non identifié, un seul nœud
   par routeur :
   - il s'affiche avec ses candidats, sous leur nom : les annonces de sa
-    partition qu'aucun routeur n'a reprises (si son ExtMac est connue,
-    seulement celles qui n'ont pas de `xa`), par exemple
+    partition qu'aucun routeur n'a reprises, sauf si son ExtMac et leur `xa`
+    sont connus tous deux et différents ; par exemple
     « HomePod Avant ou HomePod Palier · 0400 » ;
   - un seul candidat, sans élimination possible :
     « HomePod salon ? · 0400 », car ce n'est peut-être pas lui ;
   - tant que la sonde donne un maillage de la partition, les annonces
     candidates ne sont plus dessinées à part : ce nœud les porte. Le centre
-    de la zone reste dessiné, candidat ou non ;
-  - sa fiche liste les candidats ;
+    de la zone reste dessiné, candidat ou non ; avec les règles du BBR
+    principal et du chef, il ne l'est plus que rarement (rôle inconnu en
+    Thread 1.3, annonce périmée, Network Data jamais lues) ;
+  - sa fiche liste les candidats ; chacun est un bouton qui ouvre la fiche
+    de son annonce (rôle, adresses, journal, « Renommer… »), tant que
+    l'instantané la connaît ;
   - sans candidat, il s'affiche « Routeur de bordure · B400 ».
 
   Sans sonde (ou quand son maillage est périmé), rien ne change : toutes les

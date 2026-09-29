@@ -211,15 +211,18 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   son ExtMac, donc pas le nom de son annonce. La sonde (firmware 1.0.2)
   apprend celle des routeurs qu'elle entend : chaque tournée lit sa table des
   routeurs (`routeurs`) et retient chaque paire RLOC16 ↔ ExtMac, comme celle
-  de son parent. Ces identités sont gardées d'un lancement à l'autre avec leur
-  partition (`identites-routeurs.json` dans le dossier de l'app ; une autre
-  partition les efface) : déplacée dans la maison, la sonde les apprend
-  toutes. S'il ne reste qu'un routeur de bordure non identifié pour une seule
-  annonce, c'est lui, par élimination. Sinon, il s'affiche avec ses
-  candidats, « HomePod Avant ou HomePod Palier · 0400 »
-  (« HomePod salon ? · 0400 » pour un seul), et ces annonces ne sont plus
-  dessinées à part : un seul nœud par routeur. Sa fiche liste les candidats.
-  Sans sonde, toutes les annonces restent dessinées.
+  de son parent, même quand la tournée n'aboutit pas. Ces identités sont
+  gardées d'un lancement à l'autre avec leur partition
+  (`identites-routeurs.json` dans le dossier de l'app ; une autre partition
+  les efface, et la paire d'un routeur sorti de la liste des routeurs est
+  oubliée) : déplacée dans la maison, la sonde les apprend toutes. Le chef,
+  s'il est un routeur de bordure, est l'annonce dont le rôle est chef. S'il
+  ne reste qu'un routeur de bordure non identifié pour une seule annonce,
+  c'est lui, par élimination. Sinon, il s'affiche avec ses candidats,
+  « HomePod Avant ou HomePod Palier · 0400 » (« HomePod salon ? · 0400 »
+  pour un seul), et ces annonces ne sont plus dessinées à part : un seul nœud
+  par routeur. Sa fiche liste les candidats ; chacun ouvre la fiche de son
+  annonce. Sans sonde, toutes les annonces restent dessinées.
 - Dans le graphe, les traits pleins sont les liens radio, colorés et épaissis
   par la qualité (vert 3, jaune 2, orange 1, gris inconnue) ; le trait d'un
   enfant vers son parent reste fin. Les pointillés restent pour ce que la

@@ -204,15 +204,18 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   ExtMac, so not the name of its announcement either. The probe (firmware
   1.0.2) learns the ExtMac of the routers it hears: each tour reads its router
   table (`routeurs`) and keeps every RLOC16 ↔ ExtMac pair, like the one of its
-  parent. These identities are kept from one launch to the next with their
-  partition (`identites-routeurs.json` in the app folder; another partition
-  erases them): moved around the house, the probe learns them all. If a
-  single border router is left unidentified for a single announcement, it is
-  that one, by elimination. Otherwise it shows with its candidates,
+  parent, even when the tour gets no mesh. These identities are kept from one
+  launch to the next with their partition (`identites-routeurs.json` in the
+  app folder; another partition erases them, and the pair of a router that
+  left the router list is forgotten): moved around the house, the probe
+  learns them all. The leader, when it is a border router, is the
+  announcement whose role is leader. If a single border router is left
+  unidentified for a single announcement, it is that one, by elimination.
+  Otherwise it shows with its candidates,
   "HomePod Avant or HomePod Palier · 0400" ("HomePod salon? · 0400" for a
   single one), and those announcements are no longer drawn apart: one node per
-  router. Its card lists the candidates. Without a probe, every announcement
-  stays drawn.
+  router. Its card lists the candidates; each one opens its announcement's
+  card. Without a probe, every announcement stays drawn.
 - In the graph, solid lines are radio links, colored and thickened by quality
   (green 3, yellow 2, orange 1, grey unknown); a child's line to its parent
   stays thin. Dotted lines stay for what the probe does not see. Devices that
