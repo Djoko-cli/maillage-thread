@@ -337,6 +337,44 @@ struct SondeMaillageTests {
         #expect(p.string(forKey: SondeMaillage.cleSerie) == nil)
     }
 
+    /// Aucune sonde retenue : un C6 branche est liste pour les Reglages, jamais ouvert
+    /// (spec, section 3 : aucun port qu'on ne lui a pas designe).
+    @Test func sansSondeRetenueAucunPortOuvert() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        var canaux = 0
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in
+            canaux += 1
+            return CanalRejoue { _ in [CanalRejoue.bonjour] }
+        })
+        s.portsChanges([Self.port])
+        // Une connexion lancee passerait avant la suite du test (meme acteur, dans l'ordre).
+        await Task.yield()
+        #expect(s.ports == [Self.port])
+        #expect(canaux == 0)
+        #expect(s.etat == .sansSonde)
+    }
+
+    /// La sonde retenue (serie S) n'est pas branchee, un autre C6 l'est (serie H, le
+    /// pont Halo par exemple) : il n'est jamais ouvert, la sonde est absente.
+    @Test func autreC6JamaisOuvert() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
+        let autre = PortUSB(chemin: "/dev/cu.usbmodemFACTICE02", vid: 0x303A, pid: 0x1001, serie: "B0:00:00:00:00:02",
+                            produit: "USB JTAG/serial debug unit")
+        var canaux = 0
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in
+            canaux += 1
+            return CanalRejoue { _ in [CanalRejoue.bonjour] }
+        })
+        s.portsChanges([autre])
+        await Task.yield()
+        #expect(s.ports == [autre])
+        #expect(canaux == 0)
+        #expect(s.etat == .absente)
+    }
+
     /// La sonde retenue debranchee : absente.
     @Test func debranchee() throws {
         let (p, domaine) = try Self.preferences()
