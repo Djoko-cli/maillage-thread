@@ -210,8 +210,10 @@ struct CanalReseauTests {
         try await s.demarrer {}
         let r = try await s.diag(0x0000, [5, 6], delaiMs: 600)
         #expect(r.ok, "reponse gardee, rendue au renvoi apres le vol")
+        // Au-dela du renvoi suivant (1 s) : il ne part pas, la reponse l'a annule.
+        try await Task.sleep(for: .milliseconds(400))
         let diags = carte.recues.compactMap(Self.decouper).filter { $0.commande.hasPrefix("diag ") }
-        #expect(diags.count == 4, "envoi, renvois a 200 et 400 ms pendant le vol, renvoi a 700 ms")
+        #expect(diags.count == 4, "envoi, renvois a 200 et 400 ms pendant le vol, renvoi a 700 ms ; pas celui de 1 s")
         #expect(Set(diags.map(\.rid)).count == 1, "meme rid")
         await s.fermer()
     }
