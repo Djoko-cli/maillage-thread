@@ -150,7 +150,8 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
   Priorité : surnom > Maison > HomeKit (`_hap._udp`) > hôte.
 - Rafraîchissement : la fenêtre du graphe lance Passeur Noms en arrière-plan à
   son ouverture (si le relevé a plus de 15 min), puis toutes les heures ;
-  « Rafraîchir depuis Maison » (menu ou réglages) le fait à la demande. L'app
+  « Rafraîchir depuis Maison » (menu ou réglages) le fait à la demande, comme
+  le bouton rafraîchir du graphe dès qu'un dossier des noms est choisi. L'app
   dépose d'abord `passeur-demande.json` dans le dossier : Passeur Noms écrit
   et se ferme aussitôt, sa fenêtre ne fait que passer derrière les autres.
 - Batteries : niveau, état de charge et alerte de l'accessoire lui-même, pour
@@ -174,12 +175,22 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
 
 - Dans Maillage Thread : Réglages › Sonde › Port. L'app n'ouvre que le port
   choisi (le pont Halo est aussi un ESP32-C6). La sonde est retenue par son
-  numéro de série USB ; son code d'appairage s'y affiche tant qu'elle n'est pas
-  dans Maison.
-- Une tournée toutes les 5 minutes, et au rafraîchissement. La liste des
-  routeurs vient du chef ; s'il se tait, d'un routeur qui a déjà répondu ;
-  sinon d'une recherche sur tous les identifiants de routeur. Sans liste, pas
-  de nouveau maillage : le dernier vieillit.
+  numéro de série USB et s'affiche sous son nom, « SONDE-01 » par défaut : le
+  firmware le garde, il suit donc la carte d'un Mac à l'autre (le nom USB du
+  C6 est fixé par la puce). Tout autre port s'affiche « ESP32-C6 ·
+  usbmodem… ». La ligne du menu et Réglages › Sonde prennent aussi ce nom
+  (« SONDE-01 : connectée · relevé il y a 2 minutes »).
+- Réglages › Sonde montre le QR code Matter de la sonde et son code
+  d'appairage (4-3-4), même une fois dans Maison.
+- Une tournée toutes les 5 minutes, et au rafraîchissement : le bouton
+  rafraîchir du graphe relit le réseau, lance une tournée (sauf s'il y en a
+  déjà une) et Passeur Noms. Pendant une tournée, la barre d'outils du graphe
+  montre son étape, un compteur de requêtes et sa durée (« Balayage des
+  routeurs muets · 24/48 · 0:42 ») ; Réglages › Sonde et la ligne du menu
+  montrent aussi l'étape et le compteur.
+- La liste des routeurs vient du chef ; s'il se tait, d'un routeur qui a déjà
+  répondu ; sinon d'une recherche sur tous les identifiants de routeur. Sans
+  liste, pas de nouveau maillage : le dernier vieillit.
 - La tournée demande ensuite à chaque routeur qui répond ses liens (avec la
   qualité dans chaque sens) et ses enfants, lit les routeurs de bordure dans
   les Network Data, et demande à chaque enfant listé dans la table d'un

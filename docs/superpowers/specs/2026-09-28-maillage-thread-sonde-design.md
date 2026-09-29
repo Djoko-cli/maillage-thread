@@ -25,6 +25,14 @@
 > d'Apple ne répondent pas au diagnostic. La tournée (section 4) en tient
 > compte : les liens et les enfants viennent des routeurs qui répondent, et
 > les enfants des routeurs muets se trouvent par balayage de leurs RLOC16.
+>
+> **Révision du 29/09 pendant la vérification sur la carte** (demandes de
+> Djoko) : la sonde a un nom, donné par la carte, et `bonjour` donne toujours
+> son code d'appairage et son QR code (section 3, firmware 1.0.1). Réglages ›
+> Sonde la montre sous ce nom, avec son QR code et son code ; la tournée en
+> cours se voit, avec son étape et son compteur, dans le graphe, les Réglages
+> et le menu ; le bouton rafraîchir du graphe lance aussi le passeur des noms
+> de Maison, sans relancer une tournée en cours (sections 4 et 5).
 
 ## 0. Contexte, but, décisions
 
@@ -123,8 +131,8 @@ Sans sonde, l'app marche exactement comme à l'étape 1.
 - **Entrée dans le réseau.** La sonde est appairée à Maison par Bluetooth,
   comme le pont Halo. Maison lui transmet les identifiants Thread ; personne
   ne manipule la clé du réseau.
-  - Le code d'appairage passe par l'USB (message `bonjour`), jamais par le
-    réseau.
+  - Le code d'appairage et le QR code passent par l'USB (message `bonjour`),
+    jamais par le réseau.
   - Le premier flash se fait avec effacement (usage de benq).
   - Seul le port de la sonde est flashé, désigné par Djoko.
 - **Dans Maison,** un interrupteur « Sonde maillage » (prise On/Off), allumé
@@ -148,8 +156,12 @@ régler DTR et RTS **d'un seul coup** : sinon le C6 peut redémarrer, c'est le
 piège décrit dans benq.
 
 **Commandes du Mac** (texte, une par ligne) :
-- `bonjour` : produit, version, état d'appairage, code d'appairage s'il
-  n'est pas encore appairé ;
+- `bonjour` : produit, version, nom, état d'appairage, code d'appairage et
+  charge du QR code, toujours (firmware 1.0.1 ; la 1.0.0 ne donnait le code
+  qu'avant l'appairage) ;
+- `nom <texte>` : change le nom de la sonde et le garde ; réponse : un
+  `bonjour` à jour, ou l'erreur `syntaxe` (nom refusé) ou `ecriture` (mémoire
+  qui refuse l'écriture) ;
 - `etat` : l'état de la sonde dans le réseau ;
 - `voisins` : ce que la sonde entend ;
 - `diag <cible> <tlv,tlv,…> <id> [<délai ms>]` : `<cible>` est un RLOC16 en
@@ -159,7 +171,13 @@ piège décrit dans benq.
 
 **Messages de la sonde :**
 - `bonjour` :
-  `{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.0","appairee":true,"code":null}`
+  `{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.1","nom":"SONDE-01","mac":"<MAC>","appairee":true,"code":"<11 chiffres>","qr":"MT:<…>"}`.
+  - `nom` : 1 à 32 caractères parmi les lettres ASCII, les chiffres, `-`,
+    `_` et `.` (rien à échapper) ; « SONDE-01 » par défaut. La carte le
+    garde à côté de l'état de l'interrupteur : il la suit d'un Mac à
+    l'autre. Un firmware 1.0.0 ne l'envoie pas.
+  - `code` (code d'appairage manuel) et `qr` (charge du QR code, `MT:…`),
+    appairée ou non ; `null` si Matter n'a pas pu les former.
 - `etat` : `role`, `rloc16`, `parent` (`rloc16`, `ext`, `lqIn`, `lqOut`,
   `rssi`), `partition`, `chef` (identifiant du routeur chef), `canal`,
   `prefixeMaille`, `xp`, `suspendue`.
@@ -175,14 +193,21 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
 - **Mémoire :** le numéro de série USB est retenu, pour se reconnecter seul.
 - **Vérification :** une sonde répond à `bonjour` avec
   `"produit":"sonde-maillage"`, sinon le port est refusé.
+- **Nom :** à chaque `bonjour`, l'app retient le nom de la sonde à côté de
+  son numéro de série, et la montre sous ce nom (section 5). Le port, lui, ne
+  peut pas changer de nom : le nom de produit USB et le numéro de série (la
+  MAC) du C6 sont fixés par la puce. Avant la première connexion, l'app ne
+  sait pas qu'un port est une sonde.
 
 ## 4. Tournée (révisée le 29/09 : après l'essai, puis à l'exécution du plan 3a)
 
 **Quand :**
-- la tournée courte, toutes les 5 minutes et au bouton rafraîchir. `etat`
-  n'est pas surveillé entre deux tournées : un autre chef ou une autre
-  partition est vu à la tournée suivante. Une autre partition remet à zéro la
-  mémoire de la tournée, car les identifiants de routeur y sont redistribués ;
+- la tournée courte, toutes les 5 minutes et au bouton rafraîchir, sauf
+  pendant une tournée : le bouton ne la relance pas, et la suivante part
+  toujours 5 minutes après la fin de celle-ci. `etat` n'est pas surveillé
+  entre deux tournées : un autre chef ou une autre partition est vu à la
+  tournée suivante. Une autre partition remet à zéro la mémoire de la
+  tournée, car les identifiants de routeur y sont redistribués ;
 - le balayage, toutes les 30 minutes, et quand l'ensemble des routeurs à
   balayer change.
 
@@ -268,6 +293,19 @@ Ces durées se comptent depuis la réception du maillage, à la fin de sa
 tournée. Pendant une tournée, il n'est pas marqué « ancien » : le suivant
 arrive. En marche normale, il ne l'est donc jamais.
 
+**Avancement :** la tournée signale le début de chaque étape qu'elle
+atteint (état de la sonde, liste des routeurs, routeurs, pile et Network
+Data, balayage, identité des enfants), puis chaque requête revenue : les
+requêtes faites sur le total prévu de l'étape, 0 si elle n'a rien à faire. Ce
+total ne baisse jamais :
+- liste des routeurs : le chef et les secours, puis, s'il faut chercher,
+  tous les autres identifiants ; l'étape s'arrête à la première Route64,
+  souvent avant son total ;
+- balayage : pour chaque routeur, les numéros jusqu'à 8 après le dernier
+  enfant trouvé. Le total grandit quand un enfant répond loin, et finit égal
+  aux requêtes envoyées (48 à la première tournée rejouée sur la capture de
+  l'essai).
+
 **Sortie :** un instantané de maillage daté, comprenant :
 - la partition ;
 - les routeurs : RLOC16, Ext MAC s'il est connu, identité, rôle (bordure,
@@ -296,6 +334,15 @@ arrive. En marche normale, il ne l'est donc jamais.
   supposé ».
 - **Survol :** les liens du nœud s'éclairent.
 
+**Barre d'outils du graphe.**
+- Pendant une tournée, un petit indicateur de progression et « Balayage des
+  routeurs muets · 24/48 · 0:42 » : l'étape, les requêtes revenues sur le
+  total prévu (section 4), la durée, à jour chaque seconde.
+- Le bouton rafraîchir relit le réseau, lance une tournée (pas pendant une
+  tournée) et le passeur des noms de Maison, dans les conditions de
+  « Rafraîchir depuis Maison » : en mode direct, avec un dossier des noms
+  choisi. Il n'est jamais désactivé ; son aide dit ce qu'il fait.
+
 **Fiche.**
 - Appareil : parent et qualité, endormi ou non (délai), fabricant, modèle,
   version de Thread, RLOC16.
@@ -309,12 +356,18 @@ arrive. En marche normale, il ne l'est donc jamais.
    s'il y en a plusieurs, comme « Eve Energy · 8A13 » ;
 4. l'hôte.
 
-**Menu.** Une ligne « Sonde : connectée » ou « Sonde : absente ».
+**Menu.** Une ligne sous le nom de la sonde (« Sonde » tant qu'il n'est pas
+connu) : « SONDE-01 : connectée · relevé il y a 2 min », « SONDE-01 :
+absente » ; pendant une tournée, son étape et son compteur, « SONDE-01 :
+Routeurs 3/7… ».
 
 **Réglages › Sonde :**
-- le port ;
-- l'état : partition, dernier relevé ;
-- le code d'appairage tant que la sonde n'est pas dans Maison ;
+- le port : la sonde retenue sous son nom (« SONDE-01 »), tout autre port
+  sous un libellé neutre (« ESP32-C6 · usbmodem11301 ») ;
+- l'état, sous le nom de la sonde : partition, dernier relevé ; pendant une
+  tournée, « Tournée : Balayage des routeurs muets · 24/48 · depuis 42 s » ;
+- le QR code Matter de la sonde (noir sur blanc, agrandi sans lissage) et son
+  code d'appairage mis en forme 4-3-4, même quand elle est dans Maison ;
 - l'interrupteur « Sonde maillage » (lecture seule).
 
 ## 6. Journal et historique (plan 3b, validée)

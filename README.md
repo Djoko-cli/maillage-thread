@@ -145,7 +145,8 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   (`_hap._udp`) > host.
 - Refreshing: the graph window launches Passeur Noms in the background when it
   opens (if the last reading is older than 15 min), then every hour; "Refresh
-  from Home" (menu or settings) does it on demand. The app first drops
+  from Home" (menu or settings) does it on demand, and so does the refresh
+  button of the graph once a names folder is chosen. The app first drops
   `passeur-demande.json` in the folder, so Passeur Noms writes and quits at
   once; its window only flashes behind the others.
 - Batteries: level, charging state and the accessory's own low-battery alert,
@@ -168,11 +169,22 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
 
 - In Maillage Thread: Settings › Probe › Port. Only the chosen port is ever
   opened (the Halo bridge is also an ESP32-C6). The probe is remembered by its
-  USB serial number; its pairing code shows there until it is in Home.
-- A tour every 5 minutes, and on refresh. The list of routers comes from the
-  leader; if it is silent, from a router that has already answered; otherwise
-  from a search over every router id. With no list there is no new mesh: the
-  last one gets older.
+  USB serial number and shows under its name, "SONDE-01" by default: the
+  firmware keeps it, so it follows the board from one Mac to another (the
+  C6's USB name is fixed by the chip). Any other port shows as
+  "ESP32-C6 · usbmodem…". The menu line and Settings › Probe use the name too
+  ("SONDE-01: connected · updated 2 minutes ago").
+- Settings › Probe shows the probe's Matter QR code and its pairing code
+  (4-3-4), even once it is in Home.
+- A tour every 5 minutes, and on refresh: the refresh button of the graph
+  rereads the network, starts a tour (unless one is running) and launches
+  Passeur Noms. While a tour runs, the graph's toolbar shows its step, a
+  counter of requests and its duration ("Scan of silent routers · 24/48 ·
+  0:42"); Settings › Probe and the menu line show the step and the counter
+  too.
+- The list of routers comes from the leader; if it is silent, from a router
+  that has already answered; otherwise from a search over every router id.
+  With no list there is no new mesh: the last one gets older.
 - The tour then asks every router that answers for its links (with the
   quality in both directions) and its children, reads the border routers from
   the Network Data, and asks each child listed in a router's child table for
