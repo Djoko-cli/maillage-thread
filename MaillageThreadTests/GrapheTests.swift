@@ -23,11 +23,13 @@ struct GrapheTests {
         #expect(abs(c2.x - 510) < 1e-9 && abs(c2.y - 415) < 1e-9)
     }
 
-    /// Le bouton rafraichir du graphe lance aussi le passeur des noms de Maison, dans les
-    /// conditions de « Rafraichir depuis Maison » : mode direct, dossier des noms choisi.
-    @Test func rafraichirLanceLePasseur() {
+    /// Le bouton rafraichir du graphe lance aussi le passeur des noms de Maison, en mode direct
+    /// et seulement si un dossier des noms est choisi (« Rafraichir depuis Maison », lui, demande
+    /// le dossier s'il manque).
+    @Test func rafraichirLanceLePasseurAvecUnDossier() {
         #expect(BarreOutils.lancePasseur(mode: .direct, dossierChoisi: true))
-        #expect(!BarreOutils.lancePasseur(mode: .direct, dossierChoisi: false), "sans dossier, il demanderait un dossier")
+        #expect(!BarreOutils.lancePasseur(mode: .direct, dossierChoisi: false),
+                "sans dossier : pas de passeur au premier plan a chaque clic")
         #expect(!BarreOutils.lancePasseur(mode: .demo, dossierChoisi: true))
         #expect(!BarreOutils.lancePasseur(mode: .demo, dossierChoisi: false))
     }

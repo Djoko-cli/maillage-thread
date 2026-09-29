@@ -122,9 +122,9 @@ struct BarreOutils: View {
     @Environment(\.openWindow) private var openWindow
     @State private var appareilsIP = false
 
-    /// Rafraichir lance aussi le passeur des noms de Maison, dans les conditions de
-    /// « Rafraichir depuis Maison » : en mode direct, et avec un dossier des noms choisi
-    /// (sans dossier, le passeur passerait au premier plan pour en demander un).
+    /// Rafraichir lance aussi le passeur des noms de Maison, en mode direct, et seulement si un
+    /// dossier des noms est choisi : sans dossier, le passeur passerait au premier plan a chaque
+    /// clic pour en demander un (« Rafraichir depuis Maison », lui, le demande s'il manque).
     static func lancePasseur(mode: Surveillance.Mode, dossierChoisi: Bool) -> Bool {
         mode == .direct && dossierChoisi
     }
