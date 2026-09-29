@@ -770,8 +770,10 @@ static void diagsFinis() {
 
 // Ligne de reponse a cle nouvelle, au plus : RS, {"v":1,"t":"cle","id":<10>,
 // "cle":"<64>","empreinte":"<8>","hote":"<63>"}, LF : 204 octets. Avec le msg
-// d'une cle non chargee (kMsgNonChargee, rare) : 251, sous les 256 du tampon.
-static constexpr int kLigneCleMax = 208;
+// d'une cle non chargee (kMsgNonChargee, rare) : 252, sous les 256 du tampon.
+// La place libre exigee couvre le cas le plus long : la reponse est la seule
+// copie de la cle.
+static constexpr int kLigneCleMax = 252;
 static const char *const kMsgNonChargee = "cle non chargee : active au redemarrage";
 
 // Effacement de la cle refuse par la NVS : la cle n'est plus en memoire (plus
