@@ -328,6 +328,27 @@ struct SondeReseauTests {
         s.oublier()
     }
 
+    /// Une activite est tenue pendant une session reseau (App Nap retarderait la veille et les
+    /// tournees), relachee a sa fin ; rien de tel en USB.
+    @Test(.timeLimit(.minutes(1))) func activitePendantLaSessionReseau() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = try Self.prete(p, liaison: .usb)
+        let premiere = Self.sonde()
+        let s = Self.sondeMaillage(p, trousseau: t, reseau: ReseauFactice([.success(premiere), .failure(ErreurReseau.aucunDefi)]),
+                                   delais: [.seconds(60)])
+        await s.connecter(Self.port, choisi: true)
+        #expect(!s.activiteTenue, "pas en USB")
+        s.choisirLiaison(.reseau)
+        await SondeMaillageTests.attendre { SondeMaillageTests.connectee(s) }
+        #expect(s.activiteTenue)
+        premiere.fermer()
+        await SondeMaillageTests.attendre { if case .erreur = s.etat { true } else { false } }
+        #expect(!s.activiteTenue, "session perdue")
+        s.oublier()
+        #expect(!s.activiteTenue)
+    }
+
     /// Retour a l'USB : la session reseau est fermee, la sonde branchee reprise par son port.
     @Test(.timeLimit(.minutes(1))) func retourALUSB() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()

@@ -90,6 +90,9 @@ final class SondeMaillage {
     @ObservationIgnored private var reprise: Task<Void, Never>?
     /// Canal de la session reseau en place : sa cause de fermeture est montree a la perte.
     @ObservationIgnored private var canalReseau: (any CanalSonde)?
+    /// Activite tenue pendant une session reseau, comme la session serie de Halo : sans elle,
+    /// App Nap retarderait la veille du canal (la carte oublie une session muette) et les tournees.
+    @ObservationIgnored private var activite: (any NSObjectProtocol)?
     /// Heure du debut de la tournee et de la reception du maillage (injectee par les tests).
     @ObservationIgnored private let horloge: () -> Date
     @ObservationIgnored private var sonde: SondeUSB?
@@ -132,6 +135,9 @@ final class SondeMaillage {
         hote = preferences.string(forKey: Self.cleHote)
         empreinteAcces = hote.flatMap(empreinte(pour:))
     }
+
+    /// Une activite est tenue (session reseau en place).
+    var activiteTenue: Bool { activite != nil }
 
     /// Le reseau se choisit : nom d'hote connu, et cle de ce Mac pour lui.
     var reseauDisponible: Bool { hote != nil && empreinteAcces != nil }
@@ -398,6 +404,7 @@ final class SondeMaillage {
             enConnexion = nil
             sonde = s
             canalReseau = c
+            tenirActivite()
             etat = .connectee(b)
             essaisReprise = 0
             retenirNom(b.nom)
@@ -420,6 +427,18 @@ final class SondeMaillage {
     /// l'autorisation d'acceder au trousseau (fenetre modale), sans figer le menu.
     private nonisolated static func lireCle(_ trousseau: any TrousseauCles, _ nom: String) async throws -> Data {
         try await Task.detached(priority: .userInitiated) { try trousseau.lire(nom: nom) }.value
+    }
+
+    private func tenirActivite() {
+        guard activite == nil else { return }
+        activite = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
+                                                         reason: "Session reseau de la sonde : veille et tournees")
+    }
+
+    private func relacherActivite() {
+        guard let a = activite else { return }
+        ProcessInfo.processInfo.endActivity(a)
+        activite = nil
     }
 
     /// Nouvel essai de la liaison reseau apres un delai croissant.
@@ -482,6 +501,7 @@ final class SondeMaillage {
         sonde = nil
         enConnexion = nil
         canalReseau = nil
+        relacherActivite()
         cheminConnecte = nil
         serieEtat = port?.serie
         etat = nouveau
