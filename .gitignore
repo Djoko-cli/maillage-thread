@@ -30,3 +30,6 @@ passeur-demande.json
 # Firmware de la sonde (PlatformIO)
 sonde/.pio/
 sonde/.vscode/
+
+# Captures brutes de la sonde (adresses du reseau de la maison) : jamais dans le depot
+docs/releves/**/capture-*-essai.jsonl
