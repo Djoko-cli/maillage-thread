@@ -509,12 +509,70 @@ struct SondeReseauTests {
     }
 
     /// Reglages › Sonde : le bloc de l'acces reseau se dessine (etat, bouton, explication).
-    @Test func vueAccesReseau() throws {
+    @Test func vueAccesReseau() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
-        let s = Self.sondeMaillage(p, trousseau: try Self.prete(p, liaison: .usb))
-        let vue = NSHostingView(rootView: Form { AccesReseauSonde() }.formStyle(.grouped).environment(s))
-        #expect(vue.fittingSize.height > 0)
+        func hauteur(_ s: SondeMaillage) -> CGFloat {
+            NSHostingView(rootView: Form { AccesReseauSonde() }.formStyle(.grouped).environment(s)).fittingSize.height
+        }
+        // En USB : etat, bouton et explication ; une erreur ajoute sa ligne.
+        let usb = Self.sondeMaillage(p, usb: { _ in Self.sonde(bonjour: Self.bonjour(hote: nil)) }, trousseau: TrousseauMemoire())
+        await usb.connecter(Self.port, choisi: true)
+        let sansErreur = hauteur(usb)
+        await usb.autoriserAccesReseau()
+        #expect(usb.erreurAcces != nil)
+        #expect(hauteur(usb) > sansErreur, "ligne de l'erreur")
+        usb.oublier()
+        // Par le reseau : pas de bouton (la cle ne passe que par l'USB).
+        let t = try Self.prete(p, liaison: .reseau)
+        let reseau = Self.sondeMaillage(p, trousseau: t, reseau: ReseauFactice([.success(Self.sonde())]))
+        #expect(hauteur(reseau) < sansErreur, "sans le bouton")
+        reseau.oublier()
+    }
+
+    /// Liaison reseau tombee (aucune sonde dans l'app) : un port branche, debranche, rebranche ne
+    /// change rien et n'est jamais ouvert.
+    @Test(.timeLimit(.minutes(1))) func reseauTombeAucunPortOuvert() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = try Self.prete(p, liaison: .reseau)
+        var canaux = 0
+        let premiere = Self.sonde()
+        let s = Self.sondeMaillage(p, usb: { _ in
+            canaux += 1
+            return Self.sonde()
+        }, trousseau: t, reseau: ReseauFactice([.success(premiere), .failure(ErreurReseau.aucunDefi)]), delais: [.seconds(60)])
+        await s.connecterReseau()
+        premiere.fermer()
+        await SondeMaillageTests.attendre { if case .erreur = s.etat { true } else { false } }
+        let tombee = s.etat
+        for liste in [[Self.port], [], [Self.port]] {
+            s.portsChanges(liste)
+            await Task.yield()
+            #expect(s.etat == tombee, "ni connexion, ni absente")
+        }
+        #expect(canaux == 0)
+        #expect(s.ports == [Self.port], "port liste pour les Reglages")
+        s.oublier()
+    }
+
+    /// Au lancement, liaison reseau retenue : `demarrer` se connecte par le reseau ; les ports
+    /// branches sont seulement listes (IOKit), aucun n'est ouvert.
+    @Test(.timeLimit(.minutes(1))) func demarrerEnReseau() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = try Self.prete(p, liaison: .reseau)
+        let reseau = ReseauFactice([.success(Self.sonde())])
+        var canaux = 0
+        let s = Self.sondeMaillage(p, usb: { _ in
+            canaux += 1
+            return Self.sonde()
+        }, trousseau: t, reseau: reseau)
+        s.demarrer()
+        #expect(await Self.sonder { SondeMaillageTests.connectee(s) }, "connectee par le reseau")
+        #expect(reseau.appels.count == 1)
+        #expect(canaux == 0)
+        s.oublier()
     }
 
     /// Par le reseau, `bonjour` et `etat` attendent au-dela du renvoi de 4 s du canal : la

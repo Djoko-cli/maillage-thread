@@ -125,6 +125,23 @@ struct ProtocoleSondeTests {
         #expect(String(describing: r).contains("630DCD29"), "l'empreinte reste")
     }
 
+    /// Firmware 1.0.2 : `code` et `qr` nuls (par le reseau), `etat.eligible`, `udp` et `tas` dans
+    /// la reponse `cle` : tout se lit.
+    @Test func toleranceDuFirmware102() {
+        let bonjour = #"{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.2","nom":"SONDE-01","mac":"A00000000001","appairee":true,"code":null,"qr":null,"hote":"0123456789ABCDEF"}"#
+        let etat = #"{"v":1,"t":"etat","role":"child","rloc16":"AC09","ext":"E0000000000000FF","mode":"rdn","eligible":false,"parent":null,"partition":"46CBEBCD","chef":24,"canal":25,"prefixeMaille":null,"xp":null,"suspendue":false}"#
+        let cle = #"{"v":1,"t":"cle","id":7,"cle":"\#(Self.cleVecteurs)","empreinte":"630DCD29","hote":"0123456789ABCDEF","udp":{"port":5480,"ouvert":true},"tas":123456}"#
+        guard case .bonjour(let b)? = MessageSonde.lire(Data(bonjour.utf8)),
+              case .etat(let e)? = MessageSonde.lire(Data(etat.utf8)),
+              case .cle(let r)? = MessageSonde.lire(Data(cle.utf8)) else {
+            Issue.record("message 1.0.2 illisible")
+            return
+        }
+        #expect(b.code == nil && b.qr == nil && b.hote == "0123456789ABCDEF")
+        #expect(e.mode == "rdn" && e.partition == "46CBEBCD")
+        #expect(r.id == 7 && r.empreinte == "630DCD29" && r.hote == "0123456789ABCDEF")
+    }
+
     /// Diag : reussi (TLV decodees) et echoue (delai, occupee).
     @Test func diag() throws {
         let diags = try Self.messages().compactMap { if case .diag(let d) = $0 { d } else { nil } }
