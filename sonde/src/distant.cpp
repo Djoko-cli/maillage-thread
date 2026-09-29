@@ -153,4 +153,17 @@ bool Gardees::rendre(uint32_t rid, Rendu f, void *contexte) const {
   return trouve;
 }
 
+// ===========================================================================
+//  Cadence (copie de benq src/json_out.cpp, Cadence::allow)
+// ===========================================================================
+
+bool Cadence::allow(uint32_t now) {
+  // at_[idx_] : la plus ancienne des kLines dernieres lignes acceptees.
+  if (n_ >= kLines && now - at_[idx_] < kWindowMs) return false;
+  at_[idx_] = now;
+  idx_ = (uint8_t)((idx_ + 1) % kLines);
+  if (n_ < kLines) n_++;
+  return true;
+}
+
 }  // namespace distant

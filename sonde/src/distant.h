@@ -12,6 +12,8 @@
 //    la reponse gardee repart (les 8 dernieres par session, lignes comprises,
 //    comme le cache des 8 dernieres reponses d'une session reseau du pont
 //    Halo, benq src/json_out.h, ReplyCache).
+//  - Cadence : 20 commandes par seconde glissante et par session au plus
+//    (Cadence, copie de celle du pont Halo) ; au-dela, rien (l'app renvoie).
 //
 //  Pur et sans Arduino : teste sur l'hote.
 // ===========================================================================
@@ -78,6 +80,20 @@ class Gardees {
   uint32_t rid_ = 0;
   bool ouverte_ = false;     // une reponse est commencee
   bool abandonnee_ = false;  // trop grande : rien n'en est garde
+};
+
+// Au plus kLines lignes acceptees par kWindowMs glissantes : copie de la
+// classe Cadence du pont Halo (benq src/json_out.h et json_out.cpp, section
+// 6.5 de son protocole), jugee ici par session reseau.
+class Cadence {
+ public:
+  static constexpr uint8_t kLines = 20;
+  static constexpr uint32_t kWindowMs = 1000;
+  bool allow(uint32_t now);  // true : ligne acceptee et comptee
+
+ private:
+  uint32_t at_[kLines] = {};
+  uint8_t idx_ = 0, n_ = 0;
 };
 
 }  // namespace distant

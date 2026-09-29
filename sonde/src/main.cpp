@@ -216,8 +216,10 @@ struct Sortie {
 };
 static Sortie sSortie;
 
-// Reponses gardees de chaque session reseau (un rid repete ne relance rien).
+// Reponses gardees de chaque session reseau (un rid repete ne relance rien),
+// et cadence de chaque session (20 commandes par seconde au plus).
 static distant::Gardees sGardees[kPlacesReseau];
+static distant::Cadence sCadences[kPlacesReseau];
 
 static char sLigne[4096];
 static size_t sLong = 0;
@@ -876,7 +878,9 @@ static void surveillerAppairage(uint32_t maintenant) {
 // ---------------------------------------------------------------------------
 
 void reseauSessionPartie(uint8_t place) {
-  if (place < kPlacesReseau) sGardees[place].vider();
+  if (place >= kPlacesReseau) return;
+  sGardees[place].vider();
+  sCadences[place] = distant::Cadence();
 }
 
 // Une ligne gardee repart vers l'app, "<rid> <ligne JSON>".
@@ -895,8 +899,9 @@ static void executer(char *c);
 
 // "<rid> <commande>" d'une session etablie. Sans rid lisible, aucune reponse
 // possible : ignoree. Un rid deja servi ne relance rien : la reponse gardee
-// repart, ou rien si un diag de ce rid est encore en vol. Hors liste blanche :
-// erreur « refuse ».
+// repart, ou rien si un diag de ce rid est encore en vol. Puis la cadence,
+// comme Halo apres l'id (benq cli.cpp) : plus de 20 commandes dans la seconde,
+// rien, sans reponse (l'app renvoie). Hors liste blanche : erreur « refuse ».
 void reseauRecu(uint8_t place, char *charge) {
   uint32_t rid = 0;
   char *commande = nullptr;
@@ -911,6 +916,7 @@ void reseauRecu(uint8_t place, char *charge) {
   renvoi.n = distant::texteRid(rid, renvoi.prefixe);
   renvoi.prefixe[renvoi.n++] = ' ';
   if (sGardees[place].rendre(rid, renvoyerLigne, &renvoi)) return;
+  if (!sCadences[place].allow(millis())) return;
 
   sSortie.reseau = true;
   sSortie.place = place;
