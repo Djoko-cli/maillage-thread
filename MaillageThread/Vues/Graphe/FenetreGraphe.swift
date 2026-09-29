@@ -34,6 +34,7 @@ struct FenetreGraphe: View {
             }
             VStack(spacing: 10) {
                 BarreOutils()
+                LigneTournee()
                 if let r = surveillance.reseau, r.estScinde {
                     BandeauScission(reseau: r)
                 }
@@ -165,17 +166,26 @@ struct BarreOutils: View {
                 }
                 .buttonStyle(.glass)
                 .help("Rafraîchir : réseau, tournée de la sonde et noms de Maison")
-                if let a = sonde.avancement, let debut = sonde.debutTournee {
-                    IndicateurTournee(avancement: a, debut: debut)
-                }
             }
         }
     }
 }
 
-/// Tournee de la sonde en cours, dans la barre d'outils : un petit indicateur de
-/// progression et « Balayage des routeurs muets · 24/48 · 0:42 », la duree a jour chaque
-/// seconde.
+/// Ligne de la tournee en cours, centree sous la barre d'outils : la barre garde sa largeur,
+/// son bouton rafraichir ne bouge pas sous le pointeur. Rien hors tournee. Vue a part : seule
+/// elle se redessine a chaque pas de la tournee, pas la fenetre du graphe.
+struct LigneTournee: View {
+    @Environment(SondeMaillage.self) private var sonde
+
+    var body: some View {
+        if let a = sonde.avancement, let debut = sonde.debutTournee {
+            IndicateurTournee(avancement: a, debut: debut)
+        }
+    }
+}
+
+/// Tournee de la sonde en cours : un petit indicateur de progression et « Balayage des
+/// routeurs muets · 24/48 · 0:42 », la duree a jour chaque seconde.
 struct IndicateurTournee: View {
     let avancement: AvancementTournee
     let debut: Date

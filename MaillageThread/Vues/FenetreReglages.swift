@@ -237,13 +237,18 @@ struct CodeMatterSonde: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            if let image {
-                Image(decorative: image, scale: 1)
-                    .resizable()
-                    .interpolation(.none)
-                    .frame(width: 120, height: 120)
-                    .padding(8)
-                    .background(.white, in: .rect(cornerRadius: 6))
+            if qr != nil {
+                // Place reservee des la construction : la section ne saute pas quand l'image arrive.
+                ZStack {
+                    if let image {
+                        Image(decorative: image, scale: 1)
+                            .resizable()
+                            .interpolation(.none)
+                    }
+                }
+                .frame(width: 120, height: 120)
+                .padding(8)
+                .background(.white, in: .rect(cornerRadius: 6))
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Code Matter de la sonde").font(.caption).foregroundStyle(.secondary)

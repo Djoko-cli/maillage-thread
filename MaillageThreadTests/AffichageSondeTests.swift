@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import MaillageCoeur
+import SwiftUI
 import Testing
 @testable import MaillageThread
 
@@ -174,5 +176,15 @@ struct AffichageSondeTests {
         let image = try #require(CodeMatter.imageQR("MT:ABCDEFGHIJ0123456789"))
         #expect(image.width == image.height)
         #expect(image.width >= 21)
+    }
+
+    /// Le QR code a sa place (120 pt et sa marge) des la construction de la vue : la section ne
+    /// saute pas quand l'image, formee apres coup, arrive. Sans charge, pas de place pour lui.
+    @Test func placeDuQRCodeReservee() {
+        let avec = NSHostingView(rootView: CodeMatterSonde(qr: "MT:ABCDEFGHIJ0123456789", code: "12345678901",
+                                                           appairee: true)).fittingSize
+        #expect(avec.width >= 136 && avec.height >= 136)
+        let sans = NSHostingView(rootView: CodeMatterSonde(qr: nil, code: "12345678901", appairee: true)).fittingSize
+        #expect(sans.height < 136)
     }
 }

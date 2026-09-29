@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import MaillageCoeur
+import SwiftUI
 import Testing
 @testable import MaillageThread
 
@@ -32,6 +34,36 @@ struct GrapheTests {
                 "sans dossier : pas de passeur au premier plan a chaque clic")
         #expect(!BarreOutils.lancePasseur(mode: .demo, dossierChoisi: true))
         #expect(!BarreOutils.lancePasseur(mode: .demo, dossierChoisi: false))
+    }
+
+    /// Pendant une tournee, la barre d'outils garde sa largeur : le bouton rafraichir ne bouge
+    /// pas sous le pointeur. L'indicateur est sur sa propre ligne, qui ne prend aucune place
+    /// hors tournee (pas meme l'espacement de la pile).
+    @Test(.timeLimit(.minutes(1))) func barreImmobilePendantUneTournee() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let surveillance = Surveillance(mode: .direct, dossier: nil)
+        let noms = DossierNoms(cache: nil)
+        let journal = JournalCanaux()
+        let sonde = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in SondeMaillageTests.canalRetenu(journal) })
+        func taille(_ vue: some View) -> CGSize {
+            NSHostingView(rootView: vue.environment(surveillance).environment(sonde).environment(noms)).fittingSize
+        }
+        func pile() -> CGSize {
+            taille(VStack(spacing: 10) {
+                Color.clear.frame(width: 10, height: 10)
+                LigneTournee()
+                Color.clear.frame(width: 10, height: 10)
+            })
+        }
+        let barre = taille(BarreOutils())
+        #expect(pile().height == 30, "hors tournee : rien")
+        await sonde.connecter(SondeMaillageTests.port, choisi: true)
+        await journal.attendre(SondeMaillageTests.listeRetenue)
+        await SondeMaillageTests.attendre { sonde.avancement != nil }
+        #expect(taille(BarreOutils()) == barre)
+        #expect(pile().height > 30, "pendant la tournee : la ligne de l'indicateur")
+        sonde.oublier()
     }
 }
 
