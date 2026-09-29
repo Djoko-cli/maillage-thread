@@ -5,6 +5,9 @@ import Observation
 /// La sonde vue par l'app : port retenu (par son numero de serie USB),
 /// connexion, tournee toutes les 5 minutes, dernier maillage. L'app n'ouvre
 /// jamais un port qu'on ne lui a pas designe (spec de la sonde, section 3).
+/// Liaison par l'USB, ou par le reseau Thread (contrat 1.0.2, comme le pont Halo) :
+/// la cle se cree par l'USB et reste dans le trousseau ; par le reseau, la sonde
+/// peut etre debranchee du Mac et alimentee ailleurs.
 @MainActor
 @Observable
 final class SondeMaillage {
@@ -20,11 +23,23 @@ final class SondeMaillage {
         case erreur(String)
     }
 
+    /// Liaison avec la sonde retenue : son port USB, ou le reseau Thread.
+    enum Liaison: String, Sendable {
+        case usb
+        case reseau
+    }
+
     /// Numero de serie USB de la sonde retenue (l'adresse MAC du C6).
     static let cleSerie = "sondeSerieUSB"
     /// Nom de la sonde retenue, donne par la carte (`bonjour`).
     static let cleNom = "sondeNom"
+    /// Nom d'hote SRP de la sonde retenue (sans `.local`), donne par la carte (`bonjour`, `cle`).
+    static let cleHote = "sondeHote"
+    /// Liaison choisie dans les Reglages (USB si absente).
+    static let cleLiaison = "sondeLiaison"
     static let periode: Duration = .seconds(300)
+    /// Reprises de la liaison reseau apres un echec : 1, 2, 5, 10 s, puis toutes les 30 s.
+    static let delaisReprise: [Duration] = [.seconds(1), .seconds(2), .seconds(5), .seconds(10), .seconds(30)]
 
     private(set) var etat: Etat = .sansSonde
     /// Ports Espressif branches (la sonde, ou un autre C6 comme le pont Halo).
@@ -46,6 +61,16 @@ final class SondeMaillage {
     private(set) var debutTournee: Date?
     /// Derniere erreur d'une tournee (la liaison reste ouverte).
     private(set) var erreurTournee: String?
+    private(set) var liaison: Liaison = .usb
+    /// Nom d'hote SRP de la sonde retenue (sans `.local`) : l'acces reseau vise `<hote>.local`.
+    private(set) var hote: String?
+    /// Empreinte de la cle de ce Mac pour la sonde retenue (trousseau) ; nil sans cle.
+    private(set) var empreinteAcces: String?
+    /// « Autoriser l'acces reseau » en cours (cle demandee par l'USB).
+    private(set) var autorisationEnCours = false
+    /// Echec de la derniere operation sur l'acces reseau (autorisation, oubli de la cle) ; nil
+    /// apres une reussite.
+    private(set) var erreurAcces: String?
     /// Appele a chaque nouveau maillage, avec l'heure de sa reception (fin de la
     /// tournee) : la fraicheur affichee se compte depuis.
     @ObservationIgnored var surMaillage: ((Maillage, Date) -> Void)?
@@ -56,6 +81,19 @@ final class SondeMaillage {
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let actif: Bool
     @ObservationIgnored private let ouvrirCanal: (String) -> any CanalSonde
+    /// Cles de l'acces reseau : en memoire par defaut, celui du Mac au lancement de l'app.
+    @ObservationIgnored private let trousseau: any TrousseauCles
+    /// Session reseau vers `<hote>.local` avec la cle : le canal pret, ou l'erreur.
+    @ObservationIgnored private let ouvrirReseau: @MainActor (String, Data) async throws -> any CanalSonde
+    @ObservationIgnored private let delaisReprise: [Duration]
+    /// Echecs de la liaison reseau depuis la derniere connexion reussie.
+    @ObservationIgnored private var essaisReprise = 0
+    @ObservationIgnored private var reprise: Task<Void, Never>?
+    /// Canal de la session reseau en place : sa cause de fermeture est montree a la perte.
+    @ObservationIgnored private var canalReseau: (any CanalSonde)?
+    /// Activite tenue pendant une session reseau, comme la session serie de Halo : sans elle,
+    /// App Nap retarderait la veille du canal (la carte oublie une session muette) et les tournees.
+    @ObservationIgnored private var activite: (any NSObjectProtocol)?
     /// Heure du debut de la tournee et de la reception du maillage (injectee par les tests).
     @ObservationIgnored private let horloge: () -> Date
     @ObservationIgnored private var sonde: SondeUSB?
@@ -75,16 +113,41 @@ final class SondeMaillage {
     @ObservationIgnored private(set) var boucle: Task<Void, Never>?
     @ObservationIgnored private var surveillantPorts: PortsUSB?
 
-    /// `actif` faux (mode demo, tests) : ni port, ni preferences lues.
+    /// `actif` faux (mode demo, tests) : ni port, ni preferences lues, ni trousseau.
+    /// `trousseau` : en memoire par defaut (tests) ; l'app lui passe celui du Mac.
     init(preferences: UserDefaults = .standard, actif: Bool,
          ouvrirCanal: @escaping (String) -> any CanalSonde = { CanalSerie(liaison: LiaisonSerie(chemin: $0)) },
+         trousseau: any TrousseauCles = TrousseauMemoire(),
+         ouvrirReseau: @escaping @MainActor (String, Data) async throws -> any CanalSonde
+             = { try await CanalReseau.connecter(hote: $0, cle: $1) },
+         delaisReprise: [Duration] = SondeMaillage.delaisReprise,
          horloge: @escaping () -> Date = { Date() }) {
         self.preferences = preferences
         self.actif = actif
         self.ouvrirCanal = ouvrirCanal
+        self.trousseau = trousseau
+        self.ouvrirReseau = ouvrirReseau
+        self.delaisReprise = delaisReprise
         self.horloge = horloge
         serie = actif ? preferences.string(forKey: Self.cleSerie) : nil
         nom = actif ? preferences.string(forKey: Self.cleNom) : nil
+        guard actif else { return }
+        liaison = preferences.string(forKey: Self.cleLiaison).flatMap(Liaison.init(rawValue:)) ?? .usb
+        hote = preferences.string(forKey: Self.cleHote)
+        empreinteAcces = hote.flatMap(empreinte(pour:))
+    }
+
+    /// Une activite est tenue (session reseau en place).
+    var activiteTenue: Bool { activite != nil }
+
+    /// Le reseau se choisit : nom d'hote connu, et cle de ce Mac pour lui.
+    var reseauDisponible: Bool { hote != nil && empreinteAcces != nil }
+
+    /// « Autoriser l'acces reseau » possible : la sonde retenue connectee par son port USB, hors
+    /// tournee (une ligne `erreur`, sans id, serait attribuee a la demande de cle).
+    var peutAutoriser: Bool {
+        guard liaison == .usb, !autorisationEnCours, !tourneeEnCours, case .connectee = etat else { return false }
+        return serie != nil && serieEtat == serie
     }
 
     /// Nom de la sonde retenue pour l'etat qui la concerne : absente, ou connexion, connexion
@@ -115,21 +178,71 @@ final class SondeMaillage {
         p.demarrer()
         surveillantPorts = p
         portsChanges(PortsUSB.lister())
+        if liaison == .reseau { lancerConnexionReseau() }
     }
 
     /// Choix d'un port dans les Reglages : retenu seulement s'il repond en sonde.
     /// Le port de la sonde deja connectee n'est pas rouvert.
     func choisir(_ port: PortUSB) {
-        guard actif, port.chemin != cheminConnecte else { return }
+        guard actif, liaison == .usb, port.chemin != cheminConnecte else { return }
         lancerConnexion(port, choisi: true)
     }
 
-    /// Oublie la sonde retenue (numero de serie et nom) et ferme la liaison.
+    /// Liaison choisie dans les Reglages. Le reseau exige une cle de ce Mac pour la sonde
+    /// retenue : la liaison USB est fermee (le port libere), la session reseau ouverte. L'USB
+    /// ferme la session reseau et reprend la sonde retenue si elle est branchee.
+    func choisirLiaison(_ l: Liaison) {
+        guard actif, l != liaison, l == .usb || reseauDisponible else { return }
+        liaison = l
+        preferences.set(l.rawValue, forKey: Self.cleLiaison)
+        reprise?.cancel()
+        essaisReprise = 0
+        switch l {
+        case .reseau:
+            lancerConnexionReseau()
+        case .usb:
+            deconnecter(serie == nil ? .sansSonde : .absente)
+            portsChanges(ports)
+        }
+    }
+
+    /// Oublie la sonde retenue (numero de serie, nom, nom d'hote, cle de ce Mac pour elle :
+    /// la sonde garde la sienne) et ferme la liaison ; retour a l'USB. Si le trousseau refuse
+    /// d'effacer la cle, l'echec est montre et le nom d'hote reste (comme la cle) : « Oublier »
+    /// peut etre relance.
     func oublier() {
         preferences.removeObject(forKey: Self.cleSerie)
         serie = nil
         retenirNom(nil)
+        erreurAcces = nil
+        if let hote {
+            do {
+                try trousseau.oublier(nom: hote)
+                retenirHote(nil)
+            } catch {
+                erreurAcces = String(localized: "Clé de \(hote).local non retirée du trousseau : \(error.localizedDescription)")
+            }
+        }
+        liaison = .usb
+        preferences.removeObject(forKey: Self.cleLiaison)
+        reprise?.cancel()
         deconnecter(.sansSonde)
+    }
+
+    /// Nom d'hote de la sonde retenue, garde a cote de son numero de serie ; l'empreinte de la
+    /// cle de ce Mac pour lui est relue du trousseau.
+    private func retenirHote(_ h: String?) {
+        if let h {
+            preferences.set(h, forKey: Self.cleHote)
+        } else {
+            preferences.removeObject(forKey: Self.cleHote)
+        }
+        hote = h
+        empreinteAcces = h.flatMap(empreinte(pour:))
+    }
+
+    private func empreinte(pour nom: String) -> String? {
+        trousseau.lister().first { $0.nom == nom }?.empreinte
     }
 
     /// Nom donne par le dernier `bonjour` : retenu a cote du numero de serie, efface si le
@@ -151,9 +264,10 @@ final class SondeMaillage {
     }
 
     /// Ports branches : la sonde retenue revient, ou s'en va.
+    /// Par le reseau, la sonde n'est jamais ouverte en USB, meme branchee.
     func portsChanges(_ liste: [PortUSB]) {
         ports = liste.filter(\.estEspressif)
-        guard let serie else { return }
+        guard liaison == .usb, let serie else { return }
         if let p = ports.first(where: { $0.serie == serie }) {
             // `lancerConnexion` passe tout de suite a `.connexion` : un second appel n'en lance pas d'autre.
             if sonde == nil && etat != .connexion { lancerConnexion(p, choisi: false) }
@@ -199,11 +313,17 @@ final class SondeMaillage {
             cheminConnecte = port.chemin
             etat = .connectee(b)
             if choisi, let serieUSB = port.serie {
+                let autre = serieUSB != serie
                 preferences.set(serieUSB, forKey: Self.cleSerie)
                 serie = serieUSB
+                // Le nom d'hote retenu etait celui d'une autre sonde.
+                if autre { retenirHote(nil) }
             }
             // Le nom va avec la sonde retenue (un port sans numero de serie ne l'est pas).
-            retenirNom(port.serie != nil && port.serie == serie ? b.nom : nil)
+            let retenue = port.serie != nil && port.serie == serie
+            retenirNom(retenue ? b.nom : nil)
+            // Son nom d'hote aussi, s'il est connu (nil tant que Matter ne l'a pas enregistre).
+            if retenue, let h = b.hote, h != hote { retenirHote(h) }
             lancerBoucle()
         } catch {
             await s.fermer()
@@ -227,7 +347,162 @@ final class SondeMaillage {
 
     private func liaisonFermee(_ s: SondeUSB) {
         guard sonde === s else { return }
-        deconnecter(.absente)
+        guard liaison == .reseau else {
+            deconnecter(.absente)
+            return
+        }
+        // Veille sans reponse (sonde debranchee, redemarree), session perdue : cause montree,
+        // puis reconnexion.
+        let cause = (canalReseau as? any CauseFermeture)?.raisonFermeture
+        deconnecter(.erreur(cause ?? String(localized: "liaison réseau perdue")))
+        serieEtat = serie
+        planifierReprise()
+    }
+
+    // MARK: - Reseau
+
+    /// Connexion par le reseau lancee sans l'attendre (Reglages, lancement) : la liaison en
+    /// place est fermee et `etat` passe a `.connexion` tout de suite.
+    private func lancerConnexionReseau() {
+        deconnecter(.connexion)
+        serieEtat = serie
+        let n = essai
+        Task {
+            guard n == essai else { return }
+            await connecterReseau()
+        }
+    }
+
+    /// Connexion a la sonde retenue par le reseau Thread : cle du trousseau, session vers
+    /// `<hote>.local:5480` (poignee de main H1), `bonjour`, puis tournees. Un echec est montre et
+    /// la connexion reprise seule (1, 2, 5, 10 s, puis toutes les 30 s), sauf sans cle (il faut
+    /// l'USB). Perimee par un `deconnecter`, elle ferme sa liaison et sort sans rien toucher.
+    func connecterReseau() async {
+        // Liaison USB : rien a fermer ni a changer.
+        guard actif, liaison == .reseau else { return }
+        deconnecter(.connexion)
+        serieEtat = serie
+        let n = essai
+        // La liaison USB en place est vraiment fermee : le port est libre.
+        await fermetures?.value
+        guard n == essai, liaison == .reseau else { return }
+        var canal: (any CanalSonde)?
+        do {
+            guard let hote else { throw CleReseau.Erreur.sansNomDHote }
+            let c = try await ouvrirReseau(hote, try await Self.lireCle(trousseau, hote))
+            canal = c
+            guard n == essai else {
+                c.fermer()
+                return
+            }
+            // Par le reseau, une commande attend au-dela du renvoi de 4 s du canal.
+            let s = SondeUSB(canal: c, delaiCommande: SondeUSB.delaiCommandeReseau)
+            enConnexion = s
+            try await s.demarrer { [weak self] in
+                Task { @MainActor in self?.liaisonFermee(s) }
+            }
+            let b = try await s.bonjour()
+            guard n == essai else {
+                await s.fermer()
+                return
+            }
+            guard b.estSonde else {
+                await s.fermer()
+                guard n == essai else { return }
+                enConnexion = nil
+                etat = .refusee(String(localized: "\(hote).local n'est pas une sonde (« \(b.produit) »)"))
+                return
+            }
+            enConnexion = nil
+            sonde = s
+            canalReseau = c
+            tenirActivite()
+            etat = .connectee(b)
+            essaisReprise = 0
+            retenirNom(b.nom)
+            lancerBoucle()
+        } catch {
+            // Session ouverte puis abandonnee (bonjour sans reponse...) : fermee ici.
+            canal?.fermer()
+            guard n == essai else { return }
+            enConnexion = nil
+            etat = .erreur(error.localizedDescription)
+            // Sans cle ou sans nom d'hote (trousseau, ou jamais appris) : il faut l'USB ; le reste
+            // se reprend seul.
+            if error is ErreurTrousseau || error is CleReseau.Erreur { return }
+            if let e = error as? ErreurReseau, !e.repriseAutomatique { return }
+            planifierReprise()
+        }
+    }
+
+    /// Cle de ce Mac pour la sonde, lue hors de l'acteur principal : macOS peut d'abord demander
+    /// l'autorisation d'acceder au trousseau (fenetre modale), sans figer le menu.
+    private nonisolated static func lireCle(_ trousseau: any TrousseauCles, _ nom: String) async throws -> Data {
+        try await Task.detached(priority: .userInitiated) { try trousseau.lire(nom: nom) }.value
+    }
+
+    private func tenirActivite() {
+        guard activite == nil else { return }
+        activite = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
+                                                         reason: "Session reseau de la sonde : veille et tournees")
+    }
+
+    private func relacherActivite() {
+        guard let a = activite else { return }
+        ProcessInfo.processInfo.endActivity(a)
+        activite = nil
+    }
+
+    /// Nouvel essai de la liaison reseau apres un delai croissant.
+    private func planifierReprise() {
+        let delai = delaisReprise[min(essaisReprise, delaisReprise.count - 1)]
+        essaisReprise += 1
+        let n = essai
+        reprise?.cancel()
+        reprise = Task { [weak self] in
+            try? await Task.sleep(for: delai)
+            guard !Task.isCancelled, let self, n == self.essai, self.liaison == .reseau else { return }
+            await self.connecterReseau()
+        }
+    }
+
+    // MARK: - Cle
+
+    /// « Autoriser l'acces reseau » (Reglages, sonde retenue branchee en USB) : `bonjour` pour un
+    /// nom d'hote a jour (sans lui, aucune cle n'est demandee), `cle nouvelle` par l'USB, cle
+    /// verifiee puis rangee dans le trousseau sous ce nom. La carte remplace sa cle : une session
+    /// reseau en cours (autre Mac) tombe.
+    func autoriserAccesReseau() async {
+        guard peutAutoriser, let s = sonde else { return }
+        autorisationEnCours = true
+        erreurAcces = nil
+        defer { autorisationEnCours = false }
+        do {
+            let b = try await s.bonjour()
+            if sonde === s {
+                etat = .connectee(b)
+                retenirNom(b.nom)
+            }
+            guard let nomHote = b.hote, !nomHote.isEmpty else { throw CleReseau.Erreur.sansNomDHote }
+            let reponse = try await s.cleNouvelle(alea: CleReseau.alea())
+            let c = try CleReseau.verifier(reponse).get()
+            // La carte a adopte la cle : elle se range meme si la liaison s'est fermee depuis, sous
+            // le nom d'hote de la reponse, sinon (nul ou vide) sous celui du `bonjour`.
+            let nom = c.hote.flatMap { $0.isEmpty ? nil : $0 } ?? nomHote
+            try trousseau.ranger(nom: nom, cle: c.cle, empreinte: c.empreinte)
+            retenirHote(nom)
+            // Une seule sonde retenue : les cles d'autres noms d'hote (mise en service anterieure)
+            // ne servent plus ; un echec est montre, la nouvelle cle reste rangee.
+            for ancien in trousseau.lister() where ancien.nom != nom {
+                do {
+                    try trousseau.oublier(nom: ancien.nom)
+                } catch {
+                    erreurAcces = String(localized: "Clé rangée ; l'ancienne clé de \(ancien.nom).local n'a pas pu être retirée du trousseau : \(error.localizedDescription)")
+                }
+            }
+        } catch {
+            erreurAcces = error.localizedDescription
+        }
     }
 
     /// Ferme sans attendre la liaison connectee et celle d'une connexion en
@@ -246,6 +521,8 @@ final class SondeMaillage {
         }
         sonde = nil
         enConnexion = nil
+        canalReseau = nil
+        relacherActivite()
         cheminConnecte = nil
         serieEtat = port?.serie
         etat = nouveau

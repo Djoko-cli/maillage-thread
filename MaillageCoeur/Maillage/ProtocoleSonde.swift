@@ -23,8 +23,46 @@ public struct Bonjour: Hashable, Sendable, Codable {
     public let code: String?
     /// Charge du QR code Matter (« MT:... »), comme `code`.
     public let qr: String?
+    /// Nom d'hote SRP de la sonde, sans `.local` (celui que Matter enregistre) : l'acces par le
+    /// reseau Thread vise `<hote>.local`. Firmware 1.0.2 et suivants ; nil tant qu'il n'est pas connu.
+    public let hote: String?
 
     public var estSonde: Bool { produit == ProtocoleSonde.produit }
+}
+
+/// Reponse a `cle nouvelle` (USB seulement) : la cle de l'acces reseau, rendue une seule fois,
+/// avec l'id de la demande et le nom d'hote ; ou reponse a `cle` : l'empreinte seule (nil sans
+/// cle). La cle n'apparait dans aucune description (`description`, `dump`) : jamais dans un
+/// journal, la console ni un message d'erreur.
+public struct ReponseCle: Hashable, Sendable, Codable {
+    public let id: Int?
+    /// 64 hexa MAJUSCULES.
+    public let cle: String?
+    /// 8 premiers hexa de SHA-256(cle).
+    public let empreinte: String?
+    public let hote: String?
+
+    public init(id: Int?, cle: String?, empreinte: String?, hote: String?) {
+        self.id = id
+        self.cle = cle
+        self.empreinte = empreinte
+        self.hote = hote
+    }
+}
+
+extension ReponseCle: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    private var cleMasquee: String { cle == nil ? "nil" : "<masquee>" }
+
+    public var description: String {
+        "cle(id: \(id.map(String.init) ?? "nil"), cle: \(cleMasquee), empreinte: \(empreinte ?? "nil"), hote: \(hote ?? "nil"))"
+    }
+
+    public var debugDescription: String { description }
+
+    public var customMirror: Mirror {
+        Mirror(self, children: ["id": id as Any, "cle": cleMasquee, "empreinte": empreinte as Any, "hote": hote as Any],
+               displayStyle: .struct)
+    }
 }
 
 /// Parent de la sonde, tel qu'elle le voit.
@@ -98,6 +136,7 @@ public enum MessageSonde: Hashable, Sendable {
     case etat(EtatSonde)
     case voisins([VoisinSonde])
     case diag(ResultatDiag)
+    case cle(ReponseCle)
     case erreur(String)
     /// Type inconnu (version plus recente de la sonde) : ignore.
     case inconnu(String)
@@ -124,6 +163,7 @@ public enum MessageSonde: Hashable, Sendable {
         case "etat": return (try? d.decode(EtatSonde.self, from: json)).map { .etat($0) }
         case "voisins": return (try? d.decode(Voisins.self, from: json)).map { .voisins($0.liste) }
         case "diag": return (try? d.decode(ResultatDiag.self, from: json)).map { .diag($0) }
+        case "cle": return (try? d.decode(ReponseCle.self, from: json)).map { .cle($0) }
         case "erreur": return (try? d.decode(Erreur.self, from: json)).map { .erreur($0.erreur) }
         default: return .inconnu(e.t)
         }
@@ -137,6 +177,9 @@ public enum CommandeSonde: Hashable, Sendable {
     case voisins
     /// `diag <RLOC16> <t,t,...> <id> [<delai ms>]`
     case diag(cible: UInt16, tlv: [UInt8], id: Int, delaiMs: Int?)
+    /// `cle nouvelle <alea en 64 HEXA> <id>` (USB seulement) : la carte en tire la cle de
+    /// l'acces reseau et la rend une seule fois (`cle`).
+    case cleNouvelle(alea: Data, id: Int)
 
     /// Ligne a envoyer, fin de ligne comprise.
     public var ligne: String {
@@ -148,6 +191,8 @@ public enum CommandeSonde: Hashable, Sendable {
             var l = String(format: "diag %04X ", cible) + tlv.map(String.init).joined(separator: ",") + " \(id)"
             if let delai { l += " \(delai)" }
             return l + "\n"
+        case .cleNouvelle(let alea, let id):
+            return "cle nouvelle " + alea.map { String(format: "%02X", $0) }.joined() + " \(id)\n"
         }
     }
 }

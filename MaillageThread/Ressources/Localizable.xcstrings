@@ -385,6 +385,22 @@
         }
       }
     },
+    "%@.local n'est pas une sonde (« %@ »)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@.local is not a probe (“%2$@”)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@.local n'est pas une sonde (« %2$@ »)"
+          }
+        }
+      }
+    },
     "%lld accessoires · %@" : {
       "localizations" : {
         "en" : {
@@ -461,6 +477,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Accès au réseau local refusé"
+          }
+        }
+      }
+    },
+    "Accès au réseau local refusé : Réglages Système › Confidentialité et sécurité › Réseau local › Maillage Thread." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local network access denied: System Settings › Privacy & Security › Local Network › Maillage Thread."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accès au réseau local refusé : Réglages Système › Confidentialité et sécurité › Réseau local › Maillage Thread."
+          }
+        }
+      }
+    },
+    "Accès réseau" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network access"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accès réseau"
           }
         }
       }
@@ -721,6 +769,22 @@
         }
       }
     },
+    "Autoriser l'accès réseau" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Network Access"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autoriser l'accès réseau"
+          }
+        }
+      }
+    },
     "Autorisez Maillage Thread dans Réglages Système › Confidentialité et sécurité › Réseau local." : {
       "localizations" : {
         "en" : {
@@ -865,6 +929,54 @@
         }
       }
     },
+    "Clé absente de ce Mac pour %@.local : brancher la sonde en USB, puis « Autoriser l'accès réseau »." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No key on this Mac for %@.local: plug the probe in over USB, then “Allow Network Access”."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé absente de ce Mac pour %@.local : brancher la sonde en USB, puis « Autoriser l'accès réseau »."
+          }
+        }
+      }
+    },
+    "Clé de %@.local non retirée du trousseau : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key for %1$@.local not removed from the keychain: %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé de %1$@.local non retirée du trousseau : %2$@"
+          }
+        }
+      }
+    },
+    "Clé rangée ; l'ancienne clé de %@.local n'a pas pu être retirée du trousseau : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key stored; the old key for %1$@.local could not be removed from the keychain: %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé rangée ; l'ancienne clé de %1$@.local n'a pas pu être retirée du trousseau : %2$@"
+          }
+        }
+      }
+    },
     "Code Matter de la sonde" : {
       "localizations" : {
         "en" : {
@@ -877,6 +989,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Code Matter de la sonde"
+          }
+        }
+      }
+    },
+    "Connexion réseau perdue : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network connection lost: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connexion réseau perdue : %@"
           }
         }
       }
@@ -1009,6 +1137,22 @@
         }
       }
     },
+    "Empreinte incohérente avec la clé reçue : clé non rangée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fingerprint does not match the received key: key not stored."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empreinte incohérente avec la clé reçue : clé non rangée."
+          }
+        }
+      }
+    },
     "Enregistrer" : {
       "localizations" : {
         "en" : {
@@ -1053,6 +1197,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Entre %1$@ et %2$@ : %3$@"
+          }
+        }
+      }
+    },
+    "Erreur réseau : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network error: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erreur réseau : %@"
           }
         }
       }
@@ -1201,6 +1361,22 @@
         }
       }
     },
+    "La clé passe par l'USB, sonde branchée, et reste dans le trousseau de ce Mac. Avec la liaison « Réseau Thread », la sonde peut être débranchée et alimentée ailleurs." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The key goes over USB, with the probe plugged in, and stays in this Mac's keychain. With the “Thread Network” link, the probe can be unplugged and powered elsewhere."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La clé passe par l'USB, sonde branchée, et reste dans le trousseau de ce Mac. Avec la liaison « Réseau Thread », la sonde peut être débranchée et alimentée ailleurs."
+          }
+        }
+      }
+    },
     "La langue change au prochain lancement." : {
       "localizations" : {
         "en" : {
@@ -1213,6 +1389,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La langue change au prochain lancement."
+          }
+        }
+      }
+    },
+    "La sonde n'a pas encore de nom d'hôte (Matter ne l'a pas encore enregistré) : réessayer dans une minute." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The probe has no host name yet (Matter has not registered it yet): try again in a minute."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sonde n'a pas encore de nom d'hôte (Matter ne l'a pas encore enregistré) : réessayer dans une minute."
+          }
+        }
+      }
+    },
+    "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Autoriser l'accès réseau »)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The probe does not answer: powered off, not yet in the Thread network, or a key different from this Mac's (plug it in over USB, then “Allow Network Access”)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Autoriser l'accès réseau »)."
+          }
+        }
+      }
+    },
+    "La sonde refuse l'accès réseau : la brancher en USB, puis « Autoriser l'accès réseau »." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The probe refuses network access: plug it in over USB, then “Allow Network Access”."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sonde refuse l'accès réseau : la brancher en USB, puis « Autoriser l'accès réseau »."
           }
         }
       }
@@ -1277,6 +1501,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Le surnom reste sur ce Mac et passe avant le nom de Maison."
+          }
+        }
+      }
+    },
+    "Liaison" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liaison"
           }
         }
       }
@@ -1373,6 +1613,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mode démo : pas de sonde."
+          }
+        }
+      }
+    },
+    "Nom d'hôte" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host name"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nom d'hôte"
           }
         }
       }
@@ -1645,6 +1901,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Partition %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Pas de route IPv6 vers le réseau Thread : l'adresse OMR de la sonde est injoignable depuis ce Mac. L'assistant halo-routes de benq rétablit la route (sh tools/macos/halo-routes/installer.sh, s'il n'est pas installé)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No IPv6 route to the Thread network: the probe's OMR address cannot be reached from this Mac. The halo-routes helper from benq restores the route (sh tools/macos/halo-routes/installer.sh, if it is not installed)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pas de route IPv6 vers le réseau Thread : l'adresse OMR de la sonde est injoignable depuis ce Mac. L'assistant halo-routes de benq rétablit la route (sh tools/macos/halo-routes/installer.sh, s'il n'est pas installé)."
           }
         }
       }
@@ -2097,6 +2369,22 @@
         }
       }
     },
+    "Réponse sans clé lisible (64 hexa majuscules attendus) : clé non rangée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reply without a readable key (64 uppercase hex digits expected): key not stored."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réponse sans clé lisible (64 hexa majuscules attendus) : clé non rangée."
+          }
+        }
+      }
+    },
     "Réseau" : {
       "localizations" : {
         "en" : {
@@ -2189,6 +2477,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Réseau %@ trouvé scindé"
+          }
+        }
+      }
+    },
+    "Réseau Thread" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thread Network"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réseau Thread"
           }
         }
       }
@@ -2353,6 +2657,22 @@
         }
       }
     },
+    "Sonde introuvable (%@) : éteinte, hors du réseau Thread, ou routeurs de bordure injoignables." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Probe not found (%@): powered off, outside the Thread network, or border routers unreachable."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sonde introuvable (%@) : éteinte, hors du réseau Thread, ou routeurs de bordure injoignables."
+          }
+        }
+      }
+    },
     "Sonde suspendue dans Maison (interrupteur « Sonde maillage » éteint) : pas de relevé." : {
       "localizations" : {
         "en" : {
@@ -2481,6 +2801,38 @@
         }
       }
     },
+    "Trousseau : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keychain: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trousseau : %@"
+          }
+        }
+      }
+    },
+    "USB" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "USB"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "USB"
+          }
+        }
+      }
+    },
     "Vu par la sonde : son ExtMac ne correspond à aucun appareil annoncé." : {
       "localizations" : {
         "en" : {
@@ -2593,6 +2945,22 @@
         }
       }
     },
+    "autorisé · clé %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "allowed · key %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "autorisé · clé %@"
+          }
+        }
+      }
+    },
     "batterie OK" : {
       "localizations" : {
         "en" : {
@@ -2621,6 +2989,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "batterie faible"
+          }
+        }
+      }
+    },
+    "canal réseau déjà ouvert" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "network channel already open"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "canal réseau déjà ouvert"
           }
         }
       }
@@ -2961,6 +3345,38 @@
         }
       }
     },
+    "la sonde ne répond plus (débranchée, redémarrée ou hors de portée ?)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "the probe no longer answers (unplugged, restarted, or out of range?)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "la sonde ne répond plus (débranchée, redémarrée ou hors de portée ?)"
+          }
+        }
+      }
+    },
+    "la sonde refuse : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "the probe refuses: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "la sonde refuse : %@"
+          }
+        }
+      }
+    },
     "lecture de DTR et RTS (TIOCMGET)" : {
       "localizations" : {
         "en" : {
@@ -3025,6 +3441,22 @@
         }
       }
     },
+    "liaison réseau perdue" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "network link lost"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "liaison réseau perdue"
+          }
+        }
+      }
+    },
     "lien radio (qualité)" : {
       "localizations" : {
         "en" : {
@@ -3085,6 +3517,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "noms.json illisible : %@"
+          }
+        }
+      }
+    },
+    "non autorisé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "not allowed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "non autorisé"
           }
         }
       }
@@ -3309,6 +3757,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "sans adresse"
+          }
+        }
+      }
+    },
+    "session réseau fermée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "network session closed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "session réseau fermée"
+          }
+        }
+      }
+    },
+    "session réseau fermée par l'app" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "network session closed by the app"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "session réseau fermée par l'app"
           }
         }
       }
