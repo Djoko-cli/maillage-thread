@@ -79,3 +79,30 @@ enum Captures {
         try CodageJSON.decodeur().decode(Annonces.self, from: Data(contentsOf: dossier.appendingPathComponent(fichier)))
     }
 }
+
+/// Capture anonymisee de la sonde (`docs/releves/2026-09-29/capture-sonde.jsonl`) :
+/// un message par ligne, tel que la sonde l'a envoye, avec l'heure de reception.
+enum CaptureSonde {
+    static let fichier = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()  // MaillageCoeurTests
+        .deletingLastPathComponent()  // racine du depot
+        .appendingPathComponent("docs/releves/2026-09-29/capture-sonde.jsonl")
+
+    /// Les lignes JSON, dans l'ordre.
+    static func lignes() throws -> [String] {
+        try String(contentsOf: fichier, encoding: .utf8).split(separator: "\n").map(String.init)
+    }
+
+    /// TLV (hexa) de la reponse `diag` d'identifiant `id`.
+    static func tlv(_ id: Int) throws -> String {
+        for l in try lignes() {
+            guard let m = try JSONSerialization.jsonObject(with: Data(l.utf8)) as? [String: Any] else { continue }
+            if m["t"] as? String == "diag", m["id"] as? Int == id, let t = m["tlv"] as? String { return t }
+        }
+        throw ErreurCapture(id: id)
+    }
+
+    struct ErreurCapture: Error {
+        let id: Int
+    }
+}
