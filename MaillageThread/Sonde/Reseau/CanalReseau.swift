@@ -186,9 +186,9 @@ final class CanalReseau: CanalSonde {
     private func recu(_ charge: Data) {
         guard let (rid, ligne) = Self.lire(charge) else { return }
         let memoire = reglages.memoireDoublons
-        let suite: AsyncStream<Data>.Continuation? = etat.withLock { e in
+        let (suite, renvoi): (AsyncStream<Data>.Continuation?, Task<Void, Never>?) = etat.withLock { e in
             e.dernierRecu = .now
-            e.attendus.removeValue(forKey: rid)?.cancel()
+            let renvoi = e.attendus.removeValue(forKey: rid)
             if e.vues[rid] == nil {
                 e.ordre.append(rid)
                 if e.ordre.count > memoire {
@@ -197,13 +197,14 @@ final class CanalReseau: CanalSonde {
                     e.veilles.remove(ancien)
                 }
             }
-            guard e.vues[rid, default: []].insert(ligne).inserted else { return nil }
+            guard e.vues[rid, default: []].insert(ligne).inserted else { return (nil, renvoi) }
             if e.veilles.contains(rid) {
                 if e.veille?.rid == rid { e.veille = nil }
-                return nil
+                return (nil, renvoi)
             }
-            return e.suite
+            return (e.suite, renvoi)
         }
+        renvoi?.cancel()
         suite?.yield(ligne)
     }
 
@@ -234,7 +235,14 @@ final class CanalReseau: CanalSonde {
         let maintenant = ContinuousClock.now
         let action = etat.withLock { e -> Garde in
             guard !e.ferme else { return .rien }
-            if let v = e.veille { return maintenant - v.depuis >= reglages.attenteVeille ? .muette : .rien }
+            if let v = e.veille {
+                // Une ligne recue depuis la veille : la sonde est vivante, meme si la veille s'est perdue.
+                guard e.dernierRecu <= v.depuis else {
+                    e.veille = nil
+                    return .rien
+                }
+                return maintenant - v.depuis >= reglages.attenteVeille ? .muette : .rien
+            }
             guard maintenant - e.dernierRecu >= reglages.veille else { return .rien }
             let rid = Self.prochainRid()
             e.veille = (rid, maintenant)

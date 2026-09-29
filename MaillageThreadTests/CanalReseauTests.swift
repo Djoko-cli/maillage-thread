@@ -184,6 +184,21 @@ struct CanalReseauTests {
         #expect(await attendreQue { lignes.liste == ["fin"] })
     }
 
+    /// La veille et ses renvois perdus, mais une autre reponse arrive ensuite : la sonde est
+    /// vivante, le canal reste ouvert.
+    @Test func veillePerdueMaisSondeVivante() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let c = try await Self.canal(carte, reglages: Self.rapides(veille: .milliseconds(100), attenteVeille: .seconds(1)))
+        let lignes = RecueilLignes(try c.ouvrir())
+        carte.perdre(3)
+        #expect(await attendreQue { carte.perdus == 3 }, "veille et ses deux renvois perdus")
+        c.envoyer("etat\n")
+        #expect(await attendreQue { lignes.liste == [CanalRejoue.etatAttache] })
+        try await Task.sleep(for: .milliseconds(1500))
+        #expect(!lignes.liste.contains("fin"), "canal toujours ouvert")
+        c.fermer()
+    }
+
     /// Sonde debranchee : la veille reste sans reponse, le canal se ferme (fin du flux).
     @Test func veilleSansReponseFermeLeCanal() async throws {
         let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)

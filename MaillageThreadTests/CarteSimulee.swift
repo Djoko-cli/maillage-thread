@@ -126,8 +126,9 @@ final class CarteSimulee: Sendable {
         var ctrsRecus: [UInt32] = []
         var session: (sid: String, ks: SymmetricKey, ctr: UInt32)?
         var pair: ConnexionSimulee?
-        /// Datagrammes de l'app a perdre en route.
+        /// Datagrammes de l'app a perdre en route, et perdus.
         var aPerdre = 0
+        var perdus = 0
         /// Debranchee : plus rien n'arrive a la carte.
         var eteinte = false
     }
@@ -145,6 +146,8 @@ final class CarteSimulee: Sendable {
     /// Charges des messages A acceptes, dans l'ordre.
     var recues: [String] { etat.withLock { $0.recues } }
     var ctrsRecus: [UInt32] { etat.withLock { $0.ctrsRecus } }
+    /// Datagrammes de l'app perdus en route (`perdre`).
+    var perdus: Int { etat.withLock { $0.perdus } }
 
     /// Les `n` prochains datagrammes de l'app se perdent.
     func perdre(_ n: Int) {
@@ -178,6 +181,7 @@ final class CarteSimulee: Sendable {
             if e.eteinte { return true }
             guard e.aPerdre > 0 else { return false }
             e.aPerdre -= 1
+            e.perdus += 1
             return true
         }
         guard !perdu else { return }
