@@ -268,6 +268,20 @@ struct RapprochementTests {
         #expect(m.routeurs[1]?.id == "rloc:0400" && m.routeurs[2]?.id == "rloc:0800")
     }
 
+    /// Reseau scinde : l'annonce de role chef de l'autre partition n'est pas le chef du maillage de
+    /// la sonde (pas de fusion) ; il reste non identifie, et elle n'est la candidate de personne.
+    @Test func regleDuChefEnReseauScinde() throws {
+        var b = Banc()
+        b.routeur("HomePod avant", partition: "46CBEBCD", lien: "fe80::1", xa: "E0000000000000D1")
+        b.routeur("Chef ailleurs", partition: "73586B68", role: .chef, lien: "fe80::2", xa: "E0000000000000C1")
+        let i = Instantane(annonces: b.annonces)
+        #expect(i.reseaux.first?.partitions.count == 2)
+        let m = try Self.deuxRouteurs(i)
+        #expect(m.routeurs[1]?.id == "rloc:0400" && m.routeurs[1]?.candidats == ["HomePod avant"])
+        #expect(!m.annoncesCandidates.contains("Chef ailleurs"))
+        #expect(m.routeurs.values.allSatisfy { $0.id != "Chef ailleurs" })
+    }
+
     /// Regle du BBR principal, gardee comme les autres : pas si l'ExtMac du BBR principal (connue,
     /// ici entendue) et le `xa` de l'annonce BBR primaire sont connus tous deux et differents ; pas
     /// non plus si deux annonces de la partition se disent BBR primaire (ExtMac inventees).

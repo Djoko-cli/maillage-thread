@@ -365,6 +365,21 @@ struct TourneeTests {
         #expect(m3.routeurs.filter(\.bordure).isEmpty)
     }
 
+    /// Autre partition : les Network Data gardees de l'ancienne sont oubliees avec le reste de la
+    /// memoire ; la requete echouant, aucun routeur n'est marque d'apres elles (ni routeur de
+    /// bordure, ni BBR principal).
+    @Test func autrePartitionOublieLesNetworkData() async throws {
+        let anciennes = try #require(DonneesReseau(MaillageTests.bbrE400PuisB400))
+        var mem = MemoireTournee()
+        mem.partition = "73586B68"
+        mem.donneesReseau = anciennes
+        let sonde = try SondeRejouee.capture().filtree { $0 != "5000|7" }
+        let (m, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0))
+        #expect(mem2.partition == "46CBEBCD")
+        #expect(mem2.donneesReseau == nil)
+        #expect(!m.routeurs.contains { $0.bordure || $0.bbrPrincipal })
+    }
+
     /// Paire d'un routeur sorti de la liste des routeurs (routeur disparu, identifiant libere) :
     /// oubliee des que la tournee a la Route64. Celle d'un routeur encore dans la liste reste,
     /// meme s'il n'est plus entendu (ExtMac inventees).
