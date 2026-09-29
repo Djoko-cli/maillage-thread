@@ -29,7 +29,8 @@ The Mac has no Thread radio: the app only **listens** to the local network.
 not "answers": reachability never comes from the probe. A disappearance is
 only kept after 2 minutes of absence and is dated from the first absence.
 Real links (child → parent, router ↔ router, link quality) come from the
-probe, an ESP32-C6 plugged into the Mac (see "Probe" below).
+probe, an ESP32-C6 plugged into the Mac or reached over the Thread network
+(see "Probe" below).
 
 Devices are placed by the OMR prefix of their address. When two partitions
 announce the same OMR prefix (seen on September 28: an isolated hub had
@@ -108,7 +109,7 @@ catalog match.
 |---|---|
 | `MaillageCoeur/` | framework without UI: TXT decoding, snapshot (networks, partitions, prefixes, devices), tracking and log events, file log, names, graph layout, routing table; tested on the real survey and on the replayed outage |
 | `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, scan of silent routers), kept router identities, matching with the snapshot (elimination, candidates); tested on an anonymized capture |
-| `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, `SondeUSB` (requests matched by id), app model (probe remembered by its USB serial number, a tour every 5 minutes) |
+| `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, access over the Thread network (`Reseau/`: UDP transport and H1 envelope from the Halo bridge, key in the keychain, rid and resends), `SondeUSB` (requests matched by id, each with its own deadline), app model (probe remembered by its USB serial number, USB or network link, a tour every 5 minutes) |
 | `MaillageThread/Noms/` | Home names: folder chosen once (security-scoped bookmark), reading `noms.json`, last names kept, launching Passeur Noms |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | app model: surveys → tracking → log and notifications; sleep of the Mac; login item |
@@ -158,10 +159,11 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
 
 The Mac has no Thread radio. The **probe** is an ESP32-C6 SuperMini plugged
 into the Mac by USB and added to Home as a Matter over Thread device (a
-"Sonde maillage" plug). It is a minimal end device: it listens all the time but
-never relays, so it never changes the mesh it observes. It sends Thread
-network diagnostics (`DIAG_GET`) for the app and passes the raw answers back
-over USB; the app decodes them and rebuilds the mesh.
+"Sonde maillage" plug). It is an end device that never becomes a router (FED
+since firmware 1.0.2): it listens all the time but never relays, so it is
+nobody's parent. It sends Thread network diagnostics (`DIAG_GET`) for the app
+and passes the raw answers back, over USB or, once access is allowed, over
+the Thread network; the app decodes them and rebuilds the mesh.
 
 ```sh
 cd sonde && pio run        # build; flashing and pairing: sonde/README.md
@@ -178,7 +180,23 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   the state in Settings › Probe ("SONDE-01 · connected"); not for another
   port being tried.
 - Settings › Probe shows the probe's Matter QR code and its pairing code
-  (4-3-4), even once it is in Home.
+  (4-3-4), even once it is in Home, over USB only: they never travel over the
+  network, and a note says so in their place.
+- **Access over the Thread network** (firmware 1.0.2, like the Halo bridge),
+  to unplug the probe from the Mac and walk it around the house so that it
+  hears every router. With the probe plugged in and connected, "Allow Network
+  Access" (Settings › Probe) creates over USB a key that stays in this Mac's
+  keychain; the "Link" choice (USB or Thread Network) then appears. Over the
+  network, the app closes the port, connects by itself to `<host name>.local`,
+  UDP port 5480, and reconnects; a keepalive goes out after 10 s of silence,
+  and Settings › Probe keeps the cause of the last disconnection until the
+  next connection. Halo's H1 envelope authenticates the messages without
+  encrypting them: the topology travels in clear on the local network. The
+  Mac needs the IPv6 route to the OMR prefix: the `halo-routes` helper from
+  benq keeps it. "Forget the probe" removes this Mac's key. Limits: no end of
+  session (a place on the board stays taken 30 s, the automatic retry fixes
+  it), a lost `routeurs` line gives a partial table; details in the spec
+  (section 3 bis).
 - A tour every 5 minutes, and on refresh: the refresh button of the graph
   rereads the network, starts a tour (unless one is running) and launches
   Passeur Noms; its help tag says which of these it will actually start. While
@@ -209,8 +227,10 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   app folder; another partition erases them, and the pair of a router that
   left the router list is forgotten): moved around the house, the probe
   learns them all. The leader, when it is a border router, is the
-  announcement whose role is leader. If a single border router is left
-  unidentified for a single announcement, it is that one, by elimination.
+  announcement of its partition whose role is leader, if it is the only one;
+  with two (a stale cache), it stays unidentified, with both as candidates.
+  If a single border router is left unidentified for a single announcement,
+  it is that one, by elimination.
   Otherwise it shows with its candidates,
   "HomePod Avant or HomePod Palier · 0400" ("HomePod salon? · 0400" for a
   single one), and those announcements are no longer drawn apart: one node per

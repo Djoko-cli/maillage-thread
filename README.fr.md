@@ -30,7 +30,8 @@ Le Mac n'a pas de radio Thread : l'app **écoute** seulement le réseau local.
 principale*, pas « répond » : la joignabilité ne vient jamais de la sonde. Une
 disparition n'est retenue qu'après 2 minutes d'absence et datée de la première
 absence. Les vrais liens (enfant → parent, routeur ↔ routeur, qualité)
-viennent de la sonde, un ESP32-C6 branché au Mac (voir « Sonde » plus bas).
+viennent de la sonde, un ESP32-C6 branché au Mac ou joint par le réseau
+Thread (voir « Sonde » plus bas).
 
 Les appareils sont placés d'après le préfixe OMR de leur adresse. Quand deux
 partitions annoncent le même préfixe OMR (vu le 28 septembre : un hub isolé
@@ -110,7 +111,7 @@ catalogue vont ensemble.
 |---|---|
 | `MaillageCoeur/` | framework sans interface : décodage des TXT, instantané (réseaux, partitions, préfixes, appareils), suivi et événements du journal, journal en fichiers, noms, disposition du graphe, table de routage ; testé sur le relevé réel et sur la panne rejouée |
 | `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, balayage des routeurs muets), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats) ; testé sur une capture anonymisée |
-| `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, `SondeUSB` (requêtes appariées par id), modèle de l'app (sonde retenue par son numéro de série USB, une tournée toutes les 5 minutes) |
+| `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, accès par le réseau Thread (`Reseau/` : transport UDP et enveloppe H1 du pont Halo, clé dans le trousseau, rid et renvois), `SondeUSB` (requêtes appariées par id, chacune avec son échéance), modèle de l'app (sonde retenue par son numéro de série USB, liaison USB ou réseau, une tournée toutes les 5 minutes) |
 | `MaillageThread/Noms/` | noms de Maison : dossier choisi une fois (signet à portée de sécurité), lecture de `noms.json`, derniers noms gardés, lancement de Passeur Noms |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | modèle de l'app : relevés → suivi → journal et notifications ; veille du Mac ; ouverture à la connexion |
@@ -164,10 +165,12 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
 
 Le Mac n'a pas de radio Thread. La **sonde** est un ESP32-C6 SuperMini branché
 au Mac en USB et ajouté à Maison comme appareil Matter sur Thread (une prise
-« Sonde maillage »). C'est un enfant minimal : elle écoute en permanence mais
-ne relaie rien, donc elle ne change jamais le maillage qu'elle observe. Elle
-envoie pour l'app les requêtes de diagnostic Thread (`DIAG_GET`) et lui rend
-les réponses brutes par l'USB ; l'app les décode et reconstruit le maillage.
+« Sonde maillage »). C'est un enfant qui ne devient jamais routeur (FED depuis
+le firmware 1.0.2) : elle écoute en permanence mais ne relaie rien, donc elle
+n'est le parent de personne. Elle envoie pour l'app les requêtes de
+diagnostic Thread (`DIAG_GET`) et lui rend les réponses brutes, par l'USB ou,
+une fois l'accès autorisé, par le réseau Thread ; l'app les décode et
+reconstruit le maillage.
 
 ```sh
 cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
@@ -184,7 +187,23 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   dans Réglages › Sonde (« SONDE-01 · connectée ») ; pas pour un autre port
   en essai.
 - Réglages › Sonde montre le QR code Matter de la sonde et son code
-  d'appairage (4-3-4), même une fois dans Maison.
+  d'appairage (4-3-4), même une fois dans Maison, en USB seulement : ils ne
+  passent jamais par le réseau, et une note le dit à leur place.
+- **Accès par le réseau Thread** (firmware 1.0.2, comme le pont Halo), pour
+  débrancher la sonde du Mac et la promener dans la maison afin d'entendre
+  tous les routeurs. Sonde branchée et connectée, « Autoriser l'accès
+  réseau » (Réglages › Sonde) crée par l'USB une clé qui reste dans le
+  trousseau de ce Mac ; le choix « Liaison » (USB ou Réseau Thread) paraît
+  alors. Par le réseau, l'app ferme le port, se connecte seule à
+  `<nom d'hôte>.local`, port UDP 5480, et se reconnecte ; une veille part
+  après 10 s de silence, et Réglages › Sonde garde la cause de la dernière
+  perte jusqu'à la connexion suivante. L'enveloppe H1 de Halo authentifie les
+  messages sans les chiffrer : la topologie circule en clair sur le réseau
+  local. Le Mac doit avoir la route IPv6 vers le préfixe OMR : l'assistant
+  `halo-routes` de benq la tient. « Oublier la sonde » retire la clé de ce Mac.
+  Limites : pas de fin de session (une place de la carte reste prise 30 s,
+  la reprise automatique le répare), une ligne `routeurs` perdue donne une
+  table partielle ; détails dans la spec (section 3 bis).
 - Une tournée toutes les 5 minutes, et au rafraîchissement : le bouton
   rafraîchir du graphe relit le réseau, lance une tournée (sauf s'il y en a
   déjà une) et Passeur Noms ; son aide dit lesquels il lancera vraiment.
@@ -216,9 +235,11 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   (`identites-routeurs.json` dans le dossier de l'app ; une autre partition
   les efface, et la paire d'un routeur sorti de la liste des routeurs est
   oubliée) : déplacée dans la maison, la sonde les apprend toutes. Le chef,
-  s'il est un routeur de bordure, est l'annonce dont le rôle est chef. S'il
-  ne reste qu'un routeur de bordure non identifié pour une seule annonce,
-  c'est lui, par élimination. Sinon, il s'affiche avec ses candidats,
+  s'il est un routeur de bordure, est l'annonce de sa partition dont le rôle
+  est chef, si elle est la seule ; avec deux (un cache périmé), il reste non
+  identifié, avec les deux pour candidates. S'il ne reste qu'un routeur de
+  bordure non identifié pour une seule annonce, c'est lui, par élimination.
+  Sinon, il s'affiche avec ses candidats,
   « HomePod Avant ou HomePod Palier · 0400 » (« HomePod salon ? · 0400 »
   pour un seul), et ces annonces ne sont plus dessinées à part : un seul nœud
   par routeur. Sa fiche liste les candidats ; chacun ouvre la fiche de son

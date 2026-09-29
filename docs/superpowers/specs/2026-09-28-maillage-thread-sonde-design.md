@@ -33,6 +33,13 @@
 > cours se voit, avec son étape et son compteur, dans le graphe, les Réglages
 > et le menu ; le bouton rafraîchir du graphe lance aussi le passeur des noms
 > de Maison, sans relancer une tournée en cours (sections 4 et 5).
+>
+> **Sonde 1.0.2 (29/09, demande de Djoko pendant la vérification) :** la
+> sonde est FED et donne sa table des routeurs (`routeurs`) ; l'app retient
+> les identités des routeurs et affiche honnêtement ceux qu'elle ne peut pas
+> identifier (section 4) ; la sonde est joignable par le réseau Thread, comme
+> le pont Halo, pour la débrancher du Mac et la promener dans la maison
+> (section 3 bis).
 
 ## 0. Contexte, but, décisions
 
@@ -54,7 +61,8 @@ dessiner, les noter au journal et garder l'historique des qualités.
   choisit qui interroger, décode, reconstruit le maillage, tient le journal
   et l'historique.
 - **La sonde est branchée au Mac en USB.** Le MacBook est à poste fixe, avec
-  trois écrans. Hors de la maison, il n'y a pas de relevé.
+  trois écrans. Hors de la maison, il n'y a pas de relevé. (Depuis la 1.0.2,
+  elle peut aussi être jointe par le réseau Thread : section 3 bis.)
 - **Usage : vue, plus journal des parents, plus historique des qualités.**
 - **Deux plans,** 3a puis 3b.
 - **Matériel :** un ESP32-C6 dédié, la troisième carte ; les deux autres
@@ -85,7 +93,9 @@ dessiner, les noter au journal et garder l'historique des qualités.
   que la pile d'Arduino ne sert pas pour le diagnostic.
 - **Rôle MED, comme le pont Halo.** La sonde reçoit en permanence mais ne
   relaie rien ; elle ne devient jamais le parent de quelqu'un et ne modifie
-  donc pas le maillage qu'elle observe.
+  donc pas le maillage qu'elle observe. (FED depuis la 1.0.2, jamais
+  éligible routeur : même garantie, et elle entend les routeurs voisins ;
+  section 3 bis.)
 - **La sonde ne voit que sa propre partition**, celle d'Apple en pratique. Une
   partition isolée (l'Aqara) reste connue par les annonces, comme à l'étape 1.
 
@@ -122,7 +132,10 @@ dessiner, les noter au journal et garder l'historique des qualités.
 3. **`MaillageThread/Sonde/`, dans l'app.**
    - liaison série, reprise de `PortSerie` de Halo Compagnon ;
    - choix du port et mémoire du numéro de série USB ;
-   - boucle de tournée, intégration à `Surveillance`.
+   - boucle de tournée, intégration à `Surveillance` ;
+   - depuis la 1.0.2, le canal par le réseau Thread (`Sonde/Reseau/`, repris
+     de Halo Compagnon : transport UDP, enveloppe H1, trousseau ; section
+     3 bis).
 
 Sans sonde, l'app marche exactement comme à l'étape 1.
 
@@ -143,7 +156,8 @@ Sans sonde, l'app marche exactement comme à l'étape 1.
     arriver dans le désordre ;
   - délai par requête donné par l'app, 45 s par défaut ;
   - lignes USB de 4 Ko au plus. Une réponse fait au plus 142 octets à
-    l'essai.
+    l'essai. Par le réseau (1.0.2), une réponse fait 1100 octets au plus
+    (section 3 bis).
 
 ## 3. Protocole USB (validée)
 
@@ -167,7 +181,10 @@ piège décrit dans benq.
 - `diag <cible> <tlv,tlv,…> <id> [<délai ms>]` : `<cible>` est un RLOC16 en
   4 hexa (la sonde forme l'adresse RLOC à partir du préfixe du réseau maillé)
   ou une adresse IPv6 du réseau maillé. Le délai borne l'attente d'une
-  réponse ; au-delà, la requête échoue en `delai`.
+  réponse ; au-delà, la requête échoue en `delai` ;
+- `routeurs` (1.0.2) : la table des routeurs de la sonde (section 4) ;
+- `cle nouvelle <64 HEXA> <id>`, `cle`, `cle efface` (1.0.2, USB
+  seulement) : la clé de l'accès par le réseau (section 3 bis).
 
 **Messages de la sonde :**
 - `bonjour` :
@@ -177,7 +194,10 @@ piège décrit dans benq.
     garde à côté de l'état de l'interrupteur : il la suit d'un Mac à
     l'autre. Un firmware 1.0.0 ne l'envoie pas.
   - `code` (code d'appairage manuel) et `qr` (charge du QR code, `MT:…`),
-    appairée ou non ; `null` si Matter n'a pas pu les former.
+    appairée ou non ; `null` si Matter n'a pas pu les former, et toujours
+    par le réseau (1.0.2).
+  - `hote` (1.0.2) : le nom d'hôte SRP de la sonde, sans `.local` (celui que
+    Matter enregistre) ; `null` tant qu'il n'est pas connu.
 - `etat` : `role`, `rloc16`, `parent` (`rloc16`, `ext`, `lqIn`, `lqOut`,
   `rssi`), `partition`, `chef` (identifiant du routeur chef), `canal`,
   `prefixeMaille`, `xp`, `suspendue`.
@@ -185,7 +205,14 @@ piège décrit dans benq.
 - `diag`, en cas de succès :
   `{"v":1,"t":"diag","id":7,"cible":"4800","ok":true,"ms":123,"tlv":"<hexa>"}`
 - `diag`, en cas d'échec : `"ok":false` et `"erreur"` valant `delai`,
-  `suspendue`, `occupee` (8 requêtes déjà en vol) ou `envoi`.
+  `suspendue`, `occupee` (8 requêtes déjà en vol) ou `envoi` ; par le réseau
+  seulement, `trop_long` (section 3 bis).
+- `routeurs` (1.0.2) :
+  `{"v":1,"t":"routeurs","liste":[{"id":…,"rloc16":"XXXX","ext":"<16 HEXA>"|null,"lqIn":…,"lqOut":…,"age":…,"lien":…}],"suite":true|false}`,
+  sur plusieurs lignes si besoin, la dernière avec `"suite":false`.
+- `cle` (1.0.2) : `{"v":1,"t":"cle","id":<id>,"cle":"<64 HEXA>","empreinte":"<8 hexa>","hote":"<nom>"|null}`
+  en réponse à `cle nouvelle`, la seule fois où la clé sort ; l'empreinte
+  seule en réponse à `cle`.
 
 **Choix du port.** L'app n'ouvre **aucun port qu'on ne lui a pas désigné**.
 Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
@@ -198,6 +225,108 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
   peut pas changer de nom : le nom de produit USB et le numéro de série (la
   MAC) du C6 sont fixés par la puce. Avant la première connexion, l'app ne
   sait pas qu'un port est une sonde.
+
+## 3 bis. Accès par le réseau Thread (sonde 1.0.2, 29/09)
+
+**Origine.** Demande de Djoko pendant la vérification sur la carte : pouvoir
+débrancher la sonde du Mac et la promener dans la maison, pour un relevé
+complet (elle n'entend pas les mêmes routeurs d'une pièce à l'autre). Tout
+existe déjà pour le pont Halo de benq : l'accès reprend son infrastructure
+telle quelle, sans nouveau design (contrat commun du 29/09, d'après le
+résumé de l'accès réseau de Halo).
+
+**Rôle.** En 1.0.2, la sonde est **FED** (enfant complet, mode `rdn`, jamais
+éligible routeur) : comme en MED, elle ne devient jamais routeur ni parent et
+ne relaie rien ; mais elle entend les routeurs voisins et leur demande un
+lien, d'où leur ExtMac (`routeurs`, section 4).
+
+**Transport.**
+- UDP sur IPv6, port fixe **5480** (socket OpenThread), vers
+  `<hote>.local:5480` : le nom d'hôte SRP que Matter enregistre auprès des
+  routeurs de bordure (`bonjour.hote`, appris par l'USB), résolu à chaque
+  connexion ; l'adresse OMR de la sonde suit donc les changements de préfixe.
+- La route IPv6 du Mac vers le préfixe OMR vient de l'assistant `halo-routes`
+  de benq (un bug du noyau de macOS la retire) ; sans elle, l'app le dit
+  (« Pas de route IPv6… »). Résoudre un nom `.local` demande l'autorisation
+  « Réseau local » de macOS.
+- Un datagramme, une charge. Requête de l'app : `<rid> <commande>` (rid
+  décimal, croissant, jamais remis à zéro à une reconnexion ; commande = le
+  même texte que sur l'USB, sans fin de ligne). Réponse : `<rid> <ligne JSON>`
+  (la ligne de l'USB, sans RS ni LF). Une réponse `routeurs` peut compter
+  plusieurs lignes sous le même rid.
+- Une charge de réponse fait 1100 octets au plus : au-delà, `routeurs` se
+  coupe (`suite`) et un `diag` répond `trop_long`, à distance seulement. La
+  tournée ne compte pas un routeur `trop_long` comme muet : elle refait une
+  fois sa requête en deux moitiés de TLV et les réunit ; une moitié encore trop
+  longue est laissée, ce qu'on a est gardé.
+
+**Enveloppe H1**, celle du pont Halo, identique : poignée de main
+`SALUT`/`DEFI` signée (`kid` = 8 premiers hexa de SHA-256 de la clé, `na` et
+`nc`), clé de session `Ks`, messages `H1 <sid> <ctr> <mac> <charge>` avec le
+sens `A` (app vers carte) ou `C` (carte vers app), fenêtre anti-rejeu de 32,
+2 DEFI par seconde au total, 2 sessions et 1 provisoire, comparaisons en temps
+constant, texte canonique strict. **Authentifiée, non chiffrée :** la
+topologie (routeurs, liens, enfants, adresses) circule en clair sur le réseau
+local. Sans clé, la carte se tait : ni réponse, ni ICMP.
+
+**Clé.**
+- Créée par l'USB seulement : Réglages › Sonde › « Autoriser l'accès réseau »,
+  la sonde retenue branchée et connectée, hors tournée. L'app tire 32 octets
+  et envoie `cle nouvelle <64 HEXA> <id>` ; la carte tire les siens, calcule
+  `HMAC-SHA256(clé = aléa de l'app, message = aléa de la carte)`, la garde en
+  NVS et la rend une seule fois (`cle`, avec l'empreinte et le nom d'hôte).
+- L'app vérifie l'empreinte, puis range la clé dans le trousseau du Mac :
+  service `fr.djoko.maillage.sonde`, compte = nom d'hôte (sans `.local`),
+  commentaire = empreinte. Jamais dans un journal, une préférence ou un
+  fichier ; les tests n'utilisent jamais le vrai trousseau.
+- « Oublier la sonde » efface la clé de ce Mac (la carte garde la sienne). Une
+  nouvelle autorisation remplace la clé de la carte et fait tomber les
+  sessions réseau en cours ; le désappairage (`oubli`) l'efface côté carte.
+
+**Liste blanche à distance :** `bonjour`, `etat`, `voisins`, `routeurs`,
+`diag`. Tout le reste (`cle…`, `nom`, `oubli`) est refusé
+(`{"v":1,"t":"erreur","erreur":"refuse"}`). Par le réseau, `bonjour` ne donne
+ni code d'appairage ni QR code : qui les lirait pourrait ajouter la sonde à
+son propre contrôleur. Réglages › Sonde met une note à leur place : les voir
+demande l'USB.
+
+**Fiabilité, côté app.**
+- Une commande sans réponse repart avec le même rid à 2 s puis à 4 s ; la
+  carte ne relance rien : elle renvoie la réponse gardée (les 8 dernières par
+  session), ou se tait si la commande est encore en cours. Un `diag`, muet
+  côté carte pendant son vol (6 à 8 s), repart ensuite toutes les 3 s, le
+  dernier au plus tard 1 s avant l'échéance de `SondeUSB` (délai du diag plus
+  5 s) : 2, 4, 7 et 10 s pour un diag de 6000 ms.
+- Une ligne identique sous le même rid (réponse renvoyée) est écartée ; les
+  lignes différentes d'une même réponse passent toutes.
+- `SondeUSB` attend une réponse 6 s par le réseau, au-delà du renvoi de 4 s,
+  et 3 s en USB, comme Halo ; chaque attente a sa propre échéance.
+- **Veille :** après 10 s sans aucune ligne, le canal envoie un `etat` de
+  veille, dont la réponse reste dans le canal (comme le ping de Halo). Sans
+  aucune ligne dans les 6 s, il se ferme et l'app se reconnecte (nouvelle
+  poignée de main) à 1, 2, 5 et 10 s, puis toutes les 30 s ; sans clé, sans
+  nom d'hôte, ou si la sonde refuse l'accès (port injoignable), elle attend
+  l'USB. La carte donne la place d'une session muette depuis 30 s à un nouveau
+  client : la veille garde celle de l'app.
+- Pendant une session réseau, l'app tient une activité : App Nap retarderait
+  la veille et les tournées.
+
+**Liaison (Réglages › Sonde).** Le choix « Liaison » (USB ou Réseau Thread)
+paraît quand une clé existe. Par le réseau, la liaison USB est fermée (le port
+libéré), l'app se connecte seule à la sonde retenue par son nom d'hôte et se
+reconnecte ; un port branché n'est jamais ouvert. Retour à l'USB : la session
+réseau se ferme et le port de la sonde retenue, et lui seul, est rouvert. La
+dernière perte de la session réseau (depuis quand, et sa cause) reste affichée
+jusqu'à la connexion suivante réussie.
+
+**Limites connues.**
+- Pas de fin de session (le `json 0` de Halo) : une place de la carte reste
+  prise jusqu'à 30 s après la dernière activité. Deux reconnexions rapides
+  peuvent faire attendre la suivante ; la reprise automatique le répare.
+- La file de réception de la carte a 4 places, comme celle de Halo : un envoi
+  groupé de 8 `diag` peut en voir attendre le renvoi à 2 s.
+- Une ligne `routeurs` perdue en route donne une table partielle : rien ne la
+  redemande.
 
 ## 4. Tournée (révisée le 29/09 : après l'essai, à l'exécution du plan 3a, puis pour les identités des routeurs, sonde 1.0.2)
 
@@ -250,6 +379,11 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
 4. **À chaque routeur qui répond** (RLOC16 = identifiant << 10) :
    - Ext MAC (0), Address16 (1), Route64 (5), Child Table (16), IPv6 Address
      List (8), Version (24) ;
+   - par le réseau, une réponse `trop_long` n'est pas un silence : la même
+     requête, une fois, en deux moitiés de TLV (0, 1, 5 puis 16, 8, 24),
+     réunies ; une moitié encore trop longue est laissée, sans échec ni
+     balayage (section 3 bis). L'avancement de l'étape compte ces deux
+     requêtes de plus ;
    - une fois, les TLV 25 à 28 : on ne garde que la version de la pile (28) ;
      25 à 27 étaient vides à l'essai (écart 1 du plan).
 5. **Routeur muet :** un routeur qui ne répond pas deux tournées de suite est
@@ -452,8 +586,15 @@ choisi) : « Sonde : … ».
   erreur) ; partition, dernier relevé ; pendant une tournée, « Tournée :
   Balayage des routeurs muets · 24/48 · depuis 42 s » ;
 - le QR code Matter de la sonde (noir sur blanc, agrandi sans lissage) et son
-  code d'appairage mis en forme 4-3-4, même quand elle est dans Maison ;
-- l'interrupteur « Sonde maillage » (lecture seule).
+  code d'appairage mis en forme 4-3-4, même quand elle est dans Maison ; par
+  le réseau, qui ne les transmet pas, une note dit de brancher la sonde en
+  USB pour les afficher ;
+- l'interrupteur « Sonde maillage » (lecture seule) ;
+- l'accès par le réseau (1.0.2, section 3 bis) : « Accès réseau : autorisé ·
+  clé <empreinte> » ou « non autorisé », le bouton « Autoriser l'accès
+  réseau » (en USB), le choix de la liaison, le nom d'hôte visé par le réseau
+  à la place du port, et la dernière perte de la session réseau
+  (« Dernière perte », depuis quand, et sa cause).
 
 ## 6. Journal et historique (plan 3b, validée)
 
@@ -486,7 +627,11 @@ journal et l'historique. Le firmware est vérifié par sa compilation, puis sur
 la carte avec Djoko.
 
 **Permissions.** L'app ajoute l'autorisation `com.apple.security.device.serial`,
-comme Halo Compagnon. Il n'y a rien de nouveau côté réseau.
+comme Halo Compagnon. Il n'y a rien de nouveau côté réseau : l'accès à la
+sonde par le réseau Thread (1.0.2) se contente de
+`com.apple.security.network.client`, déjà là, et de l'autorisation « Réseau
+local » que macOS demande à la résolution de `<hote>.local` ; la clé va dans
+le trousseau, que macOS peut demander d'autoriser (signature ad hoc).
 
 **Essai préalable au plan 3a,** sur la troisième carte :
 1. Un firmware minimal : MED, appairage, commandes `bonjour`, `etat` et
