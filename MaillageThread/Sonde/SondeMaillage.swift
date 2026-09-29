@@ -402,7 +402,8 @@ final class SondeMaillage {
             guard n == essai else { return }
             enConnexion = nil
             etat = .erreur(error.localizedDescription)
-            // Sans cle, ou cle refusee : il faut l'USB ; le reste se reprend seul.
+            // Sans cle ou sans nom d'hote (trousseau, ou jamais appris) : il faut l'USB ; le reste
+            // se reprend seul.
             if error is ErreurTrousseau || error is CleReseau.Erreur { return }
             if let e = error as? ErreurReseau, !e.repriseAutomatique { return }
             planifierReprise()
