@@ -181,10 +181,12 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   (4-3-4), even once it is in Home.
 - A tour every 5 minutes, and on refresh: the refresh button of the graph
   rereads the network, starts a tour (unless one is running) and launches
-  Passeur Noms. While a tour runs, a line under the graph's toolbar shows its
-  step, a counter of requests and its duration ("Scan of silent routers ·
-  24/48 · 0:42"); Settings › Probe and the menu line show the step and the
-  counter too.
+  Passeur Noms; its help tag says which of these it will actually start. While
+  a tour runs, a line under the graph's toolbar (and under the split-network
+  banner) shows its step, a counter of requests and its duration ("Scan of
+  silent routers · 24/48 · 0:42"); its place stays reserved above the graph
+  while a probe is remembered, so nothing moves when a tour starts or ends.
+  Settings › Probe and the menu line show the step and the counter too.
 - The list of routers comes from the leader; if it is silent, from a router
   that has already answered; otherwise from a search over every router id.
   With no list there is no new mesh: the last one gets older.

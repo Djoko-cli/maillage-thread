@@ -187,10 +187,13 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   d'appairage (4-3-4), même une fois dans Maison.
 - Une tournée toutes les 5 minutes, et au rafraîchissement : le bouton
   rafraîchir du graphe relit le réseau, lance une tournée (sauf s'il y en a
-  déjà une) et Passeur Noms. Pendant une tournée, une ligne sous la barre
-  d'outils du graphe montre son étape, un compteur de requêtes et sa durée
-  (« Balayage des routeurs muets · 24/48 · 0:42 ») ; Réglages › Sonde et la
-  ligne du menu montrent aussi l'étape et le compteur.
+  déjà une) et Passeur Noms ; son aide dit lesquels il lancera vraiment.
+  Pendant une tournée, une ligne sous la barre d'outils du graphe (et sous le
+  bandeau d'un réseau scindé) montre son étape, un compteur de requêtes et sa
+  durée (« Balayage des routeurs muets · 24/48 · 0:42 ») ; sa place reste
+  gardée au-dessus du graphe tant qu'une sonde est retenue : rien ne bouge au
+  début ni à la fin d'une tournée. Réglages › Sonde et la ligne du menu
+  montrent aussi l'étape et le compteur.
 - La liste des routeurs vient du chef ; s'il se tait, d'un routeur qui a déjà
   répondu ; sinon d'une recherche sur tous les identifiants de routeur. Sans
   liste, pas de nouveau maillage : le dernier vieillit.

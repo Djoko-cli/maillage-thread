@@ -335,16 +335,22 @@ total ne baisse jamais :
 - **Survol :** les liens du nœud s'éclairent.
 
 **Barre d'outils du graphe.**
-- Pendant une tournée, sur une ligne à part, centrée sous la barre : un petit
-  indicateur de progression et « Balayage des routeurs muets · 24/48 · 0:42 »
-  (l'étape, les requêtes revenues sur le total prévu, section 4, et la
-  durée, à jour chaque seconde). La barre garde sa largeur : ses boutons ne
-  bougent pas sous le pointeur.
+- Pendant une tournée, sur une ligne à part, centrée sous la barre et sous le
+  bandeau d'un réseau scindé : un petit indicateur de progression et
+  « Balayage des routeurs muets · 24/48 · 0:42 » (l'étape, les requêtes
+  revenues sur le total prévu, section 4, et la durée, à jour chaque
+  seconde). La capsule a la largeur de la plus longue étape, la barre garde
+  la sienne : rien ne bouge sous le pointeur.
+- La place de cette ligne est gardée en haut du graphe tant qu'une sonde est
+  retenue, pendant une tournée ou non : le graphe ne bouge ni au début ni à la
+  fin d'une tournée (seulement quand une sonde est retenue ou oubliée), et la
+  ligne ne recouvre pas les titres des zones.
 - Le bouton rafraîchir relit le réseau, lance une tournée (pas pendant une
   tournée) et le passeur des noms de Maison, en mode direct et seulement si
   un dossier des noms est choisi (« Rafraîchir depuis Maison », lui, demande
-  le dossier s'il manque). Il n'est jamais désactivé ; son aide dit ce qu'il
-  fait.
+  le dossier s'il manque). Il n'est jamais désactivé. Son aide dit ce qu'il
+  lancera vraiment : le réseau toujours, une tournée si la sonde est
+  connectée et libre, les noms de Maison si le passeur sera lancé.
 
 **Fiche.**
 - Appareil : parent et qualité, endormi ou non (délai), fabricant, modèle,
