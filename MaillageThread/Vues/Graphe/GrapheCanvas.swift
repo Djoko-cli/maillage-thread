@@ -3,16 +3,21 @@ import SwiftUI
 
 /// Dessin du graphe : zones des partitions, liens (ceux de la sonde en traits
 /// pleins colores et epaissis par la qualite, sinon des pointilles vers le centre
-/// de la zone : rattachement, pas un lien radio), routeurs et appareils.
+/// de la zone : rattachement, pas un lien radio), routeurs et appareils, et leurs
+/// libelles, chacun dans la place calculee par `PlacementLibelles` (la meme que
+/// pour le clic) ; un libelle ecarte est relie a son point par un trait fin.
 struct GrapheCanvas: View {
     let disposition: Disposition
-    let reseau: Reseau
     /// Identifiant -> appareil affiche (etat, nom).
     let appareils: [String: AppareilAffiche]
     /// Instance -> nom affiche du routeur.
     let nomsRouteurs: [String: String]
     /// Maillage de la sonde : noms des noeuds qu'elle seule connait.
     var maillage: MaillageAffiche?
+    /// Texte et pastille du libelle de chaque noeud (`libelles(...)`).
+    let libelles: [String: Libelle]
+    /// Place de chaque libelle, en coordonnees de la vue.
+    let placement: PlacementLibelles
     let projection: Projection
     let selection: String?
     let survol: String?
@@ -39,20 +44,9 @@ struct GrapheCanvas: View {
                                                        center: c, startRadius: 0, endRadius: r))
                 ctx.stroke(cercle, with: .color(couleur.opacity(0.45)), lineWidth: 1)
             }
-            // Un prefixe revendique par plusieurs partitions est marque, sur chacune.
-            let prefixes = z.prefixesTitre.map { p in
-                z.prefixesPartages.contains(p) ? String(localized: "\(p.description) (partagé)") : p.description
-            }.joined(separator: ", ")
-            let titre: String
-            if z.id.isEmpty {
-                titre = String(localized: "Sans partition connue")
-            } else if prefixes.isEmpty {
-                titre = String(localized: "Partition \(z.id)")
-            } else {
-                titre = String(localized: "Partition \(z.id) · \(prefixes)")
-            }
-            ctx.draw(Text(titre).font(.caption).foregroundStyle(couleur.opacity(0.95)),
-                     at: CGPoint(x: c.x, y: c.y - r - 6), anchor: .bottom)
+            // Dans l'obstacle que les libelles evitent (`MemoirePlacement`).
+            ctx.draw(Self.texteTitre(Self.titre(z)).foregroundStyle(couleur.opacity(0.95)),
+                     at: Self.ancreTitre(centre: c, rayon: r), anchor: .bottom)
         }
     }
 
@@ -80,16 +74,19 @@ struct GrapheCanvas: View {
     }
 
     private func dessinerNoeuds(_ ctx: inout GraphicsContext) {
-        let chefs = Set(reseau.partitions.compactMap { $0.chef?.instance })
         let principales = Set(disposition.zones.filter(\.principale).map(\.id))
-        let centres = Dictionary(disposition.zones.map { ($0.id, $0.centre) }, uniquingKeysWith: { a, _ in a })
+        // Trait fin de chaque libelle ecarte, sous les points.
+        for n in placement.noeuds {
+            guard let t = placement.places[n.id]?.trait else { continue }
+            var p = Path()
+            p.move(to: t.depart)
+            p.addLine(to: t.arrivee)
+            ctx.stroke(p, with: .color(palette.texteDiscret.opacity(0.8)), lineWidth: 0.75)
+        }
         for n in disposition.noeuds {
             let c = projection.vue(n.position)
-            // Les noeuds suivent le zoom, sans enfler dans une grande fenetre.
-            let r = max(n.rayon * min(projection.echelle, 1.1), 3)
+            let r = Self.rayonPoint(n.rayon, echelle: projection.echelle)
             let rect = CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)
-            var libelle: String
-            var pastille: String?
             switch n.genre {
             case .centre, .routeur:
                 let inconnu = nomsRouteurs[n.id] == nil && maillage?.noeud(n.id) != nil
@@ -100,8 +97,6 @@ struct GrapheCanvas: View {
                                                                         center: CGPoint(x: c.x - r / 3, y: c.y - r / 3),
                                                                         startRadius: 0, endRadius: r * 1.3))
                 }
-                libelle = nomsRouteurs[n.id] ?? maillage?.noeud(n.id).map(Self.libelleInconnu) ?? n.id
-                if chefs.contains(n.id) { libelle += " 👑" }
             case .appareil:
                 let a = appareils[n.id]
                 let couleur = palette.appareil(a?.etat ?? .inconnu)
@@ -113,50 +108,48 @@ struct GrapheCanvas: View {
                         l.fill(Path(ellipseIn: rect), with: .color(couleur))
                     }
                 }
-                libelle = a?.nom ?? maillage?.noeud(n.id).map(Self.libelleInconnu) ?? n.id
-                pastille = Self.pastilleBatterie(a?.batterie)
-                if a?.endormi == true { libelle += " ☾" }
-                if a?.etat == .sansAdresse || a?.etat == .disparu { libelle += " ⚠︎" }
             }
             if n.id == selection {
                 ctx.stroke(Path(ellipseIn: rect.insetBy(dx: -4, dy: -4)), with: .color(palette.selection), lineWidth: 2)
             }
-            let fort = n.id == selection || n.id == survol
-            let texte = Text(libelle).font(n.genre == .appareil ? .caption2 : .caption)
-                .fontWeight(fort ? .semibold : .regular).foregroundStyle(fort ? palette.selection : palette.texte)
-            // Libelle vers l'exterieur de la zone : a droite ou a gauche sur les
-            // cotes, au-dessus ou au-dessous en haut et en bas ; sous le centre.
-            let centreZone = centres[n.zone] ?? n.position
-            let angle = atan2(n.position.y - centreZone.y, n.position.x - centreZone.x)
-            let place: (point: CGPoint, ancre: UnitPoint)
-            if n.genre == .centre {
-                place = (CGPoint(x: c.x, y: c.y + r + 4), .top)
-            } else if cos(angle) > 0.35 {
-                place = (CGPoint(x: c.x + r + 4, y: c.y), .leading)
-            } else if cos(angle) < -0.35 {
-                place = (CGPoint(x: c.x - r - 4, y: c.y), .trailing)
-            } else if sin(angle) < 0 {
-                place = (CGPoint(x: c.x, y: c.y - r - 3), .bottom)
-            } else {
-                place = (CGPoint(x: c.x, y: c.y + r + 3), .top)
+        }
+        // Libelles par-dessus : aucun ne recoupe un point ni un autre libelle.
+        for n in placement.noeuds {
+            guard let place = placement.places[n.id], let l = libelles[n.id] else { continue }
+            dessinerLibelle(&ctx, l, place, genre: n.genre, fort: n.id == selection || n.id == survol)
+        }
+    }
+
+    /// Texte dans sa place, contre le cote du point : hors survol, en graisse normale, il
+    /// est un peu plus court que la place (reservee en semi-gras). La pastille suit le
+    /// texte, du cote oppose au point ; elle reste dans le cadre du libelle.
+    private func dessinerLibelle(_ ctx: inout GraphicsContext, _ l: Libelle, _ place: PlacementLibelles.Place,
+                                 genre: Disposition.Genre, fort: Bool) {
+        let resolu = ctx.resolve(Self.texteLibelle(l.texte, genre: genre, fort: fort)
+            .foregroundStyle(fort ? palette.selection : palette.texte))
+        let t = resolu.measure(in: Self.propositionTexte)
+        let r = place.texte
+        let ecart = PlacementLibelles.ecartPastille
+        switch place.sens {
+        case .droite:
+            ctx.draw(resolu, at: CGPoint(x: r.minX, y: r.midY), anchor: .leading)
+            if let p = l.pastille {
+                dessinerPastille(&ctx, p, at: CGPoint(x: r.minX + t.width + ecart.cote, y: r.midY), anchor: .leading)
             }
-            let resolu = ctx.resolve(texte)
-            ctx.draw(resolu, at: place.point, anchor: place.ancre)
-            if let pastille {
-                // Au bout du libelle, du cote oppose au noeud.
-                let t = resolu.measure(in: CGSize(width: 1000, height: 1000))
-                let cadre = CGRect(x: place.point.x - place.ancre.x * t.width, y: place.point.y - place.ancre.y * t.height,
-                                   width: t.width, height: t.height)
-                switch place.ancre {
-                case .leading:
-                    dessinerPastille(&ctx, pastille, at: CGPoint(x: cadre.maxX + 5, y: place.point.y), anchor: .leading)
-                case .trailing:
-                    dessinerPastille(&ctx, pastille, at: CGPoint(x: cadre.minX - 5, y: place.point.y), anchor: .trailing)
-                case .bottom:
-                    dessinerPastille(&ctx, pastille, at: CGPoint(x: place.point.x, y: cadre.minY - 3), anchor: .bottom)
-                default:
-                    dessinerPastille(&ctx, pastille, at: CGPoint(x: place.point.x, y: cadre.maxY + 3), anchor: .top)
-                }
+        case .gauche:
+            ctx.draw(resolu, at: CGPoint(x: r.maxX, y: r.midY), anchor: .trailing)
+            if let p = l.pastille {
+                dessinerPastille(&ctx, p, at: CGPoint(x: r.maxX - t.width - ecart.cote, y: r.midY), anchor: .trailing)
+            }
+        case .dessus:
+            ctx.draw(resolu, at: CGPoint(x: r.midX, y: r.maxY), anchor: .bottom)
+            if let p = l.pastille {
+                dessinerPastille(&ctx, p, at: CGPoint(x: r.midX, y: r.maxY - t.height - ecart.dessus), anchor: .bottom)
+            }
+        case .dessous:
+            ctx.draw(resolu, at: CGPoint(x: r.midX, y: r.minY), anchor: .top)
+            if let p = l.pastille {
+                dessinerPastille(&ctx, p, at: CGPoint(x: r.midX, y: r.minY + t.height + ecart.dessus), anchor: .top)
             }
         }
     }
@@ -201,14 +194,11 @@ struct GrapheCanvas: View {
     /// qui luit. (Triangle et texte sont dessines a part : `Text + Text` est
     /// deprecie, et une interpolation ferait une cle de traduction.)
     private func dessinerPastille(_ ctx: inout GraphicsContext, _ texte: String, at p: CGPoint, anchor: UnitPoint) {
-        let police = Font.caption2.weight(.semibold)
-        let icone = ctx.resolve(Text(Image(systemName: "exclamationmark.triangle.fill")).font(police)
-            .foregroundStyle(palette.texteBatterieFaible))
-        let valeur = ctx.resolve(Text(verbatim: texte).font(police).foregroundStyle(palette.texteBatterieFaible))
-        let grand = CGSize(width: 1000, height: 1000)
-        let ti = icone.measure(in: grand)
-        let tv = valeur.measure(in: grand)
-        let taille = CGSize(width: 6 + ti.width + 3 + tv.width + 6, height: max(ti.height, tv.height) + 4)
+        let icone = ctx.resolve(Self.iconePastille.foregroundStyle(palette.texteBatterieFaible))
+        let valeur = ctx.resolve(Self.textePastille(texte).foregroundStyle(palette.texteBatterieFaible))
+        let ti = icone.measure(in: Self.propositionTexte)
+        let tv = valeur.measure(in: Self.propositionTexte)
+        let taille = Self.taillePastille(icone: ti, valeur: tv)
         let cadre = CGRect(origin: CGPoint(x: p.x - anchor.x * taille.width, y: p.y - anchor.y * taille.height),
                            size: taille)
         let capsule = Path(roundedRect: cadre, cornerRadius: taille.height / 2)
@@ -218,5 +208,85 @@ struct GrapheCanvas: View {
         }
         ctx.draw(icone, at: CGPoint(x: cadre.minX + 6, y: cadre.midY), anchor: .leading)
         ctx.draw(valeur, at: CGPoint(x: cadre.minX + 6 + ti.width + 3, y: cadre.midY), anchor: .leading)
+    }
+}
+
+extension GrapheCanvas {
+    /// Libelle d'un noeud : son texte, et la pastille de sa batterie faible.
+    struct Libelle: Equatable {
+        var texte: String
+        var pastille: String?
+    }
+
+    /// Place proposee pour mesurer un texte d'une ligne.
+    static let propositionTexte = CGSize(width: 10_000, height: 10_000)
+
+    /// Libelle de chaque noeud : nom (routeur couronne s'il est chef), ☾ endormi,
+    /// ⚠︎ sans adresse ou disparu ; pastille d'une batterie faible.
+    static func libelles(disposition: Disposition, reseau: Reseau, appareils: [String: AppareilAffiche],
+                         nomsRouteurs: [String: String], maillage: MaillageAffiche?) -> [String: Libelle] {
+        let chefs = Set(reseau.partitions.compactMap { $0.chef?.instance })
+        var libelles: [String: Libelle] = [:]
+        for n in disposition.noeuds where libelles[n.id] == nil {
+            switch n.genre {
+            case .centre, .routeur:
+                var texte = nomsRouteurs[n.id] ?? maillage?.noeud(n.id).map(libelleInconnu) ?? n.id
+                if chefs.contains(n.id) { texte += " 👑" }
+                libelles[n.id] = Libelle(texte: texte)
+            case .appareil:
+                let a = appareils[n.id]
+                var texte = a?.nom ?? maillage?.noeud(n.id).map(libelleInconnu) ?? n.id
+                if a?.endormi == true { texte += " ☾" }
+                if a?.etat == .sansAdresse || a?.etat == .disparu { texte += " ⚠︎" }
+                libelles[n.id] = Libelle(texte: texte, pastille: pastilleBatterie(a?.batterie))
+            }
+        }
+        return libelles
+    }
+
+    /// Texte d'un libelle : `.caption` pour les routeurs, `.caption2` pour les appareils ;
+    /// semi-gras (`fort`) au survol et a la selection.
+    static func texteLibelle(_ texte: String, genre: Disposition.Genre, fort: Bool) -> Text {
+        Text(texte).font(genre == .appareil ? .caption2 : .caption).fontWeight(fort ? .semibold : .regular)
+    }
+
+    /// Titre d'une zone : sa partition et ses prefixes ; un prefixe revendique par
+    /// plusieurs partitions est marque, sur chacune.
+    static func titre(_ z: Disposition.Zone) -> String {
+        let prefixes = z.prefixesTitre.map { p in
+            z.prefixesPartages.contains(p) ? String(localized: "\(p.description) (partagé)") : p.description
+        }.joined(separator: ", ")
+        if z.id.isEmpty { return String(localized: "Sans partition connue") }
+        if prefixes.isEmpty { return String(localized: "Partition \(z.id)") }
+        return String(localized: "Partition \(z.id) · \(prefixes)")
+    }
+
+    static func texteTitre(_ titre: String) -> Text {
+        Text(titre).font(.caption)
+    }
+
+    /// Point ou pose le bas du titre d'une zone : 6 pt au-dessus de son cercle.
+    static func ancreTitre(centre: CGPoint, rayon: CGFloat) -> CGPoint {
+        CGPoint(x: centre.x, y: centre.y - rayon - 6)
+    }
+
+    static let policePastille = Font.caption2.weight(.semibold)
+
+    static var iconePastille: Text {
+        Text(Image(systemName: "exclamationmark.triangle.fill")).font(policePastille)
+    }
+
+    static func textePastille(_ valeur: String) -> Text {
+        Text(verbatim: valeur).font(policePastille)
+    }
+
+    /// Capsule de la pastille : 6 pt, l'icone, 3 pt, la valeur, 6 pt ; 2 pt dessus et dessous.
+    static func taillePastille(icone: CGSize, valeur: CGSize) -> CGSize {
+        CGSize(width: 6 + icone.width + 3 + valeur.width + 6, height: max(icone.height, valeur.height) + 4)
+    }
+
+    /// Rayon dessine d'un noeud : il suit le zoom sans enfler dans une grande fenetre.
+    static func rayonPoint(_ rayon: Double, echelle: CGFloat) -> CGFloat {
+        max(rayon * min(echelle, 1.1), 3)
     }
 }

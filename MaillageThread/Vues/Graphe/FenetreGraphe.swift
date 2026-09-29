@@ -20,6 +20,7 @@ struct FenetreGraphe: View {
     @State private var decalage: CGSize = .zero
     @State private var decalageEnCours: CGSize = .zero
     @State private var aRenommer: NoeudChoisi?
+    @State private var memoire = MemoirePlacement()
 
     var body: some View {
         let palette = Palette(sombre: apparence == .dark)
@@ -65,28 +66,36 @@ struct FenetreGraphe: View {
         let disposition = Disposition(reseau: r, appareils: affiches, maillage: maillage)
         let parId = Dictionary(affiches.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let nomsRouteurs = Dictionary(r.routeurs.map { ($0.instance, surveillance.nom($0)) }, uniquingKeysWith: { a, _ in a })
+        let libelles = GrapheCanvas.libelles(disposition: disposition, reseau: r, appareils: parId,
+                                             nomsRouteurs: nomsRouteurs, maillage: maillage)
         return GeometryReader { geo in
             let projection = Projection(cadre: disposition.cadre, taille: geo.size,
                                         marges: (haut: r.estScinde ? 110 : 70, bas: selection == nil ? 30 : 190, cotes: 60),
                                         zoom: zoom * zoomEnCours,
                                         decalage: CGSize(width: decalage.width + decalageEnCours.width,
                                                          height: decalage.height + decalageEnCours.height))
-            GrapheCanvas(disposition: disposition, reseau: r, appareils: parId, nomsRouteurs: nomsRouteurs,
-                         maillage: maillage, projection: projection, selection: selection, survol: survol,
-                         palette: palette)
+            // Libelles places pour le dessin et le clic ; recalcules seulement si la
+            // disposition, l'echelle ou les noms changent (le decalage les deplace).
+            let placement = memoire.placement(disposition, libelles: libelles, echelle: projection.echelle)
+                .decale(projection.origine)
+            GrapheCanvas(disposition: disposition, appareils: parId, nomsRouteurs: nomsRouteurs, maillage: maillage,
+                         libelles: libelles, placement: placement, projection: projection, selection: selection,
+                         survol: survol, palette: palette)
                 .contentShape(Rectangle())
+                // Clic, double clic et survol : le point (8 pt autour) ou tout le libelle.
                 .onContinuousHover { phase in
                     switch phase {
-                    case .active(let p): survol = disposition.noeud(a: projection.plan(p))?.id
+                    case .active(let p): survol = placement.cible(a: p)
                     case .ended: survol = nil
                     }
                 }
-                .onTapGesture(count: 2) {
+                .onTapGesture(count: 2) { p in
+                    selection = placement.cible(a: p)
                     zoom = 1
                     decalage = .zero
                 }
                 .simultaneousGesture(SpatialTapGesture().onEnded { v in
-                    selection = disposition.noeud(a: projection.plan(v.location))?.id
+                    selection = placement.cible(a: v.location)
                 })
                 .gesture(MagnifyGesture()
                     .onChanged { zoomEnCours = $0.magnification }
