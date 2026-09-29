@@ -321,6 +321,23 @@ struct TourneeTests {
         #expect(!requetes.contains("5001|0,1,2,8"))
     }
 
+    /// Un routeur qui repond sans son ExtMac (ici la moitie qui la porte reste sans reponse)
+    /// garde l'identite connue d'une tournee precedente, comme un muet : il ne perd pas son nom.
+    @Test func repondantSansExtMacGardeSonIdentite() async throws {
+        let (_, mem1) = try #require(try await Tournee.complete(try SondeRejouee.capture(), memoire: MemoireTournee(),
+                                                                 maintenant: Self.t0))
+        #expect(mem1.identites[0x5000] == "E000000000000002")
+        let entiere = try CaptureSonde.tlv(104)
+        let sonde = try SondeRejouee.capture(reponsesEnPlus: ["5000|16,8,24": try Self.garder(entiere, [16, 8, 24])],
+                                             tropLongs: ["5000|0,1,5,16,8,24"])
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 300))
+        #expect(m.routeur(20)?.muet == false)
+        #expect(m.routeur(20)?.extMac == "E000000000000002", "identite connue")
+        #expect(m.enfants(de: 20).count == 2, "sa table des enfants, dans la moitie recue")
+        #expect(mem.identites[0x5000] == "E000000000000002")
+        #expect(mem.echecs[20] == 0)
+    }
+
     /// Aucun routeur ne repond a sa requete (sonde occupee...) : les secours de la
     /// tournee precedente restent.
     @Test func repondantsGardes() async throws {

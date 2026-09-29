@@ -209,7 +209,13 @@ public enum Tournee {
                 mem.echecs[id] = 0
                 mem.muetInterroge[id] = nil
                 mem.dejaRepondu.insert(id)
-                if let ext = rep.extMac { mem.retenir(ext, rloc16: rloc16(id)) }
+                if let ext = rep.extMac {
+                    mem.retenir(ext, rloc16: rloc16(id))
+                } else if let ext = mem.identites[rloc16(id)] {
+                    // Reponse sans ExtMac (moitie d'un `trop_long` sans reponse...) : l'identite
+                    // connue reste, comme pour un muet.
+                    c.identite(ext, routeur: id)
+                }
                 repondants.append(id)
             } else {
                 mem.echecs[id, default: 0] += 1
