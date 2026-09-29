@@ -231,8 +231,8 @@ struct GrapheCanvas: View {
     /// Nom d'un noeud que seule la sonde connait : « Routeur de bordure · B400 »,
     /// « Routeur · 5000 », « Non identifié · AC05 ». Un routeur de bordure non identifie
     /// montre ses candidats, sous leur nom (`noms`, par instance ; l'instance a defaut) :
-    /// « HomePod Avant ou HomePod Palier · 0400 » ; un seul : « HomePod salon ? · 0400 »
-    /// (il peut n'etre aucun d'eux : il reste plus de routeurs non identifies que d'annonces).
+    /// « HomePod Avant ou HomePod Palier · 0400 » ; un seul, sans elimination possible :
+    /// « HomePod salon ? · 0400 », car ce n'est peut-etre pas lui.
     static func libelleInconnu(_ n: NoeudSonde, noms: [String: String] = [:]) -> String {
         let rloc = String(format: "%04X", n.rloc16)
         switch n.genre {

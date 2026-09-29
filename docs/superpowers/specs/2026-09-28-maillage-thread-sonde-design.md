@@ -199,7 +199,7 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
   MAC) du C6 sont fixés par la puce. Avant la première connexion, l'app ne
   sait pas qu'un port est une sonde.
 
-## 4. Tournée (révisée le 29/09 : après l'essai, puis à l'exécution du plan 3a)
+## 4. Tournée (révisée le 29/09 : après l'essai, à l'exécution du plan 3a, puis pour les identités des routeurs, sonde 1.0.2)
 
 **Quand :**
 - la tournée courte, toutes les 5 minutes et au bouton rafraîchir, sauf
@@ -213,7 +213,12 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
 
 **Tournée courte :**
 1. `etat` de la sonde : partition, chef, préfixe du réseau maillé, parent
-   (RLOC16 et ExtMac).
+   (RLOC16 et ExtMac). Puis, si elle est attachée et non suspendue,
+   `routeurs` : la table des routeurs de la sonde (firmware 1.0.2, en FED ;
+   requête locale, sans délai réseau). Elle donne le RLOC16 de chaque routeur
+   de la partition, et l'ExtMac de ceux que la sonde entend (voir
+   « Rapprochement »). Sans table (firmware 1.0.1, sonde occupée), la tournée
+   continue sans elle.
 2. **Liste des routeurs :** Route64 (5) et Leader Data (6), demandés jusqu'à
    ce que l'un réponde avec une Route64 :
    - au chef, sauf s'il est muet : il passe alors après les autres ;
@@ -279,10 +284,44 @@ est gardée jusqu'à une nouvelle réponse.
   RLOC16 se relie à son `xa` :
   - s'il est le parent de la sonde : `etat` donne les deux. La paire est
     retenue, et la sonde en apprend d'autres quand elle change de parent ;
+  - s'il est entendu par la sonde : sa table des routeurs (`routeurs`)
+    donne la paire. En FED, la sonde demande un lien aux routeurs qu'elle
+    entend et apprend ainsi leur ExtMac, jamais celle de son parent ; la
+    paire est retenue comme celle du parent. Déplacée dans la maison, la
+    sonde finit par entendre tous les routeurs ;
   - s'il est le BBR principal : les Network Data donnent son RLOC16, et le
-    bit `bbrPrimaire` de `sb` désigne son annonce.
+    bit `bbrPrimaire` de `sb` désigne son annonce ;
+  - **par élimination :** s'il reste exactement un routeur de bordure non
+    identifié dans le maillage et exactement une annonce de routeur de
+    bordure non reprise dans la même partition, c'est le même, sauf si
+    l'ExtMac du routeur est connue et n'est pas le `xa` de l'annonce. Cette
+    déduction n'est pas retenue : elle se refait à chaque affichage. La fiche
+    du routeur dit qu'il est reconnu par élimination.
 
-  Sinon, il s'affiche « Routeur de bordure · B400 ».
+  **Mémoire des identités :** les paires retenues (parent de la sonde,
+  routeurs qui répondent, routeurs entendus) sont gardées d'un lancement à
+  l'autre avec leur partition, dans `identites-routeurs.json` du dossier de
+  l'app. Elles ne sont jamais lues ni écrites en démo, ni sous les tests
+  hors d'un dossier temporaire. Une autre partition les efface à la première
+  tournée, comme le reste de la mémoire. Une ExtMac n'a qu'un RLOC16 : un
+  routeur qui change d'identifiant perd l'ancienne paire.
+
+  **Affichage honnête** d'un routeur de bordure non identifié, un seul nœud
+  par routeur :
+  - il s'affiche avec ses candidats, sous leur nom : les annonces de sa
+    partition qu'aucun routeur n'a reprises (si son ExtMac est connue,
+    seulement celles qui n'ont pas de `xa`), par exemple
+    « HomePod Avant ou HomePod Palier · 0400 » ;
+  - un seul candidat, sans élimination possible :
+    « HomePod salon ? · 0400 », car ce n'est peut-être pas lui ;
+  - tant que la sonde donne un maillage de la partition, les annonces
+    candidates ne sont plus dessinées à part : ce nœud les porte. Le centre
+    de la zone reste dessiné, candidat ou non ;
+  - sa fiche liste les candidats ;
+  - sans candidat, il s'affiche « Routeur de bordure · B400 ».
+
+  Sans sonde (ou quand son maillage est périmé), rien ne change : toutes les
+  annonces sont dessinées.
 - **Autre appareil** (HomeKit sur Thread, par exemple) : une adresse OMR
   commune entre sa liste d'adresses et celles de l'instantané.
 - Sinon, « non identifié ».
@@ -298,6 +337,8 @@ atteint (état de la sonde, liste des routeurs, routeurs, pile et Network
 Data, balayage, identité des enfants), puis chaque requête revenue : les
 requêtes faites sur le total prévu de l'étape, 0 si elle n'a rien à faire. Ce
 total ne baisse jamais :
+- état de la sonde : `etat` puis `routeurs`, soit 2 ; l'étape s'arrête à 1
+  si la sonde n'est pas attachée, ou suspendue ;
 - liste des routeurs : le chef et les secours, puis, s'il faut chercher,
   tous les autres identifiants ; l'étape s'arrête à la première Route64,
   souvent avant son total ;

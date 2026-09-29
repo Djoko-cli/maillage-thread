@@ -109,7 +109,7 @@ catalogue vont ensemble.
 | Dossier | Rôle |
 |---|---|
 | `MaillageCoeur/` | framework sans interface : décodage des TXT, instantané (réseaux, partitions, préfixes, appareils), suivi et événements du journal, journal en fichiers, noms, disposition du graphe, table de routage ; testé sur le relevé réel et sur la panne rejouée |
-| `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, balayage des routeurs muets), rapprochement avec l'instantané ; testé sur une capture anonymisée |
+| `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, balayage des routeurs muets), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats) ; testé sur une capture anonymisée |
 | `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, `SondeUSB` (requêtes appariées par id), modèle de l'app (sonde retenue par son numéro de série USB, une tournée toutes les 5 minutes) |
 | `MaillageThread/Noms/` | noms de Maison : dossier choisi une fois (signet à portée de sécurité), lecture de `noms.json`, derniers noms gardés, lancement de Passeur Noms |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
@@ -207,6 +207,19 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   répondu (ceux d'Apple) ou qui se sont tus deux tournées de suite, toutes les
   30 minutes ou quand cet ensemble change ; la qualité de ces liens reste
   inconnue, et un lien entre deux routeurs Apple n'est jamais dessiné.
+- **Identité des routeurs de bordure.** Muet, un routeur d'Apple ne donne pas
+  son ExtMac, donc pas le nom de son annonce. La sonde (firmware 1.0.2)
+  apprend celle des routeurs qu'elle entend : chaque tournée lit sa table des
+  routeurs (`routeurs`) et retient chaque paire RLOC16 ↔ ExtMac, comme celle
+  de son parent. Ces identités sont gardées d'un lancement à l'autre avec leur
+  partition (`identites-routeurs.json` dans le dossier de l'app ; une autre
+  partition les efface) : déplacée dans la maison, la sonde les apprend
+  toutes. S'il ne reste qu'un routeur de bordure non identifié pour une seule
+  annonce, c'est lui, par élimination. Sinon, il s'affiche avec ses
+  candidats, « HomePod Avant ou HomePod Palier · 0400 »
+  (« HomePod salon ? · 0400 » pour un seul), et ces annonces ne sont plus
+  dessinées à part : un seul nœud par routeur. Sa fiche liste les candidats.
+  Sans sonde, toutes les annonces restent dessinées.
 - Dans le graphe, les traits pleins sont les liens radio, colorés et épaissis
   par la qualité (vert 3, jaune 2, orange 1, gris inconnue) ; le trait d'un
   enfant vers son parent reste fin. Les pointillés restent pour ce que la

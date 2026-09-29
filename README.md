@@ -107,7 +107,7 @@ catalog match.
 | Folder | Role |
 |---|---|
 | `MaillageCoeur/` | framework without UI: TXT decoding, snapshot (networks, partitions, prefixes, devices), tracking and log events, file log, names, graph layout, routing table; tested on the real survey and on the replayed outage |
-| `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, scan of silent routers), matching with the snapshot; tested on an anonymized capture |
+| `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, scan of silent routers), kept router identities, matching with the snapshot (elimination, candidates); tested on an anonymized capture |
 | `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, `SondeUSB` (requests matched by id), app model (probe remembered by its USB serial number, a tour every 5 minutes) |
 | `MaillageThread/Noms/` | Home names: folder chosen once (security-scoped bookmark), reading `noms.json`, last names kept, launching Passeur Noms |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
@@ -200,6 +200,19 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   stayed silent two tours in a row, every 30 minutes or when that set changes;
   the quality of those links stays unknown, and a link between two Apple
   routers is never drawn.
+- **Border router identities.** A silent Apple router does not give its
+  ExtMac, so not the name of its announcement either. The probe (firmware
+  1.0.2) learns the ExtMac of the routers it hears: each tour reads its router
+  table (`routeurs`) and keeps every RLOC16 ↔ ExtMac pair, like the one of its
+  parent. These identities are kept from one launch to the next with their
+  partition (`identites-routeurs.json` in the app folder; another partition
+  erases them): moved around the house, the probe learns them all. If a
+  single border router is left unidentified for a single announcement, it is
+  that one, by elimination. Otherwise it shows with its candidates,
+  "HomePod Avant or HomePod Palier · 0400" ("HomePod salon? · 0400" for a
+  single one), and those announcements are no longer drawn apart: one node per
+  router. Its card lists the candidates. Without a probe, every announcement
+  stays drawn.
 - In the graph, solid lines are radio links, colored and thickened by quality
   (green 3, yellow 2, orange 1, grey unknown); a child's line to its parent
   stays thin. Dotted lines stay for what the probe does not see. Devices that

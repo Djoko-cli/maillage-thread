@@ -21,8 +21,8 @@ struct AffichageSondeTests {
     }
 
     /// Routeur de bordure non identifie : ses candidats sous leur nom (« HomePod Avant ou HomePod
-    /// Gauche · 0400 »), l'instance a defaut ; un seul candidat, avec un point d'interrogation (il
-    /// peut n'etre aucun d'eux : plus de routeurs non identifies que d'annonces).
+    /// Gauche · 0400 »), l'instance a defaut ; un seul candidat, avec un point d'interrogation (sans
+    /// elimination possible, ce n'est peut-etre pas lui).
     @Test func libellesAvecCandidats() {
         let deux = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true,
                               candidats: ["hp-droit", "HomePod Palier"])
