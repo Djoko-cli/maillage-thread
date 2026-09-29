@@ -158,11 +158,14 @@ struct TransportUDPTests {
         #expect(ErreurReseau.depuis(.dns(-65554), chemin: nil, hote: "sonde.example.org") == .nomIntrouvable("sonde.example.org"))
         #expect(ErreurReseau.depuis(.dns(-65537), chemin: nil, hote: "x.local") == .nomIntrouvable("x.local"))
         #expect(ErreurReseau.depuis(.dns(-65570), chemin: nil, hote: "x.local") == .reseauLocalRefuse)
-        // Chaque cas a son texte ; celui de « pas de route » renvoie a l'assistant halo-routes.
+        // Chaque cas a son texte ; celui de « pas de route » renvoie au README de ce depot, jamais
+        // a un outil ou un chemin d'un autre depot.
         let cas: [ErreurReseau] = [.reseauLocalRefuse, .pasDeRoute, .nomIntrouvable("x.local"), .portInjoignable,
                                    .aucunDefi, .cheminPerdu("x"), .autre("x")]
         #expect(Set(cas.map(\.localizedDescription)).count == cas.count)
-        #expect(ErreurReseau.pasDeRoute.localizedDescription.contains("halo-routes"))
+        let pasDeRoute = ErreurReseau.pasDeRoute.localizedDescription
+        #expect(pasDeRoute.contains("README"))
+        #expect(!["halo-routes", "benq", "tools/", ".sh"].contains { pasDeRoute.contains($0) }, "\(pasDeRoute)")
     }
 
     /// La vraie connexion (Network.framework), sur la boucle locale seulement, vers un port sans

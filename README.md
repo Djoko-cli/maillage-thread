@@ -192,8 +192,8 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   and Settings › Probe keeps the cause of the last disconnection until the
   next connection. Halo's H1 envelope authenticates the messages without
   encrypting them: the topology travels in clear on the local network. The
-  Mac needs the IPv6 route to the OMR prefix: the `halo-routes` helper from
-  benq keeps it. "Forget the probe" removes this Mac's key. Limits: no end of
+  Mac needs an IPv6 route to the OMR prefix (see "Route to the Thread
+  network" below). "Forget the probe" removes this Mac's key. Limits: no end of
   session (a place on the board stays taken 30 s, the automatic retry fixes
   it); the board's receive queue has only 4 places (a batch of 8 `diag` may
   see some of them wait for the 2 s resend); a lost `routeurs` line gives a
@@ -251,3 +251,15 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
 - Probe captures hold the home network's addresses:
   `outils/anonymiser-sonde.py` rewrites them consistently before they become
   test data (`docs/releves/2026-09-29/`).
+
+### Route to the Thread network
+
+Over the network, the app reaches the probe at its address in the OMR
+prefix, a /64 that the border routers (HomePod, Apple TV…) advertise on the
+local network. macOS does not always install the route to that prefix, and
+may lose it when it switches border routers without putting it back: the
+probe is then unreachable, and the app says "No IPv6 route to the Thread
+network". The Mac needs a route to that /64 through one of the border
+routers that advertise it (setting one takes administrator rights). The
+author uses a helper from another of their projects for this; it is not
+part of this repository.

@@ -108,8 +108,8 @@ et promenée dans la maison, l'app la joint par le réseau.
 - **UDP sur IPv6, port 5480**, socket d'OpenThread, par l'adresse OMR de la
   sonde, à travers les routeurs de bordure. L'app vise `<hote>.local:5480`
   (`hote` : le nom d'hôte SRP que Matter enregistre, donné par `bonjour`). Le
-  Mac a besoin d'une route vers le préfixe OMR : l'assistant `halo-routes`
-  de benq.
+  Mac a besoin d'une route vers le préfixe OMR : voir « Route vers le réseau
+  Thread » dans le README du dépôt.
 - **Clé** de 32 octets, créée par l'USB seulement (`cle nouvelle`) :
   `cle = HMAC-SHA256(clé = aléa de l'app, message = aléa de la carte)`,
   gardée en NVS, rendue une seule fois, jamais imprimée ailleurs. Une

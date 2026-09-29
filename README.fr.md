@@ -199,8 +199,9 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   après 10 s de silence, et Réglages › Sonde garde la cause de la dernière
   perte jusqu'à la connexion suivante. L'enveloppe H1 de Halo authentifie les
   messages sans les chiffrer : la topologie circule en clair sur le réseau
-  local. Le Mac doit avoir la route IPv6 vers le préfixe OMR : l'assistant
-  `halo-routes` de benq la tient. « Oublier la sonde » retire la clé de ce Mac.
+  local. Le Mac doit avoir une route IPv6 vers le préfixe OMR (voir
+  « Route vers le réseau Thread » plus bas). « Oublier la sonde » retire la
+  clé de ce Mac.
   Limites : pas de fin de session (une place de la carte reste prise 30 s,
   la reprise automatique le répare) ; la file de réception de la carte n'a
   que 4 places (un envoi groupé de 8 `diag` peut en voir attendre le renvoi à
@@ -261,3 +262,14 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
 - Les captures de la sonde contiennent les adresses du réseau de la maison :
   `outils/anonymiser-sonde.py` les réécrit de façon cohérente avant qu'elles ne
   deviennent des données de test (`docs/releves/2026-09-29/`).
+
+### Route vers le réseau Thread
+
+Par le réseau, l'app joint la sonde à son adresse dans le préfixe OMR, un /64
+que les routeurs de bordure (HomePod, Apple TV…) annoncent au réseau local.
+macOS n'installe pas toujours la route vers ce préfixe, et peut la perdre en
+changeant de routeur de bordure sans la remettre : la sonde est alors
+injoignable, et l'app dit « Pas de route IPv6 vers le réseau Thread ». Il
+faut au Mac une route vers ce /64 par l'un des routeurs de bordure qui
+l'annoncent (la poser demande les droits d'administrateur). L'auteur utilise
+pour cela un assistant de son autre projet, qui n'est pas dans ce dépôt.

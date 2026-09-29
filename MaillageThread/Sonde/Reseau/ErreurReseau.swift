@@ -8,8 +8,9 @@ enum ErreurReseau: Error, Sendable, Equatable, LocalizedError {
     /// Autorisation "reseau local" refusee (Reglages Systeme) : macOS refuse la resolution du
     /// nom `.local` de la sonde.
     case reseauLocalRefuse
-    /// Pas de route IPv6 vers le reseau Thread (prefixe OMR) : bug du noyau de macOS, que
-    /// l'assistant halo-routes de benq contourne.
+    /// Pas de route IPv6 vers le reseau Thread (prefixe OMR) : macOS ne l'installe pas toujours,
+    /// ou la perd en changeant de routeur de bordure ; le README (« Route vers le reseau Thread »)
+    /// explique quoi faire.
     case pasDeRoute
     /// `<nom>.local` introuvable, ou le noeud ne repond pas (`EHOSTDOWN`).
     case nomIntrouvable(String)
@@ -33,7 +34,7 @@ enum ErreurReseau: Error, Sendable, Equatable, LocalizedError {
         case .reseauLocalRefuse:
             String(localized: "Accès au réseau local refusé : Réglages Système › Confidentialité et sécurité › Réseau local › Maillage Thread.")
         case .pasDeRoute:
-            String(localized: "Pas de route IPv6 vers le réseau Thread : l'adresse OMR de la sonde est injoignable depuis ce Mac. L'assistant halo-routes de benq rétablit la route (sh tools/macos/halo-routes/installer.sh, s'il n'est pas installé).")
+            String(localized: "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans le README.")
         case .nomIntrouvable(let hote):
             String(localized: "Sonde introuvable (\(hote)) : éteinte, hors du réseau Thread, ou routeurs de bordure injoignables.")
         case .portInjoignable:

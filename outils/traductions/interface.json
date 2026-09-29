@@ -121,7 +121,7 @@
   "Partition %@": "Partition %@",
   "Partition %@ (incertaine : préfixe partagé)": "Partition %@ (uncertain: shared prefix)",
   "Partition %@ · %@": "Partition %1$@ · %2$@",
-  "Pas de route IPv6 vers le réseau Thread : l'adresse OMR de la sonde est injoignable depuis ce Mac. L'assistant halo-routes de benq rétablit la route (sh tools/macos/halo-routes/installer.sh, s'il n'est pas installé).": "No IPv6 route to the Thread network: the probe's OMR address cannot be reached from this Mac. The halo-routes helper from benq restores the route (sh tools/macos/halo-routes/installer.sh, if it is not installed).",
+  "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans le README.": "No IPv6 route to the Thread network: this Mac has no route to the OMR prefix, where the probe's address is. See “Route to the Thread network” in the README.",
   "Pas encore de noms.json dans ce dossier : lance le passeur.": "No noms.json in this folder yet: run Passeur Noms.",
   "Passeur Noms introuvable : lance outils/passeur.sh.": "Passeur Noms not found: run outils/passeur.sh.",
   "Pile et Network Data": "Stack and Network Data",
