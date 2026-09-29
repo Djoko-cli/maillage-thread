@@ -617,6 +617,11 @@ static void repondreDiagErreur(uint32_t id, const char *cible, const char *erreu
   fin();
 }
 
+// Cible : RLOC16 en 4 hexa, ou adresse IPv6 (hexa, ':', et '.' d'une IPv4
+// incluse). Rien d'autre : la cible repart telle quelle dans la ligne JSON
+// (sans echappement), qui doit rester valide, sur l'USB comme a distance.
+static const char kCaracteresCible[] = "0123456789abcdefABCDEF:.";
+
 // diag <cible> <t,t,...> <id> [<delai ms>]
 static void cmdDiag(char *args) {
   char *cible = strtok(args, " ");
@@ -624,7 +629,8 @@ static void cmdDiag(char *args) {
   char *idTexte = strtok(nullptr, " ");
   char *delaiTexte = strtok(nullptr, " ");
   const uint32_t id = idTexte ? strtoul(idTexte, nullptr, 10) : 0;
-  if (!cible || !liste || !idTexte || strlen(cible) >= sizeof(sRequetes[0].cible)) {
+  if (!cible || !liste || !idTexte || strlen(cible) >= sizeof(sRequetes[0].cible) ||
+      strspn(cible, kCaracteresCible) != strlen(cible)) {
     repondreDiagErreur(id, "", "syntaxe");
     return;
   }
