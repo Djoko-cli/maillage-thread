@@ -114,6 +114,8 @@ struct FenetreReglages: View {
                         let code = b.code.flatMap { $0.isEmpty ? nil : $0 }
                         if qr != nil || code != nil {
                             CodeMatterSonde(qr: qr, code: code, appairee: b.appairee)
+                        } else if let note = Self.noteCodeMatter(b, liaison: sonde.liaison) {
+                            Text(note).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     if let e = sonde.etatSonde {
@@ -190,6 +192,13 @@ struct FenetreReglages: View {
     static func texteAccesReseau(empreinte: String?) -> String {
         guard let empreinte else { return String(localized: "non autorisé") }
         return String(localized: "autorisé · clé \(empreinte)")
+    }
+
+    /// Note a la place du code Matter : par le reseau, la sonde (1.0.2) ne donne ni QR code ni
+    /// code d'appairage, qui ne circulent pas en clair ; nil en USB, ou quand elle les donne.
+    static func noteCodeMatter(_ b: Bonjour, liaison: SondeMaillage.Liaison) -> String? {
+        guard liaison == .reseau, (b.qr ?? "").isEmpty, (b.code ?? "").isEmpty else { return nil }
+        return String(localized: "Le code Matter ne passe pas par le réseau : branchez la sonde en USB pour l'afficher.")
     }
 
     /// Nom d'hote vise par la liaison reseau : « 0123456789ABCDEF.local ».

@@ -508,6 +508,24 @@ struct SondeReseauTests {
         #expect(FenetreReglages.texteHote(nil) == "—")
     }
 
+    /// Reglages › Sonde : par le reseau, le firmware 1.0.2 ne donne ni code ni QR code (le code
+    /// d'appairage ne circule pas en clair) ; une note les remplace. En USB, ou quand la sonde
+    /// les donne, pas de note (valeurs inventees).
+    @Test func noteCodeMatterParLeReseau() throws {
+        func lire(_ json: String) -> Bonjour? {
+            if case .bonjour(let b)? = MessageSonde.lire(Data(json.utf8)) { b } else { nil }
+        }
+        let avecCode = try #require(lire(Self.bonjour()))
+        let sansCode = try #require(lire(Self.bonjour().replacingOccurrences(
+            of: #""code":"12345678901","qr":"MT:ABCDEFGHIJ0123456789""#, with: #""code":null,"qr":null"#)))
+        #expect(sansCode.code == nil && sansCode.qr == nil)
+        let note = String(localized: "Le code Matter ne passe pas par le réseau : branchez la sonde en USB pour l'afficher.")
+        #expect(FenetreReglages.noteCodeMatter(sansCode, liaison: .reseau) == note)
+        #expect(FenetreReglages.noteCodeMatter(sansCode, liaison: .usb) == nil)
+        #expect(FenetreReglages.noteCodeMatter(avecCode, liaison: .reseau) == nil)
+        #expect(FenetreReglages.noteCodeMatter(avecCode, liaison: .usb) == nil)
+    }
+
     /// Reglages › Sonde : le bloc de l'acces reseau se dessine (etat, bouton, explication).
     @Test func vueAccesReseau() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()

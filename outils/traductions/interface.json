@@ -92,6 +92,7 @@
   "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Autoriser l'accès réseau »).": "The probe does not answer: powered off, not yet in the Thread network, or a key different from this Mac's (plug it in over USB, then “Allow Network Access”).",
   "La sonde refuse l'accès réseau : la brancher en USB, puis « Autoriser l'accès réseau ».": "The probe refuses network access: plug it in over USB, then “Allow Network Access”.",
   "Langue": "Language",
+  "Le code Matter ne passe pas par le réseau : branchez la sonde en USB pour l'afficher.": "The Matter code is not sent over the network: plug the probe in over USB to show it.",
   "Le passeur a échoué : %@": "Passeur Noms failed: %@",
   "Le passeur a échoué.": "Passeur Noms failed.",
   "Le surnom reste sur ce Mac et passe avant le nom de Maison.": "The nickname stays on this Mac and takes precedence over the Home name.",
