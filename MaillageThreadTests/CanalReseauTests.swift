@@ -79,13 +79,14 @@ struct CanalReseauTests {
 
     /// Par le reseau, `SondeUSB` attend au-dela du second renvoi du canal : les deux premiers
     /// envois perdus, la reponse au second renvoi aboutit (ici renvois a 100 et 200 ms, attente
-    /// de 400 ms ; dans l'app 2 et 4 s, attente de 6 s, et 3 s en USB).
+    /// de 800 ms, 600 ms de marge sous charge sans rien allonger ; dans l'app 2 et 4 s, attente
+    /// de 6 s, et 3 s en USB).
     @Test func reponseAuSecondRenvoi() async throws {
         #expect(SondeUSB.delaiCommandeUSB == .seconds(3))
         #expect(SondeUSB.delaiCommandeReseau == .seconds(6))
         #expect(CanalReseau.Reglages().renvois == [.seconds(2), .seconds(4)])
         let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
-        let s = SondeUSB(canal: try await Self.canal(carte), delaiCommande: .milliseconds(400))
+        let s = SondeUSB(canal: try await Self.canal(carte), delaiCommande: .milliseconds(800))
         try await s.demarrer {}
         carte.perdre(2)
         #expect(try await s.bonjour().version == "1.0.0")
@@ -255,19 +256,22 @@ struct CanalReseauTests {
         c.fermer()
     }
 
-    /// Veille levee par une autre reponse : ses renvois s'arretent (ici veille apres 600 ms de
-    /// silence, perdue ; renvois prevus a +300 ms et +1 s).
+    /// Veille levee par une autre reponse : ses renvois s'arretent (ici veille apres 1 s de
+    /// silence, perdue ; renvois prevus a +400 ms et +1 s). Le pas de la garde qui la leve est
+    /// joue des la reponse (`surveiller`), sans attendre le sien : 400 ms de marge avant le
+    /// renvoi, et 400 ms entre le constat et la veille suivante (1 s apres la reponse).
     @Test func veilleLeveeSansRenvoi() async throws {
         let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
-        var reglages = Self.rapides(veille: .milliseconds(600), attenteVeille: .seconds(3))
-        reglages.renvois = [.milliseconds(300), .seconds(1)]
+        var reglages = Self.rapides(veille: .seconds(1), attenteVeille: .seconds(3))
+        reglages.renvois = [.milliseconds(400), .seconds(1)]
         let c = try await Self.canal(carte, reglages: reglages)
         let lignes = RecueilLignes(try c.ouvrir())
         carte.perdre(1)
         #expect(await attendreQue { carte.perdus == 1 }, "veille perdue")
         c.envoyer("etat\n")
         #expect(await attendreQue { lignes.liste == [CanalRejoue.etatAttache] })
-        try await Task.sleep(for: .milliseconds(450))
+        #expect(c.surveiller(), "veille levee, canal ouvert")
+        try await Task.sleep(for: .milliseconds(600))
         let commandes = carte.recues.compactMap(Self.decouper).map { $0.commande }
         #expect(commandes == ["etat"], "le renvoi de la veille levee ne part pas")
         c.fermer()
