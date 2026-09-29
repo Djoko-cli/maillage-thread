@@ -211,10 +211,17 @@ struct IndicateurTournee: View {
             } else {
                 ProgressView()
             }
-            TimelineView(.periodic(from: debut, by: 1)) { contexte in
-                Text(TexteTournee.barre(avancement, debut: debut, maintenant: contexte.date))
-                    .monospacedDigit()
+            // Largeur de la plus longue etape, compteur et duree compris : la capsule ne change
+            // pas de taille d'une etape a l'autre (texte cale a gauche).
+            ZStack(alignment: .leading) {
+                ForEach(AvancementTournee.Etape.allCases, id: \.self) { e in
+                    Text(TexteTournee.gabaritBarre(e)).hidden()
+                }
+                TimelineView(.periodic(from: debut, by: 1)) { contexte in
+                    Text(TexteTournee.barre(avancement, debut: debut, maintenant: contexte.date))
+                }
             }
+            .monospacedDigit()
         }
         .controlSize(.small)
         .font(.callout)

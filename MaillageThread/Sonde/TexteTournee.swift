@@ -39,6 +39,12 @@ enum TexteTournee {
         String(localized: "\(avancement(a)) · \(chrono(maintenant.timeIntervalSince(debut)))")
     }
 
+    /// Texte le plus large de la barre pour une etape (compteur a trois chiffres, duree de
+    /// 99:59), invisible : il donne sa largeur fixe a la capsule de la tournee.
+    static func gabaritBarre(_ e: AvancementTournee.Etape) -> String {
+        String(localized: "\(avancement(AvancementTournee(etape: e, fait: 888, total: 888))) · \(chrono(99 * 60 + 59))")
+    }
+
     /// Reglages › Sonde : « Balayage des routeurs muets · 24/48 · depuis 42 s ».
     static func reglages(_ a: AvancementTournee, debut: Date, maintenant: Date) -> String {
         String(localized: "\(avancement(a)) · depuis \(duree(maintenant.timeIntervalSince(debut)))")

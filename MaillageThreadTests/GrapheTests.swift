@@ -48,6 +48,20 @@ struct GrapheTests {
         #expect(BarreOutils.aideRafraichir(tournee: false, passeur: false) == String(localized: "Rafraîchir : réseau"))
     }
 
+    /// La capsule de la tournee garde la meme largeur a chaque etape (celle de la plus longue,
+    /// compteur et duree compris) : elle ne change pas de taille a chaque pas.
+    @Test func capsuleDeLargeurFixe() {
+        let debut = Date(timeIntervalSinceNow: -42)
+        let avancements = AvancementTournee.Etape.allCases.flatMap { e in
+            [AvancementTournee(etape: e, fait: 0, total: 0), AvancementTournee(etape: e, fait: 3, total: 7),
+             AvancementTournee(etape: e, fait: 24, total: 48), AvancementTournee(etape: e, fait: 160, total: 160)]
+        }
+        let largeurs = avancements.map {
+            NSHostingView(rootView: IndicateurTournee(avancement: $0, debut: debut)).fittingSize.width
+        }
+        #expect(Set(largeurs).count == 1, "\(largeurs)")
+    }
+
     /// Pendant une tournee, la barre d'outils garde sa largeur : le bouton rafraichir ne bouge
     /// pas sous le pointeur. L'indicateur est sur sa propre ligne, qui ne prend aucune place
     /// hors tournee (pas meme l'espacement de la pile).
