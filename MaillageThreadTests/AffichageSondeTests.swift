@@ -48,11 +48,20 @@ struct AffichageSondeTests {
         #expect(Set(noms.keys) == Set(r.routeurs.map(\.instance)))
     }
 
-    /// Fiche d'un routeur de bordure non identifie : la liste de ses candidats, et ce que la
-    /// sonde en sait ; trois explications distinctes (routeur avec ou sans candidats, enfant).
+    /// Fiche d'un routeur de bordure non identifie : chaque candidat se choisit et ouvre la fiche
+    /// de son annonce (role, adresses, journal, « Renommer… »), si l'instantane la connait
+    /// encore ; sinon, il ne mene nulle part.
+    @Test func selectionDUnCandidat() throws {
+        let s = Surveillance(mode: .demo, dossier: nil)
+        s.demarrer()
+        #expect(FicheNoeud.selection(candidat: "HomePod Avant", dans: s) == "HomePod Avant")
+        #expect(FicheNoeud.renommable("HomePod Avant", dans: s), "sa fiche : « Renommer… »")
+        #expect(FicheNoeud.selection(candidat: "Annonce disparue", dans: s) == nil)
+    }
+
+    /// Fiche d'un routeur de bordure non identifie : ce que la sonde en sait ; trois explications
+    /// distinctes (routeur avec ou sans candidats, enfant).
     @Test func ficheAvecCandidats() {
-        #expect(FicheNoeud.ligneCandidats(["HomePod Avant", "HomePod Palier"])
-                == String(localized: "Candidats : \("HomePod Avant, HomePod Palier")"))
         let avec = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true,
                               candidats: ["HomePod Avant", "HomePod Palier"])
         let sans = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true)

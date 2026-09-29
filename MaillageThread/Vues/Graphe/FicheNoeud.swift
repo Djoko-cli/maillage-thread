@@ -7,6 +7,8 @@ struct FicheNoeud: View {
     @Environment(\.colorScheme) private var apparence
     let id: String
     @Binding var aRenommer: NoeudChoisi?
+    /// Choisit un autre noeud (la fiche d'un candidat).
+    var choisir: (String) -> Void = { _ in }
     var fermer: () -> Void
 
     var body: some View {
@@ -206,7 +208,18 @@ struct FicheNoeud: View {
             Text(GrapheCanvas.libelleInconnu(n, noms: nomsRouteurs)).font(.title3.weight(.semibold))
             Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud)).foregroundStyle(.secondary)
             if !n.candidats.isEmpty {
-                Text(Self.ligneCandidats(n.candidats.map { nomsRouteurs[$0] ?? $0 }))
+                // Chaque candidat ouvre la fiche de son annonce, pas dessinee a part.
+                HStack(spacing: 8) {
+                    Text("Candidats :")
+                    ForEach(n.candidats, id: \.self) { c in
+                        let choix = Self.selection(candidat: c, dans: surveillance)
+                        Button(nomsRouteurs[c] ?? c) {
+                            if let choix { choisir(choix) }
+                        }
+                        .buttonStyle(.link)
+                        .disabled(choix == nil)
+                    }
+                }
             }
             Text(Self.explication(n))
                 .font(.caption)
@@ -215,10 +228,10 @@ struct FicheNoeud: View {
         .frame(minWidth: 200, alignment: .leading)
     }
 
-    /// « Candidats : HomePod Avant, HomePod Palier » : les annonces qu'un routeur de bordure non
-    /// identifie porte, sous leur nom.
-    static func ligneCandidats(_ noms: [String]) -> String {
-        String(localized: "Candidats : \(noms.joined(separator: ", "))")
+    /// Noeud a choisir pour un candidat : son annonce, si l'instantane la connait encore (sa
+    /// fiche : role, adresses, journal, « Renommer… ») ; nil sinon.
+    static func selection(candidat: String, dans surveillance: Surveillance) -> String? {
+        surveillance.instantane?.routeur(candidat) != nil ? candidat : nil
     }
 
     /// Ce que la sonde sait d'un noeud qu'elle seule connait.

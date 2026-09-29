@@ -50,7 +50,7 @@
   "BBR actif": "active BBR",
   "BBR primaire": "primary BBR",
   "Balayage des routeurs muets": "Scan of silent routers",
-  "Candidats : %@": "Candidates: %@",
+  "Candidats :": "Candidates:",
   "Capture enregistrée : %@": "Capture saved: %@",
   "Ce nœud n'est plus visible.": "This node is no longer visible.",
   "Celle du Mac": "Same as the Mac",

@@ -817,18 +817,18 @@
         }
       }
     },
-    "Candidats : %@" : {
+    "Candidats :" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Candidates: %@"
+            "value" : "Candidates:"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Candidats : %@"
+            "value" : "Candidats :"
           }
         }
       }

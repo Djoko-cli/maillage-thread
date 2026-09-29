@@ -42,7 +42,9 @@ struct FenetreGraphe: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let selection {
-                    FicheNoeud(id: selection, aRenommer: $aRenommer) { self.selection = nil }
+                    FicheNoeud(id: selection, aRenommer: $aRenommer, choisir: { self.selection = $0 }) {
+                        self.selection = nil
+                    }
                 }
             }
             .padding(Self.bord)
