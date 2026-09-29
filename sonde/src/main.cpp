@@ -90,7 +90,7 @@ static const char *const kVersion = "1.0.2";
 
 // ---------------------------------------------------------------------------
 //  FED des la creation de la pile Thread, jamais eligible routeur (repris de
-//  l'essai FED, branche essai-fed, commit 078a8be)
+//  l'essai FED du 29/09 (spec, section 8))
 //
 //  esp_matter::start : _InitThreadStack (esp_openthread_init cree l'instance
 //  et relit sa NVS, puis CHIP relance Thread si le reseau est connu), puis
