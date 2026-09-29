@@ -67,6 +67,64 @@ struct ProtocoleSondeTests {
         #expect(a.code == nil && a.qr == nil)
     }
 
+    /// bonjour du firmware 1.0.2 : nom d'hote SRP, sans `.local` (valeur inventee), nul tant
+    /// qu'il n'est pas connu ; absent des firmwares precedents.
+    @Test func bonjourHote() {
+        let base = #""v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.2","nom":"SONDE-01","mac":"A00000000001","appairee":true,"code":"12345678901","qr":"MT:ABCDEFGHIJ0123456789""#
+        guard case .bonjour(let b)? = MessageSonde.lire(Data(("{" + base + #","hote":"0123456789ABCDEF"}"#).utf8)),
+              case .bonjour(let inconnu)? = MessageSonde.lire(Data(("{" + base + #","hote":null}"#).utf8)),
+              case .bonjour(let ancien)? = MessageSonde.lire(Data(("{" + base + "}").utf8)) else {
+            Issue.record("bonjour 1.0.2 illisible")
+            return
+        }
+        #expect(b.hote == "0123456789ABCDEF")
+        #expect(inconnu.hote == nil, "pas encore enregistre par SRP")
+        #expect(ancien.hote == nil, "firmware 1.0.1")
+    }
+
+    /// Cle des vecteurs H1 (00..1F) et son empreinte (8 premiers hexa de SHA-256).
+    static let cleVecteurs = "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F"
+
+    /// `cle` : reponse a `cle nouvelle` (la cle, une seule fois, avec l'id de la demande et le
+    /// nom d'hote) et a `cle` (l'empreinte seule, nulle sans cle).
+    @Test func messageCle() {
+        let nouvelle = #"{"v":1,"t":"cle","id":7,"cle":"\#(Self.cleVecteurs)","empreinte":"630DCD29","hote":"0123456789ABCDEF"}"#
+        guard case .cle(let r)? = MessageSonde.lire(Data(nouvelle.utf8)) else {
+            Issue.record("cle illisible")
+            return
+        }
+        #expect(r.id == 7)
+        #expect(r.cle == Self.cleVecteurs)
+        #expect(r.empreinte == "630DCD29")
+        #expect(r.hote == "0123456789ABCDEF")
+        let sansHote = #"{"v":1,"t":"cle","id":8,"cle":"\#(Self.cleVecteurs)","empreinte":"630DCD29","hote":null}"#
+        guard case .cle(let s)? = MessageSonde.lire(Data(sansHote.utf8)) else {
+            Issue.record("cle sans hote illisible")
+            return
+        }
+        #expect(s.hote == nil)
+        #expect(MessageSonde.lire(Data(#"{"v":1,"t":"cle","empreinte":"630DCD29"}"#.utf8))
+                == .cle(ReponseCle(id: nil, cle: nil, empreinte: "630DCD29", hote: nil)))
+        #expect(MessageSonde.lire(Data(#"{"v":1,"t":"cle","empreinte":null}"#.utf8))
+                == .cle(ReponseCle(id: nil, cle: nil, empreinte: nil, hote: nil)))
+    }
+
+    /// La cle n'apparait dans aucune description (journal, console, message d'erreur) :
+    /// ni celle de la reponse, ni celle du message, ni un dump.
+    @Test func cleMasquee() {
+        let r = ReponseCle(id: 7, cle: Self.cleVecteurs, empreinte: "630DCD29", hote: "0123456789ABCDEF")
+        var vidage = ""
+        dump(r, to: &vidage)
+        var vidageMessage = ""
+        dump(MessageSonde.cle(r), to: &vidageMessage)
+        let textes = [String(describing: r), String(reflecting: r), "\(r)", vidage, vidageMessage,
+                      String(describing: MessageSonde.cle(r)), String(reflecting: MessageSonde.cle(r))]
+        for t in textes {
+            #expect(!t.contains("000102030405"), "cle visible")
+        }
+        #expect(String(describing: r).contains("630DCD29"), "l'empreinte reste")
+    }
+
     /// Diag : reussi (TLV decodees) et echoue (delai, occupee).
     @Test func diag() throws {
         let diags = try Self.messages().compactMap { if case .diag(let d) = $0 { d } else { nil } }
@@ -93,6 +151,10 @@ struct ProtocoleSondeTests {
         #expect(CommandeSonde.diag(cible: 0x5000, tlv: [0, 1, 5, 16, 8, 24], id: 12, delaiMs: 6000).ligne
                 == "diag 5000 0,1,5,16,8,24 12 6000\n")
         #expect(CommandeSonde.diag(cible: 0x0400, tlv: [7], id: 3, delaiMs: nil).ligne == "diag 0400 7 3\n")
+        // Alea de l'app en 64 hexa MAJUSCULES, id decimal obligatoire.
+        let alea = Data((0..<32).map { UInt8(0xE0 &+ $0) })
+        #expect(CommandeSonde.cleNouvelle(alea: alea, id: 12).ligne
+                == "cle nouvelle E0E1E2E3E4E5E6E7E8E9EAEBECEDEEEFF0F1F2F3F4F5F6F7F8F9FAFBFCFDFEFF 12\n")
     }
 
     /// Lignes machine seulement, meme coupees en morceaux ; lignes humaines et trop longues ignorees.
