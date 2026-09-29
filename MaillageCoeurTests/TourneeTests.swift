@@ -292,8 +292,9 @@ struct TourneeTests {
         #expect(ReleveAvancement.croissants(routeurs))
         #expect(routeurs.last == AvancementTournee(etape: .routeurs, fait: 9, total: 9), "7 routeurs, puis 2 moities")
         let requetes = await sonde.registre.requetes
-        #expect(requetes.filter { $0.hasPrefix("5000|") && $0 != "5000|7" && $0 != "5000|25,26,27,28" }
-                == ["5000|0,1,5,16,8,24", "5000|0,1,5", "5000|16,8,24"], "une seule fois")
+        let de20 = requetes.filter { $0.hasPrefix("5000|") && $0 != "5000|7" && $0 != "5000|25,26,27,28" }
+        #expect(de20.first == "5000|0,1,5,16,8,24", "la requete entiere d'abord")
+        #expect(de20.dropFirst().sorted() == ["5000|0,1,5", "5000|16,8,24"], "puis ses moities, une seule fois, en parallele : dans le desordre")
         #expect(!requetes.contains("5001|0,1,2,8"), "pas de balayage de ses enfants")
     }
 
@@ -314,8 +315,9 @@ struct TourneeTests {
         #expect(mem.repondants == [20, 24])
         #expect(!mem.muetsBalayes.contains(20))
         let requetes = await sonde.registre.requetes
-        #expect(requetes.filter { $0.hasPrefix("5000|0,1,5") || $0.hasPrefix("5000|16,8") }
-                == ["5000|0,1,5,16,8,24", "5000|0,1,5", "5000|16,8,24"], "pas de troisieme decoupage")
+        let de20 = requetes.filter { $0.hasPrefix("5000|0,1,5") || $0.hasPrefix("5000|16,8") }
+        #expect(de20.first == "5000|0,1,5,16,8,24", "la requete entiere d'abord")
+        #expect(de20.dropFirst().sorted() == ["5000|0,1,5", "5000|16,8,24"], "ses moities, pas de troisieme decoupage")
         #expect(!requetes.contains("5001|0,1,2,8"))
     }
 
