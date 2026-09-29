@@ -338,6 +338,23 @@ struct TourneeTests {
         #expect(mem.echecs[20] == 0)
     }
 
+    /// L'identite connue d'un routeur qui repond sans ExtMac se lit apres toutes les reponses :
+    /// si un routeur suivant repond avec cette ExtMac (elle a change de routeur), la paire perimee
+    /// est oubliee et le premier ne la prend pas (valeurs de la capture ; paire perimee inventee).
+    @Test func identiteConnueApresToutesLesReponses() async throws {
+        var memoire = MemoireTournee()
+        memoire.partition = "46CBEBCD"
+        memoire.identites = [0x5000: "E000000000000003"]  // l'ExtMac du 24, perimee sous le 20
+        let entiere = try CaptureSonde.tlv(104)
+        let sonde = try SondeRejouee.capture(reponsesEnPlus: ["5000|16,8,24": try Self.garder(entiere, [16, 8, 24])],
+                                             tropLongs: ["5000|0,1,5,16,8,24"])
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: memoire, maintenant: Self.t0))
+        #expect(m.routeur(24)?.extMac == "E000000000000003")
+        #expect(m.routeur(20)?.extMac == nil, "la paire perimee est oubliee avant d'etre lue")
+        #expect(mem.identites[0x5000] == nil)
+        #expect(mem.identites[0x6000] == "E000000000000003")
+    }
+
     /// Aucun routeur ne repond a sa requete (sonde occupee...) : les secours de la
     /// tournee precedente restent.
     @Test func repondantsGardes() async throws {

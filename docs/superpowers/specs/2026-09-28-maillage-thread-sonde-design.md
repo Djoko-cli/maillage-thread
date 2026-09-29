@@ -388,7 +388,9 @@ jusqu'à la connexion suivante réussie.
      balayage (section 3 bis). L'avancement de l'étape compte ces deux
      requêtes de plus ;
    - un routeur qui répond sans son ExtMac (une moitié sans réponse) garde
-     l'identité connue de sa paire, comme un muet ;
+     l'identité connue de sa paire, comme un muet, lue après toutes les
+     réponses de la tournée (une ExtMac passée à un autre routeur a fait
+     oublier la paire périmée) ;
    - une fois, les TLV 25 à 28 : on ne garde que la version de la pile (28) ;
      25 à 27 étaient vides à l'essai (écart 1 du plan).
 5. **Routeur muet :** un routeur qui ne répond pas deux tournées de suite est

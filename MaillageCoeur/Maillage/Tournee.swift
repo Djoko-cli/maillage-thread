@@ -203,6 +203,7 @@ public enum Tournee {
                 if let t = r.tlv, r.reponse != nil { reunies[id, default: ""] += t }
             }
         }
+        var sansExtMac: [Int] = []
         for (id, r) in reponsesRouteurs {
             if let rep = r.tropLong ? ReponseDiagnostic(hexa: reunies[id] ?? "") : r.reponse {
                 c.reponse(rep, routeur: id)
@@ -211,10 +212,8 @@ public enum Tournee {
                 mem.dejaRepondu.insert(id)
                 if let ext = rep.extMac {
                     mem.retenir(ext, rloc16: rloc16(id))
-                } else if let ext = mem.identites[rloc16(id)] {
-                    // Reponse sans ExtMac (moitie d'un `trop_long` sans reponse...) : l'identite
-                    // connue reste, comme pour un muet.
-                    c.identite(ext, routeur: id)
+                } else {
+                    sansExtMac.append(id)
                 }
                 repondants.append(id)
             } else {
@@ -225,8 +224,11 @@ public enum Tournee {
         // Personne n'a repondu (sonde occupee...) : les secours d'avant restent.
         if !repondants.isEmpty { mem.repondants = repondants }
         let muets = Set(route64.routeurs).subtracting(repondants)
-        for id in muets.sorted() {
-            c.muet(id)
+        for id in muets.sorted() { c.muet(id) }
+        // Muets, et repondants sans ExtMac (moitie d'un `trop_long` sans reponse...) : l'identite
+        // connue, lue apres toutes les reponses (une ExtMac passee a un autre routeur a oublie sa
+        // paire perimee).
+        for id in muets.sorted() + sansExtMac {
             if let ext = mem.identites[rloc16(id)] { c.identite(ext, routeur: id) }
         }
 

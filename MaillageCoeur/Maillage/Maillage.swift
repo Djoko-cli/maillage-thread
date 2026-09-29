@@ -143,8 +143,9 @@ public struct ConstructionMaillage: Sendable {
         }
     }
 
-    /// ExtMac apprise ailleurs (parent de la sonde, tournee precedente) : pour un
-    /// routeur muet, qui ne la donne pas lui-meme.
+    /// ExtMac apprise ailleurs (parent de la sonde, table des routeurs, tournee precedente) : pour
+    /// un routeur qui ne la donne pas lui-meme, muet ou dont la reponse n'a pas l'ExtMac. Ne
+    /// remplace jamais celle qu'il a donnee.
     public mutating func identite(_ ext: String, routeur id: Int) {
         var r = routeurs[id, default: RouteurMaillage(id: id)]
         r.extMac = r.extMac ?? ext
