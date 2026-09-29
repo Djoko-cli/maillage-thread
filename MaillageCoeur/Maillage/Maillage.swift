@@ -50,7 +50,7 @@ public struct EnfantMaillage: Hashable, Sendable, Identifiable {
     public var extMac: String?
     /// Qualite du lien de l'enfant vers son parent, de 0 a 3 ; nil sous un routeur muet.
     public var qualite: Int?
-    /// Delai de supervision, en secondes.
+    /// Delai d'expiration de l'enfant (Child Timeout), en secondes.
     public var delai: Int?
     public var endormi: Bool?
     /// Adresses donnees par l'enfant (TLV 8), pour le reconnaitre par son adresse OMR.

@@ -71,7 +71,7 @@ public struct EntreeEnfant: Hashable, Sendable, Codable {
     public let idEnfant: Int
     /// Qualite du lien de l'enfant vers son parent, de 0 a 3.
     public let qualite: Int
-    /// Delai de supervision de l'enfant, en secondes (2^(t-4)).
+    /// Delai d'expiration de l'enfant (Child Timeout), en secondes (2^(t-4)).
     public let delai: Int
     public let mode: ModeThread
 

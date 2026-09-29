@@ -14,6 +14,14 @@ struct LiaisonSerieTests {
         }
     }
 
+    /// errno est lu avant le message, que sa construction (`String(localized:)`) peut
+    /// changer : un EBUSY reste un EBUSY (port occupe).
+    @Test func errnoAvantLeMessage() {
+        errno = EBUSY
+        let e = PortSerie.erreur({ errno = ENOENT; return "ouverture" }())
+        #expect(e.errno == EBUSY)
+    }
+
     /// Un port absent echoue proprement, sans descripteur laisse ouvert.
     @Test func portAbsent() {
         let l = LiaisonSerie(chemin: "/dev/cu.maillage-inexistant")

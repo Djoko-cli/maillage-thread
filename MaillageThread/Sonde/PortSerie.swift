@@ -20,8 +20,10 @@ enum PortSerie {
 
     static let debit: speed_t = 115_200
 
-    static func erreur(_ quoi: String) -> ErreurPort {
-        ErreurPort(quoi: quoi, errno: errno)
+    /// errno lu d'abord : construire le message (`String(localized:)`) peut le changer.
+    static func erreur(_ quoi: @autoclosure () -> String) -> ErreurPort {
+        let code = errno
+        return ErreurPort(quoi: quoi(), errno: code)
     }
 
     /// Ouvre `/dev/cu.*` (jamais `/dev/tty.*`, qui attend DCD) ; renvoie le descripteur.
