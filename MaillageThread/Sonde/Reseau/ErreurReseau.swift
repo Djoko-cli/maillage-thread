@@ -34,7 +34,7 @@ enum ErreurReseau: Error, Sendable, Equatable, LocalizedError {
         case .reseauLocalRefuse:
             String(localized: "Accès au réseau local refusé : Réglages Système › Confidentialité et sécurité › Réseau local › Maillage Thread.")
         case .pasDeRoute:
-            String(localized: "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans le README.")
+            String(localized: "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans README.fr.md.")
         case .nomIntrouvable(let hote):
             String(localized: "Sonde introuvable (\(hote)) : éteinte, hors du réseau Thread, ou routeurs de bordure injoignables.")
         case .portInjoignable:

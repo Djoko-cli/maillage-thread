@@ -1969,18 +1969,18 @@
         }
       }
     },
-    "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans le README." : {
+    "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans README.fr.md." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No IPv6 route to the Thread network: this Mac has no route to the OMR prefix, where the probe's address is. See “Route to the Thread network” in the README."
+            "value" : "No IPv6 route to the Thread network: this Mac has no route to the OMR prefix, where the probe's address is. See “Route to the Thread network” in README.md."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans le README."
+            "value" : "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans README.fr.md."
           }
         }
       }

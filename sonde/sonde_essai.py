@@ -27,7 +27,7 @@ fichier SONDE_CLE, sinon le trousseau (service fr.djoko.maillage.sonde,
 compte = nom d'hote : la cle rangee par l'app). Commande du reseau seulement :
 refus (5 datagrammes sans enveloppe vers le port : DELAI attendu, avec ou sans
 cle ; REFUS voudrait dire qu'un ICMPv6 « port injoignable » est revenu).
-Prerequis Mac : route IPv6 vers le prefixe OMR (assistant halo-routes de benq).
+Prerequis Mac : route IPv6 vers le prefixe OMR (section Route vers le reseau Thread de README.fr.md).
 """
 import fcntl, hashlib, hmac, ipaddress, json, os, re, select, socket, struct, subprocess, sys, termios, time
 
