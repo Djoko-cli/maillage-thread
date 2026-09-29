@@ -40,7 +40,8 @@ struct MaillageThreadApp: App {
             o.proposerAuPremierLancement()
             d.surNoms = { [weak s] m in s?.noms.maison = m }
             d.demarrer()
-            sm.surMaillage = { [weak s] m in s?.maillage = m }
+            sm.surMaillage = { [weak s] m, recu in s?.recevoir(m, a: recu) }
+            sm.surTournee = { [weak s] enCours in s?.tourneeEnCours = enCours }
             sm.demarrer()
         }
         s.demarrer()

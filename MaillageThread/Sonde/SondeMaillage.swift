@@ -29,16 +29,23 @@ final class SondeMaillage {
     private(set) var ports: [PortUSB] = []
     private(set) var serie: String?
     private(set) var etatSonde: EtatSonde?
+    /// Reception du dernier maillage (fin de sa tournee).
     private(set) var derniereTournee: Date?
     private(set) var tourneeEnCours = false
     /// Derniere erreur d'une tournee (la liaison reste ouverte).
     private(set) var erreurTournee: String?
-    /// Appele a chaque nouveau maillage.
-    @ObservationIgnored var surMaillage: ((Maillage) -> Void)?
+    /// Appele a chaque nouveau maillage, avec l'heure de sa reception (fin de la
+    /// tournee) : la fraicheur affichee se compte depuis.
+    @ObservationIgnored var surMaillage: ((Maillage, Date) -> Void)?
+    /// Appele au debut (vrai) et a la fin (faux) de chaque tournee : pendant une
+    /// tournee, le maillage affiche n'est pas « ancien ».
+    @ObservationIgnored var surTournee: ((Bool) -> Void)?
 
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let actif: Bool
     @ObservationIgnored private let ouvrirCanal: (String) -> any CanalSonde
+    /// Heure du debut de la tournee et de la reception du maillage (injectee par les tests).
+    @ObservationIgnored private let horloge: () -> Date
     @ObservationIgnored private var sonde: SondeUSB?
     /// Chemin du port de `sonde` (nil sans sonde connectee).
     @ObservationIgnored private var cheminConnecte: String?
@@ -57,10 +64,12 @@ final class SondeMaillage {
 
     /// `actif` faux (mode demo, tests) : ni port, ni preferences lues.
     init(preferences: UserDefaults = .standard, actif: Bool,
-         ouvrirCanal: @escaping (String) -> any CanalSonde = { CanalSerie(liaison: LiaisonSerie(chemin: $0)) }) {
+         ouvrirCanal: @escaping (String) -> any CanalSonde = { CanalSerie(liaison: LiaisonSerie(chemin: $0)) },
+         horloge: @escaping () -> Date = { Date() }) {
         self.preferences = preferences
         self.actif = actif
         self.ouvrirCanal = ouvrirCanal
+        self.horloge = horloge
         serie = actif ? preferences.string(forKey: Self.cleSerie) : nil
     }
 
@@ -201,17 +210,24 @@ final class SondeMaillage {
         }
     }
 
-    /// Etat de la sonde, puis une tournee ; le maillage part a la surveillance.
+    /// Etat de la sonde, puis une tournee ; le maillage part a la surveillance,
+    /// avec l'heure de sa reception (la fin de la tournee), entre les signaux de
+    /// debut et de fin de la tournee.
     func uneTournee() async {
         guard let sonde, !tourneeEnCours else { return }
         tourneeEnCours = true
-        defer { tourneeEnCours = false }
+        surTournee?(true)
+        defer {
+            tourneeEnCours = false
+            surTournee?(false)
+        }
         do {
             etatSonde = try await sonde.etat()
-            if let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: Date()) {
+            if let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge()) {
                 memoire = r.memoire
-                derniereTournee = r.maillage.date
-                surMaillage?(r.maillage)
+                let recu = horloge()
+                derniereTournee = recu
+                surMaillage?(r.maillage, recu)
             }
             erreurTournee = nil
         } catch SondeUSB.Erreur.fermee {

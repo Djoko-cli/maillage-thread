@@ -45,10 +45,18 @@ final class Surveillance {
     /// Reseau affiche (`xp`) ; nil : le premier.
     var reseauChoisi: String?
     /// Dernier maillage de la sonde ; nil sans sonde.
-    var maillage: Maillage?
+    private(set) var maillage: Maillage?
+    /// Reception du dernier maillage, a la fin de sa tournee : son age se compte
+    /// depuis (le maillage, lui, est date du debut de sa tournee).
+    private(set) var maillageRecu: Date?
+    /// Une tournee de la sonde est en cours (`SondeMaillage.surTournee`) : le
+    /// maillage affiche attend le suivant, il n'est pas « ancien ».
+    var tourneeEnCours = false
 
-    /// Age du maillage de la sonde : frais jusqu'a 6 min (une tournee toutes les
-    /// 5), ancien jusqu'a 15, perime ensuite (retour aux pointilles).
+    /// Age du maillage de la sonde, depuis sa reception : frais jusqu'a 6 min (la
+    /// tournee suivante part 5 min apres la fin de la precedente), et tant qu'une
+    /// tournee est en cours ; ancien ensuite (la sonde ne repond plus) jusqu'a
+    /// 15 min ; perime au-dela, tournee ou non (retour aux pointilles).
     enum Fraicheur: Equatable {
         case frais, ancien, perime
     }
@@ -104,7 +112,9 @@ final class Surveillance {
         switch mode {
         case .demo:
             for a in ScenarioPanne.releves { integrer(a) }
-            maillage = instantane.flatMap { MaillageDemo.maillage($0, date: maintenant) }
+            if let m = instantane.flatMap({ MaillageDemo.maillage($0, date: maintenant) }) {
+                recevoir(m, a: maintenant)
+            }
         case .direct:
             chargerScissionsNotifiees()
             if let journal {
@@ -152,6 +162,12 @@ final class Surveillance {
         }
         let nouveaux = suivi.integrer(a, noms: noms)
         ajouter(nouveaux)
+    }
+
+    /// Nouveau maillage de la sonde, recu a `date` (fin de sa tournee).
+    func recevoir(_ m: Maillage, a date: Date) {
+        maillage = m
+        maillageRecu = date
     }
 
     /// Veille du Mac (appele au reveil).
@@ -272,23 +288,30 @@ final class Surveillance {
         return liste
     }
 
-    nonisolated static func fraicheur(_ date: Date, maintenant: Date) -> Fraicheur {
-        let age = maintenant.timeIntervalSince(date)
-        if age <= 6 * 60 { return .frais }
-        return age <= 15 * 60 ? .ancien : .perime
+    /// Fraicheur d'un maillage recu a `recu`.
+    nonisolated static func fraicheur(_ recu: Date, maintenant: Date, tourneeEnCours: Bool = false) -> Fraicheur {
+        let age = maintenant.timeIntervalSince(recu)
+        if age > 15 * 60 { return .perime }
+        return age <= 6 * 60 || tourneeEnCours ? .frais : .ancien
+    }
+
+    /// Fraicheur du maillage de la sonde a `maintenant` ; nil sans maillage.
+    func fraicheurMaillage(a maintenant: Date) -> Fraicheur? {
+        maillageRecu.map { Self.fraicheur($0, maintenant: maintenant, tourneeEnCours: tourneeEnCours) }
     }
 
     /// Maillage de la sonde rapproche d'un reseau ; nil sans sonde ou s'il est perime.
     func maillageAffiche(pour r: Reseau) -> MaillageAffiche? {
-        guard let m = maillage, let i = instantane, Self.fraicheur(m.date, maintenant: maintenant) != .perime else {
+        guard let m = maillage, let i = instantane, fraicheurMaillage(a: maintenant) != .perime else {
             return nil
         }
         return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values))
     }
 
-    /// Le maillage affiche date de plus de 6 min : la sonde ne repond plus.
+    /// Le maillage affiche a ete recu il y a plus de 6 min, et aucune tournee n'est
+    /// en cours : la sonde ne repond plus.
     var maillageAncien: Bool {
-        maillage.map { Self.fraicheur($0.date, maintenant: maintenant) == .ancien } ?? false
+        fraicheurMaillage(a: maintenant) == .ancien
     }
 
     /// Chiffres du reseau affiche.

@@ -52,6 +52,39 @@ final class CanalRejoue: CanalSonde {
     static func diag(_ id: Int, _ cible: String, tlv: String) -> String {
         #"{"v":1,"t":"diag","id":\#(id),"cible":"\#(cible)","ms":40,"ok":true,"code":"2.04","tlv":"\#(tlv)"}"#
     }
+
+    /// Sonde attachee (valeurs inventees) : enfant 0001 du routeur 0, qui est le chef.
+    static let etatAttache = #"{"v":1,"t":"etat","role":"child","rloc16":"0001","mode":"rn","parent":null,"partition":"0000000A","chef":0,"canal":25,"prefixeMaille":"FD00000000000000","xp":null,"suspendue":false}"#
+
+    /// Reseau d'un seul routeur, le chef 0, qui ne donne que sa Route64 : la tournee
+    /// aboutit (maillage d'un routeur muet, sans enfant). `diag <cible> <tlv> <id> <ms>` :
+    /// la Route64 a la demande de la liste des routeurs, `delai` a toute autre requete.
+    static func reseauMinimal(_ ligne: String) -> [String] {
+        switch ligne {
+        case "bonjour\n": return [bonjour]
+        case "etat\n": return [etatAttache]
+        default: break
+        }
+        let mots = ligne.trimmingCharacters(in: .newlines).split(separator: " ").map(String.init)
+        guard mots.count >= 4, mots[0] == "diag", let id = Int(mots[3]) else { return [] }
+        if mots[1] == "0000" && mots[2] == "5,6" { return [diag(id, "0000", tlv: "050A01800000000000000001")] }
+        return [#"{"v":1,"t":"diag","id":\#(id),"cible":"\#(mots[1])","ok":false,"erreur":"delai"}"#]
+    }
+}
+
+/// Horloge des tests, avancee a la main (ou par un canal, pendant une tournee).
+final class HorlogeFactice: Sendable {
+    private let t: Mutex<Date>
+
+    init(_ debut: Date) {
+        t = Mutex(debut)
+    }
+
+    var maintenant: Date { t.withLock { $0 } }
+
+    func avancer(_ secondes: TimeInterval) {
+        t.withLock { $0 += secondes }
+    }
 }
 
 /// Journal commun a des canaux de test ; on peut y attendre une ligne.
@@ -402,10 +435,88 @@ struct SondeMaillageTests {
         #expect(SondeMaillage(preferences: p, actif: false).serie == nil)
     }
 
+    /// Age compte depuis la reception : frais jusqu'a 6 min, ancien jusqu'a 15, perime
+    /// ensuite ; pendant une tournee, jamais ancien, mais perime apres 15 min.
     @Test func fraicheur() {
         let t = Date(timeIntervalSince1970: 1_790_000_000)
         #expect(Surveillance.fraicheur(t, maintenant: t + 300) == .frais)
         #expect(Surveillance.fraicheur(t, maintenant: t + 7 * 60) == .ancien)
         #expect(Surveillance.fraicheur(t, maintenant: t + 16 * 60) == .perime)
+        #expect(Surveillance.fraicheur(t, maintenant: t + 7 * 60, tourneeEnCours: true) == .frais)
+        #expect(Surveillance.fraicheur(t, maintenant: t + 16 * 60, tourneeEnCours: true) == .perime)
+    }
+
+    /// Une tournee de 90 s : le maillage, date du debut de sa tournee, est recu a sa fin
+    /// (debut, maillage, fin).
+    @Test(.timeLimit(.minutes(1))) func tourneeRecueASaFin() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t0 = Date(timeIntervalSince1970: 1_790_000_000)
+        let horloge = HorlogeFactice(t0)
+        let canal = CanalRejoue { l in
+            // La demande de la liste des routeurs « dure » 90 s.
+            if l.hasPrefix("diag 0000 5,6 ") { horloge.avancer(90) }
+            return CanalRejoue.reseauMinimal(l)
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal }, horloge: { horloge.maintenant })
+        var suite: [String] = []
+        var recus: [(date: Date, recu: Date)] = []
+        s.surTournee = { suite.append($0 ? "debut" : "fin") }
+        s.surMaillage = { m, recu in
+            suite.append("maillage")
+            recus.append((m.date, recu))
+        }
+        // La connexion lance la premiere tournee.
+        await s.connecter(Self.port, choisi: true)
+        await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        #expect(suite == ["debut", "maillage", "fin"])
+        #expect(recus.first?.date == t0)
+        #expect(recus.first?.recu == t0 + 90)
+        #expect(s.derniereTournee == t0 + 90)
+        s.oublier()
+    }
+
+    /// Marche normale : une tournee de 90 s, la pause de 5 min, une tournee de 10 s, la
+    /// pause, de nouveau 90 s. Chaque maillage est date du debut de sa tournee et recu a
+    /// sa fin, comme dans l'app : il n'est jamais « ancien », ni perime.
+    @Test func fraicheurEnMarcheNormale() {
+        let s = Surveillance(mode: .direct, dossier: nil)
+        let t0 = Date(timeIntervalSince1970: 1_790_000_000)
+        var tournees: [(debut: TimeInterval, fin: TimeInterval)] = []
+        var t: TimeInterval = 0
+        for duree in [90.0, 10, 90] {
+            tournees.append((t, t + duree))
+            t += duree + 300
+        }
+        var vues: [Surveillance.Fraicheur] = []
+        for seconde in stride(from: 0, through: t, by: 1.0) {
+            for tr in tournees {
+                if seconde == tr.debut { s.tourneeEnCours = true }
+                if seconde == tr.fin {
+                    s.recevoir(ConstructionMaillage(date: t0 + tr.debut, partition: "0000000A").maillage(), a: t0 + seconde)
+                    s.tourneeEnCours = false
+                }
+            }
+            if let f = s.fraicheurMaillage(a: t0 + seconde) { vues.append(f) }
+        }
+        #expect(vues.count == Int(t - 90) + 1, "un maillage des la fin de la premiere tournee")
+        #expect(vues.filter { $0 != .frais }.isEmpty)
+    }
+
+    /// Sans tournee (sonde muette, debranchee, ou tournee sans Route64) : ancien apres
+    /// 6 min, perime apres 15 ; une tournee en cours ne retient pas un maillage perime.
+    @Test func fraicheurSansTournee() {
+        let s = Surveillance(mode: .direct, dossier: nil)
+        let t0 = Date(timeIntervalSince1970: 1_790_000_000)
+        #expect(s.fraicheurMaillage(a: t0) == nil)
+        // Tournee de 90 s : le maillage est recu a t0.
+        s.recevoir(ConstructionMaillage(date: t0 - 90, partition: "0000000A").maillage(), a: t0)
+        #expect(s.fraicheurMaillage(a: t0 + 6 * 60) == .frais)
+        #expect(s.fraicheurMaillage(a: t0 + 6 * 60 + 1) == .ancien)
+        #expect(s.fraicheurMaillage(a: t0 + 15 * 60) == .ancien)
+        #expect(s.fraicheurMaillage(a: t0 + 15 * 60 + 1) == .perime)
+        s.tourneeEnCours = true
+        #expect(s.fraicheurMaillage(a: t0 + 6 * 60 + 1) == .frais)
+        #expect(s.fraicheurMaillage(a: t0 + 15 * 60 + 1) == .perime)
     }
 }
