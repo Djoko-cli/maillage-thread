@@ -220,6 +220,9 @@ static Sortie sSortie;
 // et cadence de chaque session (20 commandes par seconde au plus).
 static distant::Gardees sGardees[kPlacesReseau];
 static distant::Cadence sCadences[kPlacesReseau];
+// Lignes pour le reseau que la file d'emission n'a pas prises (pleine) :
+// perdues en route, mais gardees pour un rid repete (Halo : json_perdus).
+static uint32_t sLignesPerdues = 0;
 
 static char sLigne[4096];
 static size_t sLong = 0;
@@ -266,7 +269,7 @@ static void sortieReseau(const uint8_t *json, size_t n) {
   char prefixe[distant::kRidMax + 2];
   size_t np = distant::texteRid(sSortie.rid, prefixe);
   prefixe[np++] = ' ';
-  reseauEnvoyer(sSortie.place, prefixe, np, json, n);
+  if (!reseauEnvoyer(sSortie.place, prefixe, np, json, n)) sLignesPerdues++;
 }
 
 static void fin() {
@@ -770,8 +773,9 @@ static bool lireEntier(const char *s, uint32_t *v) {
 }
 
 // {"v":1,"t":"cle","empreinte":"<8 hexa>"|null} ; aussi le nom d'hote, les
-// compteurs du transport (bloc reseau.ip.udp du pont Halo) et le tas (libre,
-// minimum depuis le demarrage : la 1.0.2 prend ~18 Ko de RAM de plus).
+// compteurs du transport (bloc reseau.ip.udp du pont Halo, plus les lignes
+// perdues faute de place dans la file d'emission) et le tas (libre, minimum
+// depuis le demarrage : la 1.0.2 prend ~18 Ko de RAM de plus).
 static void repondreCle() {
   char kid[h1::kKidHex + 1];
   CompteursReseau c;
@@ -786,8 +790,9 @@ static void repondreCle() {
          (unsigned)kPortReseau, c.ouvert ? "true" : "false", (unsigned)c.sessions, c.provisoire ? "true" : "false",
          (unsigned long)c.rx, (unsigned long)c.rejets, (unsigned long)c.rxPerdus, (unsigned long)c.defis,
          (unsigned long)c.tx, (unsigned long)c.txPerdus, (unsigned long)c.txErreurs);
-  if (c.tamponsMinConnu) ajoute(",\"tampons_min\":%u}", (unsigned)c.tamponsMin);
-  else ajoute(",\"tampons_min\":null}");
+  if (c.tamponsMinConnu) ajoute(",\"tampons_min\":%u", (unsigned)c.tamponsMin);
+  else ajoute(",\"tampons_min\":null");
+  ajoute(",\"lignes_perdues\":%lu}", (unsigned long)sLignesPerdues);
   ajoute(",\"tas\":{\"libre\":%lu,\"min\":%lu}", (unsigned long)tasLibre, (unsigned long)tasMin);
   fin();
 }
@@ -892,7 +897,7 @@ struct Renvoi {
 
 static void renvoyerLigne(void *contexte, const uint8_t *ligne, size_t n) {
   const Renvoi &r = *(const Renvoi *)contexte;
-  reseauEnvoyer(r.place, r.prefixe, r.n, ligne, n);
+  if (!reseauEnvoyer(r.place, r.prefixe, r.n, ligne, n)) sLignesPerdues++;
 }
 
 static void executer(char *c);
