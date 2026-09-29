@@ -6,8 +6,8 @@ import Synchronization
 /// - Chaque commande part en `<rid> <commande>` (rid decimal, croissant) ; sans aucune
 ///   reponse, elle repart avec le meme rid a 2 s puis a 4 s : la carte ne relance rien, elle
 ///   renvoie la reponse gardee (ou se tait, `diag` encore en vol). Un `diag` repart ensuite
-///   tous les 3 s, jusqu'a 1 s avant l'echeance de `SondeUSB` : sa reponse perdue apres le vol
-///   se redemande.
+///   1 s apres la fin de son vol, puis tous les 3 s, jusqu'a 1 s avant l'echeance de
+///   `SondeUSB` : sa reponse perdue apres le vol se redemande.
 /// - Chaque reponse `<rid> <ligne JSON>` passe a `SondeUSB` sans le rid, comme une ligne du
 ///   canal serie ; un doublon (meme rid, meme ligne) est ecarte.
 /// - Apres 10 s sans aucune ligne, un `etat` de veille, dont la reponse reste ici : sans
@@ -21,10 +21,12 @@ final class CanalReseau: CanalSonde, CauseFermeture {
     struct Reglages: Sendable {
         /// Renvois d'une commande sans reponse, comptes depuis son premier envoi.
         var renvois: [Duration] = [.seconds(2), .seconds(4)]
-        /// `diag` : muet cote carte tant qu'il est en vol (6 a 8 s), il tombe pendant ces renvois ;
-        /// ensuite, un renvoi tous les `pasDiag`, le dernier au plus tard `avanceDiag` avant
-        /// l'echeance de `SondeUSB` (delai du diag + `margeDiag`) : une reponse perdue apres le
-        /// vol se redemande, et la carte rend celle qu'elle a gardee.
+        /// `diag` : muet cote carte tant qu'il est en vol (son delai, 6 a 8 s), il tombe pendant
+        /// ces renvois. Ensuite, un renvoi `apresVolDiag` apres la fin du vol, puis tous les
+        /// `pasDiag`, le dernier au plus tard `avanceDiag` avant l'echeance de `SondeUSB` (delai
+        /// du diag + `margeDiag`) : une reponse perdue apres le vol se redemande, et la carte rend
+        /// celle qu'elle a gardee ; rien ne part pour rien pendant le vol.
+        var apresVolDiag: Duration = .seconds(1)
         var pasDiag: Duration = .seconds(3)
         var margeDiag: Duration = SondeUSB.margeDiag
         var avanceDiag: Duration = .seconds(1)
@@ -42,15 +44,16 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         var pasGarde: Duration { min(.seconds(1), veille / 4, attenteVeille / 4) }
 
         /// Renvois d'une commande (sans fin de ligne), comptes depuis son premier envoi :
-        /// `renvois`, puis pour un `diag` ceux de `pasDiag` (par exemple 2, 4, 7 et 10 s pour un
-        /// diag de 6000 ms).
+        /// `renvois`, puis pour un `diag` ceux d'apres son vol, au-dela du dernier de `renvois`
+        /// (2, 4, 7 et 10 s pour un diag de 6000 ms ; 2, 4, 9 et 12 s pour 8000 ms).
         func renvois(pour commande: String) -> [Duration] {
-            guard let ms = Self.delaiDiag(commande), var t = renvois.last else { return renvois }
+            guard let ms = Self.delaiDiag(commande), let fixe = renvois.last else { return renvois }
             var r = renvois
-            let dernier = .milliseconds(ms) + margeDiag - avanceDiag
-            t += pasDiag
+            let vol = Duration.milliseconds(ms)
+            let dernier = vol + margeDiag - avanceDiag
+            var t = vol + apresVolDiag
             while t <= dernier {
-                r.append(t)
+                if t > fixe { r.append(t) }
                 t += pasDiag
             }
             return r

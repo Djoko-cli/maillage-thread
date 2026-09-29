@@ -163,15 +163,16 @@ struct CanalReseauTests {
     }
 
     /// Renvois de l'app, comptes depuis le premier envoi : 2 et 4 s ; pour un `diag`, qui reste
-    /// muet cote carte tant qu'il est en vol, ensuite tous les 3 s, le dernier au plus tard 1 s
-    /// avant l'echeance de `SondeUSB` (delai du diag lu dans la commande, plus 5 s).
+    /// muet cote carte tant qu'il est en vol (son delai, lu dans la commande), ensuite 1 s apres
+    /// la fin du vol puis tous les 3 s, le dernier au plus tard 1 s avant l'echeance de
+    /// `SondeUSB` (le delai plus 5 s) : aucun renvoi pendant le vol au-dela de 4 s.
     @Test func renvoisSelonLaCommande() {
         let r = CanalReseau.Reglages()
         let s: (Int) -> Duration = { .seconds($0) }
         #expect(r.renvois(pour: "diag 5000 1 1 6000") == [s(2), s(4), s(7), s(10)])
-        #expect(r.renvois(pour: "diag 0400 0,1,2,6,9,24,26 12 8000") == [s(2), s(4), s(7), s(10)])
+        #expect(r.renvois(pour: "diag 0400 0,1,2,6,9,24,26 12 8000") == [s(2), s(4), s(9), s(12)])
         #expect(r.renvois(pour: "diag 5000 1 1 3000") == [s(2), s(4), s(7)])
-        #expect(r.renvois(pour: "diag 5000 1 1 10000") == [s(2), s(4), s(7), s(10), s(13)])
+        #expect(r.renvois(pour: "diag 5000 1 1 10000") == [s(2), s(4), s(11), s(14)])
         #expect(r.renvois(pour: "diag 5000 1 1 0") == [s(2), s(4)])
         #expect(r.renvois(pour: "diag 5000 1 1") == [s(2), s(4)], "sans delai lisible : comme les autres")
         for commande in ["bonjour", "etat", "voisins", "routeurs"] {
@@ -182,8 +183,9 @@ struct CanalReseauTests {
 
     /// Reponse d'un `diag` perdue une fois apres le vol (la carte, muette pendant le vol, la garde
     /// et la rend a un renvoi du meme rid) : le renvoi suivant la ramene, avant l'echeance de
-    /// `SondeUSB`. Ici tout divise par 10 : renvois a 200 et 400 ms puis tous les 300 ms, vol de
-    /// 450 ms, diag de 600 ms, marge de 500 ms (echeance a 1,1 s, renvois a 0,7 et 1 s).
+    /// `SondeUSB`. Ici tout divise par 10 : renvois a 200 et 400 ms, puis 100 ms apres le delai
+    /// du diag (600 ms) et tous les 300 ms ; vol de 450 ms, marge de 500 ms (echeance a 1,1 s,
+    /// renvois a 0,7 et 1 s).
     @Test(.timeLimit(.minutes(1))) func diagRedemandeApresLeVol() async throws {
         let vol: Duration = .milliseconds(450)
         let premiers = Mutex<[Int: ContinuousClock.Instant]>([:])
@@ -200,6 +202,7 @@ struct CanalReseauTests {
         }
         var reglages = Self.rapides()
         reglages.renvois = [.milliseconds(200), .milliseconds(400)]
+        reglages.apresVolDiag = .milliseconds(100)
         reglages.pasDiag = .milliseconds(300)
         reglages.margeDiag = .milliseconds(500)
         reglages.avanceDiag = .milliseconds(100)

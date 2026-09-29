@@ -294,9 +294,11 @@ demande l'USB.
 - Une commande sans réponse repart avec le même rid à 2 s puis à 4 s ; la
   carte ne relance rien : elle renvoie la réponse gardée (les 8 dernières par
   session), ou se tait si la commande est encore en cours. Un `diag`, muet
-  côté carte pendant son vol (6 à 8 s), repart ensuite toutes les 3 s, le
-  dernier au plus tard 1 s avant l'échéance de `SondeUSB` (délai du diag plus
-  5 s) : 2, 4, 7 et 10 s pour un diag de 6000 ms.
+  côté carte pendant son vol (son délai, 6 à 8 s), repart ensuite 1 s après
+  la fin du vol, puis toutes les 3 s, le dernier au plus tard 1 s avant
+  l'échéance de `SondeUSB` (délai du diag plus 5 s) : 2, 4, 7 et 10 s pour un
+  diag de 6000 ms, 2, 4, 9 et 12 s pour 8000 ms. Rien ne repart pour rien
+  pendant le vol, vers la file de 4 places de la carte.
 - Une ligne identique sous le même rid (réponse renvoyée) est écartée ; les
   lignes différentes d'une même réponse passent toutes.
 - `SondeUSB` attend une réponse 6 s par le réseau, au-delà du renvoi de 4 s,
