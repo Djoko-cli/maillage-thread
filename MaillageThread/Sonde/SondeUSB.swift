@@ -39,11 +39,14 @@ actor SondeUSB: InterlocuteurSonde {
     enum Erreur: Error, LocalizedError, Equatable {
         case fermee
         case sansReponse(String)
+        /// Ligne `erreur` de la sonde pendant une demande de cle (firmware sans acces reseau...).
+        case refusee(String)
 
         var errorDescription: String? {
             switch self {
             case .fermee: String(localized: "liaison avec la sonde fermée")
             case .sansReponse(let commande): String(localized: "la sonde ne répond pas à « \(commande) »")
+            case .refusee(let raison): String(localized: "la sonde refuse : \(raison)")
             }
         }
     }
@@ -58,6 +61,7 @@ actor SondeUSB: InterlocuteurSonde {
     private var attenteDiag: [Int: (cible: UInt16, suite: CheckedContinuation<ResultatDiag, Never>)] = [:]
     private var attenteEtat: [CheckedContinuation<EtatSonde?, Never>] = []
     private var attenteBonjour: [CheckedContinuation<Bonjour?, Never>] = []
+    private var attenteCle: [(id: Int, suite: CheckedContinuation<Result<ReponseCle, Erreur>?, Never>)] = []
     private var lecture: Task<Void, Never>?
     private(set) var fermee = false
     /// Dernier `bonjour` recu sans l'avoir demande : la sonde vient de (re)demarrer.
@@ -138,6 +142,34 @@ actor SondeUSB: InterlocuteurSonde {
         return r
     }
 
+    /// `cle nouvelle <alea> <id>` (USB seulement) : la reponse `cle` de meme id, qui porte la
+    /// cle une seule fois ; une ligne `erreur` pendant l'attente (commande inconnue d'un
+    /// firmware anterieur, refus) la termine en `refusee`. Ni l'alea ni la cle n'apparaissent
+    /// dans une erreur.
+    func cleNouvelle(alea: Data) async throws -> ReponseCle {
+        guard !fermee else { throw Erreur.fermee }
+        let id = prochainId
+        prochainId += 1
+        let r = await withCheckedContinuation { c in
+            attenteCle.append((id, c))
+            canal.envoyer(CommandeSonde.cleNouvelle(alea: alea, id: id).ligne)
+            Task {
+                try? await Task.sleep(for: Self.delaiCommande)
+                self.expirerCle(id)
+            }
+        }
+        switch r {
+        case .success(let reponse)?: return reponse
+        case .failure(let e)?: throw e
+        case nil: throw fermee ? Erreur.fermee : Erreur.sansReponse("cle nouvelle")
+        }
+    }
+
+    private func expirerCle(_ id: Int) {
+        guard let i = attenteCle.firstIndex(where: { $0.id == id }) else { return }
+        attenteCle.remove(at: i).suite.resume(returning: nil)
+    }
+
     private func expirerBonjour() {
         if !attenteBonjour.isEmpty { attenteBonjour.removeFirst().resume(returning: nil) }
     }
@@ -163,6 +195,11 @@ actor SondeUSB: InterlocuteurSonde {
             } else {
                 attenteBonjour.removeFirst().resume(returning: b)
             }
+        case .cle(let c)?:
+            if let i = attenteCle.firstIndex(where: { $0.id == c.id }) { attenteCle.remove(at: i).suite.resume(returning: .success(c)) }
+        case .erreur(let e)? where !attenteCle.isEmpty:
+            // Sans id : la demande de cle en cours (une seule a la fois dans l'app).
+            attenteCle.removeFirst().suite.resume(returning: .failure(.refusee(e)))
         default:
             break
         }
@@ -179,5 +216,7 @@ actor SondeUSB: InterlocuteurSonde {
         attenteEtat = []
         attenteBonjour.forEach { $0.resume(returning: nil) }
         attenteBonjour = []
+        attenteCle.forEach { $0.suite.resume(returning: nil) }
+        attenteCle = []
     }
 }

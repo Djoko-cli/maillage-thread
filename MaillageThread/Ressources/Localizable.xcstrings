@@ -881,6 +881,22 @@
         }
       }
     },
+    "Clé absente de ce Mac pour %@.local : brancher la sonde en USB, puis « Autoriser l'accès réseau »." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No key on this Mac for %@.local: plug the probe in over USB, then “Allow Network Access”."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé absente de ce Mac pour %@.local : brancher la sonde en USB, puis « Autoriser l'accès réseau »."
+          }
+        }
+      }
+    },
     "Code Matter de la sonde" : {
       "localizations" : {
         "en" : {
@@ -1037,6 +1053,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dossier où le passeur écrit noms.json, hors iCloud et hors du dépôt (par exemple « Maillage Thread » dans ton dossier personnel)."
+          }
+        }
+      }
+    },
+    "Empreinte incohérente avec la clé reçue : clé non rangée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fingerprint does not match the received key: key not stored."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empreinte incohérente avec la clé reçue : clé non rangée."
           }
         }
       }
@@ -1261,6 +1293,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La langue change au prochain lancement."
+          }
+        }
+      }
+    },
+    "La sonde n'a pas encore de nom d'hôte (Matter ne l'a pas encore enregistré) : réessayer dans une minute." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The probe has no host name yet (Matter has not registered it yet): try again in a minute."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sonde n'a pas encore de nom d'hôte (Matter ne l'a pas encore enregistré) : réessayer dans une minute."
           }
         }
       }
@@ -2193,6 +2241,22 @@
         }
       }
     },
+    "Réponse sans clé lisible (64 hexa majuscules attendus) : clé non rangée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reply without a readable key (64 uppercase hex digits expected): key not stored."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réponse sans clé lisible (64 hexa majuscules attendus) : clé non rangée."
+          }
+        }
+      }
+    },
     "Réseau" : {
       "localizations" : {
         "en" : {
@@ -2589,6 +2653,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tout"
+          }
+        }
+      }
+    },
+    "Trousseau : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keychain: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trousseau : %@"
           }
         }
       }
@@ -3085,6 +3165,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "la sonde ne répond pas à « %@ »"
+          }
+        }
+      }
+    },
+    "la sonde refuse : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "the probe refuses: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "la sonde refuse : %@"
           }
         }
       }
