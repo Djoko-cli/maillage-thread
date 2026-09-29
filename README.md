@@ -28,8 +28,8 @@ The Mac has no Thread radio: the app only **listens** to the local network.
 "Reachable" means *announced with a Thread address in the main partition*,
 not "answers": the app never probes. A disappearance is only kept after 2
 minutes of absence and is dated from the first absence. Real links (child →
-parent, router ↔ router, link quality) will come from a dedicated ESP32-C6
-probe (step 2, separate project).
+parent, router ↔ router, link quality) come from the probe, an ESP32-C6
+plugged into the Mac (see "Probe" below).
 
 Devices are placed by the OMR prefix of their address. When two partitions
 announce the same OMR prefix (seen on September 28: an isolated hub had
@@ -68,7 +68,8 @@ open "…/Maillage Thread.app" --args -demo -selection 86E7BD1A75F28E6D   # card
 
 The demo replays the September 27 outage, rebuilt from the real survey of
 September 28 (`docs/releves/2026-09-28/`): nothing is written, nothing is
-notified. Home names in the demo are made up.
+notified. Home names in the demo are made up, and so is the probe mesh drawn
+on the same nodes.
 
 ### Signing
 
@@ -106,11 +107,15 @@ catalog match.
 | Folder | Role |
 |---|---|
 | `MaillageCoeur/` | framework without UI: TXT decoding, snapshot (networks, partitions, prefixes, devices), tracking and log events, file log, names, graph layout, routing table; tested on the real survey and on the replayed outage |
+| `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, scan of silent routers), matching with the snapshot; tested on an anonymized capture |
+| `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, `SondeUSB` (requests matched by id), app model (probe remembered by its USB serial number, a tour every 5 minutes) |
 | `MaillageThread/Noms/` | Home names: folder chosen once (security-scoped bookmark), reading `noms.json`, last names kept, launching Passeur Noms |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | app model: surveys → tracking → log and notifications; sleep of the Mac; login item |
 | `MaillageThread/Vues/` | menu bar, graph window (Canvas, glass overlays), log window, settings |
 | `Passeur/` | Passeur Noms: iOS app run on the Mac (Designed for iPad) that reads Home and writes `noms.json` |
+| `sonde/` | probe firmware (ESP32-C6, PlatformIO) and trial tools |
+| `outils/anonymiser-sonde.py` | anonymizes a probe capture before it becomes test data |
 | `docs/releves/` | real surveys (the fixture of the tests and the demo) |
 | `docs/superpowers/` | design (spec) and implementation plans |
 
@@ -147,3 +152,38 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   for every Home accessory with a battery. The device card shows them with the
   age of the reading; in the graph, a glowing orange badge marks a low battery
   (the accessory says so, or its level is 20 % or less).
+
+## Probe (real mesh)
+
+The Mac has no Thread radio. The **probe** is an ESP32-C6 SuperMini plugged
+into the Mac by USB and added to Home as a Matter over Thread device (a
+"Sonde maillage" plug). It is a minimal end device: it listens all the time but
+never relays, so it never changes the mesh it observes. It sends Thread
+network diagnostics (`DIAG_GET`) for the app and passes the raw answers back
+over USB; the app decodes them and rebuilds the mesh.
+
+```sh
+cd sonde && pio run        # build; flashing and pairing: sonde/README.md
+```
+
+- In Maillage Thread: Settings › Probe › Port. Only the chosen port is ever
+  opened (the Halo bridge is also an ESP32-C6). The probe is remembered by its
+  USB serial number; its pairing code shows there until it is in Home.
+- A tour every 5 minutes, and on refresh: the routers from the leader, then
+  every router that answers (links with the quality in both directions, its
+  children), the border routers from the Network Data, and each new child's
+  identity (a Matter device's ExtMac is its host name).
+- **Apple's border routers never answer diagnostics.** Their children are
+  found by scanning their possible RLOC16s, every 30 minutes; the quality of
+  those links stays unknown, and a link between two Apple routers is never
+  drawn.
+- In the graph, solid lines are radio links colored by quality (green 3,
+  yellow 2, orange 1, grey unknown); dotted lines stay for what the probe does
+  not see. Devices that route move to the inner ring, and children sit near
+  their parent. The card gives the parent and the quality, or a router's
+  neighbors and children. A mesh older than 6 minutes is marked old; after 15
+  minutes the graph goes back to dotted lines.
+- Switching "Sonde maillage" off in Home suspends the probe: no tour.
+- Probe captures hold the home network's addresses:
+  `outils/anonymiser-sonde.py` rewrites them consistently before they become
+  test data (`docs/releves/2026-09-29/`).

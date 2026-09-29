@@ -8,6 +8,8 @@
 > Un essai sur la carte précède le plan 3a (section 7). Le plan 2 (les noms
 > de Maison, spec de l'étape 1, section 5) passe avant.
 >
+> **Plan 3a :** `docs/superpowers/plans/2026-09-29-maillage-thread-plan3a-sonde.md`.
+>
 > **Révision du 29/09 après l'essai** (section 8) : les routeurs de bordure
 > d'Apple ne répondent pas au diagnostic. La tournée (section 4) en tient
 > compte : les liens et les enfants viennent des routeurs qui répondent, et
