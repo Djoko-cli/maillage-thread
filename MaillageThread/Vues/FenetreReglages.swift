@@ -4,7 +4,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Reglages : notifications par categorie, ouverture a la connexion, langue,
-/// noms de Maison (dossier du passeur), diagnostic et capture.
+/// noms de Maison (dossier du passeur), sonde (liaison USB ou reseau Thread, acces
+/// reseau), diagnostic et capture.
 struct FenetreReglages: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(OuvertureSession.self) private var ouverture
@@ -86,12 +87,24 @@ struct FenetreReglages: View {
                 if surveillance.mode == .demo {
                     Text("Mode démo : pas de sonde.").foregroundStyle(.secondary)
                 } else {
-                    Picker("Port", selection: Binding(
-                        get: { sonde.ports.first { $0.serie != nil && $0.serie == sonde.serie }?.chemin ?? "" },
-                        set: { c in if let p = sonde.ports.first(where: { $0.chemin == c }) { sonde.choisir(p) } })) {
-                        Text("—").tag("")
-                        ForEach(sonde.ports) { p in
-                            Text(verbatim: Self.libellePort(p, serieRetenue: sonde.serie, nom: sonde.nom)).tag(p.chemin)
+                    // Le reseau se propose une fois l'acces autorise (cle de ce Mac pour la sonde).
+                    if sonde.reseauDisponible || sonde.liaison == .reseau {
+                        Picker("Liaison", selection: Binding(get: { sonde.liaison }, set: { sonde.choisirLiaison($0) })) {
+                            Text("USB").tag(SondeMaillage.Liaison.usb)
+                            Text("Réseau Thread").tag(SondeMaillage.Liaison.reseau)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    if sonde.liaison == .reseau {
+                        LabeledContent("Nom d'hôte", value: Self.texteHote(sonde.hote))
+                    } else {
+                        Picker("Port", selection: Binding(
+                            get: { sonde.ports.first { $0.serie != nil && $0.serie == sonde.serie }?.chemin ?? "" },
+                            set: { c in if let p = sonde.ports.first(where: { $0.chemin == c }) { sonde.choisir(p) } })) {
+                            Text("—").tag("")
+                            ForEach(sonde.ports) { p in
+                                Text(verbatim: Self.libellePort(p, serieRetenue: sonde.serie, nom: sonde.nom)).tag(p.chemin)
+                            }
                         }
                     }
                     LabeledContent("État", value: Self.texteEtatSonde(sonde.etat, nom: sonde.nomEtat))
@@ -122,6 +135,7 @@ struct FenetreReglages: View {
                         Text(e).font(.caption).foregroundStyle(.red)
                     }
                     if sonde.serie != nil {
+                        AccesReseauSonde()
                         Button("Oublier la sonde") { sonde.oublier() }
                     }
                     Text("Seul le port choisi est ouvert. Le pont Halo est aussi un ESP32-C6 : ne le choisissez pas.")
@@ -168,6 +182,18 @@ struct FenetreReglages: View {
     static func libellePort(_ p: PortUSB, serieRetenue: String?, nom: String?) -> String {
         if let nom, let serie = p.serie, serie == serieRetenue { return nom }
         return p.libelle
+    }
+
+    /// Acces reseau de la sonde retenue : « autorisé · clé 630DCD29 » (empreinte de la cle de
+    /// ce Mac), ou « non autorisé ».
+    static func texteAccesReseau(empreinte: String?) -> String {
+        guard let empreinte else { return String(localized: "non autorisé") }
+        return String(localized: "autorisé · clé \(empreinte)")
+    }
+
+    /// Nom d'hote vise par la liaison reseau : « 0123456789ABCDEF.local ».
+    static func texteHote(_ hote: String?) -> String {
+        hote.map { "\($0).local" } ?? "—"
     }
 
     /// Etat de la sonde, precede du nom de la sonde retenue quand il la concerne
@@ -222,6 +248,31 @@ struct FenetreReglages: View {
         } catch {
             messageCapture = error.localizedDescription
         }
+    }
+}
+
+/// Acces reseau de la sonde retenue (Reglages › Sonde) : son etat, et « Autoriser l'accès
+/// réseau », qui cree la cle par l'USB (sonde branchee et connectee par son port).
+struct AccesReseauSonde: View {
+    @Environment(SondeMaillage.self) private var sonde
+
+    var body: some View {
+        LabeledContent("Accès réseau", value: FenetreReglages.texteAccesReseau(empreinte: sonde.empreinteAcces))
+        if sonde.liaison == .usb {
+            HStack {
+                Button("Autoriser l'accès réseau") { Task { await sonde.autoriserAccesReseau() } }
+                    .disabled(!sonde.peutAutoriser)
+                if sonde.autorisationEnCours {
+                    ProgressView().controlSize(.small)
+                }
+            }
+        }
+        if let e = sonde.erreurAutorisation {
+            Text(e).font(.caption).foregroundStyle(.red)
+        }
+        Text("La clé passe par l'USB, sonde branchée, et reste dans le trousseau de ce Mac. Avec la liaison « Réseau Thread », la sonde peut être débranchée et alimentée ailleurs.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 }
 

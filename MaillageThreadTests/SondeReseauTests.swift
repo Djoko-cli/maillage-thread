@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import MaillageCoeur
+import SwiftUI
 import Testing
 @testable import MaillageThread
 
@@ -277,6 +279,24 @@ struct SondeReseauTests {
         await SondeMaillageTests.attendre { Self.connecteeParUSB(s) }
         #expect(journal.cycle == ["ouvrir reseau", "fermer reseau", "fin reseau", "ouvrir usb"])
         s.oublier()
+    }
+
+    /// Reglages › Sonde : etat de l'acces reseau (les attentes reprennent les cles du code :
+    /// elles suivent la langue de l'hote).
+    @Test func texteAccesReseau() {
+        #expect(FenetreReglages.texteAccesReseau(empreinte: nil) == String(localized: "non autorisé"))
+        #expect(FenetreReglages.texteAccesReseau(empreinte: "630DCD29") == String(localized: "autorisé · clé \("630DCD29")"))
+        #expect(FenetreReglages.texteHote(Self.hote) == "0123456789ABCDEF.local")
+        #expect(FenetreReglages.texteHote(nil) == "—")
+    }
+
+    /// Reglages › Sonde : le bloc de l'acces reseau se dessine (etat, bouton, explication).
+    @Test func vueAccesReseau() throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let s = Self.sondeMaillage(p, trousseau: try Self.prete(p, liaison: .usb))
+        let vue = NSHostingView(rootView: Form { AccesReseauSonde() }.formStyle(.grouped).environment(s))
+        #expect(vue.fittingSize.height > 0)
     }
 
     /// Oublier la sonde : la cle de ce Mac part avec elle ; retour a l'USB.

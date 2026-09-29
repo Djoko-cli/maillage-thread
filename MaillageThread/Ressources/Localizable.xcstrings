@@ -497,6 +497,22 @@
         }
       }
     },
+    "Accès réseau" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network access"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accès réseau"
+          }
+        }
+      }
+    },
     "Accès à Maison refusé au passeur : Réglages Système › Confidentialité et sécurité › Maison." : {
       "localizations" : {
         "en" : {
@@ -749,6 +765,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aucun événement"
+          }
+        }
+      }
+    },
+    "Autoriser l'accès réseau" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Network Access"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autoriser l'accès réseau"
           }
         }
       }
@@ -1297,6 +1329,22 @@
         }
       }
     },
+    "La clé passe par l'USB, sonde branchée, et reste dans le trousseau de ce Mac. Avec la liaison « Réseau Thread », la sonde peut être débranchée et alimentée ailleurs." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The key goes over USB, with the probe plugged in, and stays in this Mac's keychain. With the “Thread Network” link, the probe can be unplugged and powered elsewhere."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La clé passe par l'USB, sonde branchée, et reste dans le trousseau de ce Mac. Avec la liaison « Réseau Thread », la sonde peut être débranchée et alimentée ailleurs."
+          }
+        }
+      }
+    },
     "La langue change au prochain lancement." : {
       "localizations" : {
         "en" : {
@@ -1425,6 +1473,22 @@
         }
       }
     },
+    "Liaison" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liaison"
+          }
+        }
+      }
+    },
     "Liste des routeurs" : {
       "localizations" : {
         "en" : {
@@ -1517,6 +1581,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mode démo : pas de sonde."
+          }
+        }
+      }
+    },
+    "Nom d'hôte" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host name"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nom d'hôte"
           }
         }
       }
@@ -2369,6 +2449,22 @@
         }
       }
     },
+    "Réseau Thread" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thread Network"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réseau Thread"
+          }
+        }
+      }
+    },
     "Réseau Thread normal" : {
       "localizations" : {
         "en" : {
@@ -2689,6 +2785,22 @@
         }
       }
     },
+    "USB" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "USB"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "USB"
+          }
+        }
+      }
+    },
     "Vu par la sonde : son ExtMac ne correspond à aucun appareil annoncé." : {
       "localizations" : {
         "en" : {
@@ -2797,6 +2909,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "aucune sonde choisie"
+          }
+        }
+      }
+    },
+    "autorisé · clé %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "allowed · key %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "autorisé · clé %@"
           }
         }
       }
@@ -3341,6 +3469,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "noms.json illisible : %@"
+          }
+        }
+      }
+    },
+    "non autorisé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "not allowed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "non autorisé"
           }
         }
       }
