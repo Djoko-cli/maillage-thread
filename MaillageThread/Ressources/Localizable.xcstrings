@@ -465,6 +465,22 @@
         }
       }
     },
+    "Accès au réseau local refusé : Réglages Système › Confidentialité et sécurité › Réseau local › Maillage Thread." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local network access denied: System Settings › Privacy & Security › Local Network › Maillage Thread."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accès au réseau local refusé : Réglages Système › Confidentialité et sécurité › Réseau local › Maillage Thread."
+          }
+        }
+      }
+    },
     "Accès à Maison refusé au passeur : Réglages Système › Confidentialité et sécurité › Maison." : {
       "localizations" : {
         "en" : {
@@ -881,6 +897,22 @@
         }
       }
     },
+    "Connexion réseau perdue : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network connection lost: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connexion réseau perdue : %@"
+          }
+        }
+      }
+    },
     "DTR et RTS à 0 (TIOCMSET)" : {
       "localizations" : {
         "en" : {
@@ -1057,6 +1089,22 @@
         }
       }
     },
+    "Erreur réseau : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network error: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erreur réseau : %@"
+          }
+        }
+      }
+    },
     "Fabriques : %lld" : {
       "localizations" : {
         "en" : {
@@ -1213,6 +1261,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La langue change au prochain lancement."
+          }
+        }
+      }
+    },
+    "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Autoriser l'accès réseau »)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The probe does not answer: powered off, not yet in the Thread network, or a key different from this Mac's (plug it in over USB, then “Allow Network Access”)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sonde ne répond pas : éteinte, pas encore dans le réseau Thread, ou clé différente de celle de ce Mac (la brancher en USB, puis « Autoriser l'accès réseau »)."
+          }
+        }
+      }
+    },
+    "La sonde refuse l'accès réseau : la brancher en USB, puis « Autoriser l'accès réseau »." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The probe refuses network access: plug it in over USB, then “Allow Network Access”."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sonde refuse l'accès réseau : la brancher en USB, puis « Autoriser l'accès réseau »."
           }
         }
       }
@@ -1645,6 +1725,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Partition %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Pas de route IPv6 vers le réseau Thread : l'adresse OMR de la sonde est injoignable depuis ce Mac. L'assistant halo-routes de benq rétablit la route (sh tools/macos/halo-routes/installer.sh, s'il n'est pas installé)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No IPv6 route to the Thread network: the probe's OMR address cannot be reached from this Mac. The halo-routes helper from benq restores the route (sh tools/macos/halo-routes/installer.sh, if it is not installed)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pas de route IPv6 vers le réseau Thread : l'adresse OMR de la sonde est injoignable depuis ce Mac. L'assistant halo-routes de benq rétablit la route (sh tools/macos/halo-routes/installer.sh, s'il n'est pas installé)."
           }
         }
       }
@@ -2349,6 +2445,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sonde"
+          }
+        }
+      }
+    },
+    "Sonde introuvable (%@) : éteinte, hors du réseau Thread, ou routeurs de bordure injoignables." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Probe not found (%@): powered off, outside the Thread network, or border routers unreachable."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sonde introuvable (%@) : éteinte, hors du réseau Thread, ou routeurs de bordure injoignables."
           }
         }
       }
@@ -3309,6 +3421,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "sans adresse"
+          }
+        }
+      }
+    },
+    "session réseau fermée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "network session closed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "session réseau fermée"
+          }
+        }
+      }
+    },
+    "session réseau fermée par l'app" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "network session closed by the app"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "session réseau fermée par l'app"
           }
         }
       }
