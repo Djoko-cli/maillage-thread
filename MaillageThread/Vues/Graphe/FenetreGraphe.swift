@@ -11,6 +11,8 @@ struct NoeudChoisi: Identifiable {
 struct FenetreGraphe: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(DossierNoms.self) private var nomsMaison
+    /// Sonde retenue ou non : la marge du haut garde la place de la ligne de la tournee.
+    @Environment(SondeMaillage.self) private var sonde
     @Environment(\.colorScheme) private var apparence
     /// `--args -selection <id>` : fiche ouverte au lancement (captures d'ecran).
     @State private var selection: String? = UserDefaults.standard.string(forKey: "selection")
@@ -32,12 +34,8 @@ struct FenetreGraphe: View {
             } else {
                 EtatVide()
             }
-            VStack(spacing: 10) {
-                BarreOutils()
-                LigneTournee()
-                if let r = surveillance.reseau, r.estScinde {
-                    BandeauScission(reseau: r)
-                }
+            VStack(spacing: Self.espacement) {
+                EnTeteGraphe()
                 Spacer()
                 if let r = surveillance.reseau, selection == nil {
                     LegendeLiens(sonde: surveillance.maillageAffiche(pour: r) != nil, ancien: surveillance.maillageAncien)
@@ -47,7 +45,7 @@ struct FenetreGraphe: View {
                     FicheNoeud(id: selection, aRenommer: $aRenommer) { self.selection = nil }
                 }
             }
-            .padding(16)
+            .padding(Self.bord)
         }
         .frame(minWidth: 820, minHeight: 560)
         .sheet(item: $aRenommer) { FeuilleRenommer(id: $0.id) }
@@ -61,6 +59,18 @@ struct FenetreGraphe: View {
         .fenetreDeLApp()
     }
 
+    /// Bord des elements poses sur le graphe, et ecart entre eux (pt).
+    static let bord: CGFloat = 16
+    static let espacement: CGFloat = 10
+
+    /// Marge du haut du graphe (pt) : la barre d'outils et la bande des titres des zones, puis
+    /// une ligne de 40 pt pour le bandeau d'un reseau scinde, et une pour la tournee tant qu'une
+    /// sonde est retenue, pendant une tournee ou non : rien ne bouge au debut ni a la fin d'une
+    /// tournee, le graphe seulement quand une sonde est retenue ou oubliee.
+    static func margeHaut(scinde: Bool, sondeRetenue: Bool) -> CGFloat {
+        70 + (scinde ? 40 : 0) + (sondeRetenue ? 40 : 0)
+    }
+
     private func graphe(_ r: Reseau, _ palette: Palette) -> some View {
         let affiches = surveillance.appareilsAffiches(pour: r)
         let maillage = surveillance.maillageAffiche(pour: r)
@@ -71,7 +81,8 @@ struct FenetreGraphe: View {
                                              nomsRouteurs: nomsRouteurs, maillage: maillage)
         return GeometryReader { geo in
             let projection = Projection(cadre: disposition.cadre, taille: geo.size,
-                                        marges: (haut: r.estScinde ? 110 : 70, bas: selection == nil ? 30 : 190, cotes: 60),
+                                        marges: (haut: Self.margeHaut(scinde: r.estScinde, sondeRetenue: sonde.serie != nil),
+                                                 bas: selection == nil ? 30 : 190, cotes: 60),
                                         zoom: zoom * zoomEnCours,
                                         decalage: CGSize(width: decalage.width + decalageEnCours.width,
                                                          height: decalage.height + decalageEnCours.height))
@@ -110,6 +121,23 @@ struct FenetreGraphe: View {
                         decalage.height += v.translation.height
                         decalageEnCours = .zero
                     })
+        }
+    }
+}
+
+/// Haut de la fenetre du graphe, pose sur lui : barre d'outils, bandeau d'un reseau scinde,
+/// puis la ligne de la tournee (sa place est gardee dans la marge du haut du graphe tant
+/// qu'une sonde est retenue : `FenetreGraphe.margeHaut`).
+struct EnTeteGraphe: View {
+    @Environment(Surveillance.self) private var surveillance
+
+    var body: some View {
+        VStack(spacing: FenetreGraphe.espacement) {
+            BarreOutils()
+            if let r = surveillance.reseau, r.estScinde {
+                BandeauScission(reseau: r)
+            }
+            LigneTournee()
         }
     }
 }
@@ -184,9 +212,10 @@ struct BarreOutils: View {
     }
 }
 
-/// Ligne de la tournee en cours, centree sous la barre d'outils : la barre garde sa largeur,
-/// son bouton rafraichir ne bouge pas sous le pointeur. Rien hors tournee. Vue a part : seule
-/// elle se redessine a chaque pas de la tournee, pas la fenetre du graphe.
+/// Ligne de la tournee en cours, centree sous la barre d'outils (et le bandeau d'un reseau
+/// scinde) : la barre garde sa largeur, son bouton rafraichir ne bouge pas sous le pointeur.
+/// Rien hors tournee. Vue a part : seule elle se redessine a chaque pas de la tournee, pas la
+/// fenetre du graphe.
 struct LigneTournee: View {
     @Environment(SondeMaillage.self) private var sonde
 

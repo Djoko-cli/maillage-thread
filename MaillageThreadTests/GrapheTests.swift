@@ -62,6 +62,47 @@ struct GrapheTests {
         #expect(Set(largeurs).count == 1, "\(largeurs)")
     }
 
+    /// La ligne de la tournee, sous la barre et le bandeau de scission, ne recouvre pas la bande
+    /// des titres des zones : la marge du haut du graphe lui garde sa place tant qu'une sonde est
+    /// retenue, pendant une tournee ou non. Pire cas : graphe limite par la hauteur, son haut sur
+    /// la marge (zoom 1). Sans sonde, la barre et le bandeau seuls tiennent aussi au-dessus.
+    @Test(.timeLimit(.minutes(1))) func enTeteAuDessusDesTitres() async throws {
+        let demo = try LibellesGrapheTests.demo()
+        #expect(demo.scinde, "la demo : reseau scinde, bandeau affiche")
+        let scinde = Surveillance(mode: .demo, dossier: nil)
+        scinde.demarrer()
+        let sansReseau = Surveillance(mode: .direct, dossier: nil)
+        let noms = DossierNoms(cache: nil)
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        let sonde = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in SondeMaillageTests.canalRetenu(journal) })
+        func hauteur(_ s: Surveillance) -> CGFloat {
+            NSHostingView(rootView: EnTeteGraphe().environment(s).environment(sonde).environment(noms)).fittingSize.height
+        }
+        func hautDesTitres(marge: CGFloat) -> CGFloat {
+            let projection = Projection(cadre: demo.disposition.cadre, taille: CGSize(width: 4000, height: 700),
+                                        marges: (haut: marge, bas: 30, cotes: 60))
+            let placement = MemoirePlacement().placement(demo.disposition, libelles: demo.libelles,
+                                                         echelle: projection.echelle).decale(projection.origine)
+            return (placement.obstacles.map(\.minY).min() ?? .infinity) - PlacementLibelles.margeFond.height
+        }
+        for (s, estScinde) in [(sansReseau, false), (scinde, true)] {
+            let bas = FenetreGraphe.bord + hauteur(s)
+            let haut = hautDesTitres(marge: FenetreGraphe.margeHaut(scinde: estScinde, sondeRetenue: false))
+            #expect(bas <= haut, "sans sonde, scinde \(estScinde) : en-tete jusqu'a \(bas), titres des \(haut)")
+        }
+        await sonde.connecter(SondeMaillageTests.port, choisi: true)
+        await journal.attendre(SondeMaillageTests.listeRetenue)
+        await SondeMaillageTests.attendre { sonde.avancement != nil }
+        for (s, estScinde) in [(sansReseau, false), (scinde, true)] {
+            let bas = FenetreGraphe.bord + hauteur(s)
+            let haut = hautDesTitres(marge: FenetreGraphe.margeHaut(scinde: estScinde, sondeRetenue: sonde.serie != nil))
+            #expect(bas <= haut, "tournee, scinde \(estScinde) : en-tete jusqu'a \(bas), titres des \(haut)")
+        }
+        sonde.oublier()
+    }
+
     /// Pendant une tournee, la barre d'outils garde sa largeur : le bouton rafraichir ne bouge
     /// pas sous le pointeur. L'indicateur est sur sa propre ligne, qui ne prend aucune place
     /// hors tournee (pas meme l'espacement de la pile).
