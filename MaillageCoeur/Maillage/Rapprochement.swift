@@ -108,9 +108,11 @@ public struct MaillageAffiche: Hashable, Sendable {
         // (connus tous deux, ils sont differents : la regle du `xa` les aurait rapproches).
         func possible(_ r: RouteurMaillage, _ a: RouteurBordure) -> Bool { r.extMac == nil || a.adresseEtendue == nil }
         // Chef du maillage, routeur de bordure non identifie : l'annonce de role chef de la
-        // partition (Thread 1.4, bits 9-10 de `sb`), comme pour le BBR principal.
+        // partition (Thread 1.4, bits 9-10 de `sb`), comme pour le BBR principal ; seulement s'il
+        // n'en reste qu'une (un cache perime peut en garder une autre, avec le meme `pt`).
+        let chefs = bordures.filter { $0.role == .chef && !pris.contains($0.instance) }
         if let r = maillage.routeurs.first(where: { $0.chef && $0.bordure && reconnus[$0.id] == nil }),
-           let a = bordures.first(where: { $0.role == .chef && !pris.contains($0.instance) }), possible(r, a) {
+           chefs.count == 1, let a = chefs.first, possible(r, a) {
             reconnus[r.id] = a.instance
             pris.insert(a.instance)
         }

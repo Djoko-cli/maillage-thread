@@ -253,6 +253,21 @@ struct RapprochementTests {
         #expect(try Self.deuxRouteurs(i, chefBordure: false).routeurs[1]?.reconnu == false, "chef hors des routeurs de bordure")
     }
 
+    /// Deux annonces de role chef dans la partition (une perimee que le cache garde avec le meme
+    /// `pt`) : la regle du chef ne choisit pas, ni l'elimination apres elle ; les deux routeurs
+    /// restent « rloc: » avec les deux annonces pour candidates.
+    @Test func regleDuChefSansDoublon() throws {
+        var b = Banc()
+        b.routeur("Alpha perime", partition: "46CBEBCD", role: .chef, lien: "fe80::1", xa: "E0000000000000C1")
+        b.routeur("Zeta reel", partition: "46CBEBCD", role: .chef, lien: "fe80::2", xa: "E0000000000000C2")
+        let m = try Self.deuxRouteurs(Instantane(annonces: b.annonces))
+        for id in [1, 2] {
+            #expect(m.routeurs[id]?.reconnu == false && m.routeurs[id]?.deduit == false)
+            #expect(Set(m.routeurs[id]?.candidats ?? []) == ["Alpha perime", "Zeta reel"])
+        }
+        #expect(m.routeurs[1]?.id == "rloc:0400" && m.routeurs[2]?.id == "rloc:0800")
+    }
+
     /// Le centre de la zone peut etre candidat (ici le premier par nom : annonces Thread 1.3, sans
     /// role) ; il reste dessine, au centre. L'autre annonce candidate, non.
     @Test func centreCandidat() throws {
