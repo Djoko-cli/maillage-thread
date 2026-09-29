@@ -365,10 +365,19 @@ struct LibellesGrapheTests {
         return boite.tailles
     }
 
-    /// Libelles de la demo : le vrai reseau (releve du 28/09), ses noms et son maillage.
-    static func demo() throws -> (disposition: Disposition, libelles: [String: GrapheCanvas.Libelle], scinde: Bool) {
+    /// Routeurs de bordure de la demo laisses sans identite : chacun porte les deux en candidats.
+    nonisolated static let sansIdentite: Set<String> = ["HomePod Avant", "HomePod Palier"]
+
+    /// Libelles de la demo : le vrai reseau (releve du 28/09), ses noms et son maillage ;
+    /// `sansIdentite` : routeurs de bordure que ce maillage n'identifie pas.
+    static func demo(sansIdentite: Set<String> = []) throws
+        -> (disposition: Disposition, libelles: [String: GrapheCanvas.Libelle], scinde: Bool) {
         let s = Surveillance(mode: .demo, dossier: nil)
         s.demarrer()
+        if !sansIdentite.isEmpty {
+            let i = try #require(s.instantane)
+            s.recevoir(try #require(MaillageDemo.maillage(i, date: s.maintenant, sansIdentite: sansIdentite)), a: s.maintenant)
+        }
         let r = try #require(s.reseau)
         let affiches = s.appareilsAffiches(pour: r)
         let maillage = s.maillageAffiche(pour: r)
@@ -425,9 +434,11 @@ struct LibellesGrapheTests {
     }
 
     /// Disposition de la demo, a plusieurs zooms et tailles de fenetre : aucun libelle
-    /// ne recoupe un autre, ni un point, ni un titre de zone.
-    @Test func demoSansChevauchement() throws {
-        let demo = try Self.demo()
+    /// ne recoupe un autre, ni un point, ni un titre de zone ; de meme avec deux routeurs de
+    /// bordure non identifies, dont les libelles portent leurs candidats (plus longs).
+    @Test(arguments: [Set<String>(), LibellesGrapheTests.sansIdentite])
+    func demoSansChevauchement(_ sansIdentite: Set<String>) throws {
+        let demo = try Self.demo(sansIdentite: sansIdentite)
         let memoire = MemoirePlacement()
         for taille in [CGSize(width: 820, height: 560), CGSize(width: 1400, height: 900)] {
             for zoom in [0.4, 0.7, 1, 1.6, 2.5, 5] as [CGFloat] {
@@ -448,12 +459,24 @@ struct LibellesGrapheTests {
         #expect(demo.libelles.values.contains { $0.texte.hasSuffix(" 👑") })
         #expect(demo.libelles.values.contains { $0.texte.hasSuffix(" ☾") })
         #expect(demo.libelles.values.contains { $0.pastille == String(localized: "\(12)\u{202F}%") })
+        // Routeurs de bordure non identifies : un noeud chacun (routeurs 5 et 9 de la demo), avec
+        // les deux candidats ; leurs annonces ne sont pas dessinees a part.
+        let liste = ["HomePod Avant", "HomePod Palier"].formatted(.list(type: .or))
+        let candidats = demo.libelles.values.filter { $0.texte.hasPrefix(liste) }.map(\.texte).sorted()
+        if sansIdentite.isEmpty {
+            #expect(candidats.isEmpty)
+            #expect(demo.disposition.noeud("HomePod Avant") != nil)
+        } else {
+            #expect(candidats == [String(localized: "\(liste) · \("1400")"), String(localized: "\(liste) · \("2400")")])
+            #expect(demo.disposition.noeud("HomePod Avant") == nil && demo.disposition.noeud("HomePod Palier") == nil)
+        }
     }
 
     /// Meme entree, meme placement ; le clic trouve chaque noeud sur son point et sur son
-    /// libelle, dans la demo.
-    @Test func demoDeterministeEtCliquable() throws {
-        let demo = try Self.demo()
+    /// libelle, dans la demo, avec et sans routeurs de bordure non identifies.
+    @Test(arguments: [Set<String>(), LibellesGrapheTests.sansIdentite])
+    func demoDeterministeEtCliquable(_ sansIdentite: Set<String>) throws {
+        let demo = try Self.demo(sansIdentite: sansIdentite)
         let a = MemoirePlacement().placement(demo.disposition, libelles: demo.libelles, echelle: 0.8)
         let b = MemoirePlacement().placement(demo.disposition, libelles: demo.libelles, echelle: 0.8)
         #expect(a == b)

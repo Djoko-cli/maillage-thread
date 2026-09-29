@@ -20,6 +20,35 @@ struct AffichageSondeTests {
                                                        bordure: false)) == String(localized: "Non identifié · \("AC05")"))
     }
 
+    /// Routeur de bordure non identifie : ses candidats sous leur nom (« HomePod Avant ou HomePod
+    /// Gauche · 0400 »), l'instance a defaut ; un seul candidat, avec un point d'interrogation (il
+    /// peut n'etre aucun d'eux : plus de routeurs non identifies que d'annonces).
+    @Test func libellesAvecCandidats() {
+        let deux = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true,
+                              candidats: ["hp-droit", "HomePod Palier"])
+        let liste = ["HomePod Avant", "HomePod Palier"].formatted(.list(type: .or))
+        #expect(GrapheCanvas.libelleInconnu(deux, noms: ["hp-droit": "HomePod Avant"])
+                == String(localized: "\(liste) · \("0400")"))
+        let un = NoeudSonde(id: "rloc:CC00", rloc16: 0xCC00, genre: .routeur, reconnu: false, bordure: true,
+                            candidats: ["HomePod salon"])
+        #expect(GrapheCanvas.libelleInconnu(un) == String(localized: "\("HomePod salon")\u{202F}? · \("CC00")"))
+        #expect(GrapheCanvas.libelleInconnu(un) != GrapheCanvas.libelleInconnu(deux))
+    }
+
+    /// Fiche d'un routeur de bordure non identifie : la liste de ses candidats, et ce que la
+    /// sonde en sait ; trois explications distinctes (routeur avec ou sans candidats, enfant).
+    @Test func ficheAvecCandidats() {
+        #expect(FicheNoeud.ligneCandidats(["HomePod Avant", "HomePod Palier"])
+                == String(localized: "Candidats : \("HomePod Avant, HomePod Palier")"))
+        let avec = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true,
+                              candidats: ["HomePod Avant", "HomePod Palier"])
+        let sans = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true)
+        let enfant = NoeudSonde(id: "rloc:AC05", rloc16: 0xAC05, genre: .enfant, reconnu: false, bordure: false)
+        let textes = [avec, sans, enfant].map(FicheNoeud.explication)
+        #expect(Set(textes).count == 3 && !textes.contains(""))
+        #expect(!FicheNoeud.texteElimination.isEmpty)
+    }
+
     @Test func niveaux() {
         #expect(Palette.NiveauLien(3) == .bon)
         #expect(Palette.NiveauLien(2) == .moyen)

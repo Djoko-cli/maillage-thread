@@ -23,4 +23,20 @@ struct MaillageDemoTests {
         let muet = try #require(m.routeurs.first { $0.muet })
         #expect(m.enfants(de: muet.id).allSatisfy { $0.qualite == nil && $0.source == .balayage })
     }
+
+    /// Routeurs de bordure laisses sans identite : non identifies, chacun avec les deux annonces
+    /// pour candidates ; le reste du maillage ne change pas.
+    @Test func sansIdentite() throws {
+        let i = Instantane(annonces: Releve20260928.annonces)
+        let r = try #require(i.reseaux.first)
+        let date = Releve20260928.annonces.date
+        let m = try #require(MaillageDemo.maillage(i, date: date, sansIdentite: ["HomePod Avant", "HomePod Palier"]))
+        let affiche = MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils)
+        let inconnus = affiche.inconnus.filter { $0.genre == .routeur }
+        #expect(inconnus.map(\.rloc16) == [0x1400, 0x2400])
+        #expect(inconnus.allSatisfy { $0.bordure && $0.candidats == ["HomePod Avant", "HomePod Palier"] })
+        #expect(affiche.annoncesCandidates == ["HomePod Avant", "HomePod Palier"])
+        let complet = try #require(MaillageDemo.maillage(i, date: date))
+        #expect(m.liens == complet.liens && m.enfants == complet.enfants)
+    }
 }

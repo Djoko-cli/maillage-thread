@@ -198,25 +198,58 @@ struct FicheNoeud: View {
         }
     }
 
-    /// Noeud que seule la sonde connait (routeur de bordure muet sans identite, enfant inconnu).
+    /// Noeud que seule la sonde connait (routeur de bordure muet sans identite, avec ses
+    /// candidats ; enfant inconnu).
     @ViewBuilder
     private func colonnesSonde(_ n: NoeudSonde, _ m: MaillageAffiche) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(GrapheCanvas.libelleInconnu(n)).font(.title3.weight(.semibold))
+            Text(GrapheCanvas.libelleInconnu(n, noms: nomsRouteurs)).font(.title3.weight(.semibold))
             Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud)).foregroundStyle(.secondary)
-            Text(n.genre == .routeur ? "Vu par la sonde, sans annonce reconnue sur le réseau local."
-                                     : "Vu par la sonde : son ExtMac ne correspond à aucun appareil annoncé.")
+            if !n.candidats.isEmpty {
+                Text(Self.ligneCandidats(n.candidats.map { nomsRouteurs[$0] ?? $0 }))
+            }
+            Text(Self.explication(n))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .frame(minWidth: 200, alignment: .leading)
     }
 
+    /// « Candidats : HomePod Avant, HomePod Palier » : les annonces qu'un routeur de bordure non
+    /// identifie porte, sous leur nom.
+    static func ligneCandidats(_ noms: [String]) -> String {
+        String(localized: "Candidats : \(noms.joined(separator: ", "))")
+    }
+
+    /// Ce que la sonde sait d'un noeud qu'elle seule connait.
+    static func explication(_ n: NoeudSonde) -> String {
+        switch n.genre {
+        case .routeur where !n.candidats.isEmpty:
+            String(localized: "Vu par la sonde sans son identité : sans doute l'une de ces annonces du réseau local, qu'aucun nœud ne reprend.")
+        case .routeur:
+            String(localized: "Vu par la sonde, sans annonce reconnue sur le réseau local.")
+        case .enfant:
+            String(localized: "Vu par la sonde : son ExtMac ne correspond à aucun appareil annoncé.")
+        }
+    }
+
+    /// Fiche d'un routeur de bordure reconnu par elimination (`NoeudSonde.deduit`).
+    static var texteElimination: String {
+        String(localized: "Reconnu par élimination : seul routeur de bordure sans identité, seule annonce restante.")
+    }
+
+    /// Nom affiche de chaque routeur de bordure du reseau, par instance (candidats d'un routeur
+    /// de bordure non identifie).
+    private var nomsRouteurs: [String: String] {
+        Dictionary((surveillance.reseau?.routeurs ?? []).map { ($0.instance, surveillance.nom($0)) },
+                   uniquingKeysWith: { a, _ in a })
+    }
+
     /// Nom d'un noeud du graphe : routeur de bordure, appareil, ou noeud de la sonde.
     private func nomNoeud(_ id: String) -> String {
         if let r = surveillance.instantane?.routeur(id) { return surveillance.nom(r) }
         if let a = surveillance.appareil(id) { return surveillance.nom(a) }
-        if let n = sonde?.noeud(id) { return GrapheCanvas.libelleInconnu(n) }
+        if let n = sonde?.noeud(id) { return GrapheCanvas.libelleInconnu(n, noms: nomsRouteurs) }
         return id
     }
 
@@ -259,6 +292,9 @@ struct FicheNoeud: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Routeur de bordure").foregroundStyle(.secondary)
             lignesSonde(r.instance)
+            if sonde?.noeud(r.instance)?.deduit == true {
+                Text(Self.texteElimination).font(.caption).foregroundStyle(.secondary)
+            }
             if let nn = r.nomReseau { Text("Réseau \(nn)").foregroundStyle(.secondary) }
             ForEach(r.adressesLien, id: \.self) { ad in
                 Text(ad.description).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
