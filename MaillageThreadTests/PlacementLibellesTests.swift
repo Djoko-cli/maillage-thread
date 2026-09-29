@@ -397,7 +397,8 @@ struct LibellesGrapheTests {
         let mesure = MesureTextes()
         let noms = ["Détecteur de passage nord", "Détecteur de passage chaufferie côté cour ☾", "Apple TV 4K 👑",
                     "Eve Motion ☾ ⚠︎", "Halo", "Routeur de bordure · B400", "Non identifié · AC05", "客厅灯 Salon",
-                    "Partition 73586B68 · fd19:961f:2db3::/64 (partagé)"]
+                    "Partition 73586B68 · fd19:961f:2db3::/64 (partagé)", "HomePod Avant ou HomePod Palier · 0400",
+                    "HomePod salon\u{202F}? · CC00"]
         var textes: [Text] = []
         var normaux: [Text] = []
         var mesurees: [CGSize] = []
