@@ -71,20 +71,37 @@ final class SondeMaillage {
     /// qu'elles soient finies (ports vraiment fermes) avant d'ouvrir un port.
     @ObservationIgnored private var fermetures: Task<Void, Never>?
     @ObservationIgnored private var memoire = MemoireTournee()
+    /// Fichier des identites des routeurs (`fichierIdentites(demo:sousTests:)`) : lu au lancement,
+    /// ecrit quand elles changent ; nil : ni lu ni ecrit.
+    @ObservationIgnored private let fichierIdentites: URL?
+    /// Identites telles que le fichier les a (lues ou ecrites en dernier).
+    @ObservationIgnored private var identitesDuFichier: IdentitesGardees?
     /// Boucle des tournees (lue par les tests).
     @ObservationIgnored private(set) var boucle: Task<Void, Never>?
     @ObservationIgnored private var surveillantPorts: PortsUSB?
 
-    /// `actif` faux (mode demo, tests) : ni port, ni preferences lues.
+    /// `actif` faux (mode demo, tests) : ni port, ni preferences lues. `fichierIdentites` : ou
+    /// garder les identites des routeurs d'un lancement a l'autre (nil : nulle part).
     init(preferences: UserDefaults = .standard, actif: Bool,
          ouvrirCanal: @escaping (String) -> any CanalSonde = { CanalSerie(liaison: LiaisonSerie(chemin: $0)) },
-         horloge: @escaping () -> Date = { Date() }) {
+         horloge: @escaping () -> Date = { Date() }, fichierIdentites: URL? = nil) {
         self.preferences = preferences
         self.actif = actif
         self.ouvrirCanal = ouvrirCanal
         self.horloge = horloge
+        self.fichierIdentites = fichierIdentites
         serie = actif ? preferences.string(forKey: Self.cleSerie) : nil
         nom = actif ? preferences.string(forKey: Self.cleNom) : nil
+        if let g = fichierIdentites.flatMap(IdentitesGardees.lire) {
+            memoire = MemoireTournee(identites: g)
+            identitesDuFichier = g
+        }
+    }
+
+    /// Fichier des identites des routeurs : dans le dossier de l'app ; nil en demo et sous les
+    /// tests (qui passent le leur, temporaire).
+    static func fichierIdentites(demo: Bool, sousTests: Bool) -> URL? {
+        demo || sousTests ? nil : Surveillance.dossierParDefaut.appendingPathComponent("identites-routeurs.json")
     }
 
     /// Nom de la sonde retenue pour l'etat qui la concerne : absente, ou connexion, connexion
@@ -291,6 +308,7 @@ final class SondeMaillage {
             etatSonde = try await sonde.etat()
             if let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge(), avancement: suivi) {
                 memoire = r.memoire
+                garderIdentites()
                 let recu = horloge()
                 derniereTournee = recu
                 surMaillage?(r.maillage, recu)
@@ -301,5 +319,12 @@ final class SondeMaillage {
         } catch {
             erreurTournee = error.localizedDescription
         }
+    }
+
+    /// Ecrit les identites des routeurs si elles ont change depuis le fichier. Un echec les
+    /// laisse en memoire, sans message : l'ecriture est retentee a la tournee suivante.
+    private func garderIdentites() {
+        guard let f = fichierIdentites, let g = memoire.identitesGardees, g != identitesDuFichier else { return }
+        if (try? g.ecrire(dans: f)) != nil { identitesDuFichier = g }
     }
 }

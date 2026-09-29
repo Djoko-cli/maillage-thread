@@ -541,6 +541,59 @@ struct SondeMaillageTests {
         s.oublier()
     }
 
+    /// Reseau minimal dans une partition donnee ; la table des routeurs donne l'ExtMac du chef 0
+    /// (muet : il ne rend que sa Route64) s'il est entendu (valeur inventee).
+    static func canalIdentites(ext: String?, partition: String) -> CanalRejoue {
+        CanalRejoue { l in
+            switch l {
+            case "etat\n": return [CanalRejoue.etatAttache.replacingOccurrences(of: "0000000A", with: partition)]
+            case "routeurs\n": return [CanalRejoue.routeurs([("0000", ext)], suite: false)]
+            default: return CanalRejoue.reseauMinimal(l)
+            }
+        }
+    }
+
+    /// Identites des routeurs gardees dans un fichier (ici temporaire) : relues au lancement
+    /// suivant, ou le chef muet garde l'ExtMac que la sonde n'entend plus ; une autre partition
+    /// les efface, dans le fichier aussi.
+    @Test(.timeLimit(.minutes(1))) func identitesGardeesDUnLancementALAutre() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("identites-routeurs.json")
+        /// Un lancement de l'app : une sonde, une tournee, son maillage.
+        func lancement(ext: String?, partition: String = "0000000A") async -> Maillage? {
+            let s = SondeMaillage(preferences: p, actif: true,
+                                  ouvrirCanal: { _ in Self.canalIdentites(ext: ext, partition: partition) },
+                                  fichierIdentites: fichier)
+            var recu: Maillage?
+            s.surMaillage = { m, _ in recu = m }
+            await s.connecter(Self.port, choisi: true)
+            await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+            s.oublier()
+            return recu
+        }
+        let m1 = await lancement(ext: "E0000000000000A0")
+        #expect(m1?.routeur(0)?.extMac == "E0000000000000A0", "entendu par la sonde")
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A0"]))
+        let m2 = await lancement(ext: nil)
+        #expect(m2?.routeur(0)?.extMac == "E0000000000000A0", "relue au lancement suivant")
+        let m3 = await lancement(ext: nil, partition: "0000000B")
+        #expect(m3?.routeur(0)?.extMac == nil, "autre partition")
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000B", identites: [:]))
+    }
+
+    /// Fichier des identites : dans le dossier de l'app ; jamais en demo ni sous les tests (qui
+    /// passent leur propre fichier, temporaire).
+    @Test func fichierDesIdentites() {
+        #expect(SondeMaillage.fichierIdentites(demo: true, sousTests: false) == nil)
+        #expect(SondeMaillage.fichierIdentites(demo: false, sousTests: true) == nil)
+        #expect(SondeMaillage.fichierIdentites(demo: true, sousTests: true) == nil)
+        #expect(SondeMaillage.fichierIdentites(demo: false, sousTests: false)
+                == Surveillance.dossierParDefaut.appendingPathComponent("identites-routeurs.json"))
+    }
+
     /// En demo et sous tests : rien de lu.
     @Test func inactive() throws {
         let (p, domaine) = try Self.preferences()

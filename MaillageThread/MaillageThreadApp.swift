@@ -26,8 +26,10 @@ struct MaillageThreadApp: App {
         _surveillance = State(initialValue: s)
         _ouverture = State(initialValue: o)
         _nomsMaison = State(initialValue: d)
-        // Inerte en demo et sous tests : aucun port ouvert.
-        let sm = SondeMaillage(actif: !Self.demo && !Surveillance.sousTests)
+        // Inerte en demo et sous tests : aucun port ouvert, aucune identite de routeur lue ni ecrite.
+        let sm = SondeMaillage(actif: !Self.demo && !Surveillance.sousTests,
+                               fichierIdentites: SondeMaillage.fichierIdentites(demo: Self.demo,
+                                                                                sousTests: Surveillance.sousTests))
         _sonde = State(initialValue: sm)
         let premier = !UserDefaults.standard.bool(forKey: Self.clePremierGraphe)
         ouvrirGraphe = !Surveillance.sousTests && (Self.demo || premier)
