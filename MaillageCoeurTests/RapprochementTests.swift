@@ -30,7 +30,7 @@ struct RapprochementTests {
     /// Maillage de la capture ; `entendus` : les routeurs que la sonde entend (RLOC16 -> ExtMac).
     static func maillage(entendus: [UInt16: String] = [:]) async throws -> Maillage {
         let sonde = try SondeRejouee.capture(table: SondeRejouee.table(entendus: entendus))
-        return try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: .now)).maillage
+        return try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: .now)).maillage
     }
 
     /// Anneau interieur de la zone principale, dans l'ordre.

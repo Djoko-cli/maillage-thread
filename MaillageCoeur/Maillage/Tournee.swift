@@ -113,15 +113,17 @@ public enum Tournee {
     public static let periodeBalayage: TimeInterval = 30 * 60
     public static let periodeMuet: TimeInterval = 3600
 
-    /// Une tournee, et le balayage s'il est du ; nil si la sonde n'est pas attachee,
-    /// ou suspendue dans Maison (ses requetes echoueraient toutes : aucun routeur
-    /// ne doit passer pour muet), ou si aucun routeur n'a donne la liste des routeurs
-    /// (Route64). La memoire n'est alors pas rendue : l'appelant garde la sienne.
+    /// Une tournee, et le balayage s'il est du : le maillage et la memoire a garder. Pas de
+    /// maillage si la sonde n'est pas attachee, ou suspendue dans Maison (ses requetes
+    /// echoueraient toutes : aucun routeur ne doit passer pour muet ; memoire inchangee), ou si
+    /// aucun routeur n'a donne la liste des routeurs (Route64) : la memoire rendue est alors
+    /// celle d'avant (remise a zero dans une autre partition), avec les seules identites
+    /// apprises par `etat` et la table des routeurs, qu'une sonde promenee garde ainsi.
     /// `avancement` est appele au debut de chaque etape atteinte, puis a chaque requete
     /// revenue (voir `AvancementTournee`), depuis la tache de la tournee.
     public static func executer(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,
                                 avancement: (@Sendable (AvancementTournee) -> Void)? = nil)
-        async throws -> (maillage: Maillage, memoire: MemoireTournee)? {
+        async throws -> (maillage: Maillage?, memoire: MemoireTournee) {
         func signaler(_ etape: AvancementTournee.Etape, _ fait: Int, _ total: Int) {
             avancement?(AvancementTournee(etape: etape, fait: fait, total: total))
         }
@@ -130,7 +132,7 @@ public enum Tournee {
         let etat = try await sonde.etat()
         signaler(.etatSonde, 1, 2)
         guard etat.estAttachee, !etat.suspendue, let partition = etat.partition, let chef = etat.chef,
-              let moi = etat.rloc16Valeur else { return nil }
+              let moi = etat.rloc16Valeur else { return (nil, memoire) }
         // Autre partition : les identifiants de routeur y sont redistribues, rien ne vaut plus.
         if let ancienne = mem.partition, ancienne != partition { mem = MemoireTournee() }
         mem.partition = partition
@@ -166,7 +168,7 @@ public enum Tournee {
                 signaler(.listeRouteurs, essais.count + faites, essais.count + prevues)
             }
         }
-        guard let route64 else { return nil }
+        guard let route64 else { return (nil, mem) }
         c.routeurs(route64, chef: chef)
         // Paires des routeurs sortis de la liste (routeur disparu, identifiant libere) : oubliees.
         let liste = Set(route64.routeurs)

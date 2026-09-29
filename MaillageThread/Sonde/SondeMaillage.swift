@@ -306,12 +306,14 @@ final class SondeMaillage {
     private func executerTournee(_ sonde: SondeUSB, suivi: @escaping @Sendable (AvancementTournee) -> Void) async {
         do {
             etatSonde = try await sonde.etat()
-            if let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge(), avancement: suivi) {
-                memoire = r.memoire
-                garderIdentites()
+            let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge(), avancement: suivi)
+            // Meme sans maillage (pas de liste des routeurs), les identites apprises sont gardees.
+            memoire = r.memoire
+            garderIdentites()
+            if let m = r.maillage {
                 let recu = horloge()
                 derniereTournee = recu
-                surMaillage?(r.maillage, recu)
+                surMaillage?(m, recu)
             }
             erreurTournee = nil
         } catch SondeUSB.Erreur.fermee {

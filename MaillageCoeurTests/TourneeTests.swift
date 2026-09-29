@@ -104,6 +104,16 @@ struct SondeRejouee: InterlocuteurSonde {
     }
 }
 
+extension Tournee {
+    /// Tournee qui doit rendre un maillage (tests) : le maillage et la memoire ; nil sans maillage.
+    static func complete(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,
+                         avancement: (@Sendable (AvancementTournee) -> Void)? = nil)
+        async throws -> (maillage: Maillage, memoire: MemoireTournee)? {
+        let r = try await executer(sonde, memoire: memoire, maintenant: maintenant, avancement: avancement)
+        return r.maillage.map { ($0, r.memoire) }
+    }
+}
+
 @Suite("Tournee de la sonde")
 struct TourneeTests {
     static let t0 = Date(timeIntervalSince1970: 1_790_000_000)
@@ -111,7 +121,7 @@ struct TourneeTests {
     /// Premiere tournee : routeurs, roles, liens, enfants des tables et du balayage, memoire.
     @Test func premiere() async throws {
         let sonde = try SondeRejouee.capture()
-        let (m, mem) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         #expect(m.partition == "46CBEBCD")
         #expect(m.routeurs.map(\.id) == [1, 20, 24, 43, 45, 51, 57])
         #expect(m.chef?.id == 24)
@@ -147,9 +157,9 @@ struct TourneeTests {
     /// Troisieme (10 min) : les muets ne sont plus interroges.
     @Test func suivantes() async throws {
         let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         let avant2 = await sonde.registre.requetes.count
-        let (m2, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem1, maintenant: Self.t0 + 300))
+        let (m2, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 300))
         let requetes2 = await sonde.registre.requetes.dropFirst(avant2)
         #expect(requetes2.count == 9, "chef, 7 routeurs, Network Data ; pas 6002, 6005, 6006, demandes il y a 5 min")
         #expect(mem2.estMuet(43))
@@ -157,7 +167,7 @@ struct TourneeTests {
         #expect(m2.enfants(de: 43).count == 8, "enfants du balayage garde")
 
         let avant3 = await sonde.registre.requetes.count
-        let (m3, _) = try #require(try await Tournee.executer(sonde, memoire: mem2, maintenant: Self.t0 + 600))
+        let (m3, _) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 600))
         let requetes3 = Array(await sonde.registre.requetes.dropFirst(avant3))
         #expect(requetes3.first == "6000|5,6", "la liste des routeurs d'abord")
         #expect(requetes3.sorted() == ["5000|0,1,5,16,8,24", "5000|7", "6000|0,1,5,16,8,24", "6000|5,6"],
@@ -170,11 +180,11 @@ struct TourneeTests {
     /// redemandees parce que 30 min ont passe ; une seconde avant, ni l'un ni l'autre.
     @Test func balayageDu() async throws {
         let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         let avant = await sonde.registre.requetes.count
-        let (_, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem1, maintenant: Self.t0 + 1799))
+        let (_, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 1799))
         let pendant = await sonde.registre.requetes.count
-        _ = try await Tournee.executer(sonde, memoire: mem2, maintenant: Self.t0 + 1800)
+        _ = try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 1800)
         let toutes = await sonde.registre.requetes
         let presque = toutes[avant..<pendant], requetes = toutes[pendant...]
         #expect(presque.filter { $0.hasSuffix("|0,1,2,8") || $0.hasSuffix("|0,8") }.isEmpty, "29 min 59 s : rien de du")
@@ -188,7 +198,7 @@ struct TourneeTests {
         var mem = MemoireTournee()
         mem.echecs[45] = 2
         mem.repondants = [20]
-        let (m, _) = try #require(try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0))
+        let (m, _) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0))
         #expect(m.routeurs.count == 7)
         #expect(m.chef?.id == 45)
         #expect(await sonde.registre.requetes.first == "5000|5,6")
@@ -198,7 +208,7 @@ struct TourneeTests {
     /// vient du premier groupe de 8 identifiants ou un routeur repond (16 a 23 : le 20).
     @Test func chefMuetSansSecours() async throws {
         let sonde = try SondeRejouee.capture(chef: 45, reponsesEnPlus: ["5000|5,6": try CaptureSonde.tlv(104)])
-        let (m, mem) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         #expect(m.routeurs.map(\.id) == [1, 20, 24, 43, 45, 51, 57])
         #expect(m.chef?.id == 45)
         let requetes = await sonde.registre.requetes
@@ -208,11 +218,17 @@ struct TourneeTests {
         #expect(mem.repondants == [20, 24])
     }
 
-    /// Rien ne repond, sonde attachee : pas de maillage (la memoire de l'appelant reste),
-    /// et la liste des routeurs demandee au plus une fois a chaque identifiant.
+    /// Rien ne repond, sonde attachee : pas de maillage ; la memoire rendue n'a que la partition
+    /// et l'identite du parent. La liste des routeurs est demandee au plus une fois a chaque
+    /// identifiant.
     @Test func rienNeRepond() async throws {
         let sonde = try SondeRejouee.capture().filtree { _ in false }
-        #expect(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0) == nil)
+        let r = try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0)
+        #expect(r.maillage == nil)
+        var attendue = MemoireTournee()
+        attendue.partition = "46CBEBCD"
+        attendue.identites = [0xAC00: "E000000000000007"]
+        #expect(r.memoire == attendue)
         let requetes = await sonde.registre.requetes
         #expect(requetes.allSatisfy { $0.hasSuffix("|5,6") })
         #expect(requetes.count <= 63)
@@ -223,15 +239,15 @@ struct TourneeTests {
     /// maillage, mais pas balaye ; il l'est au second echec de suite.
     @Test func echecPassager() async throws {
         let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         let sans20 = sonde.filtree { !$0.hasPrefix("5000|") }
-        let (m2, mem2) = try #require(try await Tournee.executer(sans20, memoire: mem1, maintenant: Self.t0 + 300))
+        let (m2, mem2) = try #require(try await Tournee.complete(sans20, memoire: mem1, maintenant: Self.t0 + 300))
         #expect(await sans20.registre.requetes.filter { $0.hasSuffix("|0,1,2,8") }.isEmpty, "pas de balayage")
         #expect(mem2.dernierBalayage == Self.t0)
         #expect(mem2.muetsBalayes == [1, 43, 45, 51, 57])
         #expect(m2.routeur(20)?.muet == true)
 
-        let (_, mem3) = try #require(try await Tournee.executer(sans20, memoire: mem2, maintenant: Self.t0 + 600))
+        let (_, mem3) = try #require(try await Tournee.complete(sans20, memoire: mem2, maintenant: Self.t0 + 600))
         #expect(mem3.estMuet(20))
         #expect(mem3.muetsBalayes == [1, 20, 43, 45, 51, 57], "muet : balaye")
         #expect(await sans20.registre.requetes.contains("5001|0,1,2,8"))
@@ -241,9 +257,9 @@ struct TourneeTests {
     /// tournee precedente restent.
     @Test func repondantsGardes() async throws {
         let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         let seulChef = sonde.filtree { $0 == "6000|5,6" }
-        let (m2, mem2) = try #require(try await Tournee.executer(seulChef, memoire: mem1, maintenant: Self.t0 + 300))
+        let (m2, mem2) = try #require(try await Tournee.complete(seulChef, memoire: mem1, maintenant: Self.t0 + 300))
         #expect(m2.routeurs.filter(\.muet).count == 7)
         #expect(mem2.repondants == [20, 24])
     }
@@ -252,9 +268,9 @@ struct TourneeTests {
     /// nouvelle demande ; celles de la premiere tournee restent.
     @Test func identitesGardees() async throws {
         let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         let endormis = sonde.filtree { !$0.hasSuffix("|0,8") }
-        let (m2, mem2) = try #require(try await Tournee.executer(endormis, memoire: mem1, maintenant: Self.t0 + 1800))
+        let (m2, mem2) = try #require(try await Tournee.complete(endormis, memoire: mem1, maintenant: Self.t0 + 1800))
         #expect(await endormis.registre.requetes.filter { $0.hasSuffix("|0,8") }.count == 6, "redemandees")
         #expect(m2.enfants(de: 20).map(\.extMac) == ["E000000000000005", "E000000000000004"])
         #expect(mem2.identifies.count == 3)
@@ -267,7 +283,7 @@ struct TourneeTests {
     @Test func routeursEntendus() async throws {
         let entendus: [UInt16: String] = [0xE400: "E0000000000000E4", 0xCC00: "E0000000000000CC"]
         let sonde = try SondeRejouee.capture(table: SondeRejouee.table(entendus: entendus))
-        let (m, mem) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         #expect(m.routeur(57)?.extMac == "E0000000000000E4")
         #expect(m.routeur(51)?.extMac == "E0000000000000CC")
         #expect(m.routeur(1)?.extMac == nil, "pas entendu")
@@ -277,7 +293,7 @@ struct TourneeTests {
         #expect(await sonde.registre.tables == 1)
 
         let ailleurs = try SondeRejouee.capture(table: SondeRejouee.table(entendus: [0xE400: "E0000000000000E4"]))
-        let (m2, mem2) = try #require(try await Tournee.executer(ailleurs, memoire: mem, maintenant: Self.t0 + 300))
+        let (m2, mem2) = try #require(try await Tournee.complete(ailleurs, memoire: mem, maintenant: Self.t0 + 300))
         #expect(m2.routeur(51)?.extMac == "E0000000000000CC", "retenue d'une tournee a l'autre")
         #expect(mem2.identites[0xCC00] == "E0000000000000CC")
         #expect(await ailleurs.registre.tables == 1)
@@ -287,7 +303,7 @@ struct TourneeTests {
     /// sans ces paires.
     @Test func sansTable() async throws {
         let sonde = try SondeRejouee.capture(table: nil)
-        let (m, mem) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         #expect(m.routeurs.map(\.id) == [1, 20, 24, 43, 45, 51, 57])
         #expect(mem.identites == [0xAC00: "E000000000000007", 0x5000: "E000000000000002", 0x6000: "E000000000000003"])
         #expect(await sonde.registre.tables == 1)
@@ -300,11 +316,36 @@ struct TourneeTests {
         var mem = MemoireTournee()
         mem.partition = "46CBEBCD"
         mem.identites[0x0400] = "E0000000000000E4"
-        let (m, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0))
+        let (m, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0))
         #expect(mem2.identites[0x0400] == nil)
         #expect(mem2.identites[0xE400] == "E0000000000000E4")
         #expect(m.routeur(1)?.extMac == nil)
         #expect(m.routeur(57)?.extMac == "E0000000000000E4")
+    }
+
+    /// Pas de liste des routeurs (plus rien ne repond apres `etat`) : pas de maillage, mais la
+    /// memoire rendue garde les identites apprises (parent, table des routeurs), pour qu'une sonde
+    /// promenee les garde ; le reste est la memoire d'avant, aucun routeur ne passe pour muet.
+    /// Dans une autre partition, elle est remise a zero, sauf ces identites (ExtMac inventee).
+    @Test func identitesSansListe() async throws {
+        let (_, mem1) = try #require(try await Tournee.complete(try SondeRejouee.capture(), memoire: MemoireTournee(),
+                                                               maintenant: Self.t0))
+        let muette = try SondeRejouee.capture(table: SondeRejouee.table(entendus: [0xE400: "E0000000000000E4"]))
+            .filtree { _ in false }
+        let r = try await Tournee.executer(muette, memoire: mem1, maintenant: Self.t0 + 300)
+        #expect(r.maillage == nil)
+        var attendue = mem1
+        attendue.identites[0xE400] = "E0000000000000E4"
+        #expect(r.memoire == attendue, "la memoire d'avant, plus le routeur entendu")
+
+        var ailleurs = mem1
+        ailleurs.partition = "73586B68"
+        let r2 = try await Tournee.executer(muette, memoire: ailleurs, maintenant: Self.t0 + 300)
+        #expect(r2.maillage == nil)
+        var neuve = MemoireTournee()
+        neuve.partition = "46CBEBCD"
+        neuve.identites = [0xAC00: "E000000000000007", 0xE400: "E0000000000000E4"]
+        #expect(r2.memoire == neuve)
     }
 
     /// Paire d'un routeur sorti de la liste des routeurs (routeur disparu, identifiant libere) :
@@ -315,7 +356,7 @@ struct TourneeTests {
         var mem = MemoireTournee()
         mem.partition = "46CBEBCD"
         mem.identites = [0x0800: "E0000000000000EE", 0xE400: "E0000000000000E4"]
-        let (m, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0))
+        let (m, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0))
         #expect(!m.routeurs.contains { $0.id == 2 }, "l'identifiant 2 n'est pas dans la Route64")
         #expect(mem2.identites[0x0800] == nil, "oubliee")
         #expect(mem2.identites[0xE400] == "E0000000000000E4", "le routeur 57 est dans la liste : gardee")
@@ -333,7 +374,7 @@ struct TourneeTests {
         mem.muetInterroge[20] = Self.t0
         mem.dernierBalayage = Self.t0
         mem.muetsBalayes = [1, 43, 45, 51, 57]
-        let (m, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0 + 60))
+        let (m, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0 + 60))
         #expect(mem2.partition == "46CBEBCD")
         #expect(m.routeur(45)?.extMac == nil, "B400 : pas l'ExtMac retenu dans l'autre partition")
         #expect(m.routeur(20)?.muet == false, "5000 interroge de nouveau")
@@ -348,7 +389,11 @@ struct TourneeTests {
             return
         }
         let sonde = SondeRejouee(etatSonde: e, reponses: [:])
-        #expect(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0) == nil)
+        var mem = MemoireTournee()
+        mem.echecs[20] = 1
+        let r = try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0)
+        #expect(r.maillage == nil)
+        #expect(r.memoire == mem, "memoire inchangee")
         #expect(await sonde.registre.requetes.isEmpty)
         #expect(await sonde.registre.tables == 0, "ni la table des routeurs")
     }
@@ -359,7 +404,7 @@ struct TourneeTests {
     @Test func avancementPremiere() async throws {
         let sonde = try SondeRejouee.capture()
         let releve = ReleveAvancement()
-        _ = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+        _ = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
                                                    avancement: { releve.noter($0) }))
         #expect(releve.etapes == AvancementTournee.Etape.allCases)
         let totaux: [AvancementTournee.Etape: Int] = [.etatSonde: 2, .listeRouteurs: 1, .routeurs: 7, .pileEtReseau: 3,
@@ -380,9 +425,9 @@ struct TourneeTests {
     /// et les identites (demandees il y a 5 min) sont annonces sans rien a faire.
     @Test func avancementSuivante() async throws {
         let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         let releve = ReleveAvancement()
-        _ = try #require(try await Tournee.executer(sonde, memoire: mem1, maintenant: Self.t0 + 300,
+        _ = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 300,
                                                    avancement: { releve.noter($0) }))
         #expect(releve.etapes == AvancementTournee.Etape.allCases)
         #expect(releve.de(.listeRouteurs) == [AvancementTournee(etape: .listeRouteurs, fait: 0, total: 2),
@@ -399,7 +444,7 @@ struct TourneeTests {
     @Test func avancementRecherche() async throws {
         let sonde = try SondeRejouee.capture(chef: 45, reponsesEnPlus: ["5000|5,6": try CaptureSonde.tlv(104)])
         let releve = ReleveAvancement()
-        _ = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+        _ = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
                                                    avancement: { releve.noter($0) }))
         let liste = releve.de(.listeRouteurs)
         #expect(Array(liste.prefix(3)) == [AvancementTournee(etape: .listeRouteurs, fait: 0, total: 1),
@@ -415,7 +460,7 @@ struct TourneeTests {
     @Test func avancementBalayageQuiGrandit() async throws {
         let sonde = try SondeRejouee.capture(reponsesEnPlus: ["0408|0,1,2,8": try CaptureSonde.tlv(503)])
         let releve = ReleveAvancement()
-        _ = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+        _ = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
                                                    avancement: { releve.noter($0) }))
         let balayage = releve.de(.balayage)
         #expect(balayage.first == AvancementTournee(etape: .balayage, fait: 0, total: 48))
@@ -433,8 +478,9 @@ struct TourneeTests {
         }
         let sonde = SondeRejouee(etatSonde: e, reponses: [:])
         let releve = ReleveAvancement()
-        #expect(try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
-                                           avancement: { releve.noter($0) }) == nil)
+        let r = try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                           avancement: { releve.noter($0) })
+        #expect(r.maillage == nil && r.memoire == MemoireTournee())
         #expect(await sonde.registre.tables == 0, "pas de table hors d'une partition")
         #expect(releve.avancements == [AvancementTournee(etape: .etatSonde, fait: 0, total: 2),
                                        AvancementTournee(etape: .etatSonde, fait: 1, total: 2)],

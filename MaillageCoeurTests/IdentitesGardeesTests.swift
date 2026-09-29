@@ -38,7 +38,7 @@ struct IdentitesGardeesTests {
         let mem = MemoireTournee(identites: g)
         #expect(mem.partition == "46CBEBCD" && mem.identites == g.identites)
         let sonde = try SondeRejouee.capture()
-        let (m, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0))
+        let (m, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0))
         #expect(m.routeur(57)?.extMac == "E0000000000000E4")
         let gardees = try #require(mem2.identitesGardees)
         #expect(gardees.partition == "46CBEBCD")
@@ -51,7 +51,7 @@ struct IdentitesGardeesTests {
     @Test func autrePartition() async throws {
         let g = IdentitesGardees(partition: "73586B68", identites: [0xE400: "E0000000000000E4"])
         let sonde = try SondeRejouee.capture()
-        let (m, mem) = try #require(try await Tournee.executer(sonde, memoire: MemoireTournee(identites: g),
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(identites: g),
                                                               maintenant: Self.t0))
         #expect(m.routeur(57)?.extMac == nil)
         #expect(mem.identitesGardees?.partition == "46CBEBCD")

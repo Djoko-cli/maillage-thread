@@ -584,6 +584,38 @@ struct SondeMaillageTests {
         #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000B", identites: [:]))
     }
 
+    /// Reseau minimal ou personne ne donne la liste des routeurs (tout `diag` echoue) : la
+    /// tournee ne rend pas de maillage ; la table des routeurs donne l'ExtMac du chef 0 (inventee).
+    static func canalSansListe() -> CanalRejoue {
+        CanalRejoue { l in
+            if l == "routeurs\n" { return [CanalRejoue.routeurs([("0000", "E0000000000000A0")], suite: false)] }
+            let mots = l.trimmingCharacters(in: .newlines).split(separator: " ").map(String.init)
+            if mots.first == "diag", mots.count >= 4, let id = Int(mots[3]) {
+                return [#"{"v":1,"t":"diag","id":\#(id),"cible":"\#(mots[1])","ok":false,"erreur":"delai"}"#]
+            }
+            return CanalRejoue.reseauMinimal(l)
+        }
+    }
+
+    /// Tournee sans liste des routeurs : pas de maillage, mais l'identite entendue est gardee,
+    /// dans le fichier aussi (une sonde promenee ne perd rien).
+    @Test(.timeLimit(.minutes(1))) func identitesGardeesSansListeDesRouteurs() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("identites-routeurs.json")
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in Self.canalSansListe() },
+                              fichierIdentites: fichier)
+        let (fins, fin) = AsyncStream.makeStream(of: Void.self)
+        s.surTournee = { enCours in if !enCours { fin.yield() } }
+        await s.connecter(Self.port, choisi: true)
+        for await _ in fins { break }
+        #expect(s.derniereTournee == nil, "pas de maillage")
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A0"]))
+        s.oublier()
+    }
+
     /// Fichier des identites : dans le dossier de l'app ; jamais en demo ni sous les tests (qui
     /// passent leur propre fichier, temporaire).
     @Test func fichierDesIdentites() {
