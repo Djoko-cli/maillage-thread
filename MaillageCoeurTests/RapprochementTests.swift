@@ -10,13 +10,18 @@ struct RapprochementTests {
     /// de la sonde, `xa` connu), un HomePod que la sonde ne reconnait pas ; les
     /// appareils de la capture par leur ExtMac, un appareil HomeKit reconnu par son
     /// adresse OMR, un appareil que la sonde ne voit pas. `autres` : les routeurs de
-    /// bordure apres l'Apple TV (nom, `xa` invente).
+    /// bordure apres l'Apple TV (nom, `xa` invente) ; `ailleurs` : ceux d'une autre partition
+    /// du meme reseau, 73586B68.
     static func instantane(autres: [(nom: String, xa: String?)] = [("HomePod bureau", "E000000000000007"),
-                                                                    ("HomePod salon", "E0000000000000A2")]) -> Instantane {
+                                                                    ("HomePod salon", "E0000000000000A2")],
+                           ailleurs: [(nom: String, xa: String?)] = []) -> Instantane {
         var b = Banc()
         b.routeur("Apple TV", partition: "46CBEBCD", primaire: true, lien: "fe80::1", omr: omr, xa: "E0000000000000A1")
         for (i, r) in autres.enumerated() {
             b.routeur(r.nom, partition: "46CBEBCD", lien: "fe80::\(i + 2)", omr: omr, xa: r.xa)
+        }
+        for (i, r) in ailleurs.enumerated() {
+            b.routeur(r.nom, partition: "73586B68", lien: "fe80::\(i + 20)", xa: r.xa)
         }
         for (i, ext) in ["E000000000000002", "E000000000000003", "E000000000000004", "E000000000000005",
                          "E000000000000009", "E00000000000000A"].enumerated() {
@@ -149,6 +154,21 @@ struct RapprochementTests {
         // Sans sonde, rien ne change : les annonces sont dessinees.
         let sans = Disposition(reseau: r, appareils: Self.affiches(i))
         #expect(Self.interieur(sans) == ["HomePod bureau", "HomePod chambre", "HomePod avant", "HomePod palier"])
+    }
+
+    /// Reseau scinde : les candidats ne viennent que de la partition de la sonde, et seules ses
+    /// annonces candidates ne sont pas dessinees ; l'autre partition garde toutes les siennes, meme
+    /// non reprises (ExtMac inventees).
+    @Test func autrePartitionAvecCandidats() async throws {
+        let i = Self.instantane(ailleurs: [("Aqara", "E0000000000000AA"), ("HomePod isole", "E0000000000000A9")])
+        let r = try #require(i.reseaux.first)
+        #expect(r.partitions.map(\.id) == ["46CBEBCD", "73586B68"])
+        let m = MaillageAffiche(maillage: try await Self.maillage(), reseau: r, appareils: i.appareils)
+        #expect(m.annoncesCandidates == ["HomePod salon"])
+        #expect(m.routeurs[1]?.candidats == ["HomePod salon"])
+        let d = Disposition(reseau: r, appareils: Self.affiches(i), maillage: m)
+        #expect(d.noeud("HomePod salon") == nil)
+        #expect(d.noeud("Aqara")?.zone == "73586B68" && d.noeud("HomePod isole")?.zone == "73586B68")
     }
 
     /// Network Data en echec a la seconde tournee : les routeurs de bordure restent connus (les

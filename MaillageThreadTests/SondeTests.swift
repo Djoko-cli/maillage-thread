@@ -300,6 +300,26 @@ struct SondeUSBTests {
         #expect(ContinuousClock.now - debut < SondeUSB.delaiCommande)
     }
 
+    /// Pas de fin de table dans le delai (la sonde s'arrete apres une ligne `suite`) : `routeurs`
+    /// echoue en `sansReponse`, et la partie recue est abandonnee : la table suivante ne la
+    /// reprend pas.
+    @Test(.timeLimit(.minutes(1))) func routeursExpire() async throws {
+        let appels = Mutex(0)
+        let canal = CanalRejoue { l in
+            guard l == "routeurs\n" else { return [] }
+            let n = appels.withLock { a in
+                a += 1
+                return a
+            }
+            return n == 1 ? [CanalRejoue.routeurs([("0400", "E0000000000000D1")], suite: true)]
+                          : [CanalRejoue.routeurs([("E400", "E0000000000000E4")], suite: false)]
+        }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        await #expect(throws: SondeUSB.Erreur.sansReponse("routeurs")) { _ = try await s.routeurs() }
+        #expect(try await s.routeurs().map(\.rloc16) == ["E400"])
+    }
+
     /// Liaison fermee pendant l'attente de la table : l'attente est liberee.
     @Test(.timeLimit(.minutes(1))) func routeursFermeture() async throws {
         let canal = CanalRejoue { _ in [] }
@@ -613,6 +633,38 @@ struct SondeMaillageTests {
         for await _ in fins { break }
         #expect(s.derniereTournee == nil, "pas de maillage")
         #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A0"]))
+        s.oublier()
+    }
+
+    /// Fichier des identites reecrit seulement quand elles changent : efface apres la premiere
+    /// tournee, il n'est pas recree par une tournee qui n'apprend rien de nouveau ; il l'est par
+    /// celle ou le chef change d'ExtMac (valeurs inventees).
+    @Test(.timeLimit(.minutes(1))) func fichierReecritSeulementSiChangement() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("identites-routeurs.json")
+        let entendue = Mutex("E0000000000000A0")
+        let canal = CanalRejoue { l in
+            guard l == "routeurs\n" else { return CanalRejoue.reseauMinimal(l) }
+            return [CanalRejoue.routeurs([("0000", entendue.withLock { $0 })], suite: false)]
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal }, fichierIdentites: fichier)
+        let (fins, fin) = AsyncStream.makeStream(of: Void.self)
+        s.surTournee = { enCours in if !enCours { fin.yield() } }
+        var tournees = fins.makeAsyncIterator()
+        await s.connecter(Self.port, choisi: true)
+        _ = await tournees.next()
+        #expect(IdentitesGardees.lire(fichier) != nil, "premiere tournee : ecrit")
+        try FileManager.default.removeItem(at: fichier)
+        s.rafraichir()
+        _ = await tournees.next()
+        #expect(!FileManager.default.fileExists(atPath: fichier.path), "rien de change : pas reecrit")
+        entendue.withLock { $0 = "E0000000000000A1" }
+        s.rafraichir()
+        _ = await tournees.next()
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A1"]))
         s.oublier()
     }
 
