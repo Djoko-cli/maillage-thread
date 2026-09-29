@@ -177,17 +177,20 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   choisi (le pont Halo est aussi un ESP32-C6). La sonde est retenue par son
   numéro de série USB et s'affiche sous son nom, « SONDE-01 » par défaut : le
   firmware le garde, il suit donc la carte d'un Mac à l'autre (le nom USB du
-  C6 est fixé par la puce). Tout autre port s'affiche « ESP32-C6 ·
-  usbmodem… ». La ligne du menu et Réglages › Sonde prennent aussi ce nom
-  (« SONDE-01 : connectée · relevé il y a 2 minutes »).
+  C6 est fixé par la puce). Tout autre port s'affiche avec son numéro de
+  série USB (« usbmodem… · » suivi du numéro), seul moyen de distinguer la
+  sonde du pont Halo avant la première connexion. La ligne du menu prend aussi
+  ce nom (« SONDE-01 : connectée · relevé il y a 2 minutes »), comme l'état
+  dans Réglages › Sonde (« SONDE-01 · connectée ») ; pas pour un autre port
+  en essai.
 - Réglages › Sonde montre le QR code Matter de la sonde et son code
   d'appairage (4-3-4), même une fois dans Maison.
 - Une tournée toutes les 5 minutes, et au rafraîchissement : le bouton
   rafraîchir du graphe relit le réseau, lance une tournée (sauf s'il y en a
-  déjà une) et Passeur Noms. Pendant une tournée, la barre d'outils du graphe
-  montre son étape, un compteur de requêtes et sa durée (« Balayage des
-  routeurs muets · 24/48 · 0:42 ») ; Réglages › Sonde et la ligne du menu
-  montrent aussi l'étape et le compteur.
+  déjà une) et Passeur Noms. Pendant une tournée, une ligne sous la barre
+  d'outils du graphe montre son étape, un compteur de requêtes et sa durée
+  (« Balayage des routeurs muets · 24/48 · 0:42 ») ; Réglages › Sonde et la
+  ligne du menu montrent aussi l'étape et le compteur.
 - La liste des routeurs vient du chef ; s'il se tait, d'un routeur qui a déjà
   répondu ; sinon d'une recherche sur tous les identifiants de routeur. Sans
   liste, pas de nouveau maillage : le dernier vieillit.

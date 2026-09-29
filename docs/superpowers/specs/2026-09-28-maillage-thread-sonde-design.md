@@ -335,13 +335,16 @@ total ne baisse jamais :
 - **Survol :** les liens du nœud s'éclairent.
 
 **Barre d'outils du graphe.**
-- Pendant une tournée, un petit indicateur de progression et « Balayage des
-  routeurs muets · 24/48 · 0:42 » : l'étape, les requêtes revenues sur le
-  total prévu (section 4), la durée, à jour chaque seconde.
+- Pendant une tournée, sur une ligne à part, centrée sous la barre : un petit
+  indicateur de progression et « Balayage des routeurs muets · 24/48 · 0:42 »
+  (l'étape, les requêtes revenues sur le total prévu, section 4, et la
+  durée, à jour chaque seconde). La barre garde sa largeur : ses boutons ne
+  bougent pas sous le pointeur.
 - Le bouton rafraîchir relit le réseau, lance une tournée (pas pendant une
-  tournée) et le passeur des noms de Maison, dans les conditions de
-  « Rafraîchir depuis Maison » : en mode direct, avec un dossier des noms
-  choisi. Il n'est jamais désactivé ; son aide dit ce qu'il fait.
+  tournée) et le passeur des noms de Maison, en mode direct et seulement si
+  un dossier des noms est choisi (« Rafraîchir depuis Maison », lui, demande
+  le dossier s'il manque). Il n'est jamais désactivé ; son aide dit ce qu'il
+  fait.
 
 **Fiche.**
 - Appareil : parent et qualité, endormi ou non (délai), fabricant, modèle,
@@ -356,16 +359,21 @@ total ne baisse jamais :
    s'il y en a plusieurs, comme « Eve Energy · 8A13 » ;
 4. l'hôte.
 
-**Menu.** Une ligne sous le nom de la sonde (« Sonde » tant qu'il n'est pas
-connu) : « SONDE-01 : connectée · relevé il y a 2 min », « SONDE-01 :
-absente » ; pendant une tournée, son étape et son compteur, « SONDE-01 :
-Routeurs 3/7… ».
+**Menu.** Une ligne sous le nom de la sonde retenue quand l'état la concerne :
+« SONDE-01 : connectée · relevé il y a 2 minutes », « SONDE-01 : absente » ;
+pendant une tournée, son étape et son compteur, « SONDE-01 : Routeurs 3/7… ».
+Sinon (nom pas encore connu, connexion, refus ou erreur d'un autre port
+choisi) : « Sonde : … ».
 
 **Réglages › Sonde :**
-- le port : la sonde retenue sous son nom (« SONDE-01 »), tout autre port
-  sous un libellé neutre (« ESP32-C6 · usbmodem11301 ») ;
-- l'état, sous le nom de la sonde : partition, dernier relevé ; pendant une
-  tournée, « Tournée : Balayage des routeurs muets · 24/48 · depuis 42 s » ;
+- le port : la sonde retenue sous son nom seul (« SONDE-01 ») ; tout autre
+  port sous son nom et son numéro de série USB (« usbmodem11301 · » suivi du
+  numéro ; la MAC, pour un C6) : seul moyen de distinguer la sonde du pont
+  Halo avant la première connexion ;
+- l'état, précédé du nom de la sonde retenue quand il la concerne
+  (« SONDE-01 · connectée »), l'état seul pour un autre port choisi (refus,
+  erreur) ; partition, dernier relevé ; pendant une tournée, « Tournée :
+  Balayage des routeurs muets · 24/48 · depuis 42 s » ;
 - le QR code Matter de la sonde (noir sur blanc, agrandi sans lissage) et son
   code d'appairage mis en forme 4-3-4, même quand elle est dans Maison ;
 - l'interrupteur « Sonde maillage » (lecture seule).

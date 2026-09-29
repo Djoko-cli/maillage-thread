@@ -171,17 +171,20 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   opened (the Halo bridge is also an ESP32-C6). The probe is remembered by its
   USB serial number and shows under its name, "SONDE-01" by default: the
   firmware keeps it, so it follows the board from one Mac to another (the
-  C6's USB name is fixed by the chip). Any other port shows as
-  "ESP32-C6 · usbmodem…". The menu line and Settings › Probe use the name too
-  ("SONDE-01: connected · updated 2 minutes ago").
+  C6's USB name is fixed by the chip). Any other port shows with its USB
+  serial number ("usbmodem… · " then the number), the only way to tell the
+  probe from the Halo bridge before the first connection. The menu line uses
+  the name too ("SONDE-01: connected · updated 2 minutes ago"), and so does
+  the state in Settings › Probe ("SONDE-01 · connected"); not for another
+  port being tried.
 - Settings › Probe shows the probe's Matter QR code and its pairing code
   (4-3-4), even once it is in Home.
 - A tour every 5 minutes, and on refresh: the refresh button of the graph
   rereads the network, starts a tour (unless one is running) and launches
-  Passeur Noms. While a tour runs, the graph's toolbar shows its step, a
-  counter of requests and its duration ("Scan of silent routers · 24/48 ·
-  0:42"); Settings › Probe and the menu line show the step and the counter
-  too.
+  Passeur Noms. While a tour runs, a line under the graph's toolbar shows its
+  step, a counter of requests and its duration ("Scan of silent routers ·
+  24/48 · 0:42"); Settings › Probe and the menu line show the step and the
+  counter too.
 - The list of routers comes from the leader; if it is silent, from a router
   that has already answered; otherwise from a search over every router id.
   With no list there is no new mesh: the last one gets older.
