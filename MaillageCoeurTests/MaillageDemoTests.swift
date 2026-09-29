@@ -1,0 +1,26 @@
+import Foundation
+import Testing
+@testable import MaillageCoeur
+
+@Suite("Maillage de demo")
+struct MaillageDemoTests {
+    /// Sur le releve du 28/09 : les routeurs de bordure de la principale, dont un
+    /// muet, deux appareils qui routent, les autres en enfants, un enfant inconnu.
+    @Test func surLeReleve() throws {
+        let i = Instantane(annonces: Releve20260928.annonces)
+        let r = try #require(i.reseaux.first)
+        let p = try #require(r.principale)
+        let m = try #require(MaillageDemo.maillage(i, date: Releve20260928.annonces.date))
+        #expect(m.partition == p.id)
+        #expect(m.routeurs.count == p.routeurs.count + 2)
+        #expect(m.routeurs.filter(\.muet).count == 1)
+        #expect(m.routeurs.filter(\.bordure).count == p.routeurs.count)
+        #expect(m.chef?.id == 1)
+        #expect(!m.liens.isEmpty)
+        let affiche = MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils)
+        #expect(affiche.inconnus.map(\.id) == ["rloc:041F"], "tous les routeurs reconnus ; un enfant inconnu")
+        #expect(affiche.routeurs.values.filter { $0.bordure }.allSatisfy { $0.reconnu })
+        let muet = try #require(m.routeurs.first { $0.muet })
+        #expect(m.enfants(de: muet.id).allSatisfy { $0.qualite == nil && $0.source == .balayage })
+    }
+}

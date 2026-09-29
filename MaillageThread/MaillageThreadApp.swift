@@ -9,6 +9,7 @@ struct MaillageThreadApp: App {
     @State private var surveillance: Surveillance
     @State private var ouverture: OuvertureSession
     @State private var nomsMaison: DossierNoms
+    @State private var sonde: SondeMaillage
     private let notifications = Notifications()
     private static let demo = CommandLine.arguments.contains("-demo")
     /// Le graphe s'ouvre au lancement en mode demo et au tout premier lancement
@@ -25,6 +26,9 @@ struct MaillageThreadApp: App {
         _surveillance = State(initialValue: s)
         _ouverture = State(initialValue: o)
         _nomsMaison = State(initialValue: d)
+        // Inerte en demo et sous tests : aucun port ouvert.
+        let sm = SondeMaillage(actif: !Self.demo && !Surveillance.sousTests)
+        _sonde = State(initialValue: sm)
         let premier = !UserDefaults.standard.bool(forKey: Self.clePremierGraphe)
         ouvrirGraphe = !Surveillance.sousTests && (Self.demo || premier)
         guard !Surveillance.sousTests else { return }
@@ -36,6 +40,8 @@ struct MaillageThreadApp: App {
             o.proposerAuPremierLancement()
             d.surNoms = { [weak s] m in s?.noms.maison = m }
             d.demarrer()
+            sm.surMaillage = { [weak s] m in s?.maillage = m }
+            sm.demarrer()
         }
         s.demarrer()
     }
@@ -46,6 +52,7 @@ struct MaillageThreadApp: App {
                 .environment(surveillance)
                 .environment(ouverture)
                 .environment(nomsMaison)
+                .environment(sonde)
         } label: {
             IconeBarre(ouvrirGraphe: ouvrirGraphe)
                 .environment(surveillance)
@@ -56,6 +63,7 @@ struct MaillageThreadApp: App {
             FenetreGraphe()
                 .environment(surveillance)
                 .environment(nomsMaison)
+                .environment(sonde)
         }
         .defaultSize(width: 1100, height: 760)
         .defaultLaunchBehavior(.suppressed)
@@ -72,6 +80,7 @@ struct MaillageThreadApp: App {
                 .environment(surveillance)
                 .environment(ouverture)
                 .environment(nomsMaison)
+                .environment(sonde)
         }
     }
 }

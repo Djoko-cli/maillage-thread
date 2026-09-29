@@ -44,6 +44,14 @@ final class Surveillance {
     var noms: ResolveurNoms
     /// Reseau affiche (`xp`) ; nil : le premier.
     var reseauChoisi: String?
+    /// Dernier maillage de la sonde ; nil sans sonde.
+    var maillage: Maillage?
+
+    /// Age du maillage de la sonde : frais jusqu'a 6 min (une tournee toutes les
+    /// 5), ancien jusqu'a 15, perime ensuite (retour aux pointilles).
+    enum Fraicheur: Equatable {
+        case frais, ancien, perime
+    }
 
     /// Branche sur les notifications (mode direct seulement).
     @ObservationIgnored var surAlertes: (([AlerteAEnvoyer]) -> Void)?
@@ -96,6 +104,7 @@ final class Surveillance {
         switch mode {
         case .demo:
             for a in ScenarioPanne.releves { integrer(a) }
+            maillage = instantane.flatMap { MaillageDemo.maillage($0, date: maintenant) }
         case .direct:
             chargerScissionsNotifiees()
             if let journal {
@@ -261,6 +270,25 @@ final class Surveillance {
         }
         liste += suivi.disparus.values.filter(appartient).map { affiche($0, .disparu) }
         return liste
+    }
+
+    nonisolated static func fraicheur(_ date: Date, maintenant: Date) -> Fraicheur {
+        let age = maintenant.timeIntervalSince(date)
+        if age <= 6 * 60 { return .frais }
+        return age <= 15 * 60 ? .ancien : .perime
+    }
+
+    /// Maillage de la sonde rapproche d'un reseau ; nil sans sonde ou s'il est perime.
+    func maillageAffiche(pour r: Reseau) -> MaillageAffiche? {
+        guard let m = maillage, let i = instantane, Self.fraicheur(m.date, maintenant: maintenant) != .perime else {
+            return nil
+        }
+        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values))
+    }
+
+    /// Le maillage affiche date de plus de 6 min : la sonde ne repond plus.
+    var maillageAncien: Bool {
+        maillage.map { Self.fraicheur($0.date, maintenant: maintenant) == .ancien } ?? false
     }
 
     /// Chiffres du reseau affiche.

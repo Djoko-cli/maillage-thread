@@ -177,6 +177,22 @@
         }
       }
     },
+    "%@ n'est pas une sonde (« %@ »)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ is not a probe (“%2$@”)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ n'est pas une sonde (« %2$@ »)"
+          }
+        }
+      }
+    },
     "%@ · %@" : {
       "localizations" : {
         "en" : {
@@ -2289,6 +2305,22 @@
         }
       }
     },
+    "la sonde ne répond pas à « %@ »" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "the probe does not answer “%@”"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "la sonde ne répond pas à « %@ »"
+          }
+        }
+      }
+    },
     "lecture de DTR et RTS (TIOCMGET)" : {
       "localizations" : {
         "en" : {
@@ -2333,6 +2365,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "lecture impossible : %@"
+          }
+        }
+      }
+    },
+    "liaison avec la sonde fermée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "link with the probe closed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "liaison avec la sonde fermée"
           }
         }
       }
