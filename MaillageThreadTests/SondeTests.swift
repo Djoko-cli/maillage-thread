@@ -514,6 +514,36 @@ struct SondeMaillageTests {
         s.oublier()
     }
 
+    /// Rafraichir pendant une tournee (bouton du graphe) : ni seconde tournee, ni boucle
+    /// relancee (la tournee suivante partirait 5 min apres le clic, et non apres la fin de
+    /// celle-ci). Hors tournee, une tournee part tout de suite.
+    @Test(.timeLimit(.minutes(1))) func rafraichirPendantUneTournee() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        let canal = CanalRejoue { l in
+            journal.noter(l.trimmingCharacters(in: .newlines))
+            // La liste des routeurs attend que le test la rende : la tournee reste en cours.
+            return l.hasPrefix("diag 0000 5,6 ") ? [] : CanalRejoue.reseauMinimal(l)
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        await s.connecter(Self.port, choisi: true)
+        await journal.attendre("diag 0000 5,6 1 6000")
+        #expect(s.tourneeEnCours)
+        let boucle = try #require(s.boucle)
+        s.rafraichir()
+        await Task.yield()
+        #expect(s.boucle == boucle, "boucle gardee")
+        #expect(!boucle.isCancelled)
+        #expect(canal.envoyes.filter { $0 == "etat\n" }.count == 2, "une seule tournee : etat, puis celui de la tournee")
+        canal.emettre(CanalRejoue.reseauMinimal("diag 0000 5,6 1 6000\n"))
+        await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        s.rafraichir()
+        await Self.attendre { s.tourneeEnCours }
+        #expect(s.boucle != boucle, "hors tournee : une tournee tout de suite")
+        s.oublier()
+    }
+
     /// Marche normale : une tournee de 90 s, la pause de 5 min, une tournee de 10 s, la
     /// pause, de nouveau 90 s. Chaque maillage est date du debut de sa tournee et recu a
     /// sa fin, comme dans l'app : il n'est jamais « ancien », ni perime.

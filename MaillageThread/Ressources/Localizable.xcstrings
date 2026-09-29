@@ -1617,18 +1617,18 @@
         }
       }
     },
-    "Rafraîchir" : {
+    "Rafraîchir : réseau, tournée de la sonde et noms de Maison" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Refresh"
+            "value" : "Refresh: network, probe tour and Home names"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Rafraîchir"
+            "value" : "Rafraîchir : réseau, tournée de la sonde et noms de Maison"
           }
         }
       }

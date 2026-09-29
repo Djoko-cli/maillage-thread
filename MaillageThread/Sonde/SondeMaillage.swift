@@ -59,7 +59,8 @@ final class SondeMaillage {
     /// qu'elles soient finies (ports vraiment fermes) avant d'ouvrir un port.
     @ObservationIgnored private var fermetures: Task<Void, Never>?
     @ObservationIgnored private var memoire = MemoireTournee()
-    @ObservationIgnored private var boucle: Task<Void, Never>?
+    /// Boucle des tournees (lue par les tests).
+    @ObservationIgnored private(set) var boucle: Task<Void, Never>?
     @ObservationIgnored private var surveillantPorts: PortsUSB?
 
     /// `actif` faux (mode demo, tests) : ni port, ni preferences lues.
@@ -97,9 +98,10 @@ final class SondeMaillage {
         deconnecter(.sansSonde)
     }
 
-    /// Tournee tout de suite (bouton rafraichir).
+    /// Tournee tout de suite (bouton rafraichir) ; rien pendant une tournee : relancer la
+    /// boucle ne ferait que repousser la suivante de 5 min apres ce clic.
     func rafraichir() {
-        guard sonde != nil else { return }
+        guard sonde != nil, !tourneeEnCours else { return }
         lancerBoucle()
     }
 

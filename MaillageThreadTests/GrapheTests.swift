@@ -22,6 +22,15 @@ struct GrapheTests {
         let c2 = zoom.vue(Point2D(90, 130))
         #expect(abs(c2.x - 510) < 1e-9 && abs(c2.y - 415) < 1e-9)
     }
+
+    /// Le bouton rafraichir du graphe lance aussi le passeur des noms de Maison, dans les
+    /// conditions de « Rafraichir depuis Maison » : mode direct, dossier des noms choisi.
+    @Test func rafraichirLanceLePasseur() {
+        #expect(BarreOutils.lancePasseur(mode: .direct, dossierChoisi: true))
+        #expect(!BarreOutils.lancePasseur(mode: .direct, dossierChoisi: false), "sans dossier, il demanderait un dossier")
+        #expect(!BarreOutils.lancePasseur(mode: .demo, dossierChoisi: true))
+        #expect(!BarreOutils.lancePasseur(mode: .demo, dossierChoisi: false))
+    }
 }
 
 @MainActor

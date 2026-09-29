@@ -109,8 +109,16 @@ struct FenetreGraphe: View {
 struct BarreOutils: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(SondeMaillage.self) private var sonde
+    @Environment(DossierNoms.self) private var nomsMaison
     @Environment(\.openWindow) private var openWindow
     @State private var appareilsIP = false
+
+    /// Rafraichir lance aussi le passeur des noms de Maison, dans les conditions de
+    /// « Rafraichir depuis Maison » : en mode direct, et avec un dossier des noms choisi
+    /// (sans dossier, le passeur passerait au premier plan pour en demander un).
+    static func lancePasseur(mode: Surveillance.Mode, dossierChoisi: Bool) -> Bool {
+        mode == .direct && dossierChoisi
+    }
 
     var body: some View {
         GlassEffectContainer(spacing: 8) {
@@ -136,14 +144,18 @@ struct BarreOutils: View {
                     openWindow(id: "journal")
                 }
                 .buttonStyle(.glass)
+                // Pendant une tournee : le reseau et les noms, sans seconde tournee.
                 Button {
                     surveillance.rafraichir()
                     sonde.rafraichir()
+                    if Self.lancePasseur(mode: surveillance.mode, dossierChoisi: nomsMaison.dossier != nil) {
+                        nomsMaison.lancerPasseur()
+                    }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.glass)
-                .help("Rafraîchir")
+                .help("Rafraîchir : réseau, tournée de la sonde et noms de Maison")
             }
         }
     }
