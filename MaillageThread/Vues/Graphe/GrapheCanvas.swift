@@ -2,8 +2,8 @@ import MaillageCoeur
 import SwiftUI
 
 /// Dessin du graphe : zones des partitions, liens (ceux de la sonde en traits
-/// pleins colores par la qualite, sinon des pointilles vers le centre de la
-/// zone : rattachement, pas un lien radio), routeurs et appareils.
+/// pleins colores et epaissis par la qualite, sinon des pointilles vers le centre
+/// de la zone : rattachement, pas un lien radio), routeurs et appareils.
 struct GrapheCanvas: View {
     let disposition: Disposition
     let reseau: Reseau
@@ -72,7 +72,7 @@ struct GrapheCanvas: View {
                            style: StrokeStyle(lineWidth: eclaire ? 1.6 : 1, dash: [2, 4]))
             case .radio, .parent:
                 let eclaire = [l.de, l.vers].contains { $0 == selection || $0 == survol }
-                let epaisseur = l.genre == .radio ? 2.2 : 1.0
+                let epaisseur = Self.epaisseurLienSonde(l.genre, qualite: l.qualite)
                 ctx.stroke(p, with: .color(palette.lienSonde(l.qualite).opacity(eclaire ? 1 : 0.75)),
                            style: StrokeStyle(lineWidth: eclaire ? epaisseur + 1.2 : epaisseur, lineCap: .round))
             }
@@ -158,6 +158,23 @@ struct GrapheCanvas: View {
                     dessinerPastille(&ctx, pastille, at: CGPoint(x: place.point.x, y: cadre.maxY + 3), anchor: .top)
                 }
             }
+        }
+    }
+
+    /// Epaisseur (pt) d'un lien de la sonde. Le lien radio s'epaissit avec la qualite : 3 pt
+    /// pour 3, 2,2 pt pour 2, 1,4 pt pour 1 ou inconnue (nil ou 0). La couleur seule ne
+    /// suffit pas : vert et orange se distinguent mal en daltonisme rouge-vert. De l'enfant a
+    /// son parent : 1 pt, quelle que soit la qualite. (Le survol y ajoute 1,2 pt.)
+    static func epaisseurLienSonde(_ genre: Disposition.Lien.Genre, qualite: Int?) -> CGFloat {
+        switch genre {
+        case .radio:
+            switch Palette.NiveauLien(qualite) {
+            case .bon: 3
+            case .moyen: 2.2
+            case .faible, .inconnu: 1.4
+            }
+        case .parent, .rattachement:
+            1
         }
     }
 

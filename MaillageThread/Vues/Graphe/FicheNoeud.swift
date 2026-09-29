@@ -29,13 +29,22 @@ struct FicheNoeud: View {
                 }
                 .buttonStyle(.glass)
                 .help("Fermer")
-                Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
-                    .buttonStyle(.glass)
+                if Self.renommable(id, dans: surveillance) {
+                    Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
+                        .buttonStyle(.glass)
+                }
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
+    }
+
+    /// « Renommer… » : le surnom est indexe par l'instance d'un routeur de l'instantane ou
+    /// par l'id d'un appareil connu. Un noeud que la sonde seule connait n'a qu'un RLOC16,
+    /// volatil : rien ne lirait son surnom.
+    static func renommable(_ id: String, dans surveillance: Surveillance) -> Bool {
+        surveillance.instantane?.routeur(id) != nil || surveillance.appareil(id) != nil
     }
 
     // MARK: Appareil

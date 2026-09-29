@@ -191,7 +191,8 @@ struct LegendeLiens: View {
                     p.move(to: CGPoint(x: 0, y: 1))
                     p.addLine(to: CGPoint(x: 22, y: 1))
                 }
-                .stroke(Palette(sombre: true).lienSonde(3), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+                .stroke(Palette(sombre: true).lienSonde(3),
+                        style: StrokeStyle(lineWidth: GrapheCanvas.epaisseurLienSonde(.radio, qualite: 3), lineCap: .round))
                 .frame(width: 22, height: 2)
                 .accessibilityHidden(true)
                 Text("lien radio (qualité)")
