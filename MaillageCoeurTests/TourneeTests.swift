@@ -307,6 +307,21 @@ struct TourneeTests {
         #expect(m.routeur(57)?.extMac == "E0000000000000E4")
     }
 
+    /// Paire d'un routeur sorti de la liste des routeurs (routeur disparu, identifiant libere) :
+    /// oubliee des que la tournee a la Route64. Celle d'un routeur encore dans la liste reste,
+    /// meme s'il n'est plus entendu (ExtMac inventees).
+    @Test func pairesHorsDeLaListe() async throws {
+        let sonde = try SondeRejouee.capture()
+        var mem = MemoireTournee()
+        mem.partition = "46CBEBCD"
+        mem.identites = [0x0800: "E0000000000000EE", 0xE400: "E0000000000000E4"]
+        let (m, mem2) = try #require(try await Tournee.executer(sonde, memoire: mem, maintenant: Self.t0))
+        #expect(!m.routeurs.contains { $0.id == 2 }, "l'identifiant 2 n'est pas dans la Route64")
+        #expect(mem2.identites[0x0800] == nil, "oubliee")
+        #expect(mem2.identites[0xE400] == "E0000000000000E4", "le routeur 57 est dans la liste : gardee")
+        #expect(m.routeur(57)?.extMac == "E0000000000000E4")
+    }
+
     /// Autre partition (panne, fusion) : les identifiants de routeur y sont
     /// redistribues ; ce qui etait retenu de l'ancienne ne sert plus.
     @Test func autrePartition() async throws {

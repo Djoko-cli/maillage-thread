@@ -168,6 +168,9 @@ public enum Tournee {
         }
         guard let route64 else { return nil }
         c.routeurs(route64, chef: chef)
+        // Paires des routeurs sortis de la liste (routeur disparu, identifiant libere) : oubliees.
+        let liste = Set(route64.routeurs)
+        mem.identites = mem.identites.filter { liste.contains(Int($0.key >> 10)) }
 
         // 2. Chaque routeur, en parallele, sauf un muet deja interroge dans l'heure.
         let aInterroger = route64.routeurs.filter { id in
