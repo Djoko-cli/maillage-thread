@@ -14,18 +14,26 @@ public struct MemoireTournee: Hashable, Sendable {
     public var echecs: [Int: Int] = [:]
     /// Derniere interrogation d'un routeur muet : une fois par heure.
     public var muetInterroge: [Int: Date] = [:]
+    /// Routeurs qui ont repondu au moins une fois depuis le debut de cette memoire :
+    /// un seul echec ne les fait pas balayer, il faut qu'ils soient muets.
+    public var dejaRepondu: Set<Int> = []
     /// Pile (TLV 28), demandee une fois par routeur qui repond ; "" : aucune.
     public var piles: [Int: String] = [:]
     /// ExtMac des routeurs, par RLOC16 : parents successifs de la sonde, routeurs qui repondent.
     public var identites: [UInt16: String] = [:]
-    /// Enfants des routeurs muets trouves au dernier balayage.
+    /// Enfants des routeurs balayes, trouves au dernier balayage.
     public var balayes: [UInt16: EnfantMaillage] = [:]
-    /// Enfants des tables deja identifies (ExtMac, adresses), par RLOC16 : revus a chaque balayage.
+    /// Enfants des tables identifies (ExtMac, adresses), par RLOC16 : gardes jusqu'a une nouvelle reponse.
     public var identifies: [UInt16: EnfantMaillage] = [:]
+    /// Derniere demande d'identite a un enfant des tables, par RLOC16 : une par demi-heure
+    /// au plus, qu'il ait repondu ou non.
+    public var identiteDemandee: [UInt16: Date] = [:]
     public var dernierBalayage: Date?
-    /// Routeurs muets au dernier balayage : un autre ensemble relance le balayage.
+    /// Routeurs balayes la derniere fois (muets, ou qui n'ont jamais repondu) : un autre
+    /// ensemble relance le balayage.
     public var muetsBalayes: Set<Int> = []
-    /// Routeurs qui ont repondu a la derniere tournee : Route64 de secours quand le chef est muet.
+    /// Routeurs qui ont repondu a la derniere tournee ou l'un a repondu : Route64 de
+    /// secours quand le chef ne la donne pas.
     public var repondants: [Int] = []
     /// Partition de ce qui est retenu : une autre remet tout a zero.
     public var partition: String?
@@ -59,7 +67,8 @@ public enum Tournee {
 
     /// Une tournee, et le balayage s'il est du ; nil si la sonde n'est pas attachee,
     /// ou suspendue dans Maison (ses requetes echoueraient toutes : aucun routeur
-    /// ne doit passer pour muet).
+    /// ne doit passer pour muet), ou si aucun routeur n'a donne la liste des routeurs
+    /// (Route64). La memoire n'est alors pas rendue : l'appelant garde la sienne.
     public static func executer(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee,
                                 maintenant: Date) async throws -> (maillage: Maillage, memoire: MemoireTournee)? {
         var mem = memoire
@@ -75,16 +84,19 @@ public enum Tournee {
             c.enfant(EnfantMaillage(rloc16: moi, extMac: etat.ext, qualite: p.lqOut, source: .sonde))
         }
 
-        // 1. Liste des routeurs : Route64 du chef ; s'il est muet, d'un routeur qui a repondu.
+        // 1. Liste des routeurs : Route64 du chef, puis des routeurs qui ont repondu a la
+        // tournee precedente (avant le chef s'il est muet) ; sinon, des autres identifiants.
         let secours = mem.repondants.filter { $0 != chef }
+        let essais = mem.estMuet(chef) ? secours + [chef] : [chef] + secours
         var route64: Route64?
-        for id in mem.estMuet(chef) ? secours + [chef] : [chef] + secours {
+        for id in essais {
             if let r = try await sonde.diag(rloc16(id), tlvChef, delaiMs: delaiRouteur).reponse?.route64 {
                 route64 = r
                 break
             }
         }
-        guard let route64 else { return (c.maillage(), mem) }
+        if route64 == nil { route64 = try await chercherRoute64(sonde, sauf: essais) }
+        guard let route64 else { return nil }
         c.routeurs(route64, chef: chef)
 
         // 2. Chaque routeur, en parallele, sauf un muet deja interroge dans l'heure.
@@ -98,6 +110,7 @@ public enum Tournee {
                 c.reponse(rep, routeur: id)
                 mem.echecs[id] = 0
                 mem.muetInterroge[id] = nil
+                mem.dejaRepondu.insert(id)
                 if let ext = rep.extMac { mem.identites[rloc16(id)] = ext }
                 repondants.append(id)
             } else {
@@ -105,7 +118,8 @@ public enum Tournee {
                 if mem.estMuet(id) { mem.muetInterroge[id] = maintenant }
             }
         }
-        mem.repondants = repondants
+        // Personne n'a repondu (sonde occupee...) : les secours d'avant restent.
+        if !repondants.isEmpty { mem.repondants = repondants }
         let muets = Set(route64.routeurs).subtracting(repondants)
         for id in muets.sorted() {
             c.muet(id)
@@ -127,25 +141,32 @@ public enum Tournee {
             c.reseau(d)
         }
 
-        // 4. Balayage des enfants des routeurs muets : toutes les 30 min, ou si les muets
-        // changent. Les identites des enfants des tables sont alors revues aussi.
+        // 4. Balayage des enfants des routeurs sans reponse qui sont muets (deux echecs de
+        // suite) ou n'ont jamais repondu ; pas d'un routeur qui rate une seule tournee.
+        // Toutes les 30 min, ou si cet ensemble change. Les enfants trouves restent
+        // affiches sous leur parent tant qu'il ne repond pas.
+        let aBalayer = muets.filter { mem.estMuet($0) || !mem.dejaRepondu.contains($0) }
         let du = mem.dernierBalayage.map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
-        if du || (!muets.isEmpty && muets != mem.muetsBalayes) {
+        if du || (!aBalayer.isEmpty && aBalayer != mem.muetsBalayes) {
             var trouves: [UInt16: EnfantMaillage] = [:]
-            for m in muets.sorted() {
+            for m in aBalayer.sorted() {
                 for e in try await balayer(sonde, routeur: m, sauf: moi) { trouves[e.rloc16] = e }
             }
             mem.balayes = trouves
-            mem.identifies = [:]
             mem.dernierBalayage = maintenant
-            mem.muetsBalayes = muets
+            mem.muetsBalayes = aBalayer
         }
         for e in mem.balayes.values.sorted(by: { $0.rloc16 < $1.rloc16 }) where muets.contains(e.parent) {
             c.enfant(e)
         }
 
-        // 5. Enfants des tables encore inconnus : ExtMac et adresses, une fois.
-        let aIdentifier = c.enfantsSansIdentite.filter { mem.identifies[$0] == nil }
+        // 5. Enfants des tables : ExtMac et adresses, gardees jusqu'a une nouvelle reponse ;
+        // demandees de nouveau apres 30 min, que l'enfant ait repondu ou non.
+        // Endormis sous un routeur qui repond : interroges au plus une fois par demi-heure, la Child Table ne donnant pas leur ExtMac.
+        let aIdentifier = c.enfantsSansIdentite.filter { cible in
+            mem.identiteDemandee[cible].map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
+        }
+        for cible in aIdentifier { mem.identiteDemandee[cible] = maintenant }
         for (cible, r) in try await parallele(aIdentifier, { try await sonde.diag($0, tlvIdentite, delaiMs: delaiEnfant) }) {
             guard let rep = r.reponse else { continue }
             mem.identifies[cible] = EnfantMaillage(rloc16: cible, extMac: rep.extMac, adresses: rep.adresses, source: .tableEnfants)
@@ -157,6 +178,20 @@ public enum Tournee {
     }
 
     static func rloc16(_ routeur: Int) -> UInt16 { UInt16(routeur) << 10 }
+
+    /// Route64 quand ni le chef ni les secours ne l'ont donnee (chef muet des le lancement) :
+    /// les autres identifiants de routeur, de 0 a 62, par groupes de 8 dans l'ordre croissant ;
+    /// au premier groupe ou l'un la donne, celle du plus petit.
+    static func chercherRoute64(_ sonde: some InterlocuteurSonde, sauf essayes: [Int]) async throws -> Route64? {
+        let ids = (0...62).filter { !essayes.contains($0) }
+        for debut in stride(from: 0, to: ids.count, by: enVol) {
+            let groupe = Array(ids[debut..<min(debut + enVol, ids.count)])
+            for (_, r) in try await parallele(groupe, { try await sonde.diag(rloc16($0), tlvChef, delaiMs: delaiRouteur) }) {
+                if let route64 = r.reponse?.route64 { return route64 }
+            }
+        }
+        return nil
+    }
 
     /// Enfants d'un routeur muet, numero par numero, 8 en vol : de 1 a 32, en
     /// s'arretant 8 numeros apres le dernier trouve (la sonde compte, sans etre interrogee).
