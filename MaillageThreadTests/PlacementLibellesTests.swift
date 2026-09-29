@@ -494,14 +494,15 @@ struct LibellesGrapheTests {
     }
 
     /// Ordre du dessin : les liens et les traits avant les fonds et les libelles, et avant
-    /// les titres des zones (ni un lien ni un trait ne barre un texte) ; les titres sous les
-    /// points, les traits aussi ; l'anneau de selection sur les fonds ; les libelles
-    /// au-dessus de tout ; chaque couche une fois.
+    /// les titres des zones (ni un lien ni un trait ne barre un texte) ; les fonds sous les
+    /// points (ils ne rognent pas leurs halos), les titres et les traits aussi ; l'anneau de
+    /// selection sur les fonds ; les libelles au-dessus de tout ; chaque couche une fois.
     @Test func ordreDesCouches() {
         let c = GrapheCanvas.couches
         func rang(_ x: GrapheCanvas.Couche) -> Int { c.firstIndex(of: x) ?? -1 }
         #expect(c.count == GrapheCanvas.Couche.allCases.count && Set(c) == Set(GrapheCanvas.Couche.allCases))
         #expect(rang(.liens) < rang(.fonds) && rang(.traits) < rang(.fonds))
+        #expect(rang(.fonds) < rang(.points), "les fonds ne rognent pas les halos des points")
         #expect(rang(.liens) < rang(.titres) && rang(.traits) < rang(.titres) && rang(.titres) < rang(.points))
         #expect(rang(.traits) < rang(.points))
         #expect(rang(.fonds) < rang(.selection) && rang(.selection) < rang(.libelles))

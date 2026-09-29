@@ -28,11 +28,11 @@ struct GrapheCanvas: View {
         case zones, liens, traits, titres, points, fonds, selection, libelles
     }
 
-    /// Ordre du dessin, de la couche la plus basse a la plus haute : les titres des zones et
-    /// les fonds des libelles passent sur les liens et les traits (aucun ne barre un texte) ;
-    /// les titres et les traits sous les points ; l'anneau de selection sur les fonds ; les
-    /// libelles au-dessus de tout.
-    static let couches: [Couche] = [.zones, .liens, .traits, .titres, .points, .fonds, .selection, .libelles]
+    /// Ordre du dessin, de la couche la plus basse a la plus haute : les fonds des libelles et
+    /// les titres des zones passent sur les liens et les traits (aucun ne barre un texte) ; les
+    /// fonds, les titres et les traits sous les points (un fond ne rogne pas le halo d'un
+    /// point) ; l'anneau de selection sur les fonds ; les libelles au-dessus de tout.
+    static let couches: [Couche] = [.zones, .liens, .traits, .fonds, .titres, .points, .selection, .libelles]
 
     var body: some View {
         Canvas { ctx, _ in
@@ -149,7 +149,8 @@ struct GrapheCanvas: View {
     }
 
     /// Fond discret de chaque libelle (texte et pastille), coins arrondis : dessine apres
-    /// les liens et les traits, il les cache sous le texte.
+    /// les liens et les traits, il les cache sous le texte ; avant les points, il ne rogne
+    /// pas leurs halos.
     private func dessinerFonds(_ ctx: inout GraphicsContext) {
         for n in placement.noeuds {
             guard let f = placement.places[n.id]?.fond else { continue }
