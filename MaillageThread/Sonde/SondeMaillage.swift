@@ -1,6 +1,7 @@
 import Foundation
 import MaillageCoeur
 import Observation
+import os
 
 /// La sonde vue par l'app : port retenu (par son numero de serie USB),
 /// connexion, tournee toutes les 5 minutes, dernier maillage. L'app n'ouvre
@@ -20,6 +21,8 @@ final class SondeMaillage {
         case erreur(String)
     }
 
+    /// Journal du Mac (Console, sous-systeme fr.djoko.maillage) : jamais de donnees du reseau.
+    nonisolated static let journal = Logger(subsystem: "fr.djoko.maillage", category: "sonde")
     /// Numero de serie USB de la sonde retenue (l'adresse MAC du C6).
     static let cleSerie = "sondeSerieUSB"
     /// Nom de la sonde retenue, donne par la carte (`bonjour`).
@@ -323,10 +326,16 @@ final class SondeMaillage {
         }
     }
 
-    /// Ecrit les identites des routeurs si elles ont change depuis le fichier. Un echec les
-    /// laisse en memoire, sans message : l'ecriture est retentee a la tournee suivante.
+    /// Ecrit les identites des routeurs si elles ont change depuis le fichier. Un echec est
+    /// consigne dans le journal du Mac ; les identites restent en memoire et l'ecriture est
+    /// retentee a la tournee suivante.
     private func garderIdentites() {
         guard let f = fichierIdentites, let g = memoire.identitesGardees, g != identitesDuFichier else { return }
-        if (try? g.ecrire(dans: f)) != nil { identitesDuFichier = g }
+        do {
+            try g.ecrire(dans: f)
+            identitesDuFichier = g
+        } catch {
+            Self.journal.error("identites des routeurs non ecrites : \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

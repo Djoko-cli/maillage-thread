@@ -616,6 +616,34 @@ struct SondeMaillageTests {
         s.oublier()
     }
 
+    /// Ecriture du fichier des identites en echec (un fichier a la place de son dossier) : tracee,
+    /// les identites restent en memoire et l'ecriture est retentee a la tournee suivante.
+    @Test(.timeLimit(.minutes(1))) func ecritureDesIdentitesRetentee() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
+        let bouchon = dossier.appendingPathComponent("Maillage Thread")
+        try Data().write(to: bouchon)
+        let fichier = bouchon.appendingPathComponent("identites-routeurs.json")
+        let s = SondeMaillage(preferences: p, actif: true,
+                              ouvrirCanal: { _ in Self.canalIdentites(ext: "E0000000000000A0", partition: "0000000A") },
+                              fichierIdentites: fichier)
+        let (fins, fin) = AsyncStream.makeStream(of: Void.self)
+        s.surTournee = { enCours in if !enCours { fin.yield() } }
+        var tournees = fins.makeAsyncIterator()
+        await s.connecter(Self.port, choisi: true)
+        _ = await tournees.next()
+        #expect(IdentitesGardees.lire(fichier) == nil, "pas ecrit")
+        try FileManager.default.removeItem(at: bouchon)
+        s.rafraichir()
+        _ = await tournees.next()
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A0"]),
+                "retentee, sans changement des identites")
+        s.oublier()
+    }
+
     /// Fichier des identites : dans le dossier de l'app ; jamais en demo ni sous les tests (qui
     /// passent leur propre fichier, temporaire).
     @Test func fichierDesIdentites() {
