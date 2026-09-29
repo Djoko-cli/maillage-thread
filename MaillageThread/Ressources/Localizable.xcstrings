@@ -385,6 +385,22 @@
         }
       }
     },
+    "%@.local n'est pas une sonde (« %@ »)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@.local is not a probe (“%2$@”)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@.local n'est pas une sonde (« %2$@ »)"
+          }
+        }
+      }
+    },
     "%lld accessoires · %@" : {
       "localizations" : {
         "en" : {
@@ -3245,6 +3261,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "liaison avec la sonde fermée"
+          }
+        }
+      }
+    },
+    "liaison réseau perdue" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "network link lost"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "liaison réseau perdue"
           }
         }
       }
