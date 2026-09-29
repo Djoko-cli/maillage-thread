@@ -9,9 +9,15 @@
 //  - Liste blanche : bonjour, etat, voisins, routeurs, diag. Tout le reste
 //    (cle..., nom, oubli, commande inconnue) : refuse a distance.
 //  - Reponses gardees : un rid repete dans la meme session ne relance rien,
-//    la reponse gardee repart (les 8 dernieres par session, lignes comprises,
-//    comme le cache des 8 dernieres reponses d'une session reseau du pont
-//    Halo, benq src/json_out.h, ReplyCache).
+//    la reponse gardee repart : les 8 dernieres reponses, dans la limite de
+//    4096 octets par session, lignes comprises (comme le cache des 8
+//    dernieres reponses d'une session reseau du pont Halo, benq
+//    src/json_out.h, ReplyCache). Au-dela (routeurs d'une quarantaine de
+//    routeurs), un rid repete relance la commande : une lecture, sans effet.
+//  - Lignes : 1100 octets de charge au plus. routeurs se coupe en lignes
+//    "suite" ; une ligne perdue en route donne une table partielle, dont
+//    l'app tient compte. voisins au-dela de 1100 octets repond « ligne trop
+//    longue » a distance (entier sur l'USB) ; un diag trop long, trop_long.
 //  - Cadence : 20 commandes par seconde glissante et par session au plus
 //    (Cadence, copie de celle du pont Halo) ; au-dela, rien (l'app renvoie).
 //

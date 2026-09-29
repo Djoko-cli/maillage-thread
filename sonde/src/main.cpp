@@ -37,24 +37,28 @@
 //                                     derniere)
 //    diag <cible> <t,t,...> <id> [ms] DIAG_GET vers <cible> : RLOC16 en 4 hexa
 //                                     (adresse RLOC formee sur le prefixe du
-//                                     reseau maille) ou adresse IPv6 ; delai de
-//                                     3 a 60 s, 45 s par defaut
+//                                     reseau maille) ou adresse IPv6 (hexa,
+//                                     ':' et '.' seulement) ; delai de 3 a
+//                                     60 s, 45 s par defaut
 //    cle                              empreinte de la cle d'acces reseau
-//                                     (null sans cle), hote, compteurs udp,
-//                                     tas libre et minimum
+//                                     (null sans cle), effacement_en_echec,
+//                                     hote, compteurs udp (lignes_perdues
+//                                     comprises), tas libre et minimum
 //    cle efface                       efface la cle : plus d'acces reseau
 //    cle nouvelle <64 HEXA> <id>      nouvelle cle (alea de l'app), rendue
 //                                     UNE fois, dans la reponse ; sans id :
 //                                     erreur « syntaxe », jamais de cle
-//    oubli                            efface la cle, desappaire la sonde et
+//    oubli                            efface la cle (cle_effacee dans la
+//                                     reponse), desappaire la sonde et
 //                                     redemarre
 //
 //  Reseau (reseau.h) : UDP sur IPv6, port 5480, enveloppe H1 du pont Halo,
 //  cle creee par l'USB. Charge d'un message : "<rid> <commande>" ; reponse :
 //  "<rid> <ligne JSON>" (la ligne de l'USB sans RS ni LF), 1100 octets au
 //  plus. Permis : bonjour (sans code ni QR code), etat, voisins, routeurs,
-//  diag ; le reste : erreur « refuse ». Un rid repete ne relance rien. Sans
-//  cle : silence total.
+//  diag ; le reste : erreur « refuse ». Un rid repete ne relance rien (les 8
+//  dernieres reponses, dans la limite de 4096 octets par session) ; 20
+//  commandes par seconde et par session au plus. Sans cle : silence total.
 //
 //  Dans Maison : un interrupteur « Sonde maillage », allume par defaut.
 //  Eteint, la sonde refuse les requetes (erreur « suspendue »). Son etat est
