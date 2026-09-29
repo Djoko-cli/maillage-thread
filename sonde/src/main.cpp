@@ -19,7 +19,8 @@
 //    nom <texte>                      change le nom et le garde : 1 a 32
 //                                     caracteres (lettres ASCII, chiffres,
 //                                     - _ .) ; repond par un bonjour a jour,
-//                                     sinon erreur « syntaxe »
+//                                     sinon erreur « syntaxe » (nom refuse)
+//                                     ou « ecriture » (NVS qui refuse)
 //    etat                             role, RLOC16, ExtMac, parent, partition...
 //    voisins                          table des voisins (le parent, pour un MED)
 //    diag <cible> <t,t,...> <id> [ms] DIAG_GET vers <cible> : RLOC16 en 4 hexa
