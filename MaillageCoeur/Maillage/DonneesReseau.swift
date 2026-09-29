@@ -6,7 +6,11 @@ public struct DonneesReseau: Hashable, Sendable {
     /// Routeurs de bordure : ceux qui publient un prefixe (Border Router), une
     /// route (Has Route) ou le service SRP.
     public private(set) var routeursDeBordure: Set<UInt16> = []
-    /// Serveurs du service BBR (donnees 01), dans l'ordre : le principal d'abord.
+    /// Serveurs du service BBR (donnees 01), le principal d'abord, dans l'ordre d'OpenThread
+    /// (`Manager::IsBackboneRouterPreferredTo`, network_data_service.cpp) : sequence la plus haute
+    /// (comparaison simple), puis RLOC16 le plus haut ; un serveur dont les donnees font moins de
+    /// 7 octets est ignore. Le chef, que cette regle place avant tous, est traite par
+    /// `ConstructionMaillage.reseau(_:)`, qui seul le connait.
     public private(set) var bbr: [UInt16] = []
     /// Ceux qui publient un prefixe /64 en Border Router (le prefixe OMR).
     public private(set) var publientOMR: [UInt16] = []
@@ -15,17 +19,22 @@ public struct DonneesReseau: Hashable, Sendable {
     static let aUneRoute: UInt8 = 0, routeurDeBordure: UInt8 = 2, serveur: UInt8 = 6
     /// Donnees de service : BBR (Thread 1.2), SRP en anycast et en unicast.
     static let serviceBBR: UInt8 = 0x01, serviceSRPAnycast: UInt8 = 0x5C, serviceSRPUnicast: UInt8 = 0x5D
+    /// Donnees de serveur d'un BBR : sequence (1 octet), delai de reenregistrement (2), delai MLR (4).
+    static let octetsDonneesBBR = 7
 
     /// nil si une TLV depasse la fin des donnees.
     public init?(_ o: [UInt8]) {
         guard let tlv = Self.tlv(o) else { return nil }
+        var serveursBBR: [(rloc: UInt16, sequence: UInt8)] = []
         for (t, v) in tlv {
             switch t {
             case Self.prefixe: prefixe(v)
-            case Self.service: service(v)
+            case Self.service: service(v, serveursBBR: &serveursBBR)
             default: break
             }
         }
+        // Tous les services BBR lus, puis le tri : sequence la plus haute, a egalite RLOC16 le plus haut.
+        bbr = serveursBBR.sorted { ($0.sequence, $0.rloc) > ($1.sequence, $1.rloc) }.map(\.rloc)
     }
 
     /// Prefix : domaine, longueur en bits, prefixe, puis ses sous-TLV.
@@ -47,7 +56,8 @@ public struct DonneesReseau: Hashable, Sendable {
     }
 
     /// Service : T et identifiant, numero d'entreprise (si T vaut 0), donnees, puis ses serveurs.
-    private mutating func service(_ v: [UInt8]) {
+    /// Chaque serveur : RLOC16, puis ses donnees ; celles d'un BBR commencent par la sequence.
+    private mutating func service(_ v: [UInt8], serveursBBR: inout [(rloc: UInt16, sequence: UInt8)]) {
         guard let premier = v.first else { return }
         var j = premier & 0x80 != 0 ? 1 : 5
         guard j < v.count else { return }
@@ -57,10 +67,12 @@ public struct DonneesReseau: Hashable, Sendable {
         j += 1 + longueur
         guard let sous = Self.tlv(Array(v[j...])) else { return }
         let serveurs = sous.filter { $0.type == Self.serveur && $0.valeur.count >= 2 }
-            .map { UInt16($0.valeur[0]) << 8 | UInt16($0.valeur[1]) }
+            .map { (rloc: UInt16($0.valeur[0]) << 8 | UInt16($0.valeur[1]), donnees: Array($0.valeur.dropFirst(2))) }
         switch donnees.first {
-        case Self.serviceBBR?: bbr += serveurs
-        case Self.serviceSRPAnycast?, Self.serviceSRPUnicast?: routeursDeBordure.formUnion(serveurs)
+        case Self.serviceBBR?:
+            serveursBBR += serveurs.filter { $0.donnees.count >= Self.octetsDonneesBBR }
+                .map { (rloc: $0.rloc, sequence: $0.donnees[0]) }
+        case Self.serviceSRPAnycast?, Self.serviceSRPUnicast?: routeursDeBordure.formUnion(serveurs.map(\.rloc))
         default: break
         }
     }

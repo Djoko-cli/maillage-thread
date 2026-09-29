@@ -109,10 +109,14 @@ public struct ConstructionMaillage: Sendable {
         routeurs[chef, default: RouteurMaillage(id: chef)].chef = true
     }
 
-    /// Roles lus dans les Network Data.
+    /// Roles lus dans les Network Data. BBR principal, comme OpenThread : celui du chef s'il est
+    /// parmi les serveurs, sinon le premier de `d.bbr` (de meme si le chef n'est pas encore connu).
     public mutating func reseau(_ d: DonneesReseau) {
         for rloc in d.routeursDeBordure { routeurs[Int(rloc >> 10), default: RouteurMaillage(id: Int(rloc >> 10))].bordure = true }
-        if let principal = d.bbr.first { routeurs[Int(principal >> 10), default: RouteurMaillage(id: Int(principal >> 10))].bbrPrincipal = true }
+        let chef = routeurs.values.first(where: \.chef)?.rloc16
+        if let principal = d.bbr.first(where: { $0 == chef }) ?? d.bbr.first {
+            routeurs[Int(principal >> 10), default: RouteurMaillage(id: Int(principal >> 10))].bbrPrincipal = true
+        }
     }
 
     /// Reponse d'un routeur : identite, version, ses liens (Route64) et ses enfants (Child Table).

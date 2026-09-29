@@ -92,4 +92,62 @@ struct MaillageTests {
         #expect(e.qualite == 2, "qualite de la table gardee")
         #expect(e.source == .tableEnfants)
     }
+
+    // BBR principal, comme OpenThread : le chef s'il est parmi les serveurs BBR, meme avec une sequence
+    // plus basse ; sinon le premier de `bbr`. Network Data construites a la main : un Service BBR et
+    // deux Server (stable) de 9 octets = RLOC16 (2), sequence (1), reenregistrement 5 s, delai MLR 3600 s.
+
+    /// B400 (sequence 0x57) puis 6000, le chef (sequence 0x10), dans l'ordre du document.
+    static let bbrB400Puis6000: [UInt8] = [
+        0x0B, 25,                                  // Service (stable), 25 octets
+        0x80,                                      // T = 1 (numero d'entreprise Thread omis), identifiant 0
+        1, 0x01,                                   // donnees de service : 1 octet, 01 (BBR)
+        0x0D, 9, 0xB4, 0x00,                       // Server (stable), 9 octets : RLOC16 B400
+        0x57, 0x00, 0x05, 0x00, 0x00, 0x0E, 0x10,  //   sequence 0x57, delais
+        0x0D, 9, 0x60, 0x00,                       // Server (stable), 9 octets : RLOC16 6000
+        0x10, 0x00, 0x05, 0x00, 0x00, 0x0E, 0x10,  //   sequence 0x10, memes delais
+    ]
+
+    /// E400 (sequence 0x10) puis B400 (sequence 0x57), dans l'ordre du document.
+    static let bbrE400PuisB400: [UInt8] = [
+        0x0B, 25,                                  // Service (stable), 25 octets
+        0x80,                                      // T = 1 (numero d'entreprise Thread omis), identifiant 0
+        1, 0x01,                                   // donnees de service : 1 octet, 01 (BBR)
+        0x0D, 9, 0xE4, 0x00,                       // Server (stable), 9 octets : RLOC16 E400
+        0x10, 0x00, 0x05, 0x00, 0x00, 0x0E, 0x10,  //   sequence 0x10, delais
+        0x0D, 9, 0xB4, 0x00,                       // Server (stable), 9 octets : RLOC16 B400
+        0x57, 0x00, 0x05, 0x00, 0x00, 0x0E, 0x10,  //   sequence 0x57, memes delais
+    ]
+
+    /// Le chef (6000, routeur 24) est BBR avec une sequence plus basse que B400 (routeur 45) : c'est lui le principal.
+    @Test func bbrPrincipalChef() throws {
+        let d = try #require(DonneesReseau(Self.bbrB400Puis6000))
+        #expect(d.bbr == [0xB400, 0x6000], "le chef n'est pas en tete de `bbr`")
+        var c = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
+        c.routeurs(try #require(try Self.reponse(204).route64), chef: 24)
+        c.reseau(d)
+        let m = c.maillage()
+        #expect(m.routeurs.filter(\.bbrPrincipal).map(\.id) == [24])
+        #expect(m.routeur(45)?.bbrPrincipal == false)
+    }
+
+    /// Le chef (6000) n'est pas parmi les serveurs BBR : le principal est le premier de `bbr`, B400.
+    @Test func bbrPrincipalSansLeChef() throws {
+        let d = try #require(DonneesReseau(Self.bbrE400PuisB400))
+        #expect(d.bbr == [0xB400, 0xE400])
+        var c = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
+        c.routeurs(try #require(try Self.reponse(204).route64), chef: 24)
+        c.reseau(d)
+        let m = c.maillage()
+        #expect(m.routeurs.filter(\.bbrPrincipal).map(\.id) == [45])
+        #expect(m.routeur(57)?.bbrPrincipal == false)
+    }
+
+    /// Chef pas encore connu (`routeurs(_:chef:)` pas encore appele) : le premier de `bbr`.
+    @Test func bbrPrincipalChefInconnu() throws {
+        let d = try #require(DonneesReseau(Self.bbrE400PuisB400))
+        var c = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
+        c.reseau(d)
+        #expect(c.maillage().routeurs.filter(\.bbrPrincipal).map(\.id) == [45])
+    }
 }
