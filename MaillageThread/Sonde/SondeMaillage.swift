@@ -373,7 +373,8 @@ final class SondeMaillage {
                 c.fermer()
                 return
             }
-            let s = SondeUSB(canal: c)
+            // Par le reseau, une commande attend au-dela du renvoi de 4 s du canal.
+            let s = SondeUSB(canal: c, delaiCommande: SondeUSB.delaiCommandeReseau)
             enConnexion = s
             try await s.demarrer { [weak self] in
                 Task { @MainActor in self?.liaisonFermee(s) }

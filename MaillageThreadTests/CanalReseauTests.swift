@@ -77,6 +77,24 @@ struct CanalReseauTests {
         await s.fermer()
     }
 
+    /// Par le reseau, `SondeUSB` attend au-dela du second renvoi du canal : les deux premiers
+    /// envois perdus, la reponse au second renvoi aboutit (ici renvois a 100 et 200 ms, attente
+    /// de 400 ms ; dans l'app 2 et 4 s, attente de 6 s, et 3 s en USB).
+    @Test func reponseAuSecondRenvoi() async throws {
+        #expect(SondeUSB.delaiCommandeUSB == .seconds(3))
+        #expect(SondeUSB.delaiCommandeReseau == .seconds(6))
+        #expect(CanalReseau.Reglages().renvois == [.seconds(2), .seconds(4)])
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        let s = SondeUSB(canal: try await Self.canal(carte), delaiCommande: .milliseconds(400))
+        try await s.demarrer {}
+        carte.perdre(2)
+        #expect(try await s.bonjour().version == "1.0.0")
+        carte.perdre(2)
+        #expect(try await s.etat().estAttachee)
+        #expect(carte.perdus == 4)
+        await s.fermer()
+    }
+
     /// Une tournee entiere par le reseau : le maillage du reseau minimal.
     @Test func tourneeParLeReseau() async throws {
         let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)

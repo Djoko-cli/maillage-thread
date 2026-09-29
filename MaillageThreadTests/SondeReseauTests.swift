@@ -1,9 +1,46 @@
 import AppKit
 import Foundation
 import MaillageCoeur
+import Synchronization
 import SwiftUI
 import Testing
 @testable import MaillageThread
+
+/// Canal dont chaque reponse n'arrive qu'apres `delai` : par le reseau, celle qui repond au
+/// renvoi de 4 s du canal reseau.
+final class CanalLent: CanalSonde {
+    let delai: Duration
+    private let repondre: @Sendable (String) -> [String]
+    private let suite = Mutex<AsyncStream<Data>.Continuation?>(nil)
+
+    init(delai: Duration, repondre: @escaping @Sendable (String) -> [String]) {
+        self.delai = delai
+        self.repondre = repondre
+    }
+
+    func ouvrir() throws -> AsyncStream<Data> {
+        let (flux, s) = AsyncStream.makeStream(of: Data.self, bufferingPolicy: .unbounded)
+        suite.withLock { $0 = s }
+        return flux
+    }
+
+    func envoyer(_ ligne: String) {
+        let lignes = repondre(ligne), delai = delai
+        Task { [self] in
+            try? await Task.sleep(for: delai)
+            suite.withLock { s in
+                for l in lignes { s?.yield(Data(l.utf8)) }
+            }
+        }
+    }
+
+    func fermer() {
+        suite.withLock { s in
+            s?.finish()
+            s = nil
+        }
+    }
+}
 
 /// Ouvertures de la liaison reseau demandees par `SondeMaillage` : nom d'hote et cle, et le
 /// canal rendu (ou l'erreur) a chaque essai. Aucun trafic reseau.
@@ -38,10 +75,10 @@ struct SondeReseauTests {
         return #"{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.2","nom":"SONDE-01","mac":"A00000000001","appairee":true,"code":"12345678901","qr":"MT:ABCDEFGHIJ0123456789","hote":\#(h)}"#
     }
 
-    /// Sonde 1.0.2 : bonjour, etat (detachee : tournee sans requete), cle nouvelle.
-    static func sonde(bonjour: String = SondeReseauTests.bonjour(), cle: @escaping @Sendable (Int) -> [String]
-                      = { [CleReseauTests.reponse($0)] }) -> CanalRejoue {
-        CanalRejoue { l in
+    /// Reponses d'une sonde 1.0.2 : bonjour, etat (detachee : tournee sans requete), cle nouvelle.
+    static func reponses(bonjour: String = SondeReseauTests.bonjour(), cle: @escaping @Sendable (Int) -> [String]
+                         = { [CleReseauTests.reponse($0)] }) -> @Sendable (String) -> [String] {
+        { l in
             if l == "bonjour\n" { return [bonjour] }
             if l == "etat\n" { return [CanalRejoue.etatDetache] }
             if l.hasPrefix("cle nouvelle ") {
@@ -49,6 +86,11 @@ struct SondeReseauTests {
             }
             return []
         }
+    }
+
+    static func sonde(bonjour: String = SondeReseauTests.bonjour(), cle: @escaping @Sendable (Int) -> [String]
+                      = { [CleReseauTests.reponse($0)] }) -> CanalRejoue {
+        CanalRejoue(repondre: reponses(bonjour: bonjour, cle: cle))
     }
 
     static func sondeMaillage(_ p: UserDefaults, usb: @escaping (String) -> any CanalSonde = { _ in sonde() },
@@ -153,10 +195,10 @@ struct SondeReseauTests {
         s.liaison == .usb && SondeMaillageTests.connectee(s)
     }
 
-    /// Attend une condition qui n'est pas observable (canal, reseau factice), au plus 5 s ;
+    /// Attend une condition qui n'est pas observable (canal, reseau factice), au plus `delai` ;
     /// rend la condition.
-    static func sonder(_ condition: () -> Bool) async -> Bool {
-        let fin = ContinuousClock.now + .seconds(5)
+    static func sonder(delai: Duration = .seconds(5), _ condition: () -> Bool) async -> Bool {
+        let fin = ContinuousClock.now + delai
         while ContinuousClock.now < fin {
             if condition() { return true }
             try? await Task.sleep(for: .milliseconds(5))
@@ -297,6 +339,33 @@ struct SondeReseauTests {
         let s = Self.sondeMaillage(p, trousseau: try Self.prete(p, liaison: .usb))
         let vue = NSHostingView(rootView: Form { AccesReseauSonde() }.formStyle(.grouped).environment(s))
         #expect(vue.fittingSize.height > 0)
+    }
+
+    /// Par le reseau, `bonjour` et `etat` attendent au-dela du renvoi de 4 s du canal : la
+    /// reponse a ce renvoi (ici a 4,2 s) aboutit.
+    @Test(.timeLimit(.minutes(1))) func delaiDeCommandeParLeReseau() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = try Self.prete(p, liaison: .reseau)
+        let lent = CanalLent(delai: .milliseconds(4200), repondre: Self.reponses())
+        let s = Self.sondeMaillage(p, trousseau: t, reseau: ReseauFactice([.success(lent)]), delais: [.seconds(60)])
+        await s.connecterReseau()
+        #expect(SondeMaillageTests.connectee(s), "bonjour a 4,2 s : \(s.etat)")
+        #expect(await Self.sonder(delai: .seconds(10)) { s.etatSonde != nil }, "etat de la tournee a 4,2 s")
+        s.oublier()
+    }
+
+    /// En USB, rien ne change : 3 s, puis « ne répond pas ».
+    @Test(.timeLimit(.minutes(1))) func delaiDeCommandeEnUSB() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let lent = CanalLent(delai: .milliseconds(4200), repondre: Self.reponses())
+        let s = Self.sondeMaillage(p, usb: { _ in lent }, trousseau: TrousseauMemoire())
+        let debut = ContinuousClock.now
+        await s.connecter(Self.port, choisi: true)
+        #expect(s.etat == .refusee(SondeUSB.Erreur.sansReponse("bonjour").localizedDescription))
+        #expect(ContinuousClock.now - debut < .seconds(4), "abandon a 3 s")
+        s.oublier()
     }
 
     /// Oublier la sonde : la cle de ce Mac part avec elle ; retour a l'USB.

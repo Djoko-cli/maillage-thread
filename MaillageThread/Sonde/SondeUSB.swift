@@ -51,12 +51,16 @@ actor SondeUSB: InterlocuteurSonde {
         }
     }
 
-    /// Attente de `bonjour` et `etat`.
-    static let delaiCommande: Duration = .seconds(3)
+    /// Attente de `bonjour`, `etat` et `cle nouvelle` : 3 s en USB, qui ne perd rien ; 6 s par le
+    /// reseau, au-dela du renvoi de 4 s du canal (comme les delais de Halo : 3 s en USB, 6 s a
+    /// distance).
+    static let delaiCommandeUSB: Duration = .seconds(3)
+    static let delaiCommandeReseau: Duration = .seconds(6)
 
     private let canal: any CanalSonde
     /// Au-dela du delai donne a la sonde, elle a du repondre (elle echoue elle-meme en `delai`).
     private let marge: Duration
+    let delaiCommande: Duration
     private var prochainId = 1
     private var attenteDiag: [Int: (cible: UInt16, suite: CheckedContinuation<ResultatDiag, Never>)] = [:]
     private var attenteEtat: [CheckedContinuation<EtatSonde?, Never>] = []
@@ -67,9 +71,10 @@ actor SondeUSB: InterlocuteurSonde {
     /// Dernier `bonjour` recu sans l'avoir demande : la sonde vient de (re)demarrer.
     private(set) var bonjourSpontane: Bonjour?
 
-    init(canal: any CanalSonde, marge: Duration = .seconds(5)) {
+    init(canal: any CanalSonde, marge: Duration = .seconds(5), delaiCommande: Duration = SondeUSB.delaiCommandeUSB) {
         self.canal = canal
         self.marge = marge
+        self.delaiCommande = delaiCommande
     }
 
     /// Ouvre le canal et lit ses lignes ; `surFermeture` quand il se ferme.
@@ -104,7 +109,7 @@ actor SondeUSB: InterlocuteurSonde {
             attenteBonjour.append(c)
             canal.envoyer(CommandeSonde.bonjour.ligne)
             Task {
-                try? await Task.sleep(for: Self.delaiCommande)
+                try? await Task.sleep(for: self.delaiCommande)
                 self.expirerBonjour()
             }
         }
@@ -118,7 +123,7 @@ actor SondeUSB: InterlocuteurSonde {
             attenteEtat.append(c)
             canal.envoyer(CommandeSonde.etat.ligne)
             Task {
-                try? await Task.sleep(for: Self.delaiCommande)
+                try? await Task.sleep(for: self.delaiCommande)
                 self.expirerEtat()
             }
         }
@@ -154,7 +159,7 @@ actor SondeUSB: InterlocuteurSonde {
             attenteCle.append((id, c))
             canal.envoyer(CommandeSonde.cleNouvelle(alea: alea, id: id).ligne)
             Task {
-                try? await Task.sleep(for: Self.delaiCommande)
+                try? await Task.sleep(for: self.delaiCommande)
                 self.expirerCle(id)
             }
         }
