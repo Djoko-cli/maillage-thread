@@ -6,9 +6,14 @@ import Foundation
 /// appareils qui routent ; les autres appareils joignables en enfants, repartis
 /// entre eux ; un enfant que l'instantane ne connait pas.
 public enum MaillageDemo {
-    /// `sansIdentite` : instances des routeurs de bordure que ce maillage laisse sans ExtMac,
-    /// comme des routeurs que la sonde n'a jamais entendus (le BBR principal reste reconnu).
-    public static func maillage(_ i: Instantane, date: Date, sansIdentite: Set<String> = []) -> Maillage? {
+    public static func maillage(_ i: Instantane, date: Date) -> Maillage? {
+        maillage(i, date: date, sansIdentite: [])
+    }
+
+    /// Pour les tests seulement (hors de l'API publique) : `sansIdentite`, instances des routeurs
+    /// de bordure que ce maillage laisse sans ExtMac, comme des routeurs que la sonde n'a jamais
+    /// entendus (le BBR principal reste reconnu).
+    static func maillage(_ i: Instantane, date: Date, sansIdentite: Set<String>) -> Maillage? {
         guard let p = i.reseaux.first?.principale else { return nil }
         var c = ConstructionMaillage(date: date, partition: p.id)
         let bordures = p.routeurs.filter { $0.adresseEtendue != nil }

@@ -238,11 +238,10 @@ struct FicheNoeud: View {
         String(localized: "Reconnu par élimination : seul routeur de bordure sans identité, seule annonce restante.")
     }
 
-    /// Nom affiche de chaque routeur de bordure du reseau, par instance (candidats d'un routeur
-    /// de bordure non identifie).
+    /// Nom affiche de chaque routeur de bordure du reseau affiche, par instance (candidats d'un
+    /// routeur de bordure non identifie).
     private var nomsRouteurs: [String: String] {
-        Dictionary((surveillance.reseau?.routeurs ?? []).map { ($0.instance, surveillance.nom($0)) },
-                   uniquingKeysWith: { a, _ in a })
+        surveillance.reseau.map(surveillance.nomsRouteurs) ?? [:]
     }
 
     /// Nom d'un noeud du graphe : routeur de bordure, appareil, ou noeud de la sonde.

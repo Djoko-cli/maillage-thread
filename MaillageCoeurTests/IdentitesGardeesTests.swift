@@ -7,7 +7,7 @@ struct IdentitesGardeesTests {
     static let t0 = Date(timeIntervalSince1970: 1_790_000_000)
 
     /// Fichier jetable, dans un dossier temporaire qui n'existe pas encore.
-    static func fichier() -> (dossier: URL, fichier: URL) {
+    static func fichierTemporaire() -> (dossier: URL, fichier: URL) {
         let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
         return (dossier, dossier.appendingPathComponent("identites-routeurs.json"))
     }
@@ -15,7 +15,7 @@ struct IdentitesGardeesTests {
     /// Le fichier : la partition, et chaque ExtMac sous son RLOC16 en 4 hexa ; absent ou
     /// illisible, rien ; un RLOC16 illisible est ignore (ExtMac inventees).
     @Test func fichier() throws {
-        let (dossier, url) = Self.fichier()
+        let (dossier, url) = Self.fichierTemporaire()
         defer { try? FileManager.default.removeItem(at: dossier) }
         #expect(IdentitesGardees.lire(url) == nil, "absent")
         let g = IdentitesGardees(partition: "46CBEBCD", identites: [0xAC00: "E000000000000007", 0x0400: "E0000000000000D1"])

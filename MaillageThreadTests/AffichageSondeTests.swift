@@ -35,6 +35,19 @@ struct AffichageSondeTests {
         #expect(GrapheCanvas.libelleInconnu(un) != GrapheCanvas.libelleInconnu(deux))
     }
 
+    /// Noms des routeurs de bordure d'un reseau, par instance, en un seul endroit (libelles du
+    /// graphe, fiche, candidats) : le surnom d'abord, l'instance sinon.
+    @Test func nomsDesRouteurs() throws {
+        let s = Surveillance(mode: .demo, dossier: nil)
+        s.demarrer()
+        let r = try #require(s.reseau)
+        s.renommer("HomePod Avant", en: "Enceinte droite")
+        let noms = s.nomsRouteurs(pour: r)
+        #expect(noms["HomePod Avant"] == "Enceinte droite")
+        #expect(noms["HomePod Palier"] == "HomePod Palier")
+        #expect(Set(noms.keys) == Set(r.routeurs.map(\.instance)))
+    }
+
     /// Fiche d'un routeur de bordure non identifie : la liste de ses candidats, et ce que la
     /// sonde en sait ; trois explications distinctes (routeur avec ou sans candidats, enfant).
     @Test func ficheAvecCandidats() {

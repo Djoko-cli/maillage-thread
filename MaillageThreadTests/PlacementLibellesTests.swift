@@ -1,5 +1,5 @@
 import CoreGraphics
-import MaillageCoeur
+@testable import MaillageCoeur
 import SwiftUI
 import Testing
 @testable import MaillageThread
@@ -383,7 +383,7 @@ struct LibellesGrapheTests {
         let maillage = s.maillageAffiche(pour: r)
         let d = Disposition(reseau: r, appareils: affiches, maillage: maillage)
         let parId = Dictionary(affiches.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let nomsRouteurs = Dictionary(r.routeurs.map { ($0.instance, s.nom($0)) }, uniquingKeysWith: { a, _ in a })
+        let nomsRouteurs = s.nomsRouteurs(pour: r)
         let libelles = GrapheCanvas.libelles(disposition: d, reseau: r, appareils: parId, nomsRouteurs: nomsRouteurs,
                                              maillage: maillage)
         return (d, libelles, r.estScinde)

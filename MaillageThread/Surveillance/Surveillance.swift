@@ -251,6 +251,12 @@ final class Surveillance {
 
     func nom(_ a: Appareil) -> String { noms.nom(appareil: a, fabriqueApple: fabriqueApple) }
     func nom(_ r: RouteurBordure) -> String { noms.nom(routeur: r) }
+
+    /// Nom affiche de chaque routeur de bordure d'un reseau, par instance : libelles du graphe,
+    /// fiche, candidats d'un routeur de bordure non identifie.
+    func nomsRouteurs(pour r: Reseau) -> [String: String] {
+        Dictionary(r.routeurs.map { ($0.instance, nom($0)) }, uniquingKeysWith: { a, _ in a })
+    }
     func accessoire(_ a: Appareil) -> AccessoireMaison? { noms.accessoire(de: a, fabriqueApple: fabriqueApple) }
 
     /// Appareil par identifiant, present ou disparu.
