@@ -3313,6 +3313,22 @@
         }
       }
     },
+    "la sonde ne répond plus (débranchée, redémarrée ou hors de portée ?)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "the probe no longer answers (unplugged, restarted, or out of range?)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "la sonde ne répond plus (débranchée, redémarrée ou hors de portée ?)"
+          }
+        }
+      }
+    },
     "la sonde refuse : %@" : {
       "localizations" : {
         "en" : {

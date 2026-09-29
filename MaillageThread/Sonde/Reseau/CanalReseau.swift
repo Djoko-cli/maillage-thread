@@ -12,7 +12,9 @@ import Synchronization
 ///   reponse (sonde debranchee, redemarree, hors de portee), le canal se ferme, et l'app se
 ///   reconnecte (nouvelle poignee de main).
 /// - La cle ne passe jamais par le reseau : les commandes `cle ...` ne partent pas.
-final class CanalReseau: CanalSonde {
+/// - Fermee, il garde la cause (`raisonFermeture`), montree comme dans Halo :
+///   « Connexion réseau perdue : <cause> ».
+final class CanalReseau: CanalSonde, CauseFermeture {
     struct Reglages: Sendable {
         /// Renvois d'une commande sans reponse, comptes depuis son premier envoi.
         var renvois: [Duration] = [.seconds(2), .seconds(4)]
@@ -41,10 +43,20 @@ final class CanalReseau: CanalSonde {
         var veilles: Set<Int> = []
         var veille: (rid: Int, depuis: ContinuousClock.Instant)?
         var dernierRecu = ContinuousClock.now
+        /// Cause de la fermeture : celle du transport, ou le silence de la sonde.
+        var raison: String?
         var taches: [Task<Void, Never>] = []
     }
 
     private let etat = Mutex(Etat())
+
+    /// Cause d'une fermeture pour silence (veille sans reponse).
+    static var raisonSilence: String {
+        ErreurReseau.cheminPerdu(String(localized: "la sonde ne répond plus (débranchée, redémarrée ou hors de portée ?)"))
+            .localizedDescription
+    }
+
+    var raisonFermeture: String? { etat.withLock { $0.raison } }
 
     /// rid de toutes les commandes de l'app, croissants d'une connexion a l'autre.
     private static let compteur = Mutex(0)
@@ -93,7 +105,10 @@ final class CanalReseau: CanalSonde {
         let charges = charges
         let lecture = Task { [weak self] in
             for await e in charges {
-                if case .donnees(let d) = e { self?.recu(d) }
+                switch e {
+                case .donnees(let d): self?.recu(d)
+                case .ferme(let r): self?.noterRaison(r)
+                }
             }
             // Session fermee (par l'app, la veille, ou perdue) : fin des lignes.
             self?.finir()
@@ -208,6 +223,13 @@ final class CanalReseau: CanalSonde {
         suite?.yield(ligne)
     }
 
+    /// La premiere cause connue reste (le silence, pose avant la fermeture qu'il provoque).
+    private func noterRaison(_ r: String) {
+        etat.withLock { e in
+            if e.raison == nil { e.raison = r }
+        }
+    }
+
     private func finir() {
         let suite = etat.withLock { e -> AsyncStream<Data>.Continuation? in
             e.ferme = true
@@ -256,6 +278,7 @@ final class CanalReseau: CanalSonde {
             emettre(rid, Data("\(rid) etat".utf8))
             return true
         case .muette:
+            noterRaison(Self.raisonSilence)
             fermer()
             return false
         }

@@ -88,6 +88,8 @@ final class SondeMaillage {
     /// Echecs de la liaison reseau depuis la derniere connexion reussie.
     @ObservationIgnored private var essaisReprise = 0
     @ObservationIgnored private var reprise: Task<Void, Never>?
+    /// Canal de la session reseau en place : sa cause de fermeture est montree a la perte.
+    @ObservationIgnored private var canalReseau: (any CanalSonde)?
     /// Heure du debut de la tournee et de la reception du maillage (injectee par les tests).
     @ObservationIgnored private let horloge: () -> Date
     @ObservationIgnored private var sonde: SondeUSB?
@@ -333,8 +335,10 @@ final class SondeMaillage {
             deconnecter(.absente)
             return
         }
-        // Veille sans reponse (sonde debranchee, redemarree), session perdue : reconnexion.
-        deconnecter(.erreur(String(localized: "liaison réseau perdue")))
+        // Veille sans reponse (sonde debranchee, redemarree), session perdue : cause montree,
+        // puis reconnexion.
+        let cause = (canalReseau as? any CauseFermeture)?.raisonFermeture
+        deconnecter(.erreur(cause ?? String(localized: "liaison réseau perdue")))
         serieEtat = serie
         planifierReprise()
     }
@@ -393,6 +397,7 @@ final class SondeMaillage {
             }
             enConnexion = nil
             sonde = s
+            canalReseau = c
             etat = .connectee(b)
             essaisReprise = 0
             retenirNom(b.nom)
@@ -476,6 +481,7 @@ final class SondeMaillage {
         }
         sonde = nil
         enConnexion = nil
+        canalReseau = nil
         cheminConnecte = nil
         serieEtat = port?.serie
         etat = nouveau

@@ -205,6 +205,7 @@
   "isolé (partition coupée)": "isolated (split partition)",
   "joignable": "reachable",
   "la sonde ne répond pas à « %@ »": "the probe does not answer “%@”",
+  "la sonde ne répond plus (débranchée, redémarrée ou hors de portée ?)": "the probe no longer answers (unplugged, restarted, or out of range?)",
   "la sonde refuse : %@": "the probe refuses: %@",
   "lecture de DTR et RTS (TIOCMGET)": "reading DTR and RTS (TIOCMGET)",
   "lecture des réglages (tcgetattr)": "reading settings (tcgetattr)",

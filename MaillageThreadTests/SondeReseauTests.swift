@@ -302,6 +302,32 @@ struct SondeReseauTests {
         s.oublier()
     }
 
+    /// Session perdue (chemin perdu, veille sans reponse) : sa cause est montree, comme dans Halo
+    /// (« Connexion réseau perdue : <cause> ») ; ici par le vrai canal, sur la carte simulee.
+    @Test(.timeLimit(.minutes(1))) func causeDeLaPerteMontree() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = try Self.prete(p, liaison: .reseau)
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: CanalReseauTests.sonde)
+        let connexions = ConnexionsSimulees()
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in Self.sonde() }, trousseau: t,
+                              ouvrirReseau: { h, c in
+                                  try await CanalReseau.connecter(hote: h, cle: c, reglages: CanalReseauTests.rapides(),
+                                                                  reglagesTransport: TransportUDPTests.rapides()) { hh, pp in
+                                      let x = ConnexionSimulee(hote: hh, port: pp, carte: carte)
+                                      connexions.ajouter(x)
+                                      return x
+                                  }
+                              },
+                              delaisReprise: [.seconds(60)])
+        await s.connecterReseau()
+        #expect(SondeMaillageTests.connectee(s))
+        connexions.toutes.last?.echouer(.pasDeRoute)
+        await SondeMaillageTests.attendre { if case .erreur = s.etat { true } else { false } }
+        #expect(s.etat == .erreur(TransportUDP.raisonPerte(.pasDeRoute)))
+        s.oublier()
+    }
+
     /// Retour a l'USB : la session reseau est fermee, la sonde branchee reprise par son port.
     @Test(.timeLimit(.minutes(1))) func retourALUSB() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()

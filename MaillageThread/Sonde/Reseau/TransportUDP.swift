@@ -10,6 +10,12 @@ enum EtatConnexion: Sendable, Equatable {
     case echec(ErreurReseau)
 }
 
+/// Canal qui sait pourquoi il s'est ferme (le canal reseau) : la cause est montree a la perte
+/// de la liaison. nil tant que le canal est ouvert.
+protocol CauseFermeture: AnyObject, Sendable {
+    var raisonFermeture: String? { get }
+}
+
 /// Datagrammes UDP vers la sonde : Network.framework dans l'app (`ConnexionNW`), une carte
 /// simulee en memoire dans les tests (aucun trafic reseau).
 protocol ConnexionDatagrammes: AnyObject, Sendable {

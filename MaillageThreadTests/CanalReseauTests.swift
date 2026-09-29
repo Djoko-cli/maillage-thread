@@ -224,10 +224,14 @@ struct CanalReseauTests {
         let c = try await Self.canal(carte, reglages: Self.rapides(veille: .milliseconds(100), attenteVeille: .milliseconds(300)),
                                      connexions: connexions)
         let lignes = RecueilLignes(try c.ouvrir())
+        #expect(c.raisonFermeture == nil)
         carte.eteindre()
         #expect(await attendreQue { lignes.liste == ["fin"] })
         let annulees = connexions.toutes.allSatisfy { $0.annulee }
         #expect(annulees, "transport ferme")
+        // La cause, montree comme dans Halo : « Connexion réseau perdue : la sonde ne répond plus… ».
+        #expect(c.raisonFermeture == CanalReseau.raisonSilence)
+        #expect(CanalReseau.raisonSilence.hasPrefix(ErreurReseau.cheminPerdu("").localizedDescription))
     }
 
     /// Fermeture par l'app, ou session perdue : fin du flux des lignes.
@@ -243,6 +247,7 @@ struct CanalReseauTests {
         let lignesD = RecueilLignes(try d.ouvrir())
         connexions.toutes.last?.echouer(.pasDeRoute)
         #expect(await attendreQue { lignesD.liste == ["fin"] })
+        #expect(d.raisonFermeture == TransportUDP.raisonPerte(.pasDeRoute), "cause de la perte gardee")
     }
 
     /// Fermee avant d'etre ouverte (connexion abandonnee) : flux fini aussitot.
