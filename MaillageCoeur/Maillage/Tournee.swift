@@ -76,6 +76,10 @@ public struct MemoireTournee: Hashable, Sendable {
     /// Routeurs qui ont repondu a la derniere tournee ou l'un a repondu : Route64 de
     /// secours quand le chef ne la donne pas.
     public var repondants: [Int] = []
+    /// Dernieres Network Data lues : elles servent quand leur requete echoue ou n'est pas faite
+    /// (aucun routeur ne repond) ; sinon les routeurs de bordure, le BBR principal et les
+    /// candidats disparaitraient d'une tournee a l'autre.
+    public var donneesReseau: DonneesReseau?
     /// Partition de ce qui est retenu : une autre remet tout a zero.
     public var partition: String?
 
@@ -217,10 +221,19 @@ public enum Tournee {
         for id in repondants {
             c.pile(mem.piles[id].flatMap { $0.isEmpty ? nil : $0 }, routeur: id)
         }
+        var lues: DonneesReseau?
         if let id = repondants.first {
             let r = try await sonde.diag(rloc16(id), tlvReseau, delaiMs: delaiRouteur)
             signaler(.pileEtReseau, totalPile, totalPile)
-            if let brutes = r.reponse?.donneesReseau, let d = DonneesReseau(brutes) { c.reseau(d) }
+            if let brutes = r.reponse?.donneesReseau { lues = DonneesReseau(brutes) }
+        }
+        if let d = lues {
+            c.reseau(d)
+            mem.donneesReseau = d
+        } else if let d = mem.donneesReseau {
+            // Requete en echec, ou aucun routeur qui reponde : les dernieres lues, pour les seuls
+            // routeurs de la liste.
+            c.reseau(d, seulementConnus: true)
         }
 
         // 4. Balayage des enfants des routeurs sans reponse qui sont muets (deux echecs de

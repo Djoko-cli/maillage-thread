@@ -151,6 +151,21 @@ struct RapprochementTests {
         #expect(Self.interieur(sans) == ["HomePod bureau", "HomePod chambre", "HomePod avant", "HomePod palier"])
     }
 
+    /// Network Data en echec a la seconde tournee : les routeurs de bordure restent connus (les
+    /// dernieres lues), donc leurs candidats et le BBR principal aussi : l'affichage ne clignote pas.
+    @Test func candidatsSansNetworkData() async throws {
+        let i = Self.instantane()
+        let r = try #require(i.reseaux.first)
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: .now))
+        let (m2, _) = try #require(try await Tournee.complete(sonde.filtree { $0 != "5000|7" }, memoire: mem1,
+                                                              maintenant: .now))
+        let m = MaillageAffiche(maillage: m2, reseau: r, appareils: i.appareils)
+        #expect(m.routeurs[1]?.candidats == ["HomePod salon"])
+        #expect(m.routeurs[45]?.id == "Apple TV", "BBR principal")
+        #expect(m.annoncesCandidates == ["HomePod salon"])
+    }
+
     /// ExtMac connue d'un routeur de bordure qu'aucune annonce ne porte (0400, entendu) : une
     /// annonce qui a un autre `xa` n'est pas sa candidate, ni par elimination ; une annonce sans
     /// `xa` peut l'etre. Une annonce candidate de personne reste dessinee.

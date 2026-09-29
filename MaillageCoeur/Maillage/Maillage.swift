@@ -111,10 +111,16 @@ public struct ConstructionMaillage: Sendable {
 
     /// Roles lus dans les Network Data. BBR principal, comme OpenThread : celui du chef s'il est
     /// parmi les serveurs, sinon le premier de `d.bbr` (de meme si le chef n'est pas encore connu).
-    public mutating func reseau(_ d: DonneesReseau) {
-        for rloc in d.routeursDeBordure { routeurs[Int(rloc >> 10), default: RouteurMaillage(id: Int(rloc >> 10))].bordure = true }
+    /// `seulementConnus` : Network Data d'une tournee precedente, pour les seuls routeurs deja dans
+    /// le maillage (la liste des routeurs a pu changer depuis) ; un serveur BBR absent ne compte pas.
+    public mutating func reseau(_ d: DonneesReseau, seulementConnus: Bool = false) {
+        func pris(_ rloc: UInt16) -> Bool { !seulementConnus || routeurs[Int(rloc >> 10)] != nil }
+        for rloc in d.routeursDeBordure where pris(rloc) {
+            routeurs[Int(rloc >> 10), default: RouteurMaillage(id: Int(rloc >> 10))].bordure = true
+        }
         let chef = routeurs.values.first(where: \.chef)?.rloc16
-        if let principal = d.bbr.first(where: { $0 == chef }) ?? d.bbr.first {
+        let serveurs = d.bbr.filter(pris)
+        if let principal = serveurs.first(where: { $0 == chef }) ?? serveurs.first {
             routeurs[Int(principal >> 10), default: RouteurMaillage(id: Int(principal >> 10))].bbrPrincipal = true
         }
     }

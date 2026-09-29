@@ -348,6 +348,23 @@ struct TourneeTests {
         #expect(r2.memoire == neuve)
     }
 
+    /// Network Data en echec a la tournee suivante : les dernieres lues servent (routeurs de
+    /// bordure, BBR principal) ; sinon, les routeurs de bordure et leurs candidats disparaitraient
+    /// d'une tournee a l'autre. Sans Network Data deja lues, aucun routeur de bordure.
+    @Test func reseauGarde() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(mem1.donneesReseau != nil)
+        let sansReseau = sonde.filtree { $0 != "5000|7" }
+        let (m2, mem2) = try #require(try await Tournee.complete(sansReseau, memoire: mem1, maintenant: Self.t0 + 300))
+        #expect(await sansReseau.registre.requetes.contains("5000|7"), "demandees, en echec")
+        #expect(m2.routeurs.filter(\.bordure).map(\.id) == [1, 43, 45, 51, 57])
+        #expect(m2.routeur(45)?.bbrPrincipal == true)
+        #expect(mem2.donneesReseau == mem1.donneesReseau)
+        let (m3, _) = try #require(try await Tournee.complete(sansReseau, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(m3.routeurs.filter(\.bordure).isEmpty)
+    }
+
     /// Paire d'un routeur sorti de la liste des routeurs (routeur disparu, identifiant libere) :
     /// oubliee des que la tournee a la Route64. Celle d'un routeur encore dans la liste reste,
     /// meme s'il n'est plus entendu (ExtMac inventees).
