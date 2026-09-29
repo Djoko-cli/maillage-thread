@@ -23,11 +23,31 @@ struct GrapheCanvas: View {
     let survol: String?
     let palette: Palette
 
+    /// Couches du dessin.
+    enum Couche: CaseIterable {
+        case zones, liens, traits, titres, points, fonds, selection, libelles
+    }
+
+    /// Ordre du dessin, de la couche la plus basse a la plus haute : les titres des zones et
+    /// les fonds des libelles passent sur les liens et les traits (aucun ne barre un texte) ;
+    /// les titres et les traits sous les points ; l'anneau de selection sur les fonds ; les
+    /// libelles au-dessus de tout.
+    static let couches: [Couche] = [.zones, .liens, .traits, .titres, .points, .fonds, .selection, .libelles]
+
     var body: some View {
         Canvas { ctx, _ in
-            dessinerZones(&ctx)
-            dessinerLiens(&ctx)
-            dessinerNoeuds(&ctx)
+            for c in Self.couches {
+                switch c {
+                case .zones: dessinerZones(&ctx)
+                case .liens: dessinerLiens(&ctx)
+                case .traits: dessinerTraits(&ctx)
+                case .titres: dessinerTitres(&ctx)
+                case .points: dessinerPoints(&ctx)
+                case .fonds: dessinerFonds(&ctx)
+                case .selection: dessinerSelection(&ctx)
+                case .libelles: dessinerLibelles(&ctx)
+                }
+            }
         }
     }
 
@@ -44,9 +64,6 @@ struct GrapheCanvas: View {
                                                        center: c, startRadius: 0, endRadius: r))
                 ctx.stroke(cercle, with: .color(couleur.opacity(0.45)), lineWidth: 1)
             }
-            // Dans l'obstacle que les libelles evitent (`MemoirePlacement`).
-            ctx.draw(Self.texteTitre(Self.titre(z)).foregroundStyle(couleur.opacity(0.95)),
-                     at: Self.ancreTitre(centre: c, rayon: r), anchor: .bottom)
         }
     }
 
@@ -73,9 +90,24 @@ struct GrapheCanvas: View {
         }
     }
 
-    private func dessinerNoeuds(_ ctx: inout GraphicsContext) {
-        let principales = Set(disposition.zones.filter(\.principale).map(\.id))
-        // Trait fin de chaque libelle ecarte, sous les points.
+    /// Titre de chaque zone, sur un fond discret comme les libelles : par-dessus les liens et
+    /// les traits (aucun ne le barre), sous les points (aucun n'est cache). Dans l'obstacle
+    /// que les libelles evitent (`MemoirePlacement`).
+    private func dessinerTitres(_ ctx: inout GraphicsContext) {
+        for z in disposition.zones {
+            let a = Self.ancreTitre(centre: projection.vue(z.centre), rayon: z.rayon * projection.echelle)
+            let resolu = ctx.resolve(Self.texteTitre(Self.titre(z)).foregroundStyle(palette.zone(z).opacity(0.95)))
+            let t = resolu.measure(in: Self.propositionTexte)
+            let fond = CGRect(x: a.x - t.width / 2, y: a.y - t.height, width: t.width, height: t.height)
+                .insetBy(dx: -PlacementLibelles.margeFond.width, dy: -PlacementLibelles.margeFond.height)
+            ctx.fill(Path(roundedRect: fond, cornerRadius: PlacementLibelles.rayonFond, style: .circular),
+                     with: .color(palette.fondLibelle))
+            ctx.draw(resolu, at: a, anchor: .bottom)
+        }
+    }
+
+    /// Trait fin de chaque libelle ecarte, du bord de son point au bord du libelle.
+    private func dessinerTraits(_ ctx: inout GraphicsContext) {
         for n in placement.noeuds {
             guard let t = placement.places[n.id]?.trait else { continue }
             var p = Path()
@@ -83,6 +115,10 @@ struct GrapheCanvas: View {
             p.addLine(to: t.arrivee)
             ctx.stroke(p, with: .color(palette.texteDiscret.opacity(0.8)), lineWidth: 0.75)
         }
+    }
+
+    private func dessinerPoints(_ ctx: inout GraphicsContext) {
+        let principales = Set(disposition.zones.filter(\.principale).map(\.id))
         for n in disposition.noeuds {
             let c = projection.vue(n.position)
             let r = Self.rayonPoint(n.rayon, echelle: projection.echelle)
@@ -109,11 +145,31 @@ struct GrapheCanvas: View {
                     }
                 }
             }
-            if n.id == selection {
-                ctx.stroke(Path(ellipseIn: rect.insetBy(dx: -4, dy: -4)), with: .color(palette.selection), lineWidth: 2)
-            }
         }
-        // Libelles par-dessus : aucun ne recoupe un point ni un autre libelle.
+    }
+
+    /// Fond discret de chaque libelle (texte et pastille), coins arrondis : dessine apres
+    /// les liens et les traits, il les cache sous le texte.
+    private func dessinerFonds(_ ctx: inout GraphicsContext) {
+        for n in placement.noeuds {
+            guard let f = placement.places[n.id]?.fond else { continue }
+            ctx.fill(Path(roundedRect: f, cornerRadius: PlacementLibelles.rayonFond, style: .circular),
+                     with: .color(palette.fondLibelle))
+        }
+    }
+
+    /// Anneau du noeud selectionne : sur les fonds (aucun ne le cache), sous les libelles.
+    private func dessinerSelection(_ ctx: inout GraphicsContext) {
+        for n in disposition.noeuds where n.id == selection {
+            let c = projection.vue(n.position)
+            let r = Self.rayonPoint(n.rayon, echelle: projection.echelle) + 4
+            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)),
+                       with: .color(palette.selection), lineWidth: 2)
+        }
+    }
+
+    /// Libelles, au-dessus de tout : aucun ne recoupe un point ni un autre libelle.
+    private func dessinerLibelles(_ ctx: inout GraphicsContext) {
         for n in placement.noeuds {
             guard let place = placement.places[n.id], let l = libelles[n.id] else { continue }
             dessinerLibelle(&ctx, l, place, genre: n.genre, fort: n.id == selection || n.id == survol)

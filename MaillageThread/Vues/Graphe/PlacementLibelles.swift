@@ -65,6 +65,12 @@ struct PlacementLibelles: Equatable {
 
         /// Libelle ecarte de son point, relie par un trait fin.
         var ecarte: Bool { trait != nil }
+
+        /// Fond discret sous le libelle (texte et pastille), a coins arrondis de `rayonFond` :
+        /// le cadre, `margeFond` autour.
+        var fond: CGRect {
+            cadre.insetBy(dx: -PlacementLibelles.margeFond.width, dy: -PlacementLibelles.margeFond.height)
+        }
     }
 
     /// Ecart minimal entre un libelle et un autre, un point ou un obstacle.
@@ -75,6 +81,11 @@ struct PlacementLibelles: Equatable {
     static let margeClic: CGFloat = 8
     /// Entre le texte et sa pastille : cote a cote, l'un sur l'autre.
     static let ecartPastille = (cote: CGFloat(5), dessus: CGFloat(3))
+    /// Fond d'un libelle : marge autour de son cadre, rayon de ses coins (arrondi circulaire).
+    /// La marge ne depasse pas `jeu` et le rayon vaut au moins la marge : le fond reste a moins
+    /// de `jeu` de son cadre ; il touche au plus un autre libelle ou un point, sans le couvrir.
+    static let margeFond = CGSize(width: 2, height: 1)
+    static let rayonFond: CGFloat = 4
 
     /// Noeuds, dans l'ordre de pose.
     private(set) var noeuds: [Noeud] = []

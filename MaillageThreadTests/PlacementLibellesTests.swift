@@ -75,6 +75,51 @@ enum CasLibelles {
         return defauts
     }
 
+    /// Fonds des libelles (`Place.fond`, coins arrondis de `rayonFond`) qui ne couvrent pas
+    /// leur texte ou leur pastille, ou qui couvrent un autre texte, une autre pastille ou un
+    /// point (les toucher ne compte pas) ; vide si tout va bien.
+    static func defautsDesFonds(_ p: PlacementLibelles) -> [String] {
+        let rho = PlacementLibelles.rayonFond
+        // Un fond est l'ensemble des points a moins de `rho` de son rectangle interieur.
+        func interieur(_ f: CGRect) -> CGRect { f.insetBy(dx: rho, dy: rho) }
+        func distance(_ a: CGRect, _ b: CGRect) -> CGFloat {
+            hypot(max(0, a.minX - b.maxX, b.minX - a.maxX), max(0, a.minY - b.maxY, b.minY - a.maxY))
+        }
+        func coins(_ r: CGRect) -> [CGRect] {
+            [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX, y: r.minY), CGPoint(x: r.minX, y: r.maxY),
+             CGPoint(x: r.maxX, y: r.maxY)].map { CGRect(origin: $0, size: .zero) }
+        }
+        var defauts: [String] = []
+        let places = p.noeuds.compactMap { n in p.places[n.id].map { (id: n.id, place: $0) } }
+        for a in places {
+            let i = interieur(a.place.fond)
+            let siens = [a.place.texte] + (a.place.pastille.map { [$0] } ?? [])
+            if !siens.flatMap(coins).allSatisfy({ distance(i, $0) <= rho + 1e-9 }) {
+                defauts.append("le fond de \(a.id) ne couvre pas son libelle")
+            }
+            for b in places where b.id != a.id {
+                let autres = [b.place.texte] + (b.place.pastille.map { [$0] } ?? [])
+                if autres.contains(where: { distance(i, $0) < rho - 1e-9 }) {
+                    defauts.append("le fond de \(a.id) couvre le libelle de \(b.id)")
+                }
+            }
+            for n in p.noeuds where distance(i, CGRect(origin: n.centre, size: .zero)) < rho + n.rayon - 1e-9 {
+                defauts.append("le fond de \(a.id) couvre le point \(n.id)")
+            }
+        }
+        // Fond d'un titre de zone : au plus son obstacle, avec la meme marge et les memes coins.
+        for (k, o) in p.obstacles.enumerated() {
+            let i = interieur(o.insetBy(dx: -PlacementLibelles.margeFond.width, dy: -PlacementLibelles.margeFond.height))
+            for b in places {
+                let autres = [b.place.texte] + (b.place.pastille.map { [$0] } ?? [])
+                if autres.contains(where: { distance(i, $0) < rho - 1e-9 }) {
+                    defauts.append("le fond du titre \(k) couvre le libelle de \(b.id)")
+                }
+            }
+        }
+        return defauts
+    }
+
     /// Centre, quatre routeurs et quarante appareils aux noms longs sur un petit anneau
     /// (13 pt d'un appareil a l'autre : moins que la hauteur d'un libelle et son jeu).
     static let anneauDense: [PlacementLibelles.Noeud] = {
@@ -237,6 +282,18 @@ struct PlacementLibellesTests {
         #expect(placeC.sens != .dessus && !placeC.ecarte, "c laisse sa place au trait, sans etre ecarte")
     }
 
+    /// Fond discret de chaque libelle (texte et pastille) : le cadre, 2 pt de chaque cote et
+    /// 1 pt dessus et dessous, coins arrondis de 4 pt. Il couvre son texte et sa pastille, et
+    /// ne couvre ni un autre libelle, ni un point (au plus, il les touche), meme dense.
+    @Test func fondDesLibelles() throws {
+        let clairseme = PlacementLibelles(noeuds: CasLibelles.clairseme, obstacles: [])
+        let a = try #require(clairseme.places["A-droite"])
+        #expect(a.fond == CGRect(x: 179, y: -9.5, width: 109, height: 19))
+        for p in [clairseme, PlacementLibelles(noeuds: CasLibelles.anneauDense, obstacles: [CasLibelles.titreAnneau])] {
+            #expect(CasLibelles.defautsDesFonds(p) == [])
+        }
+    }
+
     /// Zone de clic et de survol : le point avec 8 pt autour du rayon dessine, plus tout
     /// le libelle (texte et pastille) ; rien ailleurs.
     @Test func clic() {
@@ -379,6 +436,7 @@ struct LibellesGrapheTests {
                 let p = memoire.placement(demo.disposition, libelles: demo.libelles, echelle: projection.echelle)
                     .decale(projection.origine)
                 #expect(CasLibelles.chevauchements(p) == [], "zoom \(zoom), fenetre \(taille)")
+                #expect(CasLibelles.defautsDesFonds(p) == [], "zoom \(zoom), fenetre \(taille)")
                 // Des le zoom 1, aucun trait fin ne traverse un libelle, un point ou un titre (plus
                 // loin, l'ecartement choisit la direction ou il en traverse le moins).
                 if zoom >= 1 { #expect(CasLibelles.traversees(p) == [], "zoom \(zoom), fenetre \(taille)") }
@@ -406,8 +464,9 @@ struct LibellesGrapheTests {
         }
     }
 
-    /// Le placement se recalcule quand la disposition, le zoom ou les noms changent, pas a
-    /// chaque image (survol, selection, glisser : memes entrees).
+    /// Le placement se recalcule quand la disposition, l'echelle ou les noms changent ; pas au
+    /// survol ni pendant un glisser (memes entrees). L'echelle suit le zoom et la fenetre, et
+    /// aussi la selection quand la hauteur limite : la fiche ouverte reserve le bas de la vue.
     @Test func recalculSeulementSiBesoin() throws {
         let demo = try Self.demo()
         let memoire = MemoirePlacement()
@@ -423,6 +482,51 @@ struct LibellesGrapheTests {
         #expect(memoire.calculs == 3, "noms")
         _ = memoire.placement(demo.disposition, libelles: renomme, echelle: 1.25)
         #expect(memoire.calculs == 3)
+        // Une selection ouvre la fiche (marge basse de 30 a 190 pt) : si la hauteur limite,
+        // l'echelle change, et le placement avec elle.
+        let taille = CGSize(width: 1400, height: 700)
+        let sansFiche = Projection(cadre: demo.disposition.cadre, taille: taille, marges: (haut: 110, bas: 30, cotes: 60))
+        let avecFiche = Projection(cadre: demo.disposition.cadre, taille: taille, marges: (haut: 110, bas: 190, cotes: 60))
+        #expect(avecFiche.echelle < sansFiche.echelle)
+        _ = memoire.placement(demo.disposition, libelles: renomme, echelle: sansFiche.echelle)
+        _ = memoire.placement(demo.disposition, libelles: renomme, echelle: avecFiche.echelle)
+        #expect(memoire.calculs == 5, "la fiche ouverte change l'echelle : recalcul")
+    }
+
+    /// Ordre du dessin : les liens et les traits avant les fonds et les libelles, et avant
+    /// les titres des zones (ni un lien ni un trait ne barre un texte) ; les titres sous les
+    /// points, les traits aussi ; l'anneau de selection sur les fonds ; les libelles
+    /// au-dessus de tout ; chaque couche une fois.
+    @Test func ordreDesCouches() {
+        let c = GrapheCanvas.couches
+        func rang(_ x: GrapheCanvas.Couche) -> Int { c.firstIndex(of: x) ?? -1 }
+        #expect(c.count == GrapheCanvas.Couche.allCases.count && Set(c) == Set(GrapheCanvas.Couche.allCases))
+        #expect(rang(.liens) < rang(.fonds) && rang(.traits) < rang(.fonds))
+        #expect(rang(.liens) < rang(.titres) && rang(.traits) < rang(.titres) && rang(.titres) < rang(.points))
+        #expect(rang(.traits) < rang(.points))
+        #expect(rang(.fonds) < rang(.selection) && rang(.selection) < rang(.libelles))
+        #expect(c.last == .libelles)
+    }
+
+    /// Pincement : le zoom est borne des la projection (de 0,4 a 5, comme a la fin du geste) ;
+    /// au-dela des bornes, rien ne bouge, et le placement ne se recalcule pas a chaque image.
+    @Test func zoomBorneEnPincement() throws {
+        #expect(Projection.zoomBorne(0.1) == 0.4)
+        #expect(Projection.zoomBorne(12) == 5)
+        #expect(Projection.zoomBorne(1.3) == 1.3)
+        let demo = try Self.demo()
+        let memoire = MemoirePlacement()
+        for zooms in [[5, 6, 8, 12], [0.4, 0.3, 0.2, 0.1]] as [[CGFloat]] {
+            let projections = zooms.map {
+                Projection(cadre: demo.disposition.cadre, taille: CGSize(width: 1400, height: 900),
+                           marges: (haut: 110, bas: 30, cotes: 60), zoom: $0)
+            }
+            #expect(projections.allSatisfy { $0 == projections[0] }, "\(zooms)")
+            for p in projections {
+                _ = memoire.placement(demo.disposition, libelles: demo.libelles, echelle: p.echelle)
+            }
+        }
+        #expect(memoire.calculs == 2, "un calcul par borne atteinte")
     }
 
     /// Mesurer pendant une mise a jour de SwiftUI (le corps de la fenetre du graphe) donne

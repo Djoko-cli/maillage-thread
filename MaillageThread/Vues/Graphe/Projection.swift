@@ -14,11 +14,17 @@ struct Projection: Equatable {
         let hauteur = max(taille.height - marges.haut - marges.bas, 1)
         let l = max(cadre.max.x - cadre.min.x, 1)
         let h = max(cadre.max.y - cadre.min.y, 1)
-        echelle = min(largeur / l, hauteur / h) * zoom
+        echelle = min(largeur / l, hauteur / h) * Self.zoomBorne(zoom)
         let centreVue = CGPoint(x: marges.cotes + largeur / 2 + decalage.width,
                                 y: marges.haut + hauteur / 2 + decalage.height)
         let centrePlan = CGPoint(x: (cadre.min.x + cadre.max.x) / 2, y: (cadre.min.y + cadre.max.y) / 2)
         origine = CGPoint(x: centreVue.x - centrePlan.x * echelle, y: centreVue.y - centrePlan.y * echelle)
+    }
+
+    /// Zoom de l'utilisateur, borne de 0,4 a 5 : a la fin d'un pincement, et des la
+    /// projection pendant le geste (au-dela des bornes, rien ne bouge).
+    static func zoomBorne(_ zoom: CGFloat) -> CGFloat {
+        min(max(zoom, 0.4), 5)
     }
 
     func vue(_ p: Point2D) -> CGPoint {

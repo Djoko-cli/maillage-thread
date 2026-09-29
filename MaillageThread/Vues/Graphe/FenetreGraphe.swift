@@ -83,15 +83,14 @@ struct FenetreGraphe: View {
                          libelles: libelles, placement: placement, projection: projection, selection: selection,
                          survol: survol, palette: palette)
                 .contentShape(Rectangle())
-                // Clic, double clic et survol : le point (8 pt autour) ou tout le libelle.
+                // Clic et survol : le point (8 pt autour) ou tout le libelle.
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let p): survol = placement.cible(a: p)
                     case .ended: survol = nil
                     }
                 }
-                .onTapGesture(count: 2) { p in
-                    selection = placement.cible(a: p)
+                .onTapGesture(count: 2) {
                     zoom = 1
                     decalage = .zero
                 }
@@ -101,7 +100,7 @@ struct FenetreGraphe: View {
                 .gesture(MagnifyGesture()
                     .onChanged { zoomEnCours = $0.magnification }
                     .onEnded { v in
-                        zoom = min(max(zoom * v.magnification, 0.4), 5)
+                        zoom = Projection.zoomBorne(zoom * v.magnification)
                         zoomEnCours = 1
                     })
                 .simultaneousGesture(DragGesture(minimumDistance: 4)

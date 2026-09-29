@@ -17,6 +17,11 @@ struct Palette {
     var lien: Color { sombre ? Color.white.opacity(0.28) : Color.black.opacity(0.22) }
     var lienEclaire: Color { sombre ? Color.white.opacity(0.85) : Color.black.opacity(0.7) }
     var selection: Color { sombre ? .white : .black }
+    /// Fond discret sous un libelle : la couleur du fond du graphe, un peu transparente.
+    /// Dessine par-dessus les liens et les traits, il les cache sous le texte.
+    var fondLibelle: Color {
+        sombre ? Color(red: 0.06, green: 0.09, blue: 0.16).opacity(0.8) : Color(red: 0.95, green: 0.96, blue: 0.99).opacity(0.85)
+    }
     /// Pastille d'une batterie faible : orange vif en halo, texte brun fonce.
     var batterieFaible: Color { Color(red: 1.0, green: 0.62, blue: 0.1) }
     var texteBatterieFaible: Color { Color(red: 0.25, green: 0.12, blue: 0.0) }

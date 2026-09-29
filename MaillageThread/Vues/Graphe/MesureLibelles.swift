@@ -53,8 +53,10 @@ final class MesureTextes {
 }
 
 /// Placement des libelles d'une disposition, recalcule seulement quand la disposition,
-/// l'echelle (zoom, taille de la fenetre) ou les textes changent : ni au survol, ni a la
-/// selection, ni pendant un glisser. Coordonnees de la vue, l'origine du plan en (0, 0) :
+/// l'echelle ou les textes changent : ni au survol, ni pendant un glisser. L'echelle suit
+/// le zoom (borne, meme pendant un pincement) et la taille de la fenetre, et aussi la
+/// selection quand la hauteur limite : la fiche ouverte reserve le bas de la vue (marge
+/// de 30 a 190 pt). Coordonnees de la vue, l'origine du plan en (0, 0) :
 /// `decale(projection.origine)` les pose dans la vue, sans rien recalculer.
 @MainActor
 final class MemoirePlacement {
