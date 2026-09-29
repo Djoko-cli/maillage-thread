@@ -542,6 +542,13 @@ struct SondeReseauTests {
         #expect(FenetreReglages.texteHote(nil) == "—")
     }
 
+    /// Reglages › Sonde : le bouton de l'acces reseau dit ce qu'il fera : autoriser sans cle,
+    /// regenerer une cle ensuite (demande de Djoko : le bouton reste actif apres l'autorisation).
+    @Test func titreBoutonAcces() {
+        #expect(FenetreReglages.titreBoutonAcces(empreinte: nil) == String(localized: "Autoriser l'accès réseau"))
+        #expect(FenetreReglages.titreBoutonAcces(empreinte: "630DCD29") == String(localized: "Régénérer une clé"))
+    }
+
     /// Reglages › Sonde : par le reseau, le firmware 1.0.2 ne donne ni code ni QR code (le code
     /// d'appairage ne circule pas en clair) ; une note les remplace. En USB, ou quand la sonde
     /// les donne, pas de note (valeurs inventees).

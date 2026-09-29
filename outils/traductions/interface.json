@@ -151,6 +151,7 @@
   "Routeurs": "Routers",
   "Routeurs : %lld · appareils : %lld · injoignables : %lld": "Routers: %1$lld · devices: %2$lld · unreachable: %3$lld",
   "Réglages…": "Settings…",
+  "Régénérer une clé": "Regenerate Key",
   "Réponse sans clé lisible (64 hexa majuscules attendus) : clé non rangée.": "Reply without a readable key (64 uppercase hex digits expected): key not stored.",
   "Réseau": "Network",
   "Réseau %@": "Network %@",

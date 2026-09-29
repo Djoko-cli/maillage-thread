@@ -2449,6 +2449,22 @@
         }
       }
     },
+    "Régénérer une clé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regenerate Key"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Régénérer une clé"
+          }
+        }
+      }
+    },
     "Réponse sans clé lisible (64 hexa majuscules attendus) : clé non rangée." : {
       "localizations" : {
         "en" : {

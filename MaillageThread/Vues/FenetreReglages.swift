@@ -195,6 +195,12 @@ struct FenetreReglages: View {
         return String(localized: "autorisé · clé \(empreinte)")
     }
 
+    /// Titre du bouton de l'acces reseau : autoriser tant qu'il n'y a pas de cle, puis en
+    /// regenerer une (le bouton reste actif : une nouvelle cle remplace l'ancienne).
+    static func titreBoutonAcces(empreinte: String?) -> String {
+        empreinte == nil ? String(localized: "Autoriser l'accès réseau") : String(localized: "Régénérer une clé")
+    }
+
     /// Note a la place du code Matter : par le reseau, la sonde (1.0.2) ne donne ni QR code ni
     /// code d'appairage, qui ne circulent pas en clair ; nil en USB, ou quand elle les donne.
     static func noteCodeMatter(_ b: Bonjour, liaison: SondeMaillage.Liaison) -> String? {
@@ -271,7 +277,9 @@ struct AccesReseauSonde: View {
         LabeledContent("Accès réseau", value: FenetreReglages.texteAccesReseau(empreinte: sonde.empreinteAcces))
         if sonde.liaison == .usb {
             HStack {
-                Button("Autoriser l'accès réseau") { Task { await sonde.autoriserAccesReseau() } }
+                Button(FenetreReglages.titreBoutonAcces(empreinte: sonde.empreinteAcces)) {
+                    Task { await sonde.autoriserAccesReseau() }
+                }
                     .disabled(!sonde.peutAutoriser)
                 if sonde.autorisationEnCours {
                     ProgressView().controlSize(.small)
