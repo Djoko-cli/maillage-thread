@@ -5,7 +5,9 @@ import Synchronization
 /// pont Halo : un `CanalSonde` de plus, `SondeUSB` et la tournee ne changent pas.
 /// - Chaque commande part en `<rid> <commande>` (rid decimal, croissant) ; sans aucune
 ///   reponse, elle repart avec le meme rid a 2 s puis a 4 s : la carte ne relance rien, elle
-///   renvoie la reponse gardee (ou se tait, `diag` encore en vol).
+///   renvoie la reponse gardee (ou se tait, `diag` encore en vol). Un `diag` repart ensuite
+///   tous les 3 s, jusqu'a 1 s avant l'echeance de `SondeUSB` : sa reponse perdue apres le vol
+///   se redemande.
 /// - Chaque reponse `<rid> <ligne JSON>` passe a `SondeUSB` sans le rid, comme une ligne du
 ///   canal serie ; un doublon (meme rid, meme ligne) est ecarte.
 /// - Apres 10 s sans aucune ligne, un `etat` de veille, dont la reponse reste ici : sans
@@ -19,6 +21,13 @@ final class CanalReseau: CanalSonde, CauseFermeture {
     struct Reglages: Sendable {
         /// Renvois d'une commande sans reponse, comptes depuis son premier envoi.
         var renvois: [Duration] = [.seconds(2), .seconds(4)]
+        /// `diag` : muet cote carte tant qu'il est en vol (6 a 8 s), il tombe pendant ces renvois ;
+        /// ensuite, un renvoi tous les `pasDiag`, le dernier au plus tard `avanceDiag` avant
+        /// l'echeance de `SondeUSB` (delai du diag + `margeDiag`) : une reponse perdue apres le
+        /// vol se redemande, et la carte rend celle qu'elle a gardee.
+        var pasDiag: Duration = .seconds(3)
+        var margeDiag: Duration = SondeUSB.margeDiag
+        var avanceDiag: Duration = .seconds(1)
         /// Silence (aucune ligne recue) avant une veille : 10 s, comme le ping de Halo. La carte
         /// donne a un nouveau client la place d'une session muette depuis 30 s : la veille garde
         /// celle de l'app.
@@ -31,6 +40,29 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         /// Pas de la garde (veille, et silence qui suit) : 1 s au plus, plus court pour des
         /// reglages de test rapides.
         var pasGarde: Duration { min(.seconds(1), veille / 4, attenteVeille / 4) }
+
+        /// Renvois d'une commande (sans fin de ligne), comptes depuis son premier envoi :
+        /// `renvois`, puis pour un `diag` ceux de `pasDiag` (par exemple 2, 4, 7 et 10 s pour un
+        /// diag de 6000 ms).
+        func renvois(pour commande: String) -> [Duration] {
+            guard let ms = Self.delaiDiag(commande), var t = renvois.last else { return renvois }
+            var r = renvois
+            let dernier = .milliseconds(ms) + margeDiag - avanceDiag
+            t += pasDiag
+            while t <= dernier {
+                r.append(t)
+                t += pasDiag
+            }
+            return r
+        }
+
+        /// Delai d'un `diag <cible> <tlv> <id> <ms>`, en ms ; nil pour une autre commande, ou
+        /// sans delai lisible.
+        static func delaiDiag(_ commande: String) -> Int? {
+            let mots = commande.split(separator: " ")
+            guard mots.count == 5, mots[0] == "diag", let ms = Int(mots[4]), ms >= 0 else { return nil }
+            return ms
+        }
     }
 
     private let transport: TransportUDP
@@ -136,7 +168,7 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         let commande = ligne.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !commande.isEmpty, !Self.estCommandeCle(commande) else { return }
         let rid = Self.prochainRid()
-        emettre(rid, Data("\(rid) \(commande)".utf8))
+        emettre(rid, Data("\(rid) \(commande)".utf8), renvois: reglages.renvois(pour: commande))
     }
 
     /// Ferme la session ; la fin du flux des lignes suit.
@@ -171,8 +203,8 @@ final class CanalReseau: CanalSonde, CauseFermeture {
 
     // MARK: - Envoi et renvois
 
-    private func emettre(_ rid: Int, _ charge: Data) {
-        let renvois = reglages.renvois
+    /// Premier envoi, puis `renvois` (comptes depuis lui) tant qu'aucune reponse n'est arrivee.
+    private func emettre(_ rid: Int, _ charge: Data, renvois: [Duration]) {
         let tache = Task { [weak self] in
             var ecoule: Duration = .zero
             for r in renvois {
@@ -282,7 +314,7 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         case .rien:
             return true
         case .veiller(let rid):
-            emettre(rid, Data("\(rid) etat".utf8))
+            emettre(rid, Data("\(rid) etat".utf8), renvois: reglages.renvois)
             return true
         case .lever(let renvoi):
             renvoi?.cancel()

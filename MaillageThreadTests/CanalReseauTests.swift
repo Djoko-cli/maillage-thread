@@ -162,6 +162,57 @@ struct CanalReseauTests {
         c.fermer()
     }
 
+    /// Renvois de l'app, comptes depuis le premier envoi : 2 et 4 s ; pour un `diag`, qui reste
+    /// muet cote carte tant qu'il est en vol, ensuite tous les 3 s, le dernier au plus tard 1 s
+    /// avant l'echeance de `SondeUSB` (delai du diag lu dans la commande, plus 5 s).
+    @Test func renvoisSelonLaCommande() {
+        let r = CanalReseau.Reglages()
+        let s: (Int) -> Duration = { .seconds($0) }
+        #expect(r.renvois(pour: "diag 5000 1 1 6000") == [s(2), s(4), s(7), s(10)])
+        #expect(r.renvois(pour: "diag 0400 0,1,2,6,9,24,26 12 8000") == [s(2), s(4), s(7), s(10)])
+        #expect(r.renvois(pour: "diag 5000 1 1 3000") == [s(2), s(4), s(7)])
+        #expect(r.renvois(pour: "diag 5000 1 1 10000") == [s(2), s(4), s(7), s(10), s(13)])
+        #expect(r.renvois(pour: "diag 5000 1 1 0") == [s(2), s(4)])
+        #expect(r.renvois(pour: "diag 5000 1 1") == [s(2), s(4)], "sans delai lisible : comme les autres")
+        for commande in ["bonjour", "etat", "voisins", "routeurs"] {
+            #expect(r.renvois(pour: commande) == [s(2), s(4)])
+        }
+        #expect(SondeUSB.margeDiag == r.margeDiag, "echeance de SondeUSB")
+    }
+
+    /// Reponse d'un `diag` perdue une fois apres le vol (la carte, muette pendant le vol, la garde
+    /// et la rend a un renvoi du meme rid) : le renvoi suivant la ramene, avant l'echeance de
+    /// `SondeUSB`. Ici tout divise par 10 : renvois a 200 et 400 ms puis tous les 300 ms, vol de
+    /// 450 ms, diag de 600 ms, marge de 500 ms (echeance a 1,1 s, renvois a 0,7 et 1 s).
+    @Test(.timeLimit(.minutes(1))) func diagRedemandeApresLeVol() async throws {
+        let vol: Duration = .milliseconds(450)
+        let premiers = Mutex<[Int: ContinuousClock.Instant]>([:])
+        let carte = CarteSimulee(cle: VecteursH1.psk) { charge in
+            guard let (rid, commande) = Self.decouper(charge), commande.hasPrefix("diag ") else { return Self.sonde(charge) }
+            let maintenant = ContinuousClock.now
+            let debut = premiers.withLock { p in
+                if p[rid] == nil { p[rid] = maintenant }
+                return p[rid] ?? maintenant
+            }
+            // En vol : rien ; a la fin du vol, la reponse part et se perd ; ensuite, gardee, elle
+            // repond a un renvoi du meme rid.
+            return maintenant - debut >= vol ? Self.sonde(charge) : []
+        }
+        var reglages = Self.rapides()
+        reglages.renvois = [.milliseconds(200), .milliseconds(400)]
+        reglages.pasDiag = .milliseconds(300)
+        reglages.margeDiag = .milliseconds(500)
+        reglages.avanceDiag = .milliseconds(100)
+        let s = SondeUSB(canal: try await Self.canal(carte, reglages: reglages), marge: reglages.margeDiag)
+        try await s.demarrer {}
+        let r = try await s.diag(0x0000, [5, 6], delaiMs: 600)
+        #expect(r.ok, "reponse gardee, rendue au renvoi apres le vol")
+        let diags = carte.recues.compactMap(Self.decouper).filter { $0.commande.hasPrefix("diag ") }
+        #expect(diags.count == 4, "envoi, renvois a 200 et 400 ms pendant le vol, renvoi a 700 ms")
+        #expect(Set(diags.map(\.rid)).count == 1, "meme rid")
+        await s.fermer()
+    }
+
     /// Premier envoi perdu : le renvoi passe, la reponse arrive, et plus rien ne repart.
     @Test func renvoiApresUnePerte() async throws {
         let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)

@@ -92,6 +92,9 @@ actor SondeUSB: InterlocuteurSonde {
     /// USB, 6 s a distance).
     static let delaiCommandeUSB: Duration = .seconds(3)
     static let delaiCommandeReseau: Duration = .seconds(6)
+    /// Attente d'un `diag` au-dela de son delai : la sonde a du repondre (elle echoue elle-meme
+    /// en `delai`). Par le reseau, le canal renvoie un diag sans reponse jusqu'a cette echeance.
+    static let margeDiag: Duration = .seconds(5)
 
     private let canal: any CanalSonde
     /// Au-dela du delai donne a la sonde, elle a du repondre (elle echoue elle-meme en `delai`).
@@ -112,7 +115,7 @@ actor SondeUSB: InterlocuteurSonde {
     /// Dernier `bonjour` recu sans l'avoir demande : la sonde vient de (re)demarrer.
     private(set) var bonjourSpontane: Bonjour?
 
-    init(canal: any CanalSonde, marge: Duration = .seconds(5), delaiCommande: Duration = SondeUSB.delaiCommandeUSB) {
+    init(canal: any CanalSonde, marge: Duration = SondeUSB.margeDiag, delaiCommande: Duration = SondeUSB.delaiCommandeUSB) {
         self.canal = canal
         self.marge = marge
         self.delaiCommande = delaiCommande
