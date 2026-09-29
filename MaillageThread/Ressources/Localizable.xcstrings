@@ -33,6 +33,118 @@
         }
       }
     },
+    "%@ : %@ %lld/%lld…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: %2$@ %3$lld/%4$lld…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ : %2$@ %3$lld/%4$lld…"
+          }
+        }
+      }
+    },
+    "%@ : %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: %2$@…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ : %2$@…"
+          }
+        }
+      }
+    },
+    "%@ : absente" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: absent"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ : absente"
+          }
+        }
+      }
+    },
+    "%@ : connectée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: connected"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ : connectée"
+          }
+        }
+      }
+    },
+    "%@ : connectée · relevé %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: connected · updated %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ : connectée · relevé %2$@"
+          }
+        }
+      }
+    },
+    "%@ : connexion…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: connecting…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ : connexion…"
+          }
+        }
+      }
+    },
+    "%@ : erreur (voir les Réglages)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: error (see Settings)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ : erreur (voir les Réglages)"
+          }
+        }
+      }
+    },
     "%@ : nouvelle adresse de lien (redémarrage probable)" : {
       "localizations" : {
         "en" : {
@@ -205,6 +317,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · %lld/%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$lld/%3$lld"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$lld/%3$lld"
+          }
+        }
+      }
+    },
+    "%@ · depuis %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · running for %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · depuis %2$@"
           }
         }
       }
@@ -641,6 +785,22 @@
         }
       }
     },
+    "Balayage des routeurs muets" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan of silent routers"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Balayage des routeurs muets"
+          }
+        }
+      }
+    },
     "Capture enregistrée : %@" : {
       "localizations" : {
         "en" : {
@@ -705,18 +865,18 @@
         }
       }
     },
-    "Code d'appairage" : {
+    "Code Matter de la sonde" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pairing code"
+            "value" : "Probe's Matter code"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Code d'appairage"
+            "value" : "Code Matter de la sonde"
           }
         }
       }
@@ -993,6 +1153,22 @@
         }
       }
     },
+    "Identité des enfants" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Child identities"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identité des enfants"
+          }
+        }
+      }
+    },
     "Journal" : {
       "localizations" : {
         "en" : {
@@ -1101,6 +1277,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Le surnom reste sur ce Mac et passe avant le nom de Maison."
+          }
+        }
+      }
+    },
+    "Liste des routeurs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Router list"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liste des routeurs"
           }
         }
       }
@@ -1485,6 +1677,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Passeur Noms introuvable : lance outils/passeur.sh."
+          }
+        }
+      }
+    },
+    "Pile et Network Data" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stack and Network Data"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pile et Network Data"
           }
         }
       }
@@ -2097,86 +2305,6 @@
         }
       }
     },
-    "Sonde : absente" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Probe: absent"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sonde : absente"
-          }
-        }
-      }
-    },
-    "Sonde : connectée" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Probe: connected"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sonde : connectée"
-          }
-        }
-      }
-    },
-    "Sonde : connectée · relevé %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Probe: connected · read %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sonde : connectée · relevé %@"
-          }
-        }
-      }
-    },
-    "Sonde : connexion…" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Probe: connecting…"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sonde : connexion…"
-          }
-        }
-      }
-    },
-    "Sonde : erreur (voir les Réglages)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Probe: error (see Settings)"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sonde : erreur (voir les Réglages)"
-          }
-        }
-      }
-    },
     "Sonde suspendue dans Maison (interrupteur « Sonde maillage » éteint) : pas de relevé." : {
       "localizations" : {
         "en" : {
@@ -2253,6 +2381,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Table de routage"
+          }
+        }
+      }
+    },
+    "Tournée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tour"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tournée"
           }
         }
       }
@@ -3233,18 +3377,18 @@
         }
       }
     },
-    "État" : {
+    "État de la sonde" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "State"
+            "value" : "Probe state"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "État"
+            "value" : "État de la sonde"
           }
         }
       }

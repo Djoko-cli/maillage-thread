@@ -90,16 +90,18 @@ struct FenetreReglages: View {
                         get: { sonde.ports.first { $0.serie != nil && $0.serie == sonde.serie }?.chemin ?? "" },
                         set: { c in if let p = sonde.ports.first(where: { $0.chemin == c }) { sonde.choisir(p) } })) {
                         Text("—").tag("")
-                        ForEach(sonde.ports) { p in Text(verbatim: p.libelle).tag(p.chemin) }
+                        ForEach(sonde.ports) { p in
+                            Text(verbatim: Self.libellePort(p, serieRetenue: sonde.serie, nom: sonde.nom)).tag(p.chemin)
+                        }
                     }
-                    LabeledContent("État", value: Self.texteEtatSonde(sonde.etat))
+                    // Sous le nom de la sonde (« Sonde » tant qu'il n'est pas connu).
+                    LabeledContent(SondeMaillage.nomAffiche(sonde.nom), value: Self.texteEtatSonde(sonde.etat))
                     if case .connectee(let b) = sonde.etat {
                         LabeledContent("Firmware", value: b.version)
-                        if !b.appairee, let code = b.code {
-                            LabeledContent("Code d'appairage", value: code)
-                            Text("Dans Maison : + › Ajouter un accessoire › Plus d'options, puis ce code.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        let qr = b.qr.flatMap { $0.isEmpty ? nil : $0 }
+                        let code = b.code.flatMap { $0.isEmpty ? nil : $0 }
+                        if qr != nil || code != nil {
+                            CodeMatterSonde(qr: qr, code: code, appairee: b.appairee)
                         }
                     }
                     if let e = sonde.etatSonde {
@@ -110,7 +112,11 @@ struct FenetreReglages: View {
                                 .foregroundStyle(.orange)
                         }
                     }
-                    if let d = sonde.derniereTournee {
+                    if let a = sonde.avancement, let debut = sonde.debutTournee {
+                        TimelineView(.periodic(from: debut, by: 1)) { contexte in
+                            LabeledContent("Tournée", value: TexteTournee.reglages(a, debut: debut, maintenant: contexte.date))
+                        }
+                    } else if let d = sonde.derniereTournee {
                         LabeledContent("Dernier relevé", value: d.formatted(date: .omitted, time: .standard))
                     }
                     if let e = sonde.erreurTournee {
@@ -154,6 +160,13 @@ struct FenetreReglages: View {
         .frame(width: 560)
         // Etat de l'ouverture a la connexion relu a chaque ouverture (Reglages Systeme).
         .onAppear { ouverture.actualiser() }
+    }
+
+    /// Libelle d'un port dans le choix : la sonde retenue sous son nom ; tout autre port, ou
+    /// la sonde retenue sans nom connu (firmware 1.0.0), sous un libelle neutre.
+    static func libellePort(_ p: PortUSB, serieRetenue: String?, nom: String?) -> String {
+        if let nom, let serie = p.serie, serie == serieRetenue { return nom }
+        return "ESP32-C6 · " + p.nomCourt
     }
 
     static func texteEtatSonde(_ e: SondeMaillage.Etat) -> String {
@@ -204,5 +217,43 @@ struct FenetreReglages: View {
         } catch {
             messageCapture = error.localizedDescription
         }
+    }
+}
+
+/// Code Matter de la sonde (Reglages › Sonde), meme quand elle est dans Maison : le QR code,
+/// agrandi sans lissage, noir sur blanc (marge blanche comprise, lisible en mode sombre), et le
+/// code d'appairage mis en forme.
+struct CodeMatterSonde: View {
+    let qr: String?
+    let code: String?
+    let appairee: Bool
+    /// QR code forme une fois par charge, et non a chaque rendu des Reglages.
+    @State private var image: CGImage?
+
+    var body: some View {
+        HStack(spacing: 16) {
+            if let image {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .interpolation(.none)
+                    .frame(width: 120, height: 120)
+                    .padding(8)
+                    .background(.white, in: .rect(cornerRadius: 6))
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Code Matter de la sonde").font(.caption).foregroundStyle(.secondary)
+                if let code {
+                    Text(verbatim: CodeMatter.formater(code))
+                        .font(.title3.monospacedDigit())
+                        .textSelection(.enabled)
+                }
+                if !appairee {
+                    Text("Dans Maison : + › Ajouter un accessoire › Plus d'options, puis ce code.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .task(id: qr) { image = qr.flatMap(CodeMatter.imageQR) }
     }
 }

@@ -16,8 +16,11 @@ struct PortUSB: Identifiable, Hashable, Sendable {
     /// VID Espressif : l'USB Serial/JTAG du C6 est 303A:1001.
     var estEspressif: Bool { vid == 0x303A }
 
+    /// Nom du port sans `/dev/cu.` : « usbmodem11301 ».
+    var nomCourt: String { chemin.replacingOccurrences(of: "/dev/cu.", with: "") }
+
     var libelle: String {
-        var s = chemin.replacingOccurrences(of: "/dev/cu.", with: "")
+        var s = nomCourt
         if let serie, !serie.isEmpty { s += " · \(serie)" }
         return s
     }

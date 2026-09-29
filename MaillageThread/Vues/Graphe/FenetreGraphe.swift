@@ -156,8 +156,39 @@ struct BarreOutils: View {
                 }
                 .buttonStyle(.glass)
                 .help("Rafraîchir : réseau, tournée de la sonde et noms de Maison")
+                if let a = sonde.avancement, let debut = sonde.debutTournee {
+                    IndicateurTournee(avancement: a, debut: debut)
+                }
             }
         }
+    }
+}
+
+/// Tournee de la sonde en cours, dans la barre d'outils : un petit indicateur de
+/// progression et « Balayage des routeurs muets · 24/48 · 0:42 », la duree a jour chaque
+/// seconde.
+struct IndicateurTournee: View {
+    let avancement: AvancementTournee
+    let debut: Date
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if avancement.total > 0 {
+                ProgressView(value: Double(avancement.fait), total: Double(avancement.total))
+                    .progressViewStyle(.circular)
+            } else {
+                ProgressView()
+            }
+            TimelineView(.periodic(from: debut, by: 1)) { contexte in
+                Text(TexteTournee.barre(avancement, debut: debut, maintenant: contexte.date))
+                    .monospacedDigit()
+            }
+        }
+        .controlSize(.small)
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .glassEffect(.regular, in: .capsule)
     }
 }
 

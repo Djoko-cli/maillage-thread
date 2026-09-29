@@ -22,16 +22,25 @@ final class SondeMaillage {
 
     /// Numero de serie USB de la sonde retenue (l'adresse MAC du C6).
     static let cleSerie = "sondeSerieUSB"
+    /// Nom de la sonde retenue, donne par la carte (`bonjour`).
+    static let cleNom = "sondeNom"
     static let periode: Duration = .seconds(300)
 
     private(set) var etat: Etat = .sansSonde
     /// Ports Espressif branches (la sonde, ou un autre C6 comme le pont Halo).
     private(set) var ports: [PortUSB] = []
     private(set) var serie: String?
+    /// Nom de la sonde (« SONDE-01 »), mis a jour a chaque `bonjour` ; nil si le firmware
+    /// n'en donne pas (1.0.0) ou sans sonde retenue.
+    private(set) var nom: String?
     private(set) var etatSonde: EtatSonde?
     /// Reception du dernier maillage (fin de sa tournee).
     private(set) var derniereTournee: Date?
     private(set) var tourneeEnCours = false
+    /// Avancement de la tournee en cours ; nil hors tournee.
+    private(set) var avancement: AvancementTournee?
+    /// Debut de la tournee en cours ; nil hors tournee.
+    private(set) var debutTournee: Date?
     /// Derniere erreur d'une tournee (la liaison reste ouverte).
     private(set) var erreurTournee: String?
     /// Appele a chaque nouveau maillage, avec l'heure de sa reception (fin de la
@@ -72,6 +81,12 @@ final class SondeMaillage {
         self.ouvrirCanal = ouvrirCanal
         self.horloge = horloge
         serie = actif ? preferences.string(forKey: Self.cleSerie) : nil
+        nom = actif ? preferences.string(forKey: Self.cleNom) : nil
+    }
+
+    /// Nom montre pour la sonde : le sien, sinon « Sonde ».
+    static func nomAffiche(_ nom: String?) -> String {
+        nom ?? String(localized: "Sonde")
     }
 
     /// Suit les ports ; reprend la sonde retenue des qu'elle est branchee.
@@ -91,11 +106,23 @@ final class SondeMaillage {
         lancerConnexion(port, choisi: true)
     }
 
-    /// Oublie la sonde retenue et ferme la liaison.
+    /// Oublie la sonde retenue (numero de serie et nom) et ferme la liaison.
     func oublier() {
         preferences.removeObject(forKey: Self.cleSerie)
         serie = nil
+        retenirNom(nil)
         deconnecter(.sansSonde)
+    }
+
+    /// Nom donne par le dernier `bonjour` : retenu a cote du numero de serie, efface si le
+    /// firmware n'en donne pas.
+    private func retenirNom(_ n: String?) {
+        if let n {
+            preferences.set(n, forKey: Self.cleNom)
+        } else {
+            preferences.removeObject(forKey: Self.cleNom)
+        }
+        nom = n
     }
 
     /// Tournee tout de suite (bouton rafraichir) ; rien pendant une tournee : relancer la
@@ -157,6 +184,8 @@ final class SondeMaillage {
                 preferences.set(serieUSB, forKey: Self.cleSerie)
                 serie = serieUSB
             }
+            // Le nom va avec la sonde retenue (un port sans numero de serie ne l'est pas).
+            retenirNom(port.serie != nil && port.serie == serie ? b.nom : nil)
             lancerBoucle()
         } catch {
             await s.fermer()
@@ -214,18 +243,33 @@ final class SondeMaillage {
 
     /// Etat de la sonde, puis une tournee ; le maillage part a la surveillance,
     /// avec l'heure de sa reception (la fin de la tournee), entre les signaux de
-    /// debut et de fin de la tournee.
+    /// debut et de fin de la tournee. L'avancement et l'heure du debut sont exposes
+    /// pendant la tournee, remis a nil a sa fin (erreur et liaison fermee comprises).
     func uneTournee() async {
         guard let sonde, !tourneeEnCours else { return }
         tourneeEnCours = true
+        debutTournee = horloge()
         surTournee?(true)
-        defer {
-            tourneeEnCours = false
-            surTournee?(false)
+        // L'avancement vient de la tache de la tournee : il passe sur le MainActor dans
+        // l'ordre, et tout est lu avant la remise a nil.
+        let (flux, suite) = AsyncStream.makeStream(of: AvancementTournee.self)
+        let lecture = Task { @MainActor [weak self] in
+            for await a in flux { self?.avancement = a }
         }
+        await executerTournee(sonde) { suite.yield($0) }
+        suite.finish()
+        await lecture.value
+        avancement = nil
+        debutTournee = nil
+        tourneeEnCours = false
+        surTournee?(false)
+    }
+
+    /// Corps de `uneTournee` : ses erreurs sont retenues ici, sauf la liaison fermee (`liaisonFermee`).
+    private func executerTournee(_ sonde: SondeUSB, suivi: @escaping @Sendable (AvancementTournee) -> Void) async {
         do {
             etatSonde = try await sonde.etat()
-            if let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge()) {
+            if let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge(), avancement: suivi) {
                 memoire = r.memoire
                 let recu = horloge()
                 derniereTournee = recu

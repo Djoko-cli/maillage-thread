@@ -47,6 +47,8 @@ final class CanalRejoue: CanalSonde {
     var envoyes: [String] { etat.withLock { $0.envoyes } }
 
     static let bonjour = #"{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.0","mac":"A00000000001","appairee":true,"code":null,"qr":null}"#
+    /// bonjour du firmware 1.0.1 : nom, code et QR code, meme appairee (valeurs inventees).
+    static let bonjourNomme = #"{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.1","nom":"SONDE-01","mac":"A00000000001","appairee":true,"code":"12345678901","qr":"MT:ABCDEFGHIJ0123456789"}"#
     static let etatDetache = #"{"v":1,"t":"etat","role":"detached","rloc16":"FFFE","mode":"rn","parent":null,"partition":null,"chef":null,"canal":25,"prefixeMaille":null,"xp":null,"suspendue":false}"#
 
     static func diag(_ id: Int, _ cible: String, tlv: String) -> String {
@@ -304,6 +306,19 @@ struct SondeMaillageTests {
         if case .connectee = s.etat { true } else { false }
     }
 
+    /// Demande de la liste des routeurs de la premiere tournee d'une connexion (id 1).
+    static let listeRetenue = "diag 0000 5,6 1 6000"
+
+    /// Canal du reseau minimal dont la liste des routeurs ne revient que quand le test la
+    /// rend (`canal.emettre(CanalRejoue.reseauMinimal(listeRetenue + "\n"))`) : la tournee
+    /// reste en cours. Les commandes sont notees au journal.
+    static func canalRetenu(_ journal: JournalCanaux) -> CanalRejoue {
+        CanalRejoue { l in
+            journal.noter(l.trimmingCharacters(in: .newlines))
+            return l.hasPrefix("diag 0000 5,6 ") ? [] : CanalRejoue.reseauMinimal(l)
+        }
+    }
+
     /// Un port qui repond en sonde est retenu (numero de serie USB) ; oublier le retire.
     @Test func retenue() async throws {
         let (p, domaine) = try Self.preferences()
@@ -470,7 +485,107 @@ struct SondeMaillageTests {
         let (p, domaine) = try Self.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
-        #expect(SondeMaillage(preferences: p, actif: false).serie == nil)
+        p.set("SONDE-01", forKey: SondeMaillage.cleNom)
+        let s = SondeMaillage(preferences: p, actif: false)
+        #expect(s.serie == nil)
+        #expect(s.nom == nil)
+    }
+
+    /// Nom donne par la carte (firmware 1.0.1) : retenu a cote du numero de serie, relu au
+    /// lancement ; oublier la sonde l'oublie aussi.
+    @Test func nomRetenu() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let canal = CanalRejoue { l in
+            l == "bonjour\n" ? [CanalRejoue.bonjourNomme] : l == "etat\n" ? [CanalRejoue.etatDetache] : []
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        #expect(s.nom == nil)
+        await s.connecter(Self.port, choisi: true)
+        #expect(s.nom == "SONDE-01")
+        #expect(p.string(forKey: SondeMaillage.cleNom) == "SONDE-01")
+        #expect(SondeMaillage(preferences: p, actif: true).nom == "SONDE-01", "relu au lancement")
+        s.oublier()
+        #expect(s.nom == nil)
+        #expect(p.string(forKey: SondeMaillage.cleNom) == nil)
+    }
+
+    /// Port sans numero de serie : la sonde n'est pas retenue, son nom non plus (il resterait
+    /// affiche sans sonde choisie apres un relancement).
+    @Test func nomSansSerieNonRetenu() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let sansSerie = PortUSB(chemin: "/dev/cu.usbmodemFACTICE03", vid: 0x303A, pid: 0x1001, serie: nil, produit: nil)
+        let canal = CanalRejoue { l in
+            l == "bonjour\n" ? [CanalRejoue.bonjourNomme] : l == "etat\n" ? [CanalRejoue.etatDetache] : []
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        await s.connecter(sansSerie, choisi: true)
+        #expect(Self.connectee(s))
+        #expect(s.serie == nil)
+        #expect(s.nom == nil)
+        #expect(p.string(forKey: SondeMaillage.cleNom) == nil)
+        s.oublier()
+    }
+
+    /// Le nom suit chaque bonjour : un firmware sans nom (1.0.0) l'efface.
+    @Test func nomSuitLeBonjour() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        var canaux = 0
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in
+            canaux += 1
+            let b = canaux == 1 ? CanalRejoue.bonjourNomme : CanalRejoue.bonjour
+            return CanalRejoue { l in l == "bonjour\n" ? [b] : l == "etat\n" ? [CanalRejoue.etatDetache] : [] }
+        })
+        await s.connecter(Self.port, choisi: true)
+        #expect(s.nom == "SONDE-01")
+        await s.connecter(Self.port, choisi: true)
+        #expect(Self.connectee(s))
+        #expect(s.nom == nil)
+        #expect(p.string(forKey: SondeMaillage.cleNom) == nil)
+        s.oublier()
+    }
+
+    /// Pendant une tournee : son avancement (etape, fait, total) et l'heure de son debut ;
+    /// l'un et l'autre remis a nil a sa fin.
+    @Test(.timeLimit(.minutes(1))) func avancementPendantLaTournee() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t0 = Date(timeIntervalSince1970: 1_790_000_000)
+        let horloge = HorlogeFactice(t0)
+        let journal = JournalCanaux()
+        let canal = Self.canalRetenu(journal)
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal }, horloge: { horloge.maintenant })
+        #expect(s.avancement == nil && s.debutTournee == nil)
+        await s.connecter(Self.port, choisi: true)
+        await journal.attendre(Self.listeRetenue)
+        await Self.attendre { s.avancement?.etape == .listeRouteurs }
+        #expect(s.avancement == AvancementTournee(etape: .listeRouteurs, fait: 0, total: 1))
+        #expect(s.debutTournee == t0)
+        canal.emettre(CanalRejoue.reseauMinimal(Self.listeRetenue + "\n"))
+        await Self.attendre { !s.tourneeEnCours }
+        #expect(s.derniereTournee == t0)
+        #expect(s.avancement == nil)
+        #expect(s.debutTournee == nil)
+        s.oublier()
+    }
+
+    /// La liaison se ferme pendant une tournee (oubli, debranchement) : la tournee finit sans
+    /// erreur a montrer, son avancement est remis a nil.
+    @Test(.timeLimit(.minutes(1))) func avancementRemisANilALaFermeture() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in Self.canalRetenu(journal) })
+        await s.connecter(Self.port, choisi: true)
+        await journal.attendre(Self.listeRetenue)
+        await Self.attendre { s.avancement != nil }
+        s.oublier()
+        await Self.attendre { !s.tourneeEnCours }
+        #expect(s.avancement == nil)
+        #expect(s.debutTournee == nil)
+        #expect(s.erreurTournee == nil)
     }
 
     /// Age compte depuis la reception : frais jusqu'a 6 min, ancien jusqu'a 15, perime
@@ -521,14 +636,10 @@ struct SondeMaillageTests {
         let (p, domaine) = try Self.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         let journal = JournalCanaux()
-        let canal = CanalRejoue { l in
-            journal.noter(l.trimmingCharacters(in: .newlines))
-            // La liste des routeurs attend que le test la rende : la tournee reste en cours.
-            return l.hasPrefix("diag 0000 5,6 ") ? [] : CanalRejoue.reseauMinimal(l)
-        }
+        let canal = Self.canalRetenu(journal)
         let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
         await s.connecter(Self.port, choisi: true)
-        await journal.attendre("diag 0000 5,6 1 6000")
+        await journal.attendre(Self.listeRetenue)
         #expect(s.tourneeEnCours)
         let boucle = try #require(s.boucle)
         s.rafraichir()
@@ -536,7 +647,7 @@ struct SondeMaillageTests {
         #expect(s.boucle == boucle, "boucle gardee")
         #expect(!boucle.isCancelled)
         #expect(canal.envoyes.filter { $0 == "etat\n" }.count == 2, "une seule tournee : etat, puis celui de la tournee")
-        canal.emettre(CanalRejoue.reseauMinimal("diag 0000 5,6 1 6000\n"))
+        canal.emettre(CanalRejoue.reseauMinimal(Self.listeRetenue + "\n"))
         await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
         s.rafraichir()
         await Self.attendre { s.tourneeEnCours }

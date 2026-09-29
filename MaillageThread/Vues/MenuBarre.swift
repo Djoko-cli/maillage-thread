@@ -106,21 +106,26 @@ struct MenuBarre: View {
         }
         if surveillance.mode == .demo {
             Text("Mode démo : panne du 27/09 rejouée").font(.caption).foregroundStyle(.secondary)
-        } else if let t = Self.ligneSonde(sonde.etat, derniere: sonde.derniereTournee, maintenant: Date()) {
+        } else if let t = Self.ligneSonde(sonde.etat, nom: sonde.nom, derniere: sonde.derniereTournee,
+                                          avancement: sonde.avancement, maintenant: Date()) {
             Text(t).font(.caption).foregroundStyle(.secondary)
         }
     }
 
-    /// Ligne de la sonde ; rien tant qu'aucune n'est choisie.
-    static func ligneSonde(_ e: SondeMaillage.Etat, derniere: Date?, maintenant: Date) -> String? {
+    /// Ligne de la sonde, sous son nom (« Sonde » tant qu'il n'est pas connu) ; pendant une
+    /// tournee, son etape et son compteur. Rien tant qu'aucune sonde n'est choisie.
+    static func ligneSonde(_ e: SondeMaillage.Etat, nom: String?, derniere: Date?, avancement: AvancementTournee?,
+                           maintenant: Date) -> String? {
+        let n = SondeMaillage.nomAffiche(nom)
         switch e {
         case .sansSonde: return nil
-        case .absente: return String(localized: "Sonde : absente")
-        case .connexion: return String(localized: "Sonde : connexion…")
+        case .absente: return String(localized: "\(n) : absente")
+        case .connexion: return String(localized: "\(n) : connexion…")
         case .connectee:
-            guard let d = derniere else { return String(localized: "Sonde : connectée") }
-            return String(localized: "Sonde : connectée · relevé \(FicheNoeud.relatif(d, maintenant))")
-        case .refusee, .erreur: return String(localized: "Sonde : erreur (voir les Réglages)")
+            if let avancement { return TexteTournee.menu(avancement, nom: n) }
+            guard let d = derniere else { return String(localized: "\(n) : connectée") }
+            return String(localized: "\(n) : connectée · relevé \(FicheNoeud.relatif(d, maintenant))")
+        case .refusee, .erreur: return String(localized: "\(n) : erreur (voir les Réglages)")
         }
     }
 
