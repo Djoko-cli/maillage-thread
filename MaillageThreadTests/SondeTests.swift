@@ -1,5 +1,6 @@
 import Foundation
 import MaillageCoeur
+import Observation
 import Synchronization
 import Testing
 @testable import MaillageThread
@@ -50,6 +51,110 @@ final class CanalRejoue: CanalSonde {
 
     static func diag(_ id: Int, _ cible: String, tlv: String) -> String {
         #"{"v":1,"t":"diag","id":\#(id),"cible":"\#(cible)","ms":40,"ok":true,"code":"2.04","tlv":"\#(tlv)"}"#
+    }
+}
+
+/// Journal commun a des canaux de test ; on peut y attendre une ligne.
+final class JournalCanaux: Sendable {
+    private struct Etat {
+        var lignes: [String] = []
+        var attentes: [(ligne: String, suite: CheckedContinuation<Void, Never>)] = []
+    }
+
+    private let etat = Mutex(Etat())
+
+    func noter(_ ligne: String) {
+        let prets = etat.withLock { e in
+            e.lignes.append(ligne)
+            let prets = e.attentes.filter { $0.ligne == ligne }.map(\.suite)
+            e.attentes.removeAll { $0.ligne == ligne }
+            return prets
+        }
+        for p in prets { p.resume() }
+    }
+
+    /// Rend la main une fois `ligne` notee (tout de suite si elle l'est deja).
+    func attendre(_ ligne: String) async {
+        await withCheckedContinuation { (suite: CheckedContinuation<Void, Never>) in
+            let deja = etat.withLock { e in
+                guard !e.lignes.contains(ligne) else { return true }
+                e.attentes.append((ligne, suite))
+                return false
+            }
+            if deja { suite.resume() }
+        }
+    }
+
+    var lignes: [String] { etat.withLock { $0.lignes } }
+
+    /// Ouvertures, fermetures et fins de flux, sans les commandes.
+    var cycle: [String] {
+        lignes.filter { l in ["ouvrir", "fermer", "fin"].contains(l.split(separator: " ").first.map(String.init)) }
+    }
+}
+
+/// Canal de test de la connexion : note au journal ses ouvertures, sa fermeture,
+/// la fin de son flux (le port vraiment ferme) et les commandes recues. Il peut
+/// retenir la reponse a `bonjour`, et finir son flux en differe, comme la liaison
+/// serie qui ferme le port sur sa file.
+final class CanalTemoin: CanalSonde {
+    let nom: String
+    let journal: JournalCanaux
+    let retenirBonjour: Bool
+    let fermetureDifferee: Duration?
+    private let suite = Mutex<AsyncStream<Data>.Continuation?>(nil)
+
+    init(_ nom: String, journal: JournalCanaux, retenirBonjour: Bool = false, fermetureDifferee: Duration? = nil) {
+        self.nom = nom
+        self.journal = journal
+        self.retenirBonjour = retenirBonjour
+        self.fermetureDifferee = fermetureDifferee
+    }
+
+    func ouvrir() throws -> AsyncStream<Data> {
+        let (flux, s) = AsyncStream.makeStream(of: Data.self, bufferingPolicy: .unbounded)
+        suite.withLock { $0 = s }
+        journal.noter("ouvrir \(nom)")
+        return flux
+    }
+
+    func envoyer(_ ligne: String) {
+        let commande = ligne.trimmingCharacters(in: .newlines)
+        journal.noter("\(commande) \(nom)")
+        switch commande {
+        case "bonjour" where !retenirBonjour: repondre(CanalRejoue.bonjour)
+        case "etat": repondre(CanalRejoue.etatDetache)
+        default: break
+        }
+    }
+
+    /// La reponse retenue a `bonjour` arrive enfin.
+    func libererBonjour() {
+        repondre(CanalRejoue.bonjour)
+    }
+
+    private func repondre(_ l: String) {
+        suite.withLock { _ = $0?.yield(Data(l.utf8)) }
+    }
+
+    /// Une seule fermeture effective ; rien a fermer si le canal n'a pas ete ouvert.
+    func fermer() {
+        guard let s = suite.withLock({ s in
+            defer { s = nil }
+            return s
+        }) else { return }
+        journal.noter("fermer \(nom)")
+        guard let d = fermetureDifferee else {
+            journal.noter("fin \(nom)")
+            s.finish()
+            return
+        }
+        let journal = journal, nom = nom
+        Task {
+            try? await Task.sleep(for: d)
+            journal.noter("fin \(nom)")
+            s.finish()
+        }
     }
 }
 
@@ -119,6 +224,26 @@ struct SondeUSBTests {
         try await Task.sleep(for: .milliseconds(50))
         #expect(await s.bonjourSpontane?.version == "1.0.0")
     }
+
+    /// fermer rend la main une fois le flux fini (le port vraiment ferme), meme
+    /// quand le canal le finit en differe.
+    @Test func fermerAttendLaFinDuFlux() async throws {
+        let journal = JournalCanaux()
+        let s = SondeUSB(canal: CanalTemoin("1", journal: journal, fermetureDifferee: .milliseconds(50)))
+        try await s.demarrer {}
+        await s.fermer()
+        #expect(journal.cycle == ["ouvrir 1", "fermer 1", "fin 1"])
+        #expect(await s.fermee)
+    }
+
+    /// Fermee avant d'avoir demarre (connexion abandonnee) : le canal ne s'ouvre plus.
+    @Test func fermeeAvantDeDemarrer() async throws {
+        let journal = JournalCanaux()
+        let s = SondeUSB(canal: CanalTemoin("1", journal: journal))
+        await s.fermer()
+        await #expect(throws: SondeUSB.Erreur.fermee) { try await s.demarrer {} }
+        #expect(journal.cycle.isEmpty)
+    }
 }
 
 @MainActor
@@ -131,6 +256,20 @@ struct SondeMaillageTests {
 
     static let port = PortUSB(chemin: "/dev/cu.usbmodem11301", vid: 0x303A, pid: 0x1001, serie: "A0:00:00:00:00:01",
                               produit: "USB JTAG/serial debug unit")
+
+    /// Attend, sans delai, que `condition` soit vraie : elle est relue a chaque
+    /// changement observe de ce qu'elle lit.
+    static func attendre(_ condition: () -> Bool) async {
+        while !condition() {
+            await withCheckedContinuation { (suite: CheckedContinuation<Void, Never>) in
+                withObservationTracking { _ = condition() } onChange: { suite.resume() }
+            }
+        }
+    }
+
+    static func connectee(_ s: SondeMaillage) -> Bool {
+        if case .connectee = s.etat { true } else { false }
+    }
 
     /// Un port qui repond en sonde est retenu (numero de serie USB) ; oublier le retire.
     @Test func retenue() async throws {
@@ -173,6 +312,86 @@ struct SondeMaillageTests {
         let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in CanalRejoue { _ in [] } })
         s.portsChanges([])
         #expect(s.etat == .absente)
+    }
+
+    /// « Oublier » pendant la verification du port (bonjour encore sans reponse) :
+    /// la connexion en cours est abandonnee et son port ferme ; rien n'est retenu.
+    @Test func oublierPendantLaConnexion() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        let canal = CanalTemoin("1", journal: journal, retenirBonjour: true)
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        let connexion = Task { await s.connecter(Self.port, choisi: true) }
+        await journal.attendre("bonjour 1")
+        s.oublier()
+        // La reponse arrive apres coup : elle ne change plus rien.
+        canal.libererBonjour()
+        await connexion.value
+        #expect(s.etat == .sansSonde)
+        #expect(s.serie == nil)
+        #expect(p.string(forKey: SondeMaillage.cleSerie) == nil)
+        #expect(journal.cycle == ["ouvrir 1", "fermer 1", "fin 1"])
+    }
+
+    /// Deux changements de ports de suite, la sonde retenue branchee : une seule connexion.
+    @Test func deuxChangementsDePorts() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
+        let journal = JournalCanaux()
+        var canaux = 0
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in
+            canaux += 1
+            return CanalTemoin("\(canaux)", journal: journal)
+        })
+        s.portsChanges([Self.port])
+        s.portsChanges([Self.port])
+        await Self.attendre { Self.connectee(s) }
+        #expect(canaux == 1)
+        #expect(journal.cycle == ["ouvrir 1"])
+        s.oublier()
+    }
+
+    /// Choisir le port de la sonde deja connectee : rien n'est ferme ni rouvert.
+    @Test func choisirLePortConnecte() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        var canaux = 0
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in
+            canaux += 1
+            return CanalTemoin("\(canaux)", journal: journal)
+        })
+        await s.connecter(Self.port, choisi: true)
+        #expect(Self.connectee(s))
+        s.choisir(Self.port)
+        // Une connexion lancee par `choisir` passerait avant la suite du test
+        // (meme acteur, dans l'ordre) et creerait son canal.
+        await Task.yield()
+        #expect(canaux == 1)
+        #expect(Self.connectee(s))
+        #expect(journal.cycle == ["ouvrir 1"])
+        s.oublier()
+    }
+
+    /// Reconnexion : l'ancienne liaison est vraiment fermee (fin de son flux)
+    /// avant que la nouvelle ne s'ouvre ; sinon le port serait encore tenu.
+    @Test func reconnexion() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        var canaux = 0
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in
+            canaux += 1
+            // Fin du flux en differe, comme la liaison serie qui ferme le port sur sa file.
+            return CanalTemoin("\(canaux)", journal: journal, fermetureDifferee: .milliseconds(50))
+        })
+        await s.connecter(Self.port, choisi: true)
+        await s.connecter(Self.port, choisi: true)
+        #expect(Self.connectee(s))
+        #expect(journal.cycle == ["ouvrir 1", "fermer 1", "fin 1", "ouvrir 2"])
+        s.oublier()
     }
 
     /// En demo et sous tests : rien de lu.

@@ -18,6 +18,8 @@ final class LiaisonSerie: Sendable {
         var fd: Int32 = -1
         var source: (any DispatchSourceRead)?
         var suite: AsyncStream<EvenementLiaison>.Continuation?
+        /// Raison de la fermeture, posee par `terminer`, emise apres `close(fd)`.
+        var raison: String?
     }
 
     private let file = DispatchQueue(label: "fr.djoko.maillage.sonde", qos: .userInitiated)
@@ -27,19 +29,26 @@ final class LiaisonSerie: Sendable {
         self.chemin = chemin
     }
 
+    /// Le flux finit une fois le descripteur ferme, juste apres `.ferme(raison)` :
+    /// a la fin du flux, le port peut etre rouvert (sinon TIOCEXCL le refuse).
     func ouvrir() throws -> AsyncStream<EvenementLiaison> {
         let fd = try PortSerie.ouvrir(chemin)
         let (flux, suite) = AsyncStream.makeStream(of: EvenementLiaison.self, bufferingPolicy: .unbounded)
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: file)
         source.setEventHandler { [weak self] in self?.lire() }
-        source.setCancelHandler {
+        source.setCancelHandler { [weak self] in
             // DTR et RTS sont deja a 0 et HUPCL est retire : fermer ne change rien aux lignes.
             close(fd)
+            // Le port est libre : la fermeture et sa raison, puis la fin du flux.
+            let raison = self?.etat.withLock { $0.raison } ?? String(localized: "port fermé par l'app")
+            suite.yield(.ferme(raison))
+            suite.finish()
         }
         etat.withLock { e in
             e.fd = fd
             e.source = source
             e.suite = suite
+            e.raison = nil
         }
         suite.onTermination = { [weak self] _ in self?.fermer() }
         source.resume()
@@ -97,19 +106,22 @@ final class LiaisonSerie: Sendable {
         }
     }
 
+    /// Sur la file serie. Sans effet si la liaison n'est pas ouverte ou deja en
+    /// train de se fermer (la premiere raison est gardee). Le gestionnaire
+    /// d'annulation de la source ferme le descripteur, puis emet `.ferme` et finit le flux.
     private func terminer(_ raison: String) {
-        let (source, suite) = etat.withLock { e -> ((any DispatchSourceRead)?, AsyncStream<EvenementLiaison>.Continuation?) in
-            let r = (e.source, e.suite)
+        let source = etat.withLock { e -> (any DispatchSourceRead)? in
+            guard let s = e.source else { return nil }
             e.source = nil
             e.suite = nil
             e.fd = -1
-            return r
+            e.raison = raison
+            return s
         }
         source?.cancel()
-        suite?.yield(.ferme(raison))
-        suite?.finish()
     }
 
+    /// Ferme le port sans attendre ; la fin du flux dit quand c'est fait.
     func fermer() {
         file.async { [weak self] in self?.terminer(String(localized: "port fermé par l'app")) }
     }

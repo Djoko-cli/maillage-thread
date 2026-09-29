@@ -69,7 +69,10 @@ actor SondeUSB: InterlocuteurSonde {
     }
 
     /// Ouvre le canal et lit ses lignes ; `surFermeture` quand il se ferme.
+    /// Une sonde fermee ne s'ouvre plus : fermee avant d'avoir demarre (connexion
+    /// abandonnee), elle n'ouvre jamais le canal.
     func demarrer(surFermeture: @escaping @Sendable () -> Void) throws {
+        guard !fermee else { throw Erreur.fermee }
         let lignes = try canal.ouvrir()
         lecture = Task {
             for await l in lignes { self.recevoir(l) }
@@ -78,8 +81,17 @@ actor SondeUSB: InterlocuteurSonde {
         }
     }
 
-    func fermer() {
+    /// Ferme le canal et attend la fin de la lecture, qui suit celle du flux :
+    /// la liaison serie ne finit son flux qu'apres avoir ferme le port. Sans
+    /// lecture (jamais demarree, ou ouverture en echec), la sonde est seulement
+    /// marquee fermee.
+    func fermer() async {
+        guard let lecture else {
+            clore()
+            return
+        }
         canal.fermer()
+        await lecture.value
     }
 
     func bonjour() async throws -> Bonjour {
