@@ -945,6 +945,38 @@
         }
       }
     },
+    "Clé de %@.local non retirée du trousseau : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key for %1$@.local not removed from the keychain: %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé de %1$@.local non retirée du trousseau : %2$@"
+          }
+        }
+      }
+    },
+    "Clé rangée ; l'ancienne clé de %@.local n'a pas pu être retirée du trousseau : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key stored; the old key for %1$@.local could not be removed from the keychain: %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé rangée ; l'ancienne clé de %1$@.local n'a pas pu être retirée du trousseau : %2$@"
+          }
+        }
+      }
+    },
     "Code Matter de la sonde" : {
       "localizations" : {
         "en" : {

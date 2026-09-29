@@ -42,6 +42,22 @@ final class CanalLent: CanalSonde {
     }
 }
 
+/// Trousseau en memoire qui peut refuser d'effacer (trousseau verrouille, acces refuse).
+final class TrousseauRetif: TrousseauCles {
+    static let refus = ErreurTrousseau.systeme(-25308)  // errSecInteractionNotAllowed
+    let memoire = TrousseauMemoire()
+    let refuserOubli = Mutex(true)
+
+    func lister() -> [SondeConnue] { memoire.lister() }
+    func lire(nom: String) throws -> Data { try memoire.lire(nom: nom) }
+    func ranger(nom: String, cle: Data, empreinte: String) throws { try memoire.ranger(nom: nom, cle: cle, empreinte: empreinte) }
+
+    func oublier(nom: String) throws {
+        if refuserOubli.withLock({ $0 }) { throw Self.refus }
+        try memoire.oublier(nom: nom)
+    }
+}
+
 /// Ouvertures de la liaison reseau demandees par `SondeMaillage` : nom d'hote et cle, et le
 /// canal rendu (ou l'erreur) a chaque essai. Aucun trafic reseau.
 @MainActor
@@ -128,7 +144,7 @@ struct SondeReseauTests {
         #expect(s.empreinteAcces == nil && !s.reseauDisponible)
         #expect(s.peutAutoriser)
         await s.autoriserAccesReseau()
-        #expect(s.erreurAutorisation == nil)
+        #expect(s.erreurAcces == nil)
         #expect(try t.lire(nom: Self.hote) == VecteursH1.psk)
         #expect(s.empreinteAcces == "630DCD29")
         #expect(s.reseauDisponible)
@@ -147,7 +163,7 @@ struct SondeReseauTests {
         let s = Self.sondeMaillage(p, usb: { _ in canal }, trousseau: t)
         await s.connecter(Self.port, choisi: true)
         await s.autoriserAccesReseau()
-        #expect(s.erreurAutorisation == CleReseau.Erreur.sansNomDHote.localizedDescription)
+        #expect(s.erreurAcces == CleReseau.Erreur.sansNomDHote.localizedDescription)
         #expect(!canal.envoyes.contains { $0.hasPrefix("cle") })
         #expect(t.lister().isEmpty)
         s.oublier()
@@ -167,13 +183,82 @@ struct SondeReseauTests {
         }, trousseau: t)
         await s.connecter(Self.port, choisi: true)
         await s.autoriserAccesReseau()
-        #expect(s.erreurAutorisation == CleReseau.Erreur.empreinteIncoherente.localizedDescription)
+        #expect(s.erreurAcces == CleReseau.Erreur.empreinteIncoherente.localizedDescription)
         await s.connecter(Self.port, choisi: true)
         await s.autoriserAccesReseau()
-        #expect(s.erreurAutorisation == SondeUSB.Erreur.refusee("commande inconnue").localizedDescription)
+        #expect(s.erreurAcces == SondeUSB.Erreur.refusee("commande inconnue").localizedDescription)
         #expect(t.lister().isEmpty)
         #expect(s.empreinteAcces == nil)
         s.oublier()
+    }
+
+    /// Apres une nouvelle mise en service, le nom d'hote a change : la cle se range sous le nouveau
+    /// nom, l'entree de l'ancien est retiree du trousseau (une seule sonde retenue).
+    @Test func autoriserRetireLAncienneEntree() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = TrousseauMemoire()
+        try t.ranger(nom: "FEDCBA9876543210", cle: Data(repeating: 1, count: 32), empreinte: "11111111")
+        p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
+        p.set("FEDCBA9876543210", forKey: SondeMaillage.cleHote)
+        let s = Self.sondeMaillage(p, trousseau: t)
+        await s.connecter(Self.port, choisi: true)
+        #expect(s.hote == Self.hote, "nom d'hote du bonjour")
+        await s.autoriserAccesReseau()
+        let noms = t.lister().map { $0.nom }
+        #expect(noms == [Self.hote])
+        s.oublier()
+    }
+
+    /// L'ancienne entree ne s'efface pas : la nouvelle cle est rangee, l'echec est montre.
+    @Test func autoriserAncienneCleNonRetiree() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let t = TrousseauRetif()
+        try t.ranger(nom: "FEDCBA9876543210", cle: Data(repeating: 1, count: 32), empreinte: "11111111")
+        let s = Self.sondeMaillage(p, trousseau: t)
+        await s.connecter(Self.port, choisi: true)
+        await s.autoriserAccesReseau()
+        #expect(s.empreinteAcces == "630DCD29" && s.reseauDisponible)
+        #expect(s.erreurAcces == String(localized: "Clé rangée ; l'ancienne clé de \("FEDCBA9876543210").local n'a pas pu être retirée du trousseau : \(TrousseauRetif.refus.localizedDescription)"))
+        t.refuserOubli.withLock { $0 = false }
+        s.oublier()
+    }
+
+    /// « Oublier la sonde » quand le trousseau refuse d'effacer la cle : l'echec est montre, le nom
+    /// d'hote reste (la cle aussi) ; relance une fois le trousseau d'accord, tout part.
+    @Test func oublierSansEffacerLaCle() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        _ = try Self.prete(p, liaison: .usb)
+        let t = TrousseauRetif()
+        try t.ranger(nom: Self.hote, cle: VecteursH1.psk, empreinte: "630DCD29")
+        let s = Self.sondeMaillage(p, trousseau: t)
+        s.oublier()
+        #expect(s.etat == .sansSonde && s.serie == nil && s.liaison == .usb)
+        #expect(s.hote == Self.hote && s.empreinteAcces == "630DCD29", "nom d'hote garde : la cle est toujours la")
+        #expect(p.string(forKey: SondeMaillage.cleHote) == Self.hote)
+        #expect(s.erreurAcces == String(localized: "Clé de \(Self.hote).local non retirée du trousseau : \(TrousseauRetif.refus.localizedDescription)"))
+        t.refuserOubli.withLock { $0 = false }
+        s.oublier()
+        #expect(s.hote == nil && s.empreinteAcces == nil && s.erreurAcces == nil)
+        #expect(t.lister().isEmpty)
+    }
+
+    /// Nom d'hote de la reponse `cle` nul ou vide : la cle se range sous celui du `bonjour`.
+    @Test func cleSansNomDHote() async throws {
+        for h in [nil, ""] as [String?] {
+            let (p, domaine) = try SondeMaillageTests.preferences()
+            defer { p.removePersistentDomain(forName: domaine) }
+            let t = TrousseauMemoire()
+            let s = Self.sondeMaillage(p, usb: { _ in Self.sonde(cle: { [CleReseauTests.reponse($0, hote: h)] }) }, trousseau: t)
+            await s.connecter(Self.port, choisi: true)
+            await s.autoriserAccesReseau()
+            let noms = t.lister().map { $0.nom }
+            #expect(noms == [Self.hote], "cle.hote \(String(describing: h))")
+            #expect(s.hote == Self.hote)
+            s.oublier()
+        }
     }
 
     /// Sans cle pour la sonde retenue, le reseau ne se choisit pas.

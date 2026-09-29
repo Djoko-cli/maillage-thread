@@ -68,8 +68,9 @@ final class SondeMaillage {
     private(set) var empreinteAcces: String?
     /// « Autoriser l'acces reseau » en cours (cle demandee par l'USB).
     private(set) var autorisationEnCours = false
-    /// Echec de la derniere autorisation ; nil apres une autorisation reussie.
-    private(set) var erreurAutorisation: String?
+    /// Echec de la derniere operation sur l'acces reseau (autorisation, oubli de la cle) ; nil
+    /// apres une reussite.
+    private(set) var erreurAcces: String?
     /// Appele a chaque nouveau maillage, avec l'heure de sa reception (fin de la
     /// tournee) : la fraicheur affichee se compte depuis.
     @ObservationIgnored var surMaillage: ((Maillage, Date) -> Void)?
@@ -205,16 +206,24 @@ final class SondeMaillage {
     }
 
     /// Oublie la sonde retenue (numero de serie, nom, nom d'hote, cle de ce Mac pour elle :
-    /// la sonde garde la sienne) et ferme la liaison ; retour a l'USB.
+    /// la sonde garde la sienne) et ferme la liaison ; retour a l'USB. Si le trousseau refuse
+    /// d'effacer la cle, l'echec est montre et le nom d'hote reste (comme la cle) : « Oublier »
+    /// peut etre relance.
     func oublier() {
         preferences.removeObject(forKey: Self.cleSerie)
         serie = nil
         retenirNom(nil)
-        if let hote { try? trousseau.oublier(nom: hote) }
-        retenirHote(nil)
+        erreurAcces = nil
+        if let hote {
+            do {
+                try trousseau.oublier(nom: hote)
+                retenirHote(nil)
+            } catch {
+                erreurAcces = String(localized: "Clé de \(hote).local non retirée du trousseau : \(error.localizedDescription)")
+            }
+        }
         liaison = .usb
         preferences.removeObject(forKey: Self.cleLiaison)
-        erreurAutorisation = nil
         reprise?.cancel()
         deconnecter(.sansSonde)
     }
@@ -463,7 +472,7 @@ final class SondeMaillage {
     func autoriserAccesReseau() async {
         guard peutAutoriser, let s = sonde else { return }
         autorisationEnCours = true
-        erreurAutorisation = nil
+        erreurAcces = nil
         defer { autorisationEnCours = false }
         do {
             let b = try await s.bonjour()
@@ -474,13 +483,22 @@ final class SondeMaillage {
             guard let nomHote = b.hote, !nomHote.isEmpty else { throw CleReseau.Erreur.sansNomDHote }
             let reponse = try await s.cleNouvelle(alea: CleReseau.alea())
             let c = try CleReseau.verifier(reponse).get()
-            // La carte a adopte la cle : elle se range meme si la liaison s'est fermee depuis.
-            let nom = c.hote ?? nomHote
+            // La carte a adopte la cle : elle se range meme si la liaison s'est fermee depuis, sous
+            // le nom d'hote de la reponse, sinon (nul ou vide) sous celui du `bonjour`.
+            let nom = c.hote.flatMap { $0.isEmpty ? nil : $0 } ?? nomHote
             try trousseau.ranger(nom: nom, cle: c.cle, empreinte: c.empreinte)
-            if let ancien = hote, ancien != nom { try? trousseau.oublier(nom: ancien) }
             retenirHote(nom)
+            // Une seule sonde retenue : les cles d'autres noms d'hote (mise en service anterieure)
+            // ne servent plus ; un echec est montre, la nouvelle cle reste rangee.
+            for ancien in trousseau.lister() where ancien.nom != nom {
+                do {
+                    try trousseau.oublier(nom: ancien.nom)
+                } catch {
+                    erreurAcces = String(localized: "Clé rangée ; l'ancienne clé de \(ancien.nom).local n'a pas pu être retirée du trousseau : \(error.localizedDescription)")
+                }
+            }
         } catch {
-            erreurAutorisation = error.localizedDescription
+            erreurAcces = error.localizedDescription
         }
     }
 

@@ -58,6 +58,8 @@
   "Celle du Mac": "Same as the Mac",
   "Choisir…": "Choose…",
   "Clé absente de ce Mac pour %@.local : brancher la sonde en USB, puis « Autoriser l'accès réseau ».": "No key on this Mac for %@.local: plug the probe in over USB, then “Allow Network Access”.",
+  "Clé de %@.local non retirée du trousseau : %@": "Key for %1$@.local not removed from the keychain: %2$@",
+  "Clé rangée ; l'ancienne clé de %@.local n'a pas pu être retirée du trousseau : %@": "Key stored; the old key for %1$@.local could not be removed from the keychain: %2$@",
   "Code Matter de la sonde": "Probe's Matter code",
   "Connexion réseau perdue : %@": "Network connection lost: %@",
   "DTR et RTS à 0 (TIOCMSET)": "DTR and RTS to 0 (TIOCMSET)",

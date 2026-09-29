@@ -134,7 +134,8 @@ struct FenetreReglages: View {
                     if let e = sonde.erreurTournee {
                         Text(e).font(.caption).foregroundStyle(.red)
                     }
-                    if sonde.serie != nil {
+                    // Le nom d'hote reste apres un oubli dont la cle n'a pas pu etre effacee.
+                    if sonde.serie != nil || sonde.hote != nil {
                         AccesReseauSonde()
                         Button("Oublier la sonde") { sonde.oublier() }
                     }
@@ -267,7 +268,7 @@ struct AccesReseauSonde: View {
                 }
             }
         }
-        if let e = sonde.erreurAutorisation {
+        if let e = sonde.erreurAcces {
             Text(e).font(.caption).foregroundStyle(.red)
         }
         Text("La clé passe par l'USB, sonde branchée, et reste dans le trousseau de ce Mac. Avec la liaison « Réseau Thread », la sonde peut être débranchée et alimentée ailleurs.")
