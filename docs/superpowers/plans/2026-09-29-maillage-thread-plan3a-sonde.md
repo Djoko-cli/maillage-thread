@@ -28,6 +28,8 @@
 - le firmware 1.0.0 compile ;
 - le plan a ensuite été rejoué tâche par tâche sur une copie neuve de `essai-sonde`. Les résultats attendus ci-dessous viennent de ce rejeu : l'erreur avant le code, les tests après, et la liste du `git add`, qui couvre chaque fichier touché. L'arbre final est identique à la copie validée.
 
+Ces effectifs et ces blocs sont ceux d'avant l'exécution : des relectures ont ensuite corrigé le code. La section « Écarts d'exécution (29/09) », à la fin du plan, liste ces corrections, les blocs qu'elles dépassent et les effectifs de tests à jour.
+
 Exécuter une tâche, c'est transcrire les fichiers et les blocs donnés, compiler et tester. Si un fichier doit s'écarter du texte donné, l'exécutant le dit dans son rapport, avec la raison.
 
 **Blocs de modification.** Un fichier existant est modifié soit en entier (« fichier entier ci-dessous »), soit par blocs « remplacer … par … ». Chaque texte à remplacer apparaît une seule fois dans le fichier au moment où on l'applique. Les blocs s'appliquent dans l'ordre, du haut vers le bas, au texte exact, espaces compris (outil Edit).
@@ -5697,6 +5699,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
    ```
 
    La MAC affichée par le flash doit être celle que Djoko a relevée pour la sonde, jamais celle du pont Halo. Sinon, arrêter.
+
+   Avant de flasher, « Sonde maillage » doit être allumé dans Maison : le firmware garde l'état de l'interrupteur d'un démarrage à l'autre, et son premier démarrage, sans état gardé, part allumé.
 3. **Liaison.** Recompiler l'app (`outils/tester.sh`), quitter celle qui tourne et lancer la nouvelle en mode direct, avec Djoko. Au démarrage, elle ne doit ouvrir aucun port. Dans Réglages › Sonde › Port, Djoko choisit la sonde. Attendu :
    - État « connectée », firmware 1.0.0 ;
    - la partition du réseau d'Apple ;
@@ -5708,9 +5712,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
    - les pointillés gardés pour ce que la sonde ne voit pas (l'Aqara, s'il a sa partition).
 
    Survoler un routeur éclaire ses liens. La fiche d'un appareil donne son parent et la qualité. La ligne du menu dit « Sonde : connectée ».
-5. **Suspension.** Djoko éteint « Sonde maillage » dans Maison. Les Réglages montrent l'avertissement de suspension et la tournée s'arrête. Il la rallume.
-6. **Débranchement.** Djoko débranche la sonde : le menu dit « Sonde : absente ». Il la rebranche : l'app la reprend seule, par son numéro de série.
-7. **Retour.** Noter le nombre de routeurs, de liens et d'enfants, et les nœuds non identifiés.
+5. **Marche normale,** pendant au moins trois tournées (un quart d'heure), balayage compris : la légende du graphe ne dit jamais « relevé de la sonde ancien ».
+6. **Suspension.** Djoko éteint « Sonde maillage » dans Maison. Les Réglages montrent l'avertissement de suspension et la tournée s'arrête. Il la laisse éteinte, débranche la sonde et la rebranche : `etat` dit toujours `suspendue` (avertissement dans les Réglages) et Maison montre « éteint ». Il la rallume.
+7. **Débranchement.** Djoko débranche la sonde : le menu dit « Sonde : absente ». Il la rebranche : l'app la reprend seule, par son numéro de série, sans rien toucher dans les Réglages. Puis « Oublier la sonde » et la choisir de nouveau dans Réglages › Sonde › Port : elle se reconnecte. Ni ici ni au rebranchement, aucune erreur « port occupé » causée par l'app.
+8. **Retour.** Noter le nombre de routeurs, de liens et d'enfants, et les nœuds non identifiés.
 
 - [ ] **Step 5 : spec, section 8.** À la fin de la section 8, ajouter le paragraphe suivant, en remplaçant `<…>` par les valeurs du Step 4. Ce sont des comptes et des RLOC16, jamais une ExtMac ni une adresse.
 
@@ -5718,7 +5723,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Vérifié le <date> avec Djoko** (firmware 1.0.0, plan 3a) : sonde choisie
 dans Réglages › Sonde et reprise seule après débranchement ; <n> routeurs
 (dont <m> muets), <l> liens radio, <e> enfants, dont <b> par balayage, et
-<i> nœuds non identifiés ; suspension par « Sonde maillage » vérifiée.
+<i> nœuds non identifiés ; suspension par « Sonde maillage » vérifiée, et
+gardée après un redémarrage ; ni « ancien » en marche normale, ni « port
+occupé » causé par l'app.
 ```
 
 Commit : `git add docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design.md`, message « Noter la verification de la sonde avec Djoko », terminé par la ligne `Co-Authored-By`.
@@ -5739,12 +5746,13 @@ Commit : `git add docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design
 | 3. Trame RS + JSON ; DTR et RTS d'un seul coup | 4, 9 |
 | 3. Commandes et messages (`bonjour`, `etat`, `voisins`, `diag`) | 4, 8, 10 (écarts 4 et 5) |
 | 3. Aucun port non désigné ; numéro de série retenu ; vérification par `bonjour` | 10, 11 |
-| 4. Tournée courte : `etat` ; Route64 et Leader Data du chef, ou d'un routeur qui a répondu ; Network Data ; routeurs ; pile une fois | 6 |
-| 4. Tournée toutes les 5 min et au bouton ; autre chef ou autre partition | 10, 11 (bouton) ; 6 (mémoire remise à zéro, écart 3) |
-| 4. Routeur muet : 2 tournées de suite, puis une fois par heure | 6 |
-| 4. Balayage : de 1 à 32, 8 après le dernier, 8 en vol, 8 s ; toutes les 30 min ou quand les muets changent ; enfants gardés entre deux balayages | 6 |
+| 4. Tournée courte : `etat` ; Route64 et Leader Data du chef (après les autres s'il est muet), des routeurs qui ont répondu à la dernière tournée, sinon des identifiants 0 à 62 par groupes de 8 ; sans Route64, pas de nouveau maillage ; Network Data ; routeurs ; pile une fois | 6 |
+| 4. Tournée toutes les 5 min et au bouton ; un autre chef ou une autre partition vu à la tournée suivante ; autre partition : mémoire remise à zéro | 10, 11 (bouton) ; 6 (mémoire remise à zéro, écart 3) |
+| 4. Routeur muet : 2 tournées de suite, puis une fois par heure ; « muet » dans le maillage rendu dès le premier échec | 5, 6 |
+| 4. Balayage des routeurs à balayer (sans réponse à la tournée, et muets ou n'ayant jamais répondu) : de 1 à 32, 8 après le dernier, 8 en vol, 8 s ; toutes les 30 min ou quand l'ensemble des routeurs à balayer change ; enfants gardés entre deux balayages | 6 |
+| 4. Identité des enfants des tables (ExtMac, adresses) : au plus une fois par demi-heure, endormis compris | 6 |
 | 4. Rapprochement : ExtMac = nom d'hôte ; `xa` par le parent de la sonde et par le BBR principal ; adresse commune ; sinon « non identifié » | 6 (identités), 7 |
-| 4. Sonde muette : « ancien » jusqu'à 15 min, puis les pointillés | 10, 11 |
+| 4. Sonde muette ou tournée sans Route64 : dernier maillage affiché 15 min, « ancien » au bout de 6 min (comptées depuis sa réception ; jamais pendant une tournée), puis les pointillés | 10, 11 |
 | 5. Graphe : anneaux ; traits pleins selon la qualité ; trait fin gris sous un routeur muet ; pas de lien entre deux muets ; pointillés sinon ; légende ; survol | 7, 11 |
 | 5. Fiche, noms, menu, Réglages › Sonde | 11 (écarts 1 et 2) |
 | 6. Journal des parents, historique des qualités | plan 3b |
@@ -5753,7 +5761,7 @@ Commit : `git add docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design
 
 ## Écarts d'exécution (29/09)
 
-Des relectures ont corrigé plusieurs comportements pendant l'exécution, par rapport au texte de ce plan. **Les blocs de code des tâches 3, 4, 5, 6, 7, 9, 10 et 11, et les textes des README de la tâche 12, sont donc dépassés par les commits ci-dessous : le dépôt fait foi.** (Les corrections des tâches 3 et 10 touchent aussi des fichiers des tâches 5 et 9.) Les effectifs de tests attendus ont aussi changé : à la fin, le cœur compte 142 tests en 20 suites et l'app 63 en 17 suites, au lieu de 122 et 55.
+Des relectures ont corrigé plusieurs comportements pendant l'exécution, par rapport au texte de ce plan. **Les blocs de code des tâches 2 à 11, et les textes des README des tâches 8 (la sonde) et 12, sont donc dépassés par les commits ci-dessous : le dépôt fait foi.** (Les corrections des tâches 3 et 10 touchent aussi des fichiers des tâches 5 et 9 ; celles de la revue finale, des fichiers des tâches 2, 5, 8, 9, 10 et 12.) Les effectifs de tests attendus ont aussi changé : à la fin, le cœur compte 142 tests en 20 suites et l'app 69 en 17 suites, au lieu de 122 et 55.
 
 - **Tâche 3, BBR principal** (`f875378`, qui touche aussi `Maillage.swift` et `MaillageTests.swift`, de la tâche 5).
   - Défaut : `bbr` gardait l'ordre des Network Data alors que `ConstructionMaillage.reseau(_:)` en prenait le premier comme BBR principal, ce qui est faux dès qu'il y a deux entrées BBR.
@@ -5782,4 +5790,10 @@ Des relectures ont corrigé plusieurs comportements pendant l'exécution, par ra
   - 2 tests ajoutés.
 - **Tâche 12, documentation** (`d8f067c`, puis le commit « Documenter la sonde telle qu'executee et noter les ecarts du plan 3a »).
   - Défaut : la première passe laissait « l'app ne sonde jamais », faux depuis la sonde, et décrivait la tournée du plan plutôt que celle du code : identité de chaque nouvel enfant, liste des routeurs donnée par le chef seul, balayage sans la règle des routeurs qui n'ont jamais répondu ou sont muets deux tournées de suite.
-  - Fait : les README (les deux langues), la spec (en-tête, sections 3 et 4) et cette section disent ce que fait le code ; le bloc de test de la tâche 9 reprend les valeurs inventées.
+  - Fait : les README (les deux langues) et cette section disent ce que fait le code ; la spec aussi, dans son en-tête, sa section 3 (la trame) et sa section 4 (la tournée), sauf pour la connexion à la sonde, un détail d'implémentation qu'elle ne décrit pas (l'épaisseur des liens y était déjà, en section 5 : c'est le code qui l'a rejointe) ; le bloc de test de la tâche 9 reprend les valeurs inventées.
+- **Revue finale, vague de corrections** (`4d68062`, `568a074`, `7c2aa2c`, `cc2c1aa`, puis le commit « Documenter la vague de corrections de la revue finale »), cinq corrections :
+  - Fraîcheur du maillage (`4d68062`, tâche 10). Défaut : le maillage était daté du début de sa tournée et la pause de 5 minutes courait depuis la fin : il passait « ancien » (plus de 6 minutes) dès que deux tournées de suite duraient plus de 60 s en tout, dès la première tournée au lancement et autour de chaque balayage, alors que la spec (section 4) réserve « ancien » à une sonde muette. Fait : l'âge du maillage se compte depuis sa réception, à la fin de sa tournée (`SondeMaillage.surMaillage` donne l'heure de réception, `Surveillance.recevoir(_:a:)` la garde) ; pendant une tournée (`SondeMaillage.surTournee`, `Surveillance.tourneeEnCours`), il n'est pas « ancien » ; le passage à « périmé » (15 minutes, retour aux pointillés) ne change pas ; API du cœur inchangée ; 3 tests ajoutés, 1 complété.
+  - Interrupteur « Sonde maillage » (`7c2aa2c`, tâche 8). Défaut : après un redémarrage, la sonde repartait allumée (`sSuspendue` à faux, `begin(true)`), quel que soit l'état montré par Maison, alors que la spec (section 2) garantit qu'éteinte, elle refuse les requêtes. Fait : le schéma de l'exemple `MatterOnOffPlugin` d'Arduino-ESP32 3.3.12 : l'état est gardé dans `Preferences` (allumé par défaut), relu avant `begin(état)`, appliqué par `updateAccessory()` après `Matter.begin()`, et sauvé par le rappel (`onChange`, que `updateAccessory()` appelle) ; vérifié par la compilation ; `sonde/README.md` le dit.
+  - Aucun port non désigné (`568a074`, tâche 10). Défaut : aucun test ne tenait l'invariant de la spec (section 3). Fait : 2 tests (sans sonde retenue, un C6 branché n'est pas ouvert ; avec une sonde retenue, un autre C6 ne l'est pas), dont le rouge est prouvé par une mutation de `portsChanges`.
+  - `errno` et commentaires (`cc2c1aa`, tâches 2, 5 et 9). Défaut : `PortSerie.erreur` lisait `errno` après avoir construit le message (`String(localized:)`, qui peut le changer), d'où un message ou un « port occupé » faussé ; le délai d'un enfant était décrit comme un délai de supervision. Fait : `errno` lu d'abord (message en `@autoclosure`), 1 test ; commentaires : c'est le Child Timeout, le délai d'expiration de l'enfant.
+  - Documentation (le dernier commit). La spec (en-tête, section 4 : le drapeau `muet` du maillage rendu, qu'aucune vue ne lit encore, et la fraîcheur comptée depuis la réception), les README (les deux langues) et ce plan (en-tête, tâche 12 : vérifications sur la carte, couverture de la spec, cette section).

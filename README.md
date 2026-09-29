@@ -188,9 +188,11 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   stays thin. Dotted lines stay for what the probe does not see. Devices that
   route move to the inner ring, and children sit near their parent. The card
   gives the parent and the quality, or a router's number of neighbors and
-  children. A mesh older than 6 minutes is marked old; after 15 minutes the
+  children. If the probe stops answering, the last mesh is marked old 6
+  minutes after it was received (never during a tour); after 15 minutes the
   graph goes back to dotted lines.
-- Switching "Sonde maillage" off in Home suspends the probe: no tour.
+- Switching "Sonde maillage" off in Home suspends the probe: no tour, even
+  after the probe restarts.
 - Probe captures hold the home network's addresses:
   `outils/anonymiser-sonde.py` rewrites them consistently before they become
   test data (`docs/releves/2026-09-29/`).

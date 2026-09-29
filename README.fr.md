@@ -195,10 +195,12 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   enfant vers son parent reste fin. Les pointillés restent pour ce que la
   sonde ne voit pas. Les appareils qui routent passent sur l'anneau
   intérieur, les enfants se rangent près de leur parent. La fiche donne le
-  parent et la qualité, ou le nombre de voisins et d'enfants d'un routeur. Un
-  maillage de plus de 6 minutes est marqué ancien ; après 15 minutes, le
+  parent et la qualité, ou le nombre de voisins et d'enfants d'un routeur. Si
+  la sonde ne répond plus, le dernier maillage est marqué ancien 6 minutes
+  après sa réception (jamais pendant une tournée) ; après 15 minutes, le
   graphe revient aux pointillés.
-- Éteindre « Sonde maillage » dans Maison suspend la sonde : pas de tournée.
+- Éteindre « Sonde maillage » dans Maison suspend la sonde : pas de tournée,
+  même après un redémarrage de la sonde.
 - Les captures de la sonde contiennent les adresses du réseau de la maison :
   `outils/anonymiser-sonde.py` les réécrit de façon cohérente avant qu'elles ne
   deviennent des données de test (`docs/releves/2026-09-29/`).

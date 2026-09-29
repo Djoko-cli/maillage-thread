@@ -11,11 +11,15 @@
 > **Plan 3a :** `docs/superpowers/plans/2026-09-29-maillage-thread-plan3a-sonde.md`.
 >
 > **Révision du 29/09 pendant l'exécution du plan 3a :** des relectures ont
-> corrigé plusieurs comportements par rapport au texte du plan (BBR principal,
-> trame, liste des routeurs, balayage, identités des enfants, connexion à la
-> sonde, épaisseur des liens). Les sections 3 et 4 en tiennent compte ;
-> chaque correction est listée dans la section « Écarts d'exécution (29/09) »
-> du plan.
+> corrigé plusieurs comportements par rapport au texte du plan. La section 3
+> en tient compte pour la trame ; la section 4, pour le BBR principal, la
+> liste des routeurs, le balayage, les identités des enfants et la fraîcheur
+> du maillage affiché. Les autres corrections ne changent pas la spec : le
+> code la rejoint pour l'épaisseur des liens (section 5) et pour
+> l'interrupteur « Sonde maillage », gardé après un redémarrage (section 2) ;
+> la sérialisation de la connexion à la sonde est un détail d'implémentation
+> que la spec ne décrit pas. Chaque correction est listée dans la section
+> « Écarts d'exécution (29/09) » du plan.
 >
 > **Révision du 29/09 après l'essai** (section 8) : les routeurs de bordure
 > d'Apple ne répondent pas au diagnostic. La tournée (section 4) en tient
@@ -212,8 +216,9 @@ Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
      25 à 27 étaient vides à l'essai (écart 1 du plan).
 5. **Routeur muet :** un routeur qui ne répond pas deux tournées de suite est
    muet, et on ne l'interroge plus qu'une fois par heure. Les routeurs de
-   bordure d'Apple le sont tous. L'affichage marque « muet » tout routeur sans
-   réponse à la tournée, dès le premier échec.
+   bordure d'Apple le sont tous. Le maillage rendu marque « muet »
+   (`RouteurMaillage.muet`) tout routeur sans réponse à la tournée, dès le
+   premier échec ; aucune vue ne lit encore ce drapeau.
 6. **Identité des enfants des tables :** Ext MAC (0) et IPv6 Address List (8),
    demandés à chaque enfant lu dans une Child Table, au plus une fois par
    demi-heure (voir « Appareils endormis »).
@@ -259,6 +264,9 @@ est gardée jusqu'à une nouvelle réponse.
 
 **Sonde muette, ou tournée sans Route64 :** le dernier maillage reste affiché
 15 min, marqué « ancien » au bout de 6 min, puis on revient aux pointillés.
+Ces durées se comptent depuis la réception du maillage, à la fin de sa
+tournée. Pendant une tournée, il n'est pas marqué « ancien » : le suivant
+arrive. En marche normale, il ne l'est donc jamais.
 
 **Sortie :** un instantané de maillage daté, comprenant :
 - la partition ;
