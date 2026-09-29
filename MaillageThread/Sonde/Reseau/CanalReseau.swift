@@ -39,13 +39,13 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         /// Lignes transmises, par rid (doublons) ; rid dans l'ordre, pour borner.
         var vues: [Int: Set<Data>] = [:]
         var ordre: [Int] = []
-        /// rid des veilles envoyees (leurs reponses restent ici), et la veille en cours.
-        var veilles: Set<Int> = []
+        /// Veille en cours : sa reponse reste ici.
         var veille: (rid: Int, depuis: ContinuousClock.Instant)?
         var dernierRecu = ContinuousClock.now
         /// Cause de la fermeture : celle du transport, ou le silence de la sonde.
         var raison: String?
-        var taches: [Task<Void, Never>] = []
+        /// Garde (veille) ; la lecture des charges, elle, finit avec le transport.
+        var garde: Task<Void, Never>?
     }
 
     private let etat = Mutex(Etat())
@@ -103,7 +103,7 @@ final class CanalReseau: CanalSonde, CauseFermeture {
             return lignes
         }
         let charges = charges
-        let lecture = Task { [weak self] in
+        Task { [weak self] in
             for await e in charges {
                 switch e {
                 case .donnees(let d): self?.recu(d)
@@ -120,7 +120,7 @@ final class CanalReseau: CanalSonde, CauseFermeture {
                 guard !Task.isCancelled, let self, self.surveiller() else { return }
             }
         }
-        etat.withLock { $0.taches = [lecture, garde] }
+        etat.withLock { $0.garde = garde }
         suite.onTermination = { [weak self] _ in self?.fermer() }
         return lignes
     }
@@ -137,7 +137,8 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         let taches = etat.withLock { e -> [Task<Void, Never>] in
             guard !e.ferme else { return [] }
             e.ferme = true
-            let t = Array(e.attendus.values) + e.taches.dropFirst()  // la lecture finit avec le transport
+            // La lecture, elle, finit avec le transport (fin des lignes).
+            let t = Array(e.attendus.values) + [e.garde].compactMap { $0 }
             e.attendus.removeAll()
             return t
         }
@@ -206,15 +207,11 @@ final class CanalReseau: CanalSonde, CauseFermeture {
             let renvoi = e.attendus.removeValue(forKey: rid)
             if e.vues[rid] == nil {
                 e.ordre.append(rid)
-                if e.ordre.count > memoire {
-                    let ancien = e.ordre.removeFirst()
-                    e.vues[ancien] = nil
-                    e.veilles.remove(ancien)
-                }
+                if e.ordre.count > memoire { e.vues[e.ordre.removeFirst()] = nil }
             }
             guard e.vues[rid, default: []].insert(ligne).inserted else { return (nil, renvoi) }
-            if e.veilles.contains(rid) {
-                if e.veille?.rid == rid { e.veille = nil }
+            if e.veille?.rid == rid {
+                e.veille = nil
                 return (nil, renvoi)
             }
             return (e.suite, renvoi)
@@ -237,7 +234,7 @@ final class CanalReseau: CanalSonde, CauseFermeture {
             e.suite = nil
             e.attendus.values.forEach { $0.cancel() }
             e.attendus.removeAll()
-            e.taches.last?.cancel()  // la garde
+            e.garde?.cancel()
             return s
         }
         suite?.finish()
@@ -248,27 +245,30 @@ final class CanalReseau: CanalSonde, CauseFermeture {
     private enum Garde {
         case rien
         case veiller(Int)
+        /// Veille levee sans reponse : ses renvois s'arretent.
+        case lever(Task<Void, Never>?)
         case muette
+        case arret
     }
 
-    /// Un pas de la garde : veille apres un silence ; sans reponse a la veille, fermeture.
-    /// Faux : la garde s'arrete.
-    private func surveiller() -> Bool {
+    /// Un pas de la garde (interne pour les tests) : veille apres un silence ; sans reponse a la
+    /// veille, fermeture. Faux : la garde s'arrete (canal ferme).
+    func surveiller() -> Bool {
         let maintenant = ContinuousClock.now
         let action = etat.withLock { e -> Garde in
-            guard !e.ferme else { return .rien }
+            guard !e.ferme else { return .arret }
             if let v = e.veille {
-                // Une ligne recue depuis la veille : la sonde est vivante, meme si la veille s'est perdue.
+                // Une ligne recue depuis la veille : la sonde est vivante, meme si la veille s'est
+                // perdue ; ses renvois s'arretent (une reponse tardive passera comme un `etat`).
                 guard e.dernierRecu <= v.depuis else {
                     e.veille = nil
-                    return .rien
+                    return .lever(e.attendus.removeValue(forKey: v.rid))
                 }
                 return maintenant - v.depuis >= reglages.attenteVeille ? .muette : .rien
             }
             guard maintenant - e.dernierRecu >= reglages.veille else { return .rien }
             let rid = Self.prochainRid()
             e.veille = (rid, maintenant)
-            e.veilles.insert(rid)
             return .veiller(rid)
         }
         switch action {
@@ -277,9 +277,14 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         case .veiller(let rid):
             emettre(rid, Data("\(rid) etat".utf8))
             return true
+        case .lever(let renvoi):
+            renvoi?.cancel()
+            return true
         case .muette:
             noterRaison(Self.raisonSilence)
             fermer()
+            return false
+        case .arret:
             return false
         }
     }

@@ -217,6 +217,33 @@ struct CanalReseauTests {
         c.fermer()
     }
 
+    /// Veille levee par une autre reponse : ses renvois s'arretent (ici veille apres 600 ms de
+    /// silence, perdue ; renvois prevus a +300 ms et +1 s).
+    @Test func veilleLeveeSansRenvoi() async throws {
+        let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
+        var reglages = Self.rapides(veille: .milliseconds(600), attenteVeille: .seconds(3))
+        reglages.renvois = [.milliseconds(300), .seconds(1)]
+        let c = try await Self.canal(carte, reglages: reglages)
+        let lignes = RecueilLignes(try c.ouvrir())
+        carte.perdre(1)
+        #expect(await attendreQue { carte.perdus == 1 }, "veille perdue")
+        c.envoyer("etat\n")
+        #expect(await attendreQue { lignes.liste == [CanalRejoue.etatAttache] })
+        try await Task.sleep(for: .milliseconds(450))
+        let commandes = carte.recues.compactMap(Self.decouper).map { $0.commande }
+        #expect(commandes == ["etat"], "le renvoi de la veille levee ne part pas")
+        c.fermer()
+    }
+
+    /// Fermee, la garde s'arrete.
+    @Test func gardeArreteeALaFermeture() async throws {
+        let c = try await Self.canal(CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde))
+        _ = RecueilLignes(try c.ouvrir())
+        #expect(c.surveiller())
+        c.fermer()
+        #expect(!c.surveiller())
+    }
+
     /// Sonde debranchee : la veille reste sans reponse, le canal se ferme (fin du flux).
     @Test func veilleSansReponseFermeLeCanal() async throws {
         let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
