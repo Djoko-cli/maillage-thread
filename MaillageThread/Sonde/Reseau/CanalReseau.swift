@@ -28,7 +28,8 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         /// ces renvois. Ensuite, un renvoi `apresVolDiag` apres la fin du vol, puis tous les
         /// `pasDiag`, le dernier au plus tard `avanceDiag` avant l'echeance de `SondeUSB` (delai
         /// du diag + `margeDiag`) : une reponse perdue apres le vol se redemande, et la carte rend
-        /// celle qu'elle a gardee ; rien ne part pour rien pendant le vol.
+        /// celle qu'elle a gardee. Les renvois fixes (2 et 4 s) partent encore pendant le vol ;
+        /// ceux d'apres le vol n'y tombent plus.
         var apresVolDiag: Duration = .seconds(1)
         var pasDiag: Duration = .seconds(3)
         var margeDiag: Duration = SondeUSB.margeDiag

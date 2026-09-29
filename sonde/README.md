@@ -122,7 +122,8 @@ et promenée dans la maison, l'app la joint par le réseau.
 - **Charges** : vers la sonde `<rid> <commande>` (le même texte que sur
   l'USB) ; en retour `<rid> <ligne JSON>` (la ligne de l'USB sans RS ni LF),
   1100 octets au plus. `routeurs` se coupe plus tôt (`suite`) : une ligne
-  perdue en route donne une table partielle, dont l'app tient compte. Un
+  perdue en route donne une table partielle, ou aucune si la dernière
+  (`"suite":false`) se perd ; l'app en tient compte. Un
   `diag` trop long répond `{"v":1,"t":"diag","id":…,"cible":…,"ok":false,"erreur":"trop_long"}` ;
   `voisins` au-delà de 1100 octets répond
   `{"v":1,"t":"erreur","erreur":"ligne trop longue"}` (entier sur l'USB).

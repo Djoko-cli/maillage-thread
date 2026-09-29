@@ -15,9 +15,10 @@
 //    src/json_out.h, ReplyCache). Au-dela (routeurs d'une quarantaine de
 //    routeurs), un rid repete relance la commande : une lecture, sans effet.
 //  - Lignes : 1100 octets de charge au plus. routeurs se coupe en lignes
-//    "suite" ; une ligne perdue en route donne une table partielle, dont
-//    l'app tient compte. voisins au-dela de 1100 octets repond « ligne trop
-//    longue » a distance (entier sur l'USB) ; un diag trop long, trop_long.
+//    "suite" ; une ligne perdue en route donne une table partielle, ou
+//    aucune si la derniere (suite:false) se perd ; l'app en tient compte.
+//    voisins au-dela de 1100 octets repond « ligne trop longue » a
+//    distance (entier sur l'USB) ; un diag trop long, trop_long.
 //  - Cadence : 20 commandes par seconde glissante et par session au plus
 //    (Cadence, copie de celle du pont Halo) ; au-dela, rien (l'app renvoie).
 //
