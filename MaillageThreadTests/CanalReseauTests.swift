@@ -95,14 +95,16 @@ struct CanalReseauTests {
         await s.fermer()
     }
 
-    /// Une tournee entiere par le reseau : le maillage du reseau minimal.
+    /// Une tournee entiere par le reseau : le maillage du reseau minimal, table des routeurs
+    /// comprise (la carte simulee repond a `routeurs`, sans attente du delai).
     @Test func tourneeParLeReseau() async throws {
         let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
         let s = SondeUSB(canal: try await Self.canal(carte))
         try await s.demarrer {}
         let r = try await Tournee.executer(s, memoire: MemoireTournee(), maintenant: Date(timeIntervalSince1970: 1_790_000_000))
-        let routeurs = r?.maillage.routeurs.map { $0.id }
+        let routeurs = r.maillage?.routeurs.map { $0.id }
         #expect(routeurs == [0])
+        #expect(carte.recues.compactMap(Self.decouper).map(\.commande).contains("routeurs"))
         await s.fermer()
     }
 

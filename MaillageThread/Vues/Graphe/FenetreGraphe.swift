@@ -42,7 +42,9 @@ struct FenetreGraphe: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let selection {
-                    FicheNoeud(id: selection, aRenommer: $aRenommer) { self.selection = nil }
+                    FicheNoeud(id: selection, aRenommer: $aRenommer, choisir: { self.selection = $0 }) {
+                        self.selection = nil
+                    }
                 }
             }
             .padding(Self.bord)
@@ -76,7 +78,7 @@ struct FenetreGraphe: View {
         let maillage = surveillance.maillageAffiche(pour: r)
         let disposition = Disposition(reseau: r, appareils: affiches, maillage: maillage)
         let parId = Dictionary(affiches.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let nomsRouteurs = Dictionary(r.routeurs.map { ($0.instance, surveillance.nom($0)) }, uniquingKeysWith: { a, _ in a })
+        let nomsRouteurs = surveillance.nomsRouteurs(pour: r)
         let libelles = GrapheCanvas.libelles(disposition: disposition, reseau: r, appareils: parId,
                                              nomsRouteurs: nomsRouteurs, maillage: maillage)
         return GeometryReader { geo in

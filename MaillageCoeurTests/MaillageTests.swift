@@ -143,6 +143,33 @@ struct MaillageTests {
         #expect(m.routeur(57)?.bbrPrincipal == false)
     }
 
+    /// Network Data d'une tournee precedente (`seulementConnus`) : pour les seuls routeurs de la
+    /// liste ; un routeur qui n'y est plus n'est pas rajoute, et un serveur BBR qui n'y est plus ne
+    /// compte pas (le principal est alors le premier des autres). Lues a la tournee, elles
+    /// rajoutent le routeur, comme avant.
+    @Test func reseauPrecedent() throws {
+        // Prefix ::/0 : Has Route 5C00 (routeur 23, absent de la Route64) ; service BBR : 5C00
+        // (sequence 0x60) puis B400 (sequence 0x57).
+        let route: [UInt8] = [0x03, 7, 0x00, 0, 0x00, 3, 0x5C, 0x00, 0x00]
+        let bbr: [UInt8] = [0x0B, 25, 0x80, 1, 0x01,
+                            0x0D, 9, 0x5C, 0x00, 0x60, 0x00, 0x05, 0x00, 0x00, 0x0E, 0x10,
+                            0x0D, 9, 0xB4, 0x00, 0x57, 0x00, 0x05, 0x00, 0x00, 0x0E, 0x10]
+        let d = try #require(DonneesReseau(route + bbr))
+        #expect(d.routeursDeBordure == [0x5C00] && d.bbr == [0x5C00, 0xB400])
+        let route64 = try #require(try Self.reponse(204).route64)
+        var precedent = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
+        precedent.routeurs(route64, chef: 24)
+        precedent.reseau(d, seulementConnus: true)
+        let m = precedent.maillage()
+        #expect(m.routeur(23) == nil)
+        #expect(m.routeurs.filter(\.bbrPrincipal).map(\.id) == [45])
+        var lues = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
+        lues.routeurs(route64, chef: 24)
+        lues.reseau(d)
+        #expect(lues.maillage().routeur(23)?.bordure == true)
+        #expect(lues.maillage().routeurs.filter(\.bbrPrincipal).map(\.id) == [23])
+    }
+
     /// Chef pas encore connu (`routeurs(_:chef:)` pas encore appele) : le premier de `bbr`.
     @Test func bbrPrincipalChefInconnu() throws {
         let d = try #require(DonneesReseau(Self.bbrE400PuisB400))

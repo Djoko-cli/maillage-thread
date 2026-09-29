@@ -26,9 +26,12 @@ struct MaillageThreadApp: App {
         _surveillance = State(initialValue: s)
         _ouverture = State(initialValue: o)
         _nomsMaison = State(initialValue: d)
-        // Inerte en demo et sous tests : aucun port ouvert, ni trousseau lu. La cle de l'acces
-        // reseau vit dans le trousseau du Mac (les tests gardent le leur en memoire).
-        let sm = SondeMaillage(actif: !Self.demo && !Surveillance.sousTests, trousseau: TrousseauSysteme())
+        // Inerte en demo et sous tests : aucun port ouvert, ni trousseau lu, aucune identite de
+        // routeur lue ni ecrite. La cle de l'acces reseau vit dans le trousseau du Mac (les tests
+        // gardent le leur en memoire).
+        let sm = SondeMaillage(actif: !Self.demo && !Surveillance.sousTests, trousseau: TrousseauSysteme(),
+                               fichierIdentites: SondeMaillage.fichierIdentites(demo: Self.demo,
+                                                                                sousTests: Surveillance.sousTests))
         _sonde = State(initialValue: sm)
         let premier = !UserDefaults.standard.bool(forKey: Self.clePremierGraphe)
         ouvrirGraphe = !Surveillance.sousTests && (Self.demo || premier)

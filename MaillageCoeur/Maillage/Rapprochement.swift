@@ -15,13 +15,23 @@ public struct NoeudSonde: Hashable, Sendable, Identifiable {
     public let reconnu: Bool
     /// Routeur de bordure (Network Data).
     public let bordure: Bool
+    /// Routeur de bordure non identifie : instances des annonces de sa partition qu'aucun
+    /// routeur n'a reprises et qui peuvent etre la sienne (sauf si son ExtMac et leur `xa` sont
+    /// connus tous deux et differents), dans l'ordre de la partition ; vide sinon.
+    public let candidats: [String]
+    /// Reconnu par elimination : seul routeur de bordure non identifie de la partition pour
+    /// une seule annonce non reprise.
+    public let deduit: Bool
 
-    public init(id: String, rloc16: UInt16, genre: Genre, reconnu: Bool, bordure: Bool) {
+    public init(id: String, rloc16: UInt16, genre: Genre, reconnu: Bool, bordure: Bool, candidats: [String] = [],
+                deduit: Bool = false) {
         self.id = id
         self.rloc16 = rloc16
         self.genre = genre
         self.reconnu = reconnu
         self.bordure = bordure
+        self.candidats = candidats
+        self.deduit = deduit
     }
 }
 
@@ -51,13 +61,24 @@ public struct MaillageAffiche: Hashable, Sendable {
     /// Enfants, par RLOC16.
     public let enfants: [UInt16: NoeudSonde]
     public let liens: [LienAffiche]
+    /// Annonces candidates d'au moins un routeur de bordure non identifie : ce routeur les porte,
+    /// elles ne sont pas dessinees a part (le centre de la zone excepte, voir `Disposition`).
+    public let annoncesCandidates: Set<String>
 
     /// Rapproche le maillage des routeurs de bordure de sa partition et des appareils :
-    /// - routeur de bordure : son ExtMac est le `xa` de son annonce ; a defaut, le
-    ///   BBR principal des Network Data est celui dont `sb` le dit ;
+    /// - routeur de bordure : son ExtMac est le `xa` de son annonce ;
     /// - autre routeur ou enfant : son ExtMac est l'hote de l'appareil ; a defaut
     ///   (enfant), une adresse commune ;
-    /// - sinon "rloc:XXXX", inconnu de l'instantane.
+    /// - BBR principal des Network Data, encore non identifie : l'annonce dont `sb` dit BBR
+    ///   primaire ; chef du maillage, routeur de bordure encore non identifie : l'annonce dont
+    ///   le role (bits 9-10 de `sb`, Thread 1.4) est chef ; chacune seulement s'il ne reste
+    ///   qu'une annonce de ce role ;
+    /// - par elimination : le seul routeur de bordure non identifie est la seule annonce
+    ///   de la partition qu'aucun routeur n'a reprise ;
+    /// - sinon "rloc:XXXX", inconnu de l'instantane ; un routeur de bordure y garde ses
+    ///   candidats, les annonces non reprises qui peuvent etre la sienne.
+    /// Ces quatre dernieres regles ecartent une annonce dont le `xa` et l'ExtMac du routeur sont
+    /// connus tous deux et differents, ou dont le `xa` est l'ExtMac connue d'un autre routeur.
     public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil]) {
         partition = maillage.partition
         date = maillage.date
@@ -65,22 +86,61 @@ public struct MaillageAffiche: Hashable, Sendable {
         let parId = Dictionary(appareils.map { ($0.id.uppercased(), $0) }, uniquingKeysWith: { a, _ in a })
         func rloc(_ r: UInt16) -> String { String(format: "rloc:%04X", r) }
 
-        var routeurs: [Int: NoeudSonde] = [:]
+        // Routeurs reconnus par leur ExtMac (id de noeud, par identifiant de routeur) : le `xa`
+        // d'une annonce, sinon l'hote d'un appareil.
+        var reconnus: [Int: String] = [:]
         var pris: Set<String> = []
         for r in maillage.routeurs {
             var id: String?
             if let ext = r.extMac, let br = bordures.first(where: { $0.adresseEtendue == ext }) {
                 id = br.instance
-            } else if r.bbrPrincipal, let br = bordures.first(where: { $0.etat?.bbrPrimaire == true }),
-                      !maillage.routeurs.contains(where: { $0.extMac == br.adresseEtendue && $0.id != r.id }) {
-                id = br.instance
             } else if let ext = r.extMac, let a = parId[ext] {
                 id = a.id
             }
             if let i = id, pris.contains(i) { id = nil }
-            if let i = id { pris.insert(i) }
+            if let i = id {
+                pris.insert(i)
+                reconnus[r.id] = i
+            }
+        }
+        // Une annonce peut etre celle d'un routeur si l'ExtMac de l'un ou le `xa` de l'autre manque
+        // (connus tous deux, ils sont differents : la regle du `xa` les aurait rapproches), et si son
+        // `xa` n'est pas l'ExtMac connue d'un autre routeur (une annonce en double de celui-ci).
+        let extMacs = Set(maillage.routeurs.compactMap(\.extMac))
+        func possible(_ r: RouteurMaillage, _ a: RouteurBordure) -> Bool {
+            guard let xa = a.adresseEtendue else { return true }
+            return r.extMac == nil && !extMacs.contains(xa)
+        }
+        // Routeur d'un role (BBR principal, chef), encore non identifie : l'annonce de ce role dans
+        // la partition, seulement s'il n'en reste qu'une (un cache perime peut en garder une autre,
+        // avec le meme `pt`) et si elle peut etre la sienne.
+        func rapprocher(_ r: RouteurMaillage?, _ annonces: [RouteurBordure]) {
+            let libres = annonces.filter { !pris.contains($0.instance) }
+            guard let r, reconnus[r.id] == nil, libres.count == 1, let a = libres.first, possible(r, a) else { return }
+            reconnus[r.id] = a.instance
+            pris.insert(a.instance)
+        }
+        // BBR principal des Network Data : l'annonce dont `sb` dit BBR primaire. Chef du maillage,
+        // routeur de bordure : l'annonce de role chef (Thread 1.4, bits 9-10 de `sb`).
+        rapprocher(maillage.routeurs.first(where: \.bbrPrincipal), bordures.filter { $0.etat?.bbrPrimaire == true })
+        rapprocher(maillage.routeurs.first(where: { $0.chef && $0.bordure }), bordures.filter { $0.role == .chef })
+        // Annonces qu'aucun routeur n'a reprises ; routeurs de bordure non identifies.
+        let restantes = bordures.filter { !pris.contains($0.instance) }
+        let nonIdentifies = maillage.routeurs.filter { $0.bordure && reconnus[$0.id] == nil }
+        var deduit: Int?
+        if nonIdentifies.count == 1, restantes.count == 1, let r = nonIdentifies.first, let a = restantes.first,
+           possible(r, a) {
+            reconnus[r.id] = a.instance
+            pris.insert(a.instance)
+            deduit = r.id
+        }
+        var routeurs: [Int: NoeudSonde] = [:]
+        for r in maillage.routeurs {
+            let id = reconnus[r.id]
+            let candidats = id == nil && r.bordure
+                ? restantes.filter { !pris.contains($0.instance) && possible(r, $0) }.map(\.instance) : []
             routeurs[r.id] = NoeudSonde(id: id ?? rloc(r.rloc16), rloc16: r.rloc16, genre: .routeur, reconnu: id != nil,
-                                        bordure: r.bordure)
+                                        bordure: r.bordure, candidats: candidats, deduit: deduit == r.id)
         }
 
         var enfants: [UInt16: NoeudSonde] = [:]
@@ -107,6 +167,7 @@ public struct MaillageAffiche: Hashable, Sendable {
         self.routeurs = routeurs
         self.enfants = enfants
         self.liens = liens
+        annoncesCandidates = Set(routeurs.values.flatMap(\.candidats))
     }
 
     /// Noeud du graphe, routeur ou enfant.

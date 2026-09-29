@@ -229,11 +229,17 @@ struct GrapheCanvas: View {
     }
 
     /// Nom d'un noeud que seule la sonde connait : « Routeur de bordure · B400 »,
-    /// « Routeur · 5000 », « Non identifié · AC05 ».
-    static func libelleInconnu(_ n: NoeudSonde) -> String {
+    /// « Routeur · 5000 », « Non identifié · AC05 ». Un routeur de bordure non identifie
+    /// montre ses candidats, sous leur nom (`noms`, par instance ; l'instance a defaut) :
+    /// « HomePod Avant ou HomePod Palier · 0400 » ; un seul, sans elimination possible :
+    /// « HomePod salon ? · 0400 », car ce n'est peut-etre pas lui.
+    static func libelleInconnu(_ n: NoeudSonde, noms: [String: String] = [:]) -> String {
         let rloc = String(format: "%04X", n.rloc16)
         switch n.genre {
         case .routeur:
+            let candidats = n.candidats.map { noms[$0] ?? $0 }
+            if candidats.count > 1 { return String(localized: "\(candidats.formatted(.list(type: .or))) · \(rloc)") }
+            if let seul = candidats.first { return String(localized: "\(seul)\u{202F}? · \(rloc)") }
             return n.bordure ? String(localized: "Routeur de bordure · \(rloc)") : String(localized: "Routeur · \(rloc)")
         case .enfant:
             return String(localized: "Non identifié · \(rloc)")
@@ -278,21 +284,22 @@ extension GrapheCanvas {
     /// Place proposee pour mesurer un texte d'une ligne.
     static let propositionTexte = CGSize(width: 10_000, height: 10_000)
 
-    /// Libelle de chaque noeud : nom (routeur couronne s'il est chef), ☾ endormi,
-    /// ⚠︎ sans adresse ou disparu ; pastille d'une batterie faible.
+    /// Libelle de chaque noeud : nom (routeur couronne s'il est chef ; candidats d'un routeur de
+    /// bordure non identifie), ☾ endormi, ⚠︎ sans adresse ou disparu ; pastille d'une batterie faible.
     static func libelles(disposition: Disposition, reseau: Reseau, appareils: [String: AppareilAffiche],
                          nomsRouteurs: [String: String], maillage: MaillageAffiche?) -> [String: Libelle] {
         let chefs = Set(reseau.partitions.compactMap { $0.chef?.instance })
+        func inconnu(_ n: NoeudSonde) -> String { libelleInconnu(n, noms: nomsRouteurs) }
         var libelles: [String: Libelle] = [:]
         for n in disposition.noeuds where libelles[n.id] == nil {
             switch n.genre {
             case .centre, .routeur:
-                var texte = nomsRouteurs[n.id] ?? maillage?.noeud(n.id).map(libelleInconnu) ?? n.id
+                var texte = nomsRouteurs[n.id] ?? maillage?.noeud(n.id).map(inconnu) ?? n.id
                 if chefs.contains(n.id) { texte += " 👑" }
                 libelles[n.id] = Libelle(texte: texte)
             case .appareil:
                 let a = appareils[n.id]
-                var texte = a?.nom ?? maillage?.noeud(n.id).map(libelleInconnu) ?? n.id
+                var texte = a?.nom ?? maillage?.noeud(n.id).map(inconnu) ?? n.id
                 if a?.endormi == true { texte += " ☾" }
                 if a?.etat == .sansAdresse || a?.etat == .disparu { texte += " ⚠︎" }
                 libelles[n.id] = Libelle(texte: texte, pastille: pastilleBatterie(a?.batterie))

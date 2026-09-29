@@ -52,7 +52,10 @@ public struct AppareilAffiche: Hashable, Sendable, Identifiable {
 /// Avec la sonde, dans sa partition : les appareils qui routent et les routeurs
 /// inconnus rejoignent l'anneau interieur, les enfants se rangent pres de leur
 /// parent, et les liens sont ceux de la sonde (radio entre routeurs, enfant vers
-/// parent) ; un noeud sans lien connu garde son rattachement.
+/// parent) ; un noeud sans lien connu garde son rattachement. Un seul noeud par
+/// routeur : l'annonce candidate d'un routeur de bordure non identifie n'est pas
+/// dessinee a part, ce routeur la porte (`MaillageAffiche.annoncesCandidates`) ; le
+/// centre reste le centre, candidat ou non.
 public struct Disposition: Hashable, Sendable {
     public enum Genre: String, Hashable, Sendable {
         case centre, routeur, appareil
@@ -137,8 +140,10 @@ public struct Disposition: Hashable, Sendable {
         let anneaux = reseau.partitions.map { p -> Anneaux in
             let apps = tries(parZone[p.id] ?? [])
             var a = Anneaux()
-            a.interieur = p.routeurs.dropFirst().map { ($0.instance, Genre.routeur, 15.0) }
-            guard let m = maillage, m.partition == p.id else {
+            let sonde = maillage.flatMap { $0.partition == p.id ? $0 : nil }
+            a.interieur = p.routeurs.dropFirst().filter { sonde?.annoncesCandidates.contains($0.instance) != true }
+                .map { ($0.instance, Genre.routeur, 15.0) }
+            guard let m = sonde else {
                 a.exterieur = apps.map(\.id)
                 return a
             }

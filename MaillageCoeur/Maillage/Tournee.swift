@@ -4,6 +4,10 @@ import Foundation
 /// rejouee dans les tests.
 public protocol InterlocuteurSonde: Sendable {
     func etat() async throws -> EtatSonde
+    /// Table des routeurs de la sonde (`routeurs`, lignes `suite` reunies) : tous les routeurs
+    /// de la partition par leur RLOC16, l'ExtMac de ceux qu'elle entend. Requete locale, sans
+    /// delai reseau.
+    func routeurs() async throws -> [RouteurSonde]
     /// `DIAG_GET` vers un RLOC16 : la reponse, ou l'echec (`delai`, `occupee`...).
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag
 }
@@ -17,7 +21,7 @@ public protocol InterlocuteurSonde: Sendable {
 public struct AvancementTournee: Hashable, Sendable {
     /// Etapes d'une tournee, dans l'ordre.
     public enum Etape: CaseIterable, Hashable, Sendable {
-        /// `etat` de la sonde.
+        /// `etat` de la sonde, puis sa table des routeurs (`routeurs`).
         case etatSonde
         /// Route64 : au chef, aux secours, puis recherche.
         case listeRouteurs
@@ -55,7 +59,8 @@ public struct MemoireTournee: Hashable, Sendable {
     public var dejaRepondu: Set<Int> = []
     /// Pile (TLV 28), demandee une fois par routeur qui repond ; "" : aucune.
     public var piles: [Int: String] = [:]
-    /// ExtMac des routeurs, par RLOC16 : parents successifs de la sonde, routeurs qui repondent.
+    /// ExtMac des routeurs, par RLOC16 : parents successifs de la sonde, routeurs qui repondent,
+    /// routeurs que la sonde entend (sa table des routeurs). Une ExtMac n'a qu'un RLOC16 (`retenir`).
     public var identites: [UInt16: String] = [:]
     /// Enfants des routeurs balayes, trouves au dernier balayage.
     public var balayes: [UInt16: EnfantMaillage] = [:]
@@ -71,12 +76,23 @@ public struct MemoireTournee: Hashable, Sendable {
     /// Routeurs qui ont repondu a la derniere tournee ou l'un a repondu : Route64 de
     /// secours quand le chef ne la donne pas.
     public var repondants: [Int] = []
+    /// Dernieres Network Data lues : elles servent quand leur requete echoue ou n'est pas faite
+    /// (aucun routeur ne repond) ; sinon les routeurs de bordure, le BBR principal et les
+    /// candidats disparaitraient d'une tournee a l'autre.
+    public var donneesReseau: DonneesReseau?
     /// Partition de ce qui est retenu : une autre remet tout a zero.
     public var partition: String?
 
     public init() {}
 
     public func estMuet(_ id: Int) -> Bool { (echecs[id] ?? 0) >= 2 }
+
+    /// Retient l'ExtMac d'un routeur. Un routeur qui a change d'identifiant (redemarrage) perd
+    /// l'ancienne paire : elle ne donne plus son ExtMac a l'identifiant libere.
+    mutating func retenir(_ ext: String, rloc16: UInt16) {
+        for (r, e) in identites where e == ext && r != rloc16 { identites[r] = nil }
+        identites[rloc16] = ext
+    }
 }
 
 /// Tournee de la sonde : liste des routeurs, routeurs qui repondent, roles,
@@ -101,31 +117,40 @@ public enum Tournee {
     public static let periodeBalayage: TimeInterval = 30 * 60
     public static let periodeMuet: TimeInterval = 3600
 
-    /// Une tournee, et le balayage s'il est du ; nil si la sonde n'est pas attachee,
-    /// ou suspendue dans Maison (ses requetes echoueraient toutes : aucun routeur
-    /// ne doit passer pour muet), ou si aucun routeur n'a donne la liste des routeurs
-    /// (Route64). La memoire n'est alors pas rendue : l'appelant garde la sienne.
+    /// Une tournee, et le balayage s'il est du : le maillage et la memoire a garder. Pas de
+    /// maillage si la sonde n'est pas attachee, ou suspendue dans Maison (ses requetes
+    /// echoueraient toutes : aucun routeur ne doit passer pour muet ; memoire inchangee), ou si
+    /// aucun routeur n'a donne la liste des routeurs (Route64) : la memoire rendue est alors
+    /// celle d'avant (remise a zero dans une autre partition), avec les seules identites
+    /// apprises par `etat` et la table des routeurs, qu'une sonde promenee garde ainsi.
     /// `avancement` est appele au debut de chaque etape atteinte, puis a chaque requete
     /// revenue (voir `AvancementTournee`), depuis la tache de la tournee.
     public static func executer(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,
                                 avancement: (@Sendable (AvancementTournee) -> Void)? = nil)
-        async throws -> (maillage: Maillage, memoire: MemoireTournee)? {
+        async throws -> (maillage: Maillage?, memoire: MemoireTournee) {
         func signaler(_ etape: AvancementTournee.Etape, _ fait: Int, _ total: Int) {
             avancement?(AvancementTournee(etape: etape, fait: fait, total: total))
         }
         var mem = memoire
-        signaler(.etatSonde, 0, 1)
+        signaler(.etatSonde, 0, 2)
         let etat = try await sonde.etat()
-        signaler(.etatSonde, 1, 1)
+        signaler(.etatSonde, 1, 2)
         guard etat.estAttachee, !etat.suspendue, let partition = etat.partition, let chef = etat.chef,
-              let moi = etat.rloc16Valeur else { return nil }
+              let moi = etat.rloc16Valeur else { return (nil, memoire) }
         // Autre partition : les identifiants de routeur y sont redistribues, rien ne vaut plus.
         if let ancienne = mem.partition, ancienne != partition { mem = MemoireTournee() }
         mem.partition = partition
+        // Table des routeurs de la sonde (requete locale, sans delai reseau) : ExtMac des routeurs
+        // qu'elle entend. Sans table (firmware sans `routeurs`, sonde occupee), la tournee continue.
+        let table = (try? await sonde.routeurs()) ?? []
+        signaler(.etatSonde, 2, 2)
         var c = ConstructionMaillage(date: maintenant, partition: partition)
         if let p = etat.parent, let rp = UInt16(p.rloc16, radix: 16) {
-            mem.identites[rp] = p.ext
+            mem.retenir(p.ext, rloc16: rp)
             c.enfant(EnfantMaillage(rloc16: moi, extMac: etat.ext, qualite: p.lqOut, source: .sonde))
+        }
+        for r in table {
+            if let ext = r.ext, let rloc = r.rloc16Valeur { mem.retenir(ext, rloc16: rloc) }
         }
 
         // 1. Liste des routeurs : Route64 du chef, puis des routeurs qui ont repondu a la
@@ -147,8 +172,11 @@ public enum Tournee {
                 signaler(.listeRouteurs, essais.count + faites, essais.count + prevues)
             }
         }
-        guard let route64 else { return nil }
+        guard let route64 else { return (nil, mem) }
         c.routeurs(route64, chef: chef)
+        // Paires des routeurs sortis de la liste (routeur disparu, identifiant libere) : oubliees.
+        let liste = Set(route64.routeurs)
+        mem.identites = mem.identites.filter { liste.contains(Int($0.key >> 10)) }
 
         // 2. Chaque routeur, en parallele, sauf un muet deja interroge dans l'heure.
         let aInterroger = route64.routeurs.filter { id in
@@ -166,7 +194,7 @@ public enum Tournee {
                 mem.echecs[id] = 0
                 mem.muetInterroge[id] = nil
                 mem.dejaRepondu.insert(id)
-                if let ext = rep.extMac { mem.identites[rloc16(id)] = ext }
+                if let ext = rep.extMac { mem.retenir(ext, rloc16: rloc16(id)) }
                 repondants.append(id)
             } else {
                 mem.echecs[id, default: 0] += 1
@@ -193,10 +221,19 @@ public enum Tournee {
         for id in repondants {
             c.pile(mem.piles[id].flatMap { $0.isEmpty ? nil : $0 }, routeur: id)
         }
+        var lues: DonneesReseau?
         if let id = repondants.first {
             let r = try await sonde.diag(rloc16(id), tlvReseau, delaiMs: delaiRouteur)
             signaler(.pileEtReseau, totalPile, totalPile)
-            if let brutes = r.reponse?.donneesReseau, let d = DonneesReseau(brutes) { c.reseau(d) }
+            if let brutes = r.reponse?.donneesReseau { lues = DonneesReseau(brutes) }
+        }
+        if let d = lues {
+            c.reseau(d)
+            mem.donneesReseau = d
+        } else if let d = mem.donneesReseau {
+            // Requete en echec, ou aucun routeur qui reponde : les dernieres lues, pour les seuls
+            // routeurs de la liste.
+            c.reseau(d, seulementConnus: true)
         }
 
         // 4. Balayage des enfants des routeurs sans reponse qui sont muets (deux echecs de

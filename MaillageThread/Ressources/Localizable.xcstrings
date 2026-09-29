@@ -401,6 +401,22 @@
         }
       }
     },
+    "%@ ? · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@? · %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ? · %2$@"
+          }
+        }
+      }
+    },
     "%lld accessoires · %@" : {
       "localizations" : {
         "en" : {
@@ -861,6 +877,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Balayage des routeurs muets"
+          }
+        }
+      }
+    },
+    "Candidats :" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Candidates:"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Candidats :"
           }
         }
       }
@@ -2177,6 +2209,22 @@
         }
       }
     },
+    "Reconnu par élimination : seul routeur de bordure sans identité, seule annonce restante." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recognized by elimination: the only border router without an identity, and the only announcement left."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reconnu par élimination : seul routeur de bordure sans identité, seule annonce restante."
+          }
+        }
+      }
+    },
     "Relancer maintenant" : {
       "localizations" : {
         "en" : {
@@ -2845,6 +2893,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vu par la sonde : son ExtMac ne correspond à aucun appareil annoncé."
+          }
+        }
+      }
+    },
+    "Vu par la sonde sans son identité : sans doute l'une de ces annonces du réseau local, qu'aucun nœud ne reprend." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seen by the probe without its identity: probably one of these local network announcements, which no node claims."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vu par la sonde sans son identité : sans doute l'une de ces annonces du réseau local, qu'aucun nœud ne reprend."
           }
         }
       }

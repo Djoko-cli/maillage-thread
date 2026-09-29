@@ -55,16 +55,29 @@ final class CanalRejoue: CanalSonde {
         #"{"v":1,"t":"diag","id":\#(id),"cible":"\#(cible)","ms":40,"ok":true,"code":"2.04","tlv":"\#(tlv)"}"#
     }
 
+    /// Ligne `routeurs` (firmware 1.0.2) : chaque routeur par son RLOC16, avec son ExtMac s'il
+    /// est entendu (lien etabli, qualites 3) ; `suite` : d'autres lignes suivent.
+    static func routeurs(_ table: [(rloc16: String, ext: String?)], suite: Bool) -> String {
+        let liste = table.map { r in
+            let id = (UInt16(r.rloc16, radix: 16) ?? 0) >> 10
+            let lq = r.ext == nil ? 0 : 3
+            return #"{"id":\#(id),"rloc16":"\#(r.rloc16)","ext":\#(r.ext.map { "\"\($0)\"" } ?? "null"),"lqIn":\#(lq),"lqOut":\#(lq),"age":4,"lien":\#(r.ext != nil)}"#
+        }
+        return #"{"v":1,"t":"routeurs","liste":[\#(liste.joined(separator: ","))],"suite":\#(suite)}"#
+    }
+
     /// Sonde attachee (valeurs inventees) : enfant 0001 du routeur 0, qui est le chef.
     static let etatAttache = #"{"v":1,"t":"etat","role":"child","rloc16":"0001","mode":"rn","parent":null,"partition":"0000000A","chef":0,"canal":25,"prefixeMaille":"FD00000000000000","xp":null,"suspendue":false}"#
 
     /// Reseau d'un seul routeur, le chef 0, qui ne donne que sa Route64 : la tournee
     /// aboutit (maillage d'un routeur muet, sans enfant). `diag <cible> <tlv> <id> <ms>` :
-    /// la Route64 a la demande de la liste des routeurs, `delai` a toute autre requete.
+    /// la Route64 a la demande de la liste des routeurs, `delai` a toute autre requete ;
+    /// `routeurs` : le chef seul, parent de la sonde, donc sans ExtMac.
     static func reseauMinimal(_ ligne: String) -> [String] {
         switch ligne {
         case "bonjour\n": return [bonjour]
         case "etat\n": return [etatAttache]
+        case "routeurs\n": return [routeurs([("0000", nil)], suite: false)]
         default: break
         }
         let mots = ligne.trimmingCharacters(in: .newlines).split(separator: " ").map(String.init)
@@ -257,6 +270,65 @@ struct SondeUSBTests {
         await #expect(throws: SondeUSB.Erreur.fermee) { _ = try await s.etat() }
         try await Task.sleep(for: .milliseconds(50))
         #expect(fermee.withLock { $0 })
+    }
+
+    /// `routeurs` sur deux lignes (la table coupee, `suite`) : les deux parties reunies, dans
+    /// l'ordre ; puis une table d'une ligne (ExtMac inventees).
+    @Test func routeursSurPlusieursLignes() async throws {
+        let canal = CanalRejoue { l in
+            guard l == "routeurs\n" else { return [] }
+            return [CanalRejoue.routeurs([("0400", nil), ("AC00", nil)], suite: true),
+                    CanalRejoue.routeurs([("E400", "E0000000000000E4")], suite: false)]
+        }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        let table = try await s.routeurs()
+        #expect(table.map(\.rloc16) == ["0400", "AC00", "E400"])
+        #expect(table.map(\.ext) == [nil, nil, "E0000000000000E4"])
+        #expect(canal.envoyes == ["routeurs\n"])
+        #expect(try await s.routeurs().count == 3, "une nouvelle table, sans reste de la precedente")
+    }
+
+    /// La sonde n'a pas le verrou d'OpenThread (`occupee`) : pas de table, sans attendre le delai.
+    @Test(.timeLimit(.minutes(1))) func routeursOccupee() async throws {
+        let s = SondeUSB(canal: CanalRejoue { l in
+            l == "routeurs\n" ? [#"{"v":1,"t":"routeurs","erreur":"occupee"}"#] : []
+        })
+        try await s.demarrer {}
+        let debut = ContinuousClock.now
+        await #expect(throws: SondeUSB.Erreur.sansReponse("routeurs")) { _ = try await s.routeurs() }
+        #expect(ContinuousClock.now - debut < SondeUSB.delaiCommandeUSB)
+    }
+
+    /// Pas de fin de table dans le delai (la sonde s'arrete apres une ligne `suite`) : `routeurs`
+    /// echoue en `sansReponse`, et la partie recue est abandonnee : la table suivante ne la
+    /// reprend pas.
+    @Test(.timeLimit(.minutes(1))) func routeursExpire() async throws {
+        let appels = Mutex(0)
+        let canal = CanalRejoue { l in
+            guard l == "routeurs\n" else { return [] }
+            let n = appels.withLock { a in
+                a += 1
+                return a
+            }
+            return n == 1 ? [CanalRejoue.routeurs([("0400", "E0000000000000D1")], suite: true)]
+                          : [CanalRejoue.routeurs([("E400", "E0000000000000E4")], suite: false)]
+        }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        await #expect(throws: SondeUSB.Erreur.sansReponse("routeurs")) { _ = try await s.routeurs() }
+        #expect(try await s.routeurs().map(\.rloc16) == ["E400"])
+    }
+
+    /// Liaison fermee pendant l'attente de la table : l'attente est liberee.
+    @Test(.timeLimit(.minutes(1))) func routeursFermeture() async throws {
+        let canal = CanalRejoue { _ in [] }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        let requete = Task { try await s.routeurs() }
+        try await Task.sleep(for: .milliseconds(50))
+        canal.fermer()
+        await #expect(throws: SondeUSB.Erreur.fermee) { _ = try await requete.value }
     }
 
     /// Un bonjour non demande : la sonde vient de redemarrer.
@@ -487,6 +559,151 @@ struct SondeMaillageTests {
         #expect(Self.connectee(s))
         #expect(journal.cycle == ["ouvrir 1", "fermer 1", "fin 1", "ouvrir 2"])
         s.oublier()
+    }
+
+    /// Reseau minimal dans une partition donnee ; la table des routeurs donne l'ExtMac du chef 0
+    /// (muet : il ne rend que sa Route64) s'il est entendu (valeur inventee).
+    static func canalIdentites(ext: String?, partition: String) -> CanalRejoue {
+        CanalRejoue { l in
+            switch l {
+            case "etat\n": return [CanalRejoue.etatAttache.replacingOccurrences(of: "0000000A", with: partition)]
+            case "routeurs\n": return [CanalRejoue.routeurs([("0000", ext)], suite: false)]
+            default: return CanalRejoue.reseauMinimal(l)
+            }
+        }
+    }
+
+    /// Identites des routeurs gardees dans un fichier (ici temporaire) : relues au lancement
+    /// suivant, ou le chef muet garde l'ExtMac que la sonde n'entend plus ; une autre partition
+    /// les efface, dans le fichier aussi.
+    @Test(.timeLimit(.minutes(1))) func identitesGardeesDUnLancementALAutre() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("identites-routeurs.json")
+        /// Un lancement de l'app : une sonde, une tournee, son maillage.
+        func lancement(ext: String?, partition: String = "0000000A") async -> Maillage? {
+            let s = SondeMaillage(preferences: p, actif: true,
+                                  ouvrirCanal: { _ in Self.canalIdentites(ext: ext, partition: partition) },
+                                  fichierIdentites: fichier)
+            var recu: Maillage?
+            s.surMaillage = { m, _ in recu = m }
+            await s.connecter(Self.port, choisi: true)
+            await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+            s.oublier()
+            return recu
+        }
+        let m1 = await lancement(ext: "E0000000000000A0")
+        #expect(m1?.routeur(0)?.extMac == "E0000000000000A0", "entendu par la sonde")
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A0"]))
+        let m2 = await lancement(ext: nil)
+        #expect(m2?.routeur(0)?.extMac == "E0000000000000A0", "relue au lancement suivant")
+        let m3 = await lancement(ext: nil, partition: "0000000B")
+        #expect(m3?.routeur(0)?.extMac == nil, "autre partition")
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000B", identites: [:]))
+    }
+
+    /// Reseau minimal ou personne ne donne la liste des routeurs (tout `diag` echoue) : la
+    /// tournee ne rend pas de maillage ; la table des routeurs donne l'ExtMac du chef 0 (inventee).
+    static func canalSansListe() -> CanalRejoue {
+        CanalRejoue { l in
+            if l == "routeurs\n" { return [CanalRejoue.routeurs([("0000", "E0000000000000A0")], suite: false)] }
+            let mots = l.trimmingCharacters(in: .newlines).split(separator: " ").map(String.init)
+            if mots.first == "diag", mots.count >= 4, let id = Int(mots[3]) {
+                return [#"{"v":1,"t":"diag","id":\#(id),"cible":"\#(mots[1])","ok":false,"erreur":"delai"}"#]
+            }
+            return CanalRejoue.reseauMinimal(l)
+        }
+    }
+
+    /// Tournee sans liste des routeurs : pas de maillage, mais l'identite entendue est gardee,
+    /// dans le fichier aussi (une sonde promenee ne perd rien).
+    @Test(.timeLimit(.minutes(1))) func identitesGardeesSansListeDesRouteurs() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("identites-routeurs.json")
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in Self.canalSansListe() },
+                              fichierIdentites: fichier)
+        let (fins, fin) = AsyncStream.makeStream(of: Void.self)
+        s.surTournee = { enCours in if !enCours { fin.yield() } }
+        await s.connecter(Self.port, choisi: true)
+        for await _ in fins { break }
+        #expect(s.derniereTournee == nil, "pas de maillage")
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A0"]))
+        s.oublier()
+    }
+
+    /// Fichier des identites reecrit seulement quand elles changent : efface apres la premiere
+    /// tournee, il n'est pas recree par une tournee qui n'apprend rien de nouveau ; il l'est par
+    /// celle ou le chef change d'ExtMac (valeurs inventees).
+    @Test(.timeLimit(.minutes(1))) func fichierReecritSeulementSiChangement() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("identites-routeurs.json")
+        let entendue = Mutex("E0000000000000A0")
+        let canal = CanalRejoue { l in
+            guard l == "routeurs\n" else { return CanalRejoue.reseauMinimal(l) }
+            return [CanalRejoue.routeurs([("0000", entendue.withLock { $0 })], suite: false)]
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal }, fichierIdentites: fichier)
+        let (fins, fin) = AsyncStream.makeStream(of: Void.self)
+        s.surTournee = { enCours in if !enCours { fin.yield() } }
+        var tournees = fins.makeAsyncIterator()
+        await s.connecter(Self.port, choisi: true)
+        _ = await tournees.next()
+        #expect(IdentitesGardees.lire(fichier) != nil, "premiere tournee : ecrit")
+        try FileManager.default.removeItem(at: fichier)
+        s.rafraichir()
+        _ = await tournees.next()
+        #expect(!FileManager.default.fileExists(atPath: fichier.path), "rien de change : pas reecrit")
+        entendue.withLock { $0 = "E0000000000000A1" }
+        s.rafraichir()
+        _ = await tournees.next()
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A1"]))
+        s.oublier()
+    }
+
+    /// Ecriture du fichier des identites en echec (un fichier a la place de son dossier) : tracee,
+    /// les identites restent en memoire et l'ecriture est retentee a la tournee suivante.
+    @Test(.timeLimit(.minutes(1))) func ecritureDesIdentitesRetentee() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
+        let bouchon = dossier.appendingPathComponent("Maillage Thread")
+        try Data().write(to: bouchon)
+        let fichier = bouchon.appendingPathComponent("identites-routeurs.json")
+        let s = SondeMaillage(preferences: p, actif: true,
+                              ouvrirCanal: { _ in Self.canalIdentites(ext: "E0000000000000A0", partition: "0000000A") },
+                              fichierIdentites: fichier)
+        let (fins, fin) = AsyncStream.makeStream(of: Void.self)
+        s.surTournee = { enCours in if !enCours { fin.yield() } }
+        var tournees = fins.makeAsyncIterator()
+        await s.connecter(Self.port, choisi: true)
+        _ = await tournees.next()
+        #expect(IdentitesGardees.lire(fichier) == nil, "pas ecrit")
+        try FileManager.default.removeItem(at: bouchon)
+        s.rafraichir()
+        _ = await tournees.next()
+        #expect(IdentitesGardees.lire(fichier) == IdentitesGardees(partition: "0000000A", identites: [0x0000: "E0000000000000A0"]),
+                "retentee, sans changement des identites")
+        s.oublier()
+    }
+
+    /// Fichier des identites : dans le dossier de l'app ; jamais en demo ni sous les tests (qui
+    /// passent leur propre fichier, temporaire).
+    @Test func fichierDesIdentites() {
+        #expect(SondeMaillage.fichierIdentites(demo: true, sousTests: false) == nil)
+        #expect(SondeMaillage.fichierIdentites(demo: false, sousTests: true) == nil)
+        #expect(SondeMaillage.fichierIdentites(demo: true, sousTests: true) == nil)
+        #expect(SondeMaillage.fichierIdentites(demo: false, sousTests: false)
+                == Surveillance.dossierParDefaut.appendingPathComponent("identites-routeurs.json"))
     }
 
     /// En demo et sous tests : rien de lu.

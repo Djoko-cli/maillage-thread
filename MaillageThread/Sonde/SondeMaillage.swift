@@ -1,6 +1,7 @@
 import Foundation
 import MaillageCoeur
 import Observation
+import os
 
 /// La sonde vue par l'app : port retenu (par son numero de serie USB),
 /// connexion, tournee toutes les 5 minutes, dernier maillage. L'app n'ouvre
@@ -29,6 +30,8 @@ final class SondeMaillage {
         case reseau
     }
 
+    /// Journal du Mac (Console, sous-systeme fr.djoko.maillage) : jamais de donnees du reseau.
+    nonisolated static let journal = Logger(subsystem: "fr.djoko.maillage", category: "sonde")
     /// Numero de serie USB de la sonde retenue (l'adresse MAC du C6).
     static let cleSerie = "sondeSerieUSB"
     /// Nom de la sonde retenue, donne par la carte (`bonjour`).
@@ -109,19 +112,26 @@ final class SondeMaillage {
     /// qu'elles soient finies (ports vraiment fermes) avant d'ouvrir un port.
     @ObservationIgnored private var fermetures: Task<Void, Never>?
     @ObservationIgnored private var memoire = MemoireTournee()
+    /// Fichier des identites des routeurs (`fichierIdentites(demo:sousTests:)`) : lu au lancement,
+    /// ecrit quand elles changent ; nil : ni lu ni ecrit.
+    @ObservationIgnored private let fichierIdentites: URL?
+    /// Identites telles que le fichier les a (lues ou ecrites en dernier).
+    @ObservationIgnored private var identitesDuFichier: IdentitesGardees?
     /// Boucle des tournees (lue par les tests).
     @ObservationIgnored private(set) var boucle: Task<Void, Never>?
     @ObservationIgnored private var surveillantPorts: PortsUSB?
 
     /// `actif` faux (mode demo, tests) : ni port, ni preferences lues, ni trousseau.
     /// `trousseau` : en memoire par defaut (tests) ; l'app lui passe celui du Mac.
+    /// `fichierIdentites` : ou garder les identites des routeurs d'un lancement a l'autre (nil :
+    /// nulle part).
     init(preferences: UserDefaults = .standard, actif: Bool,
          ouvrirCanal: @escaping (String) -> any CanalSonde = { CanalSerie(liaison: LiaisonSerie(chemin: $0)) },
          trousseau: any TrousseauCles = TrousseauMemoire(),
          ouvrirReseau: @escaping @MainActor (String, Data) async throws -> any CanalSonde
              = { try await CanalReseau.connecter(hote: $0, cle: $1) },
          delaisReprise: [Duration] = SondeMaillage.delaisReprise,
-         horloge: @escaping () -> Date = { Date() }) {
+         horloge: @escaping () -> Date = { Date() }, fichierIdentites: URL? = nil) {
         self.preferences = preferences
         self.actif = actif
         self.ouvrirCanal = ouvrirCanal
@@ -129,12 +139,24 @@ final class SondeMaillage {
         self.ouvrirReseau = ouvrirReseau
         self.delaisReprise = delaisReprise
         self.horloge = horloge
+        self.fichierIdentites = fichierIdentites
         serie = actif ? preferences.string(forKey: Self.cleSerie) : nil
         nom = actif ? preferences.string(forKey: Self.cleNom) : nil
+        // Lu quel que soit `actif` : l'app ne passe aucun fichier en demo ni sous les tests.
+        if let g = fichierIdentites.flatMap(IdentitesGardees.lire) {
+            memoire = MemoireTournee(identites: g)
+            identitesDuFichier = g
+        }
         guard actif else { return }
         liaison = preferences.string(forKey: Self.cleLiaison).flatMap(Liaison.init(rawValue:)) ?? .usb
         hote = preferences.string(forKey: Self.cleHote)
         empreinteAcces = hote.flatMap(empreinte(pour:))
+    }
+
+    /// Fichier des identites des routeurs : dans le dossier de l'app ; nil en demo et sous les
+    /// tests (qui passent le leur, temporaire).
+    static func fichierIdentites(demo: Bool, sousTests: Bool) -> URL? {
+        demo || sousTests ? nil : Surveillance.dossierParDefaut.appendingPathComponent("identites-routeurs.json")
     }
 
     /// Une activite est tenue (session reseau en place).
@@ -566,17 +588,33 @@ final class SondeMaillage {
     private func executerTournee(_ sonde: SondeUSB, suivi: @escaping @Sendable (AvancementTournee) -> Void) async {
         do {
             etatSonde = try await sonde.etat()
-            if let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge(), avancement: suivi) {
-                memoire = r.memoire
+            let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge(), avancement: suivi)
+            // Meme sans maillage (pas de liste des routeurs), les identites apprises sont gardees.
+            memoire = r.memoire
+            garderIdentites()
+            if let m = r.maillage {
                 let recu = horloge()
                 derniereTournee = recu
-                surMaillage?(r.maillage, recu)
+                surMaillage?(m, recu)
             }
             erreurTournee = nil
         } catch SondeUSB.Erreur.fermee {
             // La liaison est fermee : `liaisonFermee` s'en occupe.
         } catch {
             erreurTournee = error.localizedDescription
+        }
+    }
+
+    /// Ecrit les identites des routeurs si elles ont change depuis le fichier. Un echec est
+    /// consigne dans le journal du Mac ; les identites restent en memoire et l'ecriture est
+    /// retentee a la tournee suivante.
+    private func garderIdentites() {
+        guard let f = fichierIdentites, let g = memoire.identitesGardees, g != identitesDuFichier else { return }
+        do {
+            try g.ecrire(dans: f)
+            identitesDuFichier = g
+        } catch {
+            Self.journal.error("identites des routeurs non ecrites : \(error.localizedDescription, privacy: .public)")
         }
     }
 }

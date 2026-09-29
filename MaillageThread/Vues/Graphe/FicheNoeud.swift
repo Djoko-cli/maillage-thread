@@ -7,6 +7,8 @@ struct FicheNoeud: View {
     @Environment(\.colorScheme) private var apparence
     let id: String
     @Binding var aRenommer: NoeudChoisi?
+    /// Choisit un autre noeud (la fiche d'un candidat).
+    var choisir: (String) -> Void = { _ in }
     var fermer: () -> Void
 
     var body: some View {
@@ -198,25 +200,68 @@ struct FicheNoeud: View {
         }
     }
 
-    /// Noeud que seule la sonde connait (routeur de bordure muet sans identite, enfant inconnu).
+    /// Noeud que seule la sonde connait (routeur de bordure muet sans identite, avec ses
+    /// candidats ; enfant inconnu).
     @ViewBuilder
     private func colonnesSonde(_ n: NoeudSonde, _ m: MaillageAffiche) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(GrapheCanvas.libelleInconnu(n)).font(.title3.weight(.semibold))
+            Text(GrapheCanvas.libelleInconnu(n, noms: nomsRouteurs)).font(.title3.weight(.semibold))
             Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud)).foregroundStyle(.secondary)
-            Text(n.genre == .routeur ? "Vu par la sonde, sans annonce reconnue sur le réseau local."
-                                     : "Vu par la sonde : son ExtMac ne correspond à aucun appareil annoncé.")
+            if !n.candidats.isEmpty {
+                // Chaque candidat ouvre la fiche de son annonce, pas dessinee a part.
+                HStack(spacing: 8) {
+                    Text("Candidats :")
+                    ForEach(n.candidats, id: \.self) { c in
+                        let choix = Self.selection(candidat: c, dans: surveillance)
+                        Button(nomsRouteurs[c] ?? c) {
+                            if let choix { choisir(choix) }
+                        }
+                        .buttonStyle(.link)
+                        .disabled(choix == nil)
+                    }
+                }
+            }
+            Text(Self.explication(n))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .frame(minWidth: 200, alignment: .leading)
     }
 
+    /// Noeud a choisir pour un candidat : son annonce, si l'instantane la connait encore (sa
+    /// fiche : role, adresses, journal, « Renommer… ») ; nil sinon.
+    static func selection(candidat: String, dans surveillance: Surveillance) -> String? {
+        surveillance.instantane?.routeur(candidat) != nil ? candidat : nil
+    }
+
+    /// Ce que la sonde sait d'un noeud qu'elle seule connait.
+    static func explication(_ n: NoeudSonde) -> String {
+        switch n.genre {
+        case .routeur where !n.candidats.isEmpty:
+            String(localized: "Vu par la sonde sans son identité : sans doute l'une de ces annonces du réseau local, qu'aucun nœud ne reprend.")
+        case .routeur:
+            String(localized: "Vu par la sonde, sans annonce reconnue sur le réseau local.")
+        case .enfant:
+            String(localized: "Vu par la sonde : son ExtMac ne correspond à aucun appareil annoncé.")
+        }
+    }
+
+    /// Fiche d'un routeur de bordure reconnu par elimination (`NoeudSonde.deduit`).
+    static var texteElimination: String {
+        String(localized: "Reconnu par élimination : seul routeur de bordure sans identité, seule annonce restante.")
+    }
+
+    /// Nom affiche de chaque routeur de bordure du reseau affiche, par instance (candidats d'un
+    /// routeur de bordure non identifie).
+    private var nomsRouteurs: [String: String] {
+        surveillance.reseau.map(surveillance.nomsRouteurs) ?? [:]
+    }
+
     /// Nom d'un noeud du graphe : routeur de bordure, appareil, ou noeud de la sonde.
     private func nomNoeud(_ id: String) -> String {
         if let r = surveillance.instantane?.routeur(id) { return surveillance.nom(r) }
         if let a = surveillance.appareil(id) { return surveillance.nom(a) }
-        if let n = sonde?.noeud(id) { return GrapheCanvas.libelleInconnu(n) }
+        if let n = sonde?.noeud(id) { return GrapheCanvas.libelleInconnu(n, noms: nomsRouteurs) }
         return id
     }
 
@@ -259,6 +304,9 @@ struct FicheNoeud: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Routeur de bordure").foregroundStyle(.secondary)
             lignesSonde(r.instance)
+            if sonde?.noeud(r.instance)?.deduit == true {
+                Text(Self.texteElimination).font(.caption).foregroundStyle(.secondary)
+            }
             if let nn = r.nomReseau { Text("Réseau \(nn)").foregroundStyle(.secondary) }
             ForEach(r.adressesLien, id: \.self) { ad in
                 Text(ad.description).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)

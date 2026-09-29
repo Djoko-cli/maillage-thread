@@ -34,7 +34,7 @@ struct CanalSerie: CanalSonde {
 }
 
 /// Sonde branchee en USB : envoie les commandes et apparie les reponses, par
-/// ordre pour `bonjour` et `etat`, par id pour `diag` (8 en vol, dans le desordre).
+/// ordre pour `bonjour`, `etat` et `routeurs`, par id pour `diag` (8 en vol, dans le desordre).
 actor SondeUSB: InterlocuteurSonde {
     enum Erreur: Error, LocalizedError, Equatable {
         case fermee
@@ -51,9 +51,9 @@ actor SondeUSB: InterlocuteurSonde {
         }
     }
 
-    /// Attente de `bonjour`, `etat` et `cle nouvelle` : 3 s en USB, qui ne perd rien ; 6 s par le
-    /// reseau, au-dela du renvoi de 4 s du canal (comme les delais de Halo : 3 s en USB, 6 s a
-    /// distance).
+    /// Attente de `bonjour`, `etat`, `routeurs` et `cle nouvelle` : 3 s en USB, qui ne perd rien ;
+    /// 6 s par le reseau, au-dela du renvoi de 4 s du canal (comme les delais de Halo : 3 s en
+    /// USB, 6 s a distance).
     static let delaiCommandeUSB: Duration = .seconds(3)
     static let delaiCommandeReseau: Duration = .seconds(6)
 
@@ -65,6 +65,9 @@ actor SondeUSB: InterlocuteurSonde {
     private var attenteDiag: [Int: (cible: UInt16, suite: CheckedContinuation<ResultatDiag, Never>)] = [:]
     private var attenteEtat: [CheckedContinuation<EtatSonde?, Never>] = []
     private var attenteBonjour: [CheckedContinuation<Bonjour?, Never>] = []
+    private var attenteRouteurs: [CheckedContinuation<[RouteurSonde]?, Never>] = []
+    /// Parties de la table des routeurs deja recues (lignes `suite`), en attendant la derniere.
+    private var routeursRecus: [RouteurSonde] = []
     private var attenteCle: [(id: Int, suite: CheckedContinuation<Result<ReponseCle, Erreur>?, Never>)] = []
     private var lecture: Task<Void, Never>?
     private(set) var fermee = false
@@ -131,6 +134,22 @@ actor SondeUSB: InterlocuteurSonde {
         return e
     }
 
+    /// Table des routeurs, ses lignes `suite` reunies. `sansReponse` si la sonde ne la rend
+    /// pas : delai depasse (firmware sans `routeurs`), ou `occupee` (verrou d'OpenThread).
+    func routeurs() async throws -> [RouteurSonde] {
+        guard !fermee else { throw Erreur.fermee }
+        let t = await withCheckedContinuation { c in
+            attenteRouteurs.append(c)
+            canal.envoyer(CommandeSonde.routeurs.ligne)
+            Task {
+                try? await Task.sleep(for: self.delaiCommande)
+                self.expirerRouteurs()
+            }
+        }
+        guard let t else { throw fermee ? Erreur.fermee : Erreur.sansReponse("routeurs") }
+        return t
+    }
+
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
         guard !fermee else { throw Erreur.fermee }
         let id = prochainId
@@ -183,6 +202,26 @@ actor SondeUSB: InterlocuteurSonde {
         if !attenteEtat.isEmpty { attenteEtat.removeFirst().resume(returning: nil) }
     }
 
+    /// Delai depasse : la table en cours de reception est abandonnee avec son attente.
+    private func expirerRouteurs() {
+        guard !attenteRouteurs.isEmpty else { return }
+        attenteRouteurs.removeFirst().resume(returning: nil)
+        routeursRecus = []
+    }
+
+    /// Partie de la table : gardee jusqu'a la derniere (`suite` faux), qui rend la table entiere
+    /// a la premiere attente ; l'erreur (`occupee`) la libere sans table. Sans attente (reponse
+    /// apres le delai), la table est oubliee.
+    private func recevoirRouteurs(_ p: PartieRouteurs) {
+        if p.erreur == nil {
+            routeursRecus += p.liste
+            guard !p.suite else { return }
+        }
+        let table = p.erreur == nil ? routeursRecus : nil
+        routeursRecus = []
+        if !attenteRouteurs.isEmpty { attenteRouteurs.removeFirst().resume(returning: table) }
+    }
+
     private func expirerDiag(_ id: Int) {
         guard let a = attenteDiag.removeValue(forKey: id) else { return }
         a.suite.resume(returning: ResultatDiag(id: id, cible: String(format: "%04X", a.cible), ok: false, erreur: "delai"))
@@ -194,6 +233,8 @@ actor SondeUSB: InterlocuteurSonde {
             attenteDiag.removeValue(forKey: r.id)?.suite.resume(returning: r)
         case .etat(let e)?:
             if !attenteEtat.isEmpty { attenteEtat.removeFirst().resume(returning: e) }
+        case .routeurs(let p)?:
+            recevoirRouteurs(p)
         case .bonjour(let b)?:
             if attenteBonjour.isEmpty {
                 bonjourSpontane = b
@@ -221,6 +262,9 @@ actor SondeUSB: InterlocuteurSonde {
         attenteEtat = []
         attenteBonjour.forEach { $0.resume(returning: nil) }
         attenteBonjour = []
+        attenteRouteurs.forEach { $0.resume(returning: nil) }
+        attenteRouteurs = []
+        routeursRecus = []
         attenteCle.forEach { $0.suite.resume(returning: nil) }
         attenteCle = []
     }

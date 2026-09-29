@@ -20,6 +20,57 @@ struct AffichageSondeTests {
                                                        bordure: false)) == String(localized: "Non identifié · \("AC05")"))
     }
 
+    /// Routeur de bordure non identifie : ses candidats sous leur nom (« HomePod Avant ou HomePod
+    /// Gauche · 0400 »), l'instance a defaut ; un seul candidat, avec un point d'interrogation (sans
+    /// elimination possible, ce n'est peut-etre pas lui).
+    @Test func libellesAvecCandidats() {
+        let deux = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true,
+                              candidats: ["hp-droit", "HomePod Palier"])
+        let liste = ["HomePod Avant", "HomePod Palier"].formatted(.list(type: .or))
+        #expect(GrapheCanvas.libelleInconnu(deux, noms: ["hp-droit": "HomePod Avant"])
+                == String(localized: "\(liste) · \("0400")"))
+        let un = NoeudSonde(id: "rloc:CC00", rloc16: 0xCC00, genre: .routeur, reconnu: false, bordure: true,
+                            candidats: ["HomePod salon"])
+        #expect(GrapheCanvas.libelleInconnu(un) == String(localized: "\("HomePod salon")\u{202F}? · \("CC00")"))
+        #expect(GrapheCanvas.libelleInconnu(un) != GrapheCanvas.libelleInconnu(deux))
+    }
+
+    /// Noms des routeurs de bordure d'un reseau, par instance, en un seul endroit (libelles du
+    /// graphe, fiche, candidats) : le surnom d'abord, l'instance sinon.
+    @Test func nomsDesRouteurs() throws {
+        let s = Surveillance(mode: .demo, dossier: nil)
+        s.demarrer()
+        let r = try #require(s.reseau)
+        s.renommer("HomePod Avant", en: "Enceinte droite")
+        let noms = s.nomsRouteurs(pour: r)
+        #expect(noms["HomePod Avant"] == "Enceinte droite")
+        #expect(noms["HomePod Palier"] == "HomePod Palier")
+        #expect(Set(noms.keys) == Set(r.routeurs.map(\.instance)))
+    }
+
+    /// Fiche d'un routeur de bordure non identifie : chaque candidat se choisit et ouvre la fiche
+    /// de son annonce (role, adresses, journal, « Renommer… »), si l'instantane la connait
+    /// encore ; sinon, il ne mene nulle part.
+    @Test func selectionDUnCandidat() throws {
+        let s = Surveillance(mode: .demo, dossier: nil)
+        s.demarrer()
+        #expect(FicheNoeud.selection(candidat: "HomePod Avant", dans: s) == "HomePod Avant")
+        #expect(FicheNoeud.renommable("HomePod Avant", dans: s), "sa fiche : « Renommer… »")
+        #expect(FicheNoeud.selection(candidat: "Annonce disparue", dans: s) == nil)
+    }
+
+    /// Fiche d'un routeur de bordure non identifie : ce que la sonde en sait ; trois explications
+    /// distinctes (routeur avec ou sans candidats, enfant).
+    @Test func ficheAvecCandidats() {
+        let avec = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true,
+                              candidats: ["HomePod Avant", "HomePod Palier"])
+        let sans = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true)
+        let enfant = NoeudSonde(id: "rloc:AC05", rloc16: 0xAC05, genre: .enfant, reconnu: false, bordure: false)
+        let textes = [avec, sans, enfant].map(FicheNoeud.explication)
+        #expect(Set(textes).count == 3 && !textes.contains(""))
+        #expect(!FicheNoeud.texteElimination.isEmpty)
+    }
+
     @Test func niveaux() {
         #expect(Palette.NiveauLien(3) == .bon)
         #expect(Palette.NiveauLien(2) == .moyen)
