@@ -37,10 +37,10 @@ size_t texteRid(uint32_t rid, char out[kRidMax + 1]) {
   return n;
 }
 
-bool permise(const char *c) {
-  while (*c == ' ') c++;
-  return !strcmp(c, "bonjour") || !strcmp(c, "etat") || !strcmp(c, "voisins") || !strcmp(c, "routeurs") ||
-         !strncmp(c, "diag ", 5);
+bool permise(const char *commande) {
+  while (*commande == ' ') commande++;
+  return !strcmp(commande, "bonjour") || !strcmp(commande, "etat") || !strcmp(commande, "voisins") ||
+         !strcmp(commande, "routeurs") || !strncmp(commande, "diag ", 5);
 }
 
 // ===========================================================================

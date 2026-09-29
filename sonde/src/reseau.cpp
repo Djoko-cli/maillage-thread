@@ -170,25 +170,25 @@ static void queueRaw(const h1::Peer &to, const uint8_t *d, size_t n, uint32_t no
   memcpy(t->data, d, n);
 }
 
-bool reseauEnvoyer(uint8_t slot, const char *prefix, size_t np, const uint8_t *json, size_t nj) {
-  const size_t n = np + nj;
-  if (slot >= h1::kSlots || n > kChargeMax) return false;
-  const h1::Session &s = sTable.slot(slot);
+bool reseauEnvoyer(uint8_t place, const char *prefixe, size_t nPrefixe, const uint8_t *json, size_t nJson) {
+  const size_t n = nPrefixe + nJson;
+  if (place >= h1::kSlots || n > kChargeMax) return false;
+  const h1::Session &s = sTable.slot(place);
   TxItem *t = txTail();
   if (!s.used || !t) return false;
   // La charge est posee apres la place de l'en-tete le plus long, scellee la,
   // puis ramenee contre l'en-tete (les deux zones se chevauchent : memmove).
   uint8_t *payload = t->data + h1::kHeaderMax;
-  memcpy(payload, prefix, np);
-  memcpy(payload + np, json, nj);
+  memcpy(payload, prefixe, nPrefixe);
+  memcpy(payload + nPrefixe, json, nJson);
   char hdr[h1::kHeaderMax + 1];
-  const size_t hn = sTable.seal(slot, payload, n, hdr);
+  const size_t hn = sTable.seal(place, payload, n, hdr);
   if (!hn) return false;
   memmove(t->data + hn, payload, n);
   memcpy(t->data, hdr, hn);
   t->at = millis();
   t->errCounted = false;
-  t->slot = slot;
+  t->slot = place;
   t->len = (uint16_t)(hn + n);
   t->port = s.peer.port;
   memcpy(t->peer, s.peer.ip, 16);
@@ -433,12 +433,12 @@ static void dropAll() {
   rxClear();
 }
 
-ResultatCle reseauCleNouvelle(const uint8_t appRandom[32], char keyHex[65], char kid[9]) {
+ResultatCle reseauCleNouvelle(const uint8_t aleaApp[32], char cleHex[65], char empreinte[9]) {
   uint8_t card[32], key[h1::kKeyLen];
   esp_fill_random(card, sizeof(card));
   const h1::Part part = {card, sizeof(card)};
   char newKid[h1::kKidHex + 1];
-  const bool made = h1::hmacSha256(appRandom, 32, &part, 1, key) && h1::keyId(key, newKid);
+  const bool made = h1::hmacSha256(aleaApp, 32, &part, 1, key) && h1::keyId(key, newKid);
   h1::wipe(card, sizeof(card));
   if (!made) {
     h1::wipe(key, sizeof(key));
@@ -454,8 +454,8 @@ ResultatCle reseauCleNouvelle(const uint8_t appRandom[32], char keyHex[65], char
   dropAll();
   const bool loaded = sTable.setKey(key);
   sKeyLoaded = sTable.hasKey();
-  h1::toHex(key, sizeof(key), keyHex);
-  memcpy(kid, newKid, h1::kKidHex + 1);
+  h1::toHex(key, sizeof(key), cleHex);
+  memcpy(empreinte, newKid, h1::kKidHex + 1);
   h1::wipe(key, sizeof(key));
   return loaded ? ResultatCle::Ok : ResultatCle::Chargement;
 }
@@ -472,9 +472,9 @@ bool reseauCleEfface() {
   return ok;
 }
 
-bool reseauEmpreinte(char kid[9]) {
+bool reseauEmpreinte(char empreinte[9]) {
   if (!sTable.hasKey()) return false;
-  memcpy(kid, sTable.kid(), h1::kKidHex + 1);
+  memcpy(empreinte, sTable.kid(), h1::kKidHex + 1);
   return true;
 }
 
