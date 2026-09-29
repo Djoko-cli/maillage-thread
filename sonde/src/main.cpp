@@ -1,9 +1,13 @@
 // ===========================================================================
-//  Sonde de maillage Thread, firmware 1.0.1 (spec de la sonde, sections 2 et 3)
+//  Sonde de maillage Thread, firmware 1.0.2 (spec de la sonde, sections 2 et
+//  3 ; contrat de la 1.0.2 : FED, routeurs, acces reseau comme le pont Halo)
 //
-//  Noeud Matter sur Thread, en MED : il recoit en permanence mais ne relaie
-//  rien, et ne devient jamais le parent de personne. Maison lui donne les
-//  identifiants du reseau a l'appairage par Bluetooth.
+//  Noeud Matter sur Thread, en FED non eligible routeur (Full End Device) :
+//  il recoit en permanence mais ne relaie rien, ne devient jamais routeur ni
+//  chef, et ne devient jamais le parent de personne. En FED, OpenThread tient
+//  la table des routeurs de la partition et apprend l'ExtMac de ceux qu'il
+//  entend (commande routeurs). Maison lui donne les identifiants du reseau a
+//  l'appairage par Bluetooth.
 //
 //  La pile OpenThread precompilee d'Arduino n'a pas de client de diagnostic :
 //  la sonde fabrique elle-meme la requete DIAG_GET (CoAP POST d/dg, TLV
@@ -15,19 +19,42 @@
 //  RS (0x1E) + JSON compact en ASCII + LF, 4096 octets au plus.
 //    bonjour                          produit, version, nom, MAC, appairage,
 //                                     code d'appairage et charge du QR code
-//                                     (toujours, meme dans Maison)
+//                                     (toujours, meme dans Maison), nom
+//                                     d'hote SRP (hote, null tant qu'inconnu)
 //    nom <texte>                      change le nom et le garde : 1 a 32
 //                                     caracteres (lettres ASCII, chiffres,
 //                                     - _ .) ; repond par un bonjour a jour,
 //                                     sinon erreur « syntaxe » (nom refuse)
 //                                     ou « ecriture » (NVS qui refuse)
-//    etat                             role, RLOC16, ExtMac, parent, partition...
-//    voisins                          table des voisins (le parent, pour un MED)
+//    etat                             role, RLOC16, ExtMac, mode, eligible,
+//                                     parent, partition...
+//    voisins                          routeurs voisins a lien etabli (le
+//                                     parent n'y est pas : voir etat)
+//    routeurs                         table des routeurs d'OpenThread
+//                                     (otThreadGetRouterInfo), entrees
+//                                     allouees ; plusieurs lignes si besoin
+//                                     ("suite":true sur toutes sauf la
+//                                     derniere)
 //    diag <cible> <t,t,...> <id> [ms] DIAG_GET vers <cible> : RLOC16 en 4 hexa
 //                                     (adresse RLOC formee sur le prefixe du
 //                                     reseau maille) ou adresse IPv6 ; delai de
 //                                     3 a 60 s, 45 s par defaut
-//    oubli                            desappaire la sonde et redemarre
+//    cle                              empreinte de la cle d'acces reseau
+//                                     (null sans cle), hote, compteurs udp,
+//                                     tas libre et minimum
+//    cle efface                       efface la cle : plus d'acces reseau
+//    cle nouvelle <64 HEXA> <id>      nouvelle cle (alea de l'app), rendue
+//                                     UNE fois, dans la reponse ; sans id :
+//                                     erreur « syntaxe », jamais de cle
+//    oubli                            efface la cle, desappaire la sonde et
+//                                     redemarre
+//
+//  Reseau (reseau.h) : UDP sur IPv6, port 5480, enveloppe H1 du pont Halo,
+//  cle creee par l'USB. Charge d'un message : "<rid> <commande>" ; reponse :
+//  "<rid> <ligne JSON>" (la ligne de l'USB sans RS ni LF), 1100 octets au
+//  plus. Permis : bonjour (sans code ni QR code), etat, voisins, routeurs,
+//  diag ; le reste : erreur « refuse ». Un rid repete ne relance rien. Sans
+//  cle : silence total.
 //
 //  Dans Maison : un interrupteur « Sonde maillage », allume par defaut.
 //  Eteint, la sonde refuse les requetes (erreur « suspendue »). Son etat est
@@ -42,20 +69,78 @@
 #include <esp_mac.h>
 #include <esp_openthread.h>
 #include <esp_openthread_lock.h>
+#include <esp_system.h>
 #include <openthread/coap.h>
 #include <openthread/ip6.h>
 #include <openthread/link.h>
 #include <openthread/message.h>
 #include <openthread/thread.h>
+#include <openthread/thread_ftd.h>
 #include <stdarg.h>
 
-static const char *const kVersion = "1.0.1";
+#include "distant.h"
+#include "h1_proto.h"
+#include "reseau.h"
+
+static const char *const kVersion = "1.0.2";
 
 // ---------------------------------------------------------------------------
-//  MED des l'init de Thread (repris du pont Halo, benq matter_bridge.cpp) :
-//  esp_matter::start demande « routeur » ; l'enveloppe le remplace par MED.
-//  Lien : -Wl,--wrap=<symbole> dans platformio.ini.
+//  FED des la creation de la pile Thread, jamais eligible routeur (repris de
+//  l'essai FED, branche essai-fed, commit 078a8be)
+//
+//  esp_matter::start : _InitThreadStack (esp_openthread_init cree l'instance
+//  et relit sa NVS, puis CHIP relance Thread si le reseau est connu), puis
+//  _SetThreadDeviceType(Router), puis _StartThreadTask. Avant cette tache,
+//  OpenThread ne traite ni message MLE ni minuteur.
+//
+//  Trois enveloppes, -Wl,--wrap=<symbole> dans platformio.ini (une enveloppe
+//  sans son drapeau, ou l'inverse, ne lie pas) :
+//  1. esp_openthread_init : des la creation de l'instance, avant que Thread
+//     soit relance, la sonde passe en FED (imposerFed).
+//  2. _SetThreadDeviceType : toute demande devient FullEndDevice. CHIP appelle
+//     alors otThreadSetRouterEligible(false) avant otThreadSetLinkMode(r+d)
+//     (objdump). Puis le FED est impose de nouveau, avec n.
+//  3. otThreadSetRouterEligible : toujours false, quel que soit l'appelant
+//     (CHIP, CLI OpenThread, ce fichier). Dans les bibliotheques, seuls
+//     _SetThreadDeviceType et la CLI y font reference, et OpenThread ne rend
+//     jamais l'eligibilite de lui-meme (nm, objdump).
+//  Non eligible, OpenThread refuse de devenir routeur ou chef, ne repond pas
+//  aux Parent Request, refuse les Child ID Request et n'emet ni balise ni
+//  annonce MLE.
 // ---------------------------------------------------------------------------
+
+extern "C" otError __real_otThreadSetRouterEligible(otInstance *instance, bool eligible);
+
+extern "C" otError __wrap_otThreadSetRouterEligible(otInstance *instance, bool eligible) {
+  (void)eligible;
+  return __real_otThreadSetRouterEligible(instance, false);
+}
+
+// Non eligible d'abord (jamais FTD et eligible a la fois), puis mode rdn :
+// reception permanente, appareil complet, donnees reseau completes. Verrou
+// OT sans limite, comme CHIP a ces deux endroits : il est recursif, et la
+// tache OpenThread n'existe pas encore. Aucun appel CHIP dessous.
+static void imposerFed(otInstance *ot) {
+  esp_openthread_lock_acquire(portMAX_DELAY);
+  otThreadSetRouterEligible(ot, false);
+  otLinkModeConfig mode = otThreadGetLinkMode(ot);
+  if (!mode.mRxOnWhenIdle || !mode.mDeviceType || !mode.mNetworkData) {
+    mode.mRxOnWhenIdle = true;
+    mode.mDeviceType = true;
+    mode.mNetworkData = true;
+    otThreadSetLinkMode(ot, mode);
+  }
+  esp_openthread_lock_release();
+}
+
+extern "C" esp_err_t __real_esp_openthread_init(const esp_openthread_platform_config_t *config);
+
+// Echec : ni instance ni verrou surs, on n'y touche pas.
+extern "C" esp_err_t __wrap_esp_openthread_init(const esp_openthread_platform_config_t *config) {
+  const esp_err_t e = __real_esp_openthread_init(config);
+  if (e == ESP_OK) imposerFed(esp_openthread_get_instance());
+  return e;
+}
 
 using ThreadDeviceType = chip::DeviceLayer::ConnectivityManager::ThreadDeviceType;
 
@@ -66,10 +151,13 @@ __real__ZN4chip11DeviceLayer8Internal40GenericThreadStackManagerImpl_OpenThreadI
 extern "C" CHIP_ERROR
 __wrap__ZN4chip11DeviceLayer8Internal40GenericThreadStackManagerImpl_OpenThreadINS0_22ThreadStackManagerImplEE20_SetThreadDeviceTypeENS0_19ConnectivityManager16ThreadDeviceTypeE(
     void *self, ThreadDeviceType type) {
-  if (type == chip::DeviceLayer::ConnectivityManager::kThreadDeviceType_Router)
-    type = chip::DeviceLayer::ConnectivityManager::kThreadDeviceType_MinimalEndDevice;
-  return __real__ZN4chip11DeviceLayer8Internal40GenericThreadStackManagerImpl_OpenThreadINS0_22ThreadStackManagerImplEE20_SetThreadDeviceTypeENS0_19ConnectivityManager16ThreadDeviceTypeE(
-      self, type);
+  (void)type;
+  const CHIP_ERROR e =
+      __real__ZN4chip11DeviceLayer8Internal40GenericThreadStackManagerImpl_OpenThreadINS0_22ThreadStackManagerImplEE20_SetThreadDeviceTypeENS0_19ConnectivityManager16ThreadDeviceTypeE(
+          self, chip::DeviceLayer::ConnectivityManager::kThreadDeviceType_FullEndDevice);
+  // Echec (pas d'instance OpenThread) : rien a imposer.
+  if (e == CHIP_NO_ERROR) imposerFed(esp_openthread_get_instance());
+  return e;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,19 +197,47 @@ static bool nomValide(const char *s) {
 static bool verrouOt(uint32_t ms) { return sThreadPret && esp_openthread_lock_acquire(pdMS_TO_TICKS(ms / 2)); }
 static void libereOt() { esp_openthread_lock_release(); }
 
+// Pour reseau.cpp : verrou pris SANS attente (emission, socket, nom d'hote).
+bool reseauVerrouEssai() { return verrouOt(0); }
+void reseauVerrouLibere() { libereOt(); }
+
 // ---------------------------------------------------------------------------
-//  Ligne machine : RS + JSON + LF, 4096 octets au plus
+//  Ligne machine : RS + JSON + LF, 4096 octets au plus sur l'USB
 // ---------------------------------------------------------------------------
+
+// Destination des lignes : l'USB, ou une session reseau (place, generation de
+// la place, rid de la requete). Posee le temps d'une commande recue par le
+// reseau, et pour la reponse d'un diag qui en venait.
+struct Sortie {
+  bool reseau = false;
+  uint8_t place = 0;
+  uint32_t generation = 0;
+  uint32_t rid = 0;
+};
+static Sortie sSortie;
+
+// Reponses gardees de chaque session reseau (un rid repete ne relance rien).
+static distant::Gardees sGardees[kPlacesReseau];
 
 static char sLigne[4096];
 static size_t sLong = 0;
 static bool sTropLong = false;
+static size_t sLimite = sizeof(sLigne);
+
+// Taille de sLigne permise pour la destination en cours (RS, LF et le 0
+// final de vsnprintf compris) : 4096 sur l'USB ; sur le reseau, la charge
+// "<rid> <ligne JSON>" tient en kChargeMax octets (JSON <= sLimite - 3).
+static size_t limiteSortie() {
+  if (!sSortie.reseau) return sizeof(sLigne);
+  char rid[distant::kRidMax + 1];
+  return kChargeMax - (distant::texteRid(sSortie.rid, rid) + 1) + 3;
+}
 
 static void ajoute(const char *fmt, ...) {
   if (sTropLong) return;
   va_list ap;
   va_start(ap, fmt);
-  const size_t reste = sizeof(sLigne) - sLong - 2;  // place pour '}' et LF
+  const size_t reste = sLimite - sLong - 2;  // place pour '}' et LF
   const int n = vsnprintf(sLigne + sLong, reste, fmt, ap);
   va_end(ap);
   if (n < 0 || (size_t)n >= reste) {
@@ -134,8 +250,21 @@ static void ajoute(const char *fmt, ...) {
 static void debut(const char *type) {
   sLong = 0;
   sTropLong = false;
+  sLimite = limiteSortie();
   sLigne[sLong++] = 0x1E;
   ajoute("{\"v\":1,\"t\":\"%s\"", type);
+}
+
+// Ligne pour une session reseau : gardee (pour un rid repete), puis envoyee
+// "<rid> <ligne JSON>", sans RS ni LF. Session partie entre-temps : rien.
+// File d'emission pleine : perdue, mais gardee, l'app renverra le rid.
+static void sortieReseau(const uint8_t *json, size_t n) {
+  if (!reseauSessionActive(sSortie.place, sSortie.generation)) return;
+  sGardees[sSortie.place].ajouter(json, n);
+  char prefixe[distant::kRidMax + 2];
+  size_t np = distant::texteRid(sSortie.rid, prefixe);
+  prefixe[np++] = ' ';
+  reseauEnvoyer(sSortie.place, prefixe, np, json, n);
 }
 
 static void fin() {
@@ -145,13 +274,27 @@ static void fin() {
   }
   sLigne[sLong++] = '}';
   sLigne[sLong++] = '\n';
-  Serial.write((const uint8_t *)sLigne, sLong);
+  if (sSortie.reseau) sortieReseau((const uint8_t *)sLigne + 1, sLong - 2);
+  else Serial.write((const uint8_t *)sLigne, sLong);
 }
 
 static void hexa(const char *cle, const uint8_t *o, size_t n) {
   ajoute(",\"%s\":\"", cle);
   for (size_t i = 0; i < n && !sTropLong; i++) ajoute("%02X", o[i]);
   ajoute("\"");
+}
+
+static void repondreErreur(const char *erreur) {
+  debut("erreur");
+  ajoute(",\"erreur\":\"%s\"", erreur);
+  fin();
+}
+
+// Nom d'hote SRP, sans .local ; null tant qu'il n'est pas connu.
+static void ajouteHote() {
+  char hote[64];
+  if (reseauHote(hote)) ajoute(",\"hote\":\"%s\"", hote);
+  else ajoute(",\"hote\":null");
 }
 
 // ---------------------------------------------------------------------------
@@ -209,26 +352,36 @@ static void chaineOuNull(const char *cle, const String &valeur) {
   }
 }
 
-// Code d'appairage et QR code toujours, appairee ou non : Maillage Thread les
-// montre dans ses Reglages (Matter les forme une fois, au demarrage).
+// Code d'appairage et QR code toujours sur l'USB, appairee ou non : Maillage
+// Thread les montre dans ses Reglages (Matter les forme une fois, au
+// demarrage). A distance, jamais : null, comme le pont Halo (le trafic H1
+// n'est pas chiffre ; qui les lirait pourrait ajouter la sonde a son propre
+// controleur des que l'appairage est ouvert).
 static void cmdBonjour() {
   const bool appairee = Matter.isDeviceCommissioned();
-  // L'URL du QR code porte la charge utile « MT:... » apres « data= ».
-  const String url = Matter.getOnboardingQRCodeUrl();
-  const int i = url.indexOf("data=");
-  String qr = i >= 0 ? url.substring(i + 5) : url;
-  qr.replace("%3A", ":");
+  String code, qr;
+  if (!sSortie.reseau) {
+    // L'URL du QR code porte la charge utile « MT:... » apres « data= ».
+    const String url = Matter.getOnboardingQRCodeUrl();
+    const int i = url.indexOf("data=");
+    qr = i >= 0 ? url.substring(i + 5) : url;
+    qr.replace("%3A", ":");
+    code = Matter.getManualPairingCode();
+  }
   debut("bonjour");
   ajoute(",\"produit\":\"sonde-maillage\",\"version\":\"%s\",\"nom\":\"%s\",\"mac\":\"%s\",\"appairee\":%s", kVersion,
          sNom, sMac, appairee ? "true" : "false");
-  chaineOuNull("code", Matter.getManualPairingCode());
+  chaineOuNull("code", code);
   chaineOuNull("qr", qr);
+  ajouteHote();
   fin();
 }
 
 // nom <texte> : change le nom et le garde ; repond par un bonjour a jour. Nom
 // refuse : erreur « syntaxe » ; NVS qui refuse l'ecriture : « ecriture ».
+// USB seulement (la liste blanche la refuse deja au reseau).
 static void cmdNom(char *texte) {
+  if (sSortie.reseau) return repondreErreur("refuse");
   while (*texte == ' ') texte++;
   size_t n = strlen(texte);
   while (n > 0 && texte[n - 1] == ' ') texte[--n] = 0;
@@ -262,6 +415,8 @@ static void cmdEtat() {
   if (ext) hexa("ext", ext->m8, sizeof(ext->m8));
   const otLinkModeConfig mode = otThreadGetLinkMode(ot);
   ajoute(",\"mode\":\"%s%s%s\"", mode.mRxOnWhenIdle ? "r" : "", mode.mDeviceType ? "d" : "", mode.mNetworkData ? "n" : "");
+  // Routeur ou chef permis (FTD, eligible, politique de securite) : false attendu.
+  ajoute(",\"eligible\":%s", otThreadIsRouterEligible(ot) ? "true" : "false");
   otRouterInfo parent;
   if (role == OT_DEVICE_ROLE_CHILD && otThreadGetParentInfo(ot, &parent) == OT_ERROR_NONE) {
     int8_t moyen = 0;
@@ -313,6 +468,88 @@ static void cmdVoisins() {
 }
 
 // ---------------------------------------------------------------------------
+//  routeurs : table des routeurs d'OpenThread (repris de l'essai FED)
+// ---------------------------------------------------------------------------
+
+// Une entree allouee d'otThreadGetRouterInfo, copiee sous le verrou OT pour
+// ecrire les lignes hors verrou.
+struct Routeur {
+  uint8_t id;
+  uint16_t rloc16;
+  uint8_t ext[8];
+  uint8_t lqIn, lqOut, age;
+  bool lien;
+};
+static constexpr size_t kRouteursMax = 64;  // identifiants 0 a 62
+static Routeur sRouteurs[kRouteursMax];
+
+// Une entree de `liste`, precedee d'une virgule sauf en tete de liste.
+// ExtMac nulle (OpenThread ne l'a pas relevee pour ce routeur) : null.
+static int formaterRouteur(char *b, size_t taille, const Routeur &r, bool premier) {
+  bool nulle = true;
+  for (uint8_t o : r.ext) nulle = nulle && o == 0;
+  char ext[19] = "null";
+  if (!nulle)
+    snprintf(ext, sizeof(ext), "\"%02X%02X%02X%02X%02X%02X%02X%02X\"", r.ext[0], r.ext[1], r.ext[2], r.ext[3],
+             r.ext[4], r.ext[5], r.ext[6], r.ext[7]);
+  return snprintf(b, taille, "%s{\"id\":%u,\"rloc16\":\"%04X\",\"ext\":%s,\"lqIn\":%u,\"lqOut\":%u,\"age\":%u,\"lien\":%s}",
+                  premier ? "" : ",", (unsigned)r.id, (unsigned)r.rloc16, ext, (unsigned)r.lqIn, (unsigned)r.lqOut,
+                  (unsigned)r.age, r.lien ? "true" : "false");
+}
+
+// Entrees allouees, de l'identifiant 0 a otThreadGetMaxRouterId(). Une ligne,
+// ou plusieurs si elle depasserait la taille permise (4096 octets sur l'USB,
+// une charge de 1100 octets sur le reseau) : "suite":true sur chaque ligne
+// sauf la derniere ("suite":false), coupees entre deux entrees.
+static void cmdRouteurs() {
+  if (!verrouOt(200)) {
+    debut("routeurs");
+    ajoute(",\"erreur\":\"occupee\"");
+    fin();
+    return;
+  }
+  otInstance *ot = esp_openthread_get_instance();
+  const uint8_t maxId = otThreadGetMaxRouterId(ot);
+  size_t n = 0;
+  for (uint16_t id = 0; id <= maxId && n < kRouteursMax; id++) {
+    otRouterInfo info;
+    if (otThreadGetRouterInfo(ot, id, &info) != OT_ERROR_NONE || !info.mAllocated) continue;
+    Routeur &r = sRouteurs[n++];
+    r.id = info.mRouterId;
+    r.rloc16 = info.mRloc16;
+    memcpy(r.ext, info.mExtAddress.m8, sizeof(r.ext));
+    r.lqIn = info.mLinkQualityIn;
+    r.lqOut = info.mLinkQualityOut;
+    r.age = info.mAge;
+    r.lien = info.mLinkEstablished;
+  }
+  libereOt();
+
+  static const char kFinDerniere[] = "],\"suite\":false";  // la plus longue des deux fins
+  debut("routeurs");
+  ajoute(",\"liste\":[");
+  bool premier = true;
+  for (size_t i = 0; i < n; i++) {
+    char entree[160];
+    int l = formaterRouteur(entree, sizeof(entree), sRouteurs[i], premier);
+    // ajoute() reussit si sLong + longueur + 3 <= sLimite (NUL, '}' et LF) :
+    // l'entree puis la fin de ligne doivent encore tenir, sinon ligne suivante.
+    if (!premier && sLong + (size_t)l + (sizeof(kFinDerniere) - 1) + 3 > sLimite) {
+      ajoute("],\"suite\":true");
+      fin();
+      debut("routeurs");
+      ajoute(",\"liste\":[");
+      premier = true;
+      l = formaterRouteur(entree, sizeof(entree), sRouteurs[i], premier);
+    }
+    ajoute("%s", entree);
+    premier = false;
+  }
+  ajoute("%s", kFinDerniere);
+  fin();
+}
+
+// ---------------------------------------------------------------------------
 //  DIAG_GET par CoAP, 8 en vol
 // ---------------------------------------------------------------------------
 
@@ -337,6 +574,7 @@ struct Requete {
   uint8_t charge[1024];
   uint16_t longueur;
   bool tronquee;
+  Sortie sortie;  // qui attend la reponse : l'USB, ou une session reseau et son rid
 };
 static Requete sRequetes[kEnVol];
 
@@ -452,6 +690,7 @@ static void cmdDiag(char *args) {
     Requete &r = sRequetes[libre];
     r.id = id;
     snprintf(r.cible, sizeof(r.cible), "%s", cible);
+    r.sortie = sSortie;
     r.debutMs = millis();
     r.finie = false;
     r.enVol = true;
@@ -478,7 +717,210 @@ static void imprimerDiag(const Requete &r) {
     ajoute(",\"ok\":false,\"erreur\":\"%s\"",
            r.erreur == OT_ERROR_RESPONSE_TIMEOUT ? "delai" : otThreadErrorToString(r.erreur));
   }
+  // A distance, une reponse qui ne tient pas dans un datagramme : trop_long.
+  if (sTropLong && sSortie.reseau) {
+    debut("diag");
+    ajoute(",\"id\":%lu,\"cible\":\"%s\",\"ok\":false,\"erreur\":\"trop_long\"", (unsigned long)r.id, r.cible);
+  }
   fin();
+}
+
+// Reponses arrivees. Pour une session reseau : partie entre-temps, la reponse
+// tombe ; sinon elle attend une place dans la file d'emission (jamais perdue
+// faute de place), puis elle est gardee pour un rid repete.
+static void diagsFinis() {
+  for (Requete &r : sRequetes) {
+    if (!r.enVol || !r.finie) continue;
+    if (r.sortie.reseau) {
+      if (!reseauSessionActive(r.sortie.place, r.sortie.generation)) {
+        r.finie = false;
+        r.enVol = false;
+        continue;
+      }
+      if (!reseauPlacesLibres()) continue;
+      sGardees[r.sortie.place].commencer(r.sortie.rid);
+    }
+    sSortie = r.sortie;
+    imprimerDiag(r);
+    sSortie = Sortie();
+    if (r.sortie.reseau) sGardees[r.sortie.place].terminer();
+    r.finie = false;
+    r.enVol = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  Cle d'acces reseau (USB seulement)
+// ---------------------------------------------------------------------------
+
+// Ligne de reponse a cle nouvelle, au plus : RS, {"v":1,"t":"cle","id":<10>,
+// "cle":"<64>","empreinte":"<8>","hote":"<63>"}, LF : 204 octets.
+static constexpr int kLigneCleMax = 208;
+
+// Entier decimal de 1 a 10 chiffres, 4294967295 au plus.
+static bool lireEntier(const char *s, uint32_t *v) {
+  const size_t n = strlen(s);
+  if (n == 0 || n > 10 || strspn(s, "0123456789") != n) return false;
+  const unsigned long long x = strtoull(s, nullptr, 10);
+  if (x > 0xFFFFFFFFull) return false;
+  *v = (uint32_t)x;
+  return true;
+}
+
+// {"v":1,"t":"cle","empreinte":"<8 hexa>"|null} ; aussi le nom d'hote, les
+// compteurs du transport (bloc reseau.ip.udp du pont Halo) et le tas (libre,
+// minimum depuis le demarrage : la 1.0.2 prend ~18 Ko de RAM de plus).
+static void repondreCle() {
+  char kid[h1::kKidHex + 1];
+  CompteursReseau c;
+  reseauCompteurs(&c);
+  const uint32_t tasLibre = esp_get_free_heap_size(), tasMin = esp_get_minimum_free_heap_size();
+  debut("cle");
+  if (reseauEmpreinte(kid)) ajoute(",\"empreinte\":\"%s\"", kid);
+  else ajoute(",\"empreinte\":null");
+  ajouteHote();
+  ajoute(",\"udp\":{\"port\":%u,\"ouvert\":%s,\"sessions\":%u,\"provisoire\":%s,\"rx\":%lu,\"rejets\":%lu,"
+         "\"rx_perdus\":%lu,\"defis\":%lu,\"tx\":%lu,\"tx_perdus\":%lu,\"tx_erreurs\":%lu",
+         (unsigned)kPortReseau, c.ouvert ? "true" : "false", (unsigned)c.sessions, c.provisoire ? "true" : "false",
+         (unsigned long)c.rx, (unsigned long)c.rejets, (unsigned long)c.rxPerdus, (unsigned long)c.defis,
+         (unsigned long)c.tx, (unsigned long)c.txPerdus, (unsigned long)c.txErreurs);
+  if (c.tamponsMinConnu) ajoute(",\"tampons_min\":%u}", (unsigned)c.tamponsMin);
+  else ajoute(",\"tampons_min\":null}");
+  ajoute(",\"tas\":{\"libre\":%lu,\"min\":%lu}", (unsigned long)tasLibre, (unsigned long)tasMin);
+  fin();
+}
+
+// cle nouvelle <64 HEXA> <id> : cle = HMAC-SHA256(cle = alea de l'app,
+// message = alea de la carte), gardee en NVS et rendue une seule fois, dans
+// cette reponse. La cle n'est jamais imprimee ailleurs ; sans id : syntaxe.
+static void cleNouvelle(const char *hex, const char *idTexte) {
+  uint8_t alea[32];
+  uint32_t id = 0;
+  // 64 hexa MAJUSCULES (h1::fromHex refuse les minuscules), comme Halo.
+  const bool ok = strlen(hex) == 64 && h1::fromHex(hex, sizeof(alea), alea) && lireEntier(idTexte, &id);
+  if (!ok) {
+    h1::wipe(alea, sizeof(alea));
+    return repondreErreur("syntaxe");
+  }
+  // La reponse est la seule copie de la cle : pas de cle neuve si elle ne
+  // peut pas partir tout de suite (tampon d'emission USB occupe).
+  if (Serial.availableForWrite() < kLigneCleMax) {
+    h1::wipe(alea, sizeof(alea));
+    return repondreErreur("occupee");
+  }
+  char cleHex[65], kid[h1::kKidHex + 1];
+  const ResultatCle res = reseauCleNouvelle(alea, cleHex, kid);
+  h1::wipe(alea, sizeof(alea));
+  if (res == ResultatCle::Crypto) return repondreErreur("crypto");
+  if (res == ResultatCle::Nvs) return repondreErreur("ecriture");
+  // Cle ecrite mais pas chargee (Chargement) : elle vaut au prochain
+  // demarrage ; l'app doit la connaitre, elle part aussi.
+  debut("cle");
+  ajoute(",\"id\":%lu,\"cle\":\"%s\",\"empreinte\":\"%s\"", (unsigned long)id, cleHex, kid);
+  ajouteHote();
+  fin();
+  h1::wipe(cleHex, sizeof(cleHex));
+  h1::wipe(sLigne, sizeof(sLigne));
+}
+
+// cle | cle efface | cle nouvelle <64 HEXA> <id> : USB seulement. La liste
+// blanche les refuse deja au reseau ; refusees ici aussi (defense en
+// profondeur : la reponse de nouvelle porte la cle).
+static void cmdCle(char *args) {
+  if (sSortie.reseau) return repondreErreur("refuse");
+  char *mots[4];
+  size_t n = 0;
+  for (char *m = strtok(args, " "); m && n < 4; m = strtok(nullptr, " ")) mots[n++] = m;
+  if (n == 0) return repondreCle();
+  if (n == 1 && !strcmp(mots[0], "efface")) {
+    if (!reseauCleEfface()) return repondreErreur("ecriture");
+    return repondreCle();
+  }
+  if (n == 3 && !strcmp(mots[0], "nouvelle")) return cleNouvelle(mots[1], mots[2]);
+  repondreErreur("syntaxe");
+}
+
+// oubli : la cle part aussi (deux essais : un echec la laisserait revenir au
+// demarrage), sinon l'ancien proprietaire garderait l'acces reseau apres un
+// nouvel appairage (comme Halo, matterDecommissionNow). Matter n'efface que
+// ses propres espaces NVS. USB seulement.
+static void cmdOubli() {
+  if (sSortie.reseau) return repondreErreur("refuse");
+  if (!reseauCleEfface()) reseauCleEfface();
+  debut("oubli");
+  fin();
+  Serial.flush();
+  Matter.decommission();  // efface l'appairage et redemarre
+}
+
+// Plus aucun controleur (sonde retiree de Maison sans oubli) : Matter rouvre
+// l'appairage ; la cle part aussi, sinon l'ancien proprietaire garderait
+// l'acces reseau apres qu'un autre a ajoute la sonde (comme Halo, ownerPoll).
+// Seul un passage observe de « appairee » a « plus appairee » compte (pas
+// l'etat au demarrage).
+static void surveillerAppairage(uint32_t maintenant) {
+  static int8_t sVu = -1;  // -1 : pas encore lu
+  static uint32_t sA = 0;
+  if (sVu >= 0 && maintenant - sA < 500) return;
+  sA = maintenant;
+  const bool appairee = Matter.isDeviceCommissioned();
+  char kid[h1::kKidHex + 1];
+  if (sVu == 1 && !appairee && reseauEmpreinte(kid)) {
+    if (!reseauCleEfface()) reseauCleEfface();  // deux essais, comme oubli
+  }
+  sVu = appairee ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
+//  Commandes recues par le reseau (reseau.cpp)
+// ---------------------------------------------------------------------------
+
+void reseauSessionPartie(uint8_t place) {
+  if (place < kPlacesReseau) sGardees[place].vider();
+}
+
+// Une ligne gardee repart vers l'app, "<rid> <ligne JSON>".
+struct Renvoi {
+  uint8_t place;
+  char prefixe[distant::kRidMax + 2];
+  size_t n;
+};
+
+static void renvoyerLigne(void *contexte, const uint8_t *ligne, size_t n) {
+  const Renvoi &r = *(const Renvoi *)contexte;
+  reseauEnvoyer(r.place, r.prefixe, r.n, ligne, n);
+}
+
+static void executer(char *c);
+
+// "<rid> <commande>" d'une session etablie. Sans rid lisible, aucune reponse
+// possible : ignoree. Un rid deja servi ne relance rien : la reponse gardee
+// repart, ou rien si un diag de ce rid est encore en vol. Hors liste blanche :
+// erreur « refuse ».
+void reseauRecu(uint8_t place, char *charge) {
+  uint32_t rid = 0;
+  char *commande = nullptr;
+  if (place >= kPlacesReseau || !distant::lireRid(charge, &rid, &commande)) return;
+  const uint32_t generation = reseauGeneration(place);
+  for (const Requete &r : sRequetes)
+    if (r.enVol && r.sortie.reseau && r.sortie.place == place && r.sortie.generation == generation &&
+        r.sortie.rid == rid)
+      return;
+  Renvoi renvoi;
+  renvoi.place = place;
+  renvoi.n = distant::texteRid(rid, renvoi.prefixe);
+  renvoi.prefixe[renvoi.n++] = ' ';
+  if (sGardees[place].rendre(rid, renvoyerLigne, &renvoi)) return;
+
+  sSortie.reseau = true;
+  sSortie.place = place;
+  sSortie.generation = generation;
+  sSortie.rid = rid;
+  sGardees[place].commencer(rid);
+  if (distant::permise(commande)) executer(commande);
+  else repondreErreur("refuse");
+  sGardees[place].terminer();
+  sSortie = Sortie();
 }
 
 // ---------------------------------------------------------------------------
@@ -495,14 +937,10 @@ static void executer(char *c) {
   if (!strcmp(c, "nom") || !strncmp(c, "nom ", 4)) return cmdNom(c + 3);
   if (!strcmp(c, "etat")) return cmdEtat();
   if (!strcmp(c, "voisins")) return cmdVoisins();
+  if (!strcmp(c, "routeurs")) return cmdRouteurs();
   if (!strncmp(c, "diag ", 5)) return cmdDiag(c + 5);
-  if (!strcmp(c, "oubli")) {
-    debut("oubli");
-    fin();
-    Serial.flush();
-    Matter.decommission();  // efface l'appairage et redemarre
-    return;
-  }
+  if (!strcmp(c, "cle") || !strncmp(c, "cle ", 4)) return cmdCle(c + 3);
+  if (!strcmp(c, "oubli")) return cmdOubli();
   if (!*c) return;
   debut("erreur");
   ajoute(",\"erreur\":\"commande inconnue\"");
@@ -512,6 +950,7 @@ static void executer(char *c) {
 void setup() {
   Serial.begin(115200);
   demarrerMatter();
+  reseauDebut();
   cmdBonjour();
 }
 
@@ -520,18 +959,18 @@ void loop() {
     const int o = Serial.read();
     if (o == '\n' || o == '\r') {
       sCommande[sCmdLong] = 0;
-      if (sCmdLong) executer(sCommande);
+      if (sCmdLong) {
+        executer(sCommande);
+        // Rien ne reste de la ligne (l'alea de cle nouvelle).
+        h1::wipe(sCommande, sizeof(sCommande));
+      }
       sCmdLong = 0;
     } else if (o >= 0x20 && o < 0x7F && sCmdLong < sizeof(sCommande) - 1) {
       sCommande[sCmdLong++] = (char)o;
     }
   }
-  for (Requete &r : sRequetes) {
-    if (r.enVol && r.finie) {
-      imprimerDiag(r);
-      r.finie = false;
-      r.enVol = false;
-    }
-  }
+  diagsFinis();
+  reseauTour();
+  surveillerAppairage(millis());
   delay(5);
 }
