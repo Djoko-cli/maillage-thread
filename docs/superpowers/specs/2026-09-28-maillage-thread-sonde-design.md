@@ -698,6 +698,15 @@ premier démarrage.
   à −89 dBm). Les requêtes lancées pendant le changement échouent en `delai`.
 - **Deux C6 en USB :** non vérifié, le pont Halo n'était pas branché au Mac.
 
+**Essai FED (29/09, firmware jetable) :** sonde en FED non éligible routeur
+(mode `rdn`), commande `routeurs` (table des routeurs d'OpenThread). Depuis le
+bureau, les 7 routeurs de la partition apparaissent tous par leur RLOC16, mais
+l'ExtMac n'est donnée que pour un routeur avec lequel la sonde a un lien :
+`E400` (−75 dBm) ; celle de son parent, `AC00` (−85 dBm), vient d'`etat`. Les
+autres routeurs d'Apple sont hors de portée. D'où la 1.0.2 : FED, `routeurs` à
+chaque tournée, identités gardées, et l'accès par le réseau pour promener la
+sonde dans la maison.
+
 **Vérifié avec Djoko les 29 et 30/09** (plan 3a ; firmwares 1.0.0, 1.0.1 puis
 1.0.2, flashés sans effacement sur `/dev/cu.usbmodem11301`, l'interrupteur
 « Sonde maillage » allumé avant chaque flash) :
