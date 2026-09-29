@@ -187,8 +187,8 @@ piège décrit dans benq.
   seulement) : la clé de l'accès par le réseau (section 3 bis).
 
 **Messages de la sonde :**
-- `bonjour` :
-  `{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.1","nom":"SONDE-01","mac":"<MAC>","appairee":true,"code":"<11 chiffres>","qr":"MT:<…>"}`.
+- `bonjour` (1.0.2, valeurs inventées) :
+  `{"v":1,"t":"bonjour","produit":"sonde-maillage","version":"1.0.2","nom":"SONDE-01","mac":"A00000000001","appairee":true,"code":"12345678901","qr":"MT:ABCDEFGHIJ0123456789","hote":"0123456789ABCDEF"}`.
   - `nom` : 1 à 32 caractères parmi les lettres ASCII, les chiffres, `-`,
     `_` et `.` (rien à échapper) ; « SONDE-01 » par défaut. La carte le
     garde à côté de l'état de l'interrupteur : il la suit d'un Mac à
@@ -198,9 +198,10 @@ piège décrit dans benq.
     par le réseau (1.0.2).
   - `hote` (1.0.2) : le nom d'hôte SRP de la sonde, sans `.local` (celui que
     Matter enregistre) ; `null` tant qu'il n'est pas connu.
-- `etat` : `role`, `rloc16`, `parent` (`rloc16`, `ext`, `lqIn`, `lqOut`,
-  `rssi`), `partition`, `chef` (identifiant du routeur chef), `canal`,
-  `prefixeMaille`, `xp`, `suspendue`.
+- `etat` : `role`, `rloc16`, `ext` (l'ExtMac de la sonde), `mode` (mode du
+  lien, `rdn` en FED), `eligible` (1.0.2 : routeur permis, `false` attendu),
+  `parent` (`rloc16`, `ext`, `lqIn`, `lqOut`, `rssi`), `partition`, `chef`
+  (identifiant du routeur chef), `canal`, `prefixeMaille`, `xp`, `suspendue`.
 - `voisins` : `liste` d'objets `rloc16`, `ext`, `rssi`, `lqi`, `routeur`.
 - `diag`, en cas de succès :
   `{"v":1,"t":"diag","id":7,"cible":"4800","ok":true,"ms":123,"tlv":"<hexa>"}`
@@ -247,8 +248,9 @@ lien, d'où leur ExtMac (`routeurs`, section 4).
   connexion ; l'adresse OMR de la sonde suit donc les changements de préfixe.
 - La route IPv6 du Mac vers le préfixe OMR vient de l'assistant `halo-routes`
   de benq (un bug du noyau de macOS la retire) ; sans elle, l'app le dit
-  (« Pas de route IPv6… »). Résoudre un nom `.local` demande l'autorisation
-  « Réseau local » de macOS.
+  (« Pas de route IPv6… ») et renvoie au README (« Route vers le réseau
+  Thread »), qui explique ce besoin. Résoudre un nom `.local` demande
+  l'autorisation « Réseau local » de macOS.
 - Un datagramme, une charge. Requête de l'app : `<rid> <commande>` (rid
   décimal, croissant, jamais remis à zéro à une reconnexion ; commande = le
   même texte que sur l'USB, sans fin de ligne). Réponse : `<rid> <ligne JSON>`
@@ -271,8 +273,10 @@ local. Sans clé, la carte se tait : ni réponse, ni ICMP.
 
 **Clé.**
 - Créée par l'USB seulement : Réglages › Sonde › « Autoriser l'accès réseau »,
-  la sonde retenue branchée et connectée, hors tournée. L'app tire 32 octets
-  et envoie `cle nouvelle <64 HEXA> <id>` ; la carte tire les siens, calcule
+  qui devient « Régénérer une clé » une fois la clé créée (le bouton reste
+  actif : une nouvelle clé remplace l'ancienne), la sonde retenue branchée et
+  connectée, hors tournée. L'app tire 32 octets et envoie
+  `cle nouvelle <64 HEXA> <id>` ; la carte tire les siens, calcule
   `HMAC-SHA256(clé = aléa de l'app, message = aléa de la carte)`, la garde en
   NVS et la rend une seule fois (`cle`, avec l'empreinte et le nom d'hôte).
 - L'app vérifie l'empreinte, puis range la clé dans le trousseau du Mac :
@@ -605,9 +609,10 @@ choisi) : « Sonde : … ».
 - l'interrupteur « Sonde maillage » (lecture seule) ;
 - l'accès par le réseau (1.0.2, section 3 bis) : « Accès réseau : autorisé ·
   clé <empreinte> » ou « non autorisé », le bouton « Autoriser l'accès
-  réseau » (en USB), le choix de la liaison, le nom d'hôte visé par le réseau
-  à la place du port, et la dernière perte de la session réseau
-  (« Dernière perte », depuis quand, et sa cause).
+  réseau », « Régénérer une clé » une fois la clé créée (en USB), le choix de
+  la liaison, le nom d'hôte visé par le réseau à la place du port, et la
+  dernière perte de la session réseau (« Dernière perte », depuis quand, et
+  sa cause).
 
 ## 6. Journal et historique (plan 3b, validée)
 

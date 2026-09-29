@@ -186,7 +186,8 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   to unplug the probe from the Mac and walk it around the house so that it
   hears every router. With the probe plugged in and connected, "Allow Network
   Access" (Settings › Probe) creates over USB a key that stays in this Mac's
-  keychain; the "Link" choice (USB or Thread Network) then appears. Over the
+  keychain; the button then becomes "Regenerate Key" (a new key replaces the
+  old one), and the "Link" choice (USB or Thread Network) appears. Over the
   network, the app closes the port, connects by itself to `<host name>.local`,
   UDP port 5480, and reconnects; a keepalive goes out after 10 s of silence,
   and Settings › Probe keeps the cause of the last disconnection until the

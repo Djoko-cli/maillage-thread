@@ -193,8 +193,9 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   débrancher la sonde du Mac et la promener dans la maison afin d'entendre
   tous les routeurs. Sonde branchée et connectée, « Autoriser l'accès
   réseau » (Réglages › Sonde) crée par l'USB une clé qui reste dans le
-  trousseau de ce Mac ; le choix « Liaison » (USB ou Réseau Thread) paraît
-  alors. Par le réseau, l'app ferme le port, se connecte seule à
+  trousseau de ce Mac ; le bouton devient ensuite « Régénérer une clé » (une
+  nouvelle clé remplace l'ancienne), et le choix « Liaison » (USB ou Réseau
+  Thread) paraît. Par le réseau, l'app ferme le port, se connecte seule à
   `<nom d'hôte>.local`, port UDP 5480, et se reconnecte ; une veille part
   après 10 s de silence, et Réglages › Sonde garde la cause de la dernière
   perte jusqu'à la connexion suivante. L'enveloppe H1 de Halo authentifie les
