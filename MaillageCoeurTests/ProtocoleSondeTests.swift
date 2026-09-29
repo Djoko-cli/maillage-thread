@@ -82,4 +82,40 @@ struct ProtocoleSondeTests {
         long.append(0x0A)
         #expect(d.ajouter(long + Data("\u{1E}{}\n".utf8)) == [Data("{}".utf8)])
     }
+
+    // Une ligne machine commence au dernier RS de la ligne, comme dans le pont Halo (le JSON est de
+    // l'ASCII imprimable : jamais de RS dedans) ; ce qui precede le RS sur la ligne est abandonne.
+
+    /// Du texte sans fin de ligne juste avant le RS (queue d'un log coupe, invite d'une session humaine) :
+    /// la ligne machine intacte est retrouvee, dans le meme morceau ou dans le suivant.
+    @Test func decoupageTexteAvantLeRS() {
+        let json = #"{"v":1,"t":"erreur","erreur":"occupee"}"#
+        var d = DecoupeurLignes()
+        #expect(d.ajouter(Data("E (48213) chip[DL]: fin d'un log\u{1E}\(json)\n".utf8)) == [Data(json.utf8)],
+                "queue de log et ligne machine dans le meme morceau")
+        #expect(d.ajouter(Data("> ".utf8)).isEmpty)
+        #expect(d.ajouter(Data("\u{1E}\(json)\r\n".utf8)) == [Data(json.utf8)], "invite, puis la ligne dans le morceau suivant")
+    }
+
+    /// Ligne machine coupee (RS et debut du JSON) suivie d'une ligne complete : seule la complete sort,
+    /// et non les deux collees en une ligne que `lire` refuserait, la bonne perdue avec elle.
+    @Test func decoupageLigneCoupee() {
+        let coupee = #"{"v":1,"t":"diag","id":11,"cible":"5000","ok":true,"ms":73,"code":"2.04","tlv":"0E08"#
+        let complete = #"{"v":1,"t":"erreur","erreur":"occupee"}"#
+        var d = DecoupeurLignes()
+        let l = d.ajouter(Data("\u{1E}\(coupee)\u{1E}\(complete)\n".utf8))
+        #expect(l == [Data(complete.utf8)], "la coupee et la complete dans le meme morceau")
+        #expect(l.compactMap { MessageSonde.lire($0) } == [.erreur("occupee")])
+        #expect(d.ajouter(Data("\u{1E}\(coupee)".utf8)).isEmpty)
+        #expect(d.ajouter(Data("\u{1E}\(complete)\n".utf8)) == [Data(complete.utf8)], "la complete dans le morceau suivant")
+    }
+
+    /// Un RS remet a zero l'etat "ligne trop longue" : la ligne machine qui le suit est retrouvee.
+    @Test func decoupageRSApresUneLigneTropLongue() {
+        let trop = Data(repeating: 0x41, count: 5000)
+        var d = DecoupeurLignes()
+        #expect(d.ajouter(Data([ProtocoleSonde.separateur]) + trop + Data("\u{1E}{}\n".utf8)) == [Data("{}".utf8)],
+                "ligne machine trop longue, coupee")
+        #expect(d.ajouter(trop + Data("\u{1E}{}\n".utf8)) == [Data("{}".utf8)], "texte trop long, sans fin de ligne")
+    }
 }

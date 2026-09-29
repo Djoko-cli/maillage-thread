@@ -150,6 +150,8 @@ public enum CommandeSonde: Hashable, Sendable {
 
 /// Decoupe le flux USB en lignes machine (RS ... LF), sans le RS ; le reste
 /// (journaux de la pile, lignes humaines) est ignore, comme une ligne trop longue.
+/// La ligne machine commence au dernier RS de la ligne, comme dans le pont Halo : ce qui le
+/// precede (queue d'un journal sans fin de ligne, invite, ligne machine coupee) est abandonne.
 public struct DecoupeurLignes: Sendable {
     private var tampon: [UInt8] = []
     private var tropLongue = false
@@ -159,7 +161,12 @@ public struct DecoupeurLignes: Sendable {
     public mutating func ajouter(_ d: Data) -> [Data] {
         var lignes: [Data] = []
         for o in d {
-            if o == 0x0A {
+            if o == ProtocoleSonde.separateur {
+                // Le JSON est de l'ASCII imprimable, sans RS : un RS ouvre toujours une ligne machine.
+                tampon.removeAll(keepingCapacity: true)
+                tampon.append(o)
+                tropLongue = false
+            } else if o == 0x0A {
                 if !tropLongue, tampon.first == ProtocoleSonde.separateur {
                     var l = tampon.dropFirst()
                     if l.last == 0x0D { l = l.dropLast() }
