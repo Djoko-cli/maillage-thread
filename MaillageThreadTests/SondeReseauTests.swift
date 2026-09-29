@@ -62,7 +62,7 @@ struct SondeReseauTests {
                       delaisReprise: delais)
     }
 
-    /// Sonde retenue avec sa cle, prete pour le reseau (comme apres « Autoriser l'accès réseau »).
+    /// Sonde retenue avec sa cle, prete pour le reseau (comme apres « Autoriser l'acces reseau »).
     static func prete(_ p: UserDefaults, liaison: SondeMaillage.Liaison) throws -> TrousseauMemoire {
         p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
         p.set("SONDE-01", forKey: SondeMaillage.cleNom)

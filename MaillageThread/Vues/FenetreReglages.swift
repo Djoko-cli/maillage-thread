@@ -184,8 +184,8 @@ struct FenetreReglages: View {
         return p.libelle
     }
 
-    /// Acces reseau de la sonde retenue : « autorisé · clé 630DCD29 » (empreinte de la cle de
-    /// ce Mac), ou « non autorisé ».
+    /// Acces reseau de la sonde retenue : « autorise · cle 630DCD29 » (empreinte de la cle de
+    /// ce Mac), ou « non autorise ».
     static func texteAccesReseau(empreinte: String?) -> String {
         guard let empreinte else { return String(localized: "non autorisé") }
         return String(localized: "autorisé · clé \(empreinte)")
@@ -251,8 +251,8 @@ struct FenetreReglages: View {
     }
 }
 
-/// Acces reseau de la sonde retenue (Reglages › Sonde) : son etat, et « Autoriser l'accès
-/// réseau », qui cree la cle par l'USB (sonde branchee et connectee par son port).
+/// Acces reseau de la sonde retenue (Reglages › Sonde) : son etat, et « Autoriser l'acces
+/// reseau », qui cree la cle par l'USB (sonde branchee et connectee par son port).
 struct AccesReseauSonde: View {
     @Environment(SondeMaillage.self) private var sonde
 

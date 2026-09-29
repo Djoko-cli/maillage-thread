@@ -66,7 +66,7 @@ final class SondeMaillage {
     private(set) var hote: String?
     /// Empreinte de la cle de ce Mac pour la sonde retenue (trousseau) ; nil sans cle.
     private(set) var empreinteAcces: String?
-    /// « Autoriser l'accès réseau » en cours (cle demandee par l'USB).
+    /// « Autoriser l'acces reseau » en cours (cle demandee par l'USB).
     private(set) var autorisationEnCours = false
     /// Echec de la derniere autorisation ; nil apres une autorisation reussie.
     private(set) var erreurAutorisation: String?
@@ -134,7 +134,7 @@ final class SondeMaillage {
     /// Le reseau se choisit : nom d'hote connu, et cle de ce Mac pour lui.
     var reseauDisponible: Bool { hote != nil && empreinteAcces != nil }
 
-    /// « Autoriser l'accès réseau » possible : la sonde retenue connectee par son port USB.
+    /// « Autoriser l'acces reseau » possible : la sonde retenue connectee par son port USB.
     var peutAutoriser: Bool {
         guard liaison == .usb, !autorisationEnCours, case .connectee = etat else { return false }
         return serie != nil && serieEtat == serie
@@ -430,7 +430,7 @@ final class SondeMaillage {
 
     // MARK: - Cle
 
-    /// « Autoriser l'accès réseau » (Reglages, sonde retenue branchee en USB) : `bonjour` pour un
+    /// « Autoriser l'acces reseau » (Reglages, sonde retenue branchee en USB) : `bonjour` pour un
     /// nom d'hote a jour (sans lui, aucune cle n'est demandee), `cle nouvelle` par l'USB, cle
     /// verifiee puis rangee dans le trousseau sous ce nom. La carte remplace sa cle : une session
     /// reseau en cours (autre Mac) tombe.

@@ -96,7 +96,7 @@ struct TransportUDPTests {
         await #expect(throws: ErreurReseau.pasDeRoute) { _ = try await echec.ouvrir() }
     }
 
-    /// Session perdue apres l'ouverture : le flux se ferme sur « Connexion réseau perdue : <cause> ».
+    /// Session perdue apres l'ouverture : le flux se ferme sur « Connexion reseau perdue : <cause> ».
     @Test func perteEnSession() async throws {
         let connexions = ConnexionsSimulees()
         let t = Self.transport(CarteSimulee(cle: VecteursH1.psk), connexions: connexions)

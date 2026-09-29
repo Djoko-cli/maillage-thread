@@ -154,7 +154,7 @@ final class TransportUDP: Sendable {
     }
 
     /// Raison de fermeture d'une session perdue apres son ouverture :
-    /// "Connexion réseau perdue : <cause>".
+    /// "Connexion reseau perdue : <cause>".
     static func raisonPerte(_ cause: ErreurReseau) -> String {
         ErreurReseau.cheminPerdu(cause.localizedDescription).localizedDescription
     }
