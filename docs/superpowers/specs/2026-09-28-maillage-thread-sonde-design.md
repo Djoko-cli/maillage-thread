@@ -297,8 +297,8 @@ est gardée jusqu'à une nouvelle réponse.
     entend et apprend ainsi leur ExtMac, jamais celle de son parent ; la
     paire est retenue comme celle du parent. Déplacée dans la maison, la
     sonde finit par entendre tous les routeurs ;
-  - s'il est le BBR principal : les Network Data donnent son RLOC16, et le
-    bit `bbrPrimaire` de `sb` désigne son annonce ;
+  - s'il est le BBR principal, encore non identifié : les Network Data
+    donnent son RLOC16, et le bit `bbrPrimaire` de `sb` désigne son annonce ;
   - s'il est le chef, routeur de bordure encore non identifié : `etat` donne
     son identifiant, et le rôle (bits 9-10 de `sb`, Thread 1.4) désigne
     l'annonce du chef dans la même partition. Les routeurs de bordure
@@ -309,9 +309,15 @@ est gardée jusqu'à une nouvelle réponse.
     déduction n'est pas retenue : elle se refait à chaque affichage. La fiche
     du routeur dit qu'il est reconnu par élimination.
 
-  La règle du chef, l'élimination et les candidats (plus bas) écartent une
-  annonce si l'ExtMac du routeur et le `xa` de l'annonce sont connus tous
-  deux et différents.
+  Les identifications par l'ExtMac (le `xa` d'une annonce, l'hôte d'un
+  appareil) passent d'abord. Les règles du BBR principal et du chef ne
+  s'appliquent que s'il reste une seule annonce de ce rôle, non reprise,
+  dans la partition : un cache périmé peut en garder une seconde, avec le
+  même `pt`, et le routeur reste alors non identifié, avec les deux pour
+  candidates. Ces deux règles, l'élimination et les candidats (plus bas)
+  écartent une annonce si l'ExtMac du routeur et le `xa` de l'annonce sont
+  connus tous deux et différents, ou si ce `xa` est l'ExtMac connue d'un
+  autre routeur (une annonce en double de celui-ci).
 
   **Mémoire des identités :** les paires retenues (parent de la sonde,
   routeurs qui répondent, routeurs entendus) sont gardées d'un lancement à
@@ -329,8 +335,8 @@ est gardée jusqu'à une nouvelle réponse.
   **Affichage honnête** d'un routeur de bordure non identifié, un seul nœud
   par routeur :
   - il s'affiche avec ses candidats, sous leur nom : les annonces de sa
-    partition qu'aucun routeur n'a reprises, sauf si son ExtMac et leur `xa`
-    sont connus tous deux et différents ; par exemple
+    partition qu'aucun routeur n'a reprises, sauf celles qu'écarte la
+    comparaison de l'ExtMac et du `xa` (plus haut) ; par exemple
     « HomePod Avant ou HomePod Palier · 0400 » ;
   - un seul candidat, sans élimination possible :
     « HomePod salon ? · 0400 », car ce n'est peut-être pas lui ;
