@@ -9,6 +9,7 @@ struct FenetreReglages: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(OuvertureSession.self) private var ouverture
     @Environment(DossierNoms.self) private var nomsMaison
+    @Environment(SondeMaillage.self) private var sonde
     @AppStorage(Notifications.cle(.scission)) private var scission = CategorieAlerte.scission.parDefaut
     @AppStorage(Notifications.cle(.routeurDisparu)) private var routeurDisparu = CategorieAlerte.routeurDisparu.parDefaut
     @AppStorage(Notifications.cle(.pertes)) private var pertes = CategorieAlerte.pertes.parDefaut
@@ -81,6 +82,48 @@ struct FenetreReglages: View {
                 Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
                     .disabled(surveillance.mode == .demo)
             }
+            Section("Sonde") {
+                if surveillance.mode == .demo {
+                    Text("Mode démo : pas de sonde.").foregroundStyle(.secondary)
+                } else {
+                    Picker("Port", selection: Binding(
+                        get: { sonde.ports.first { $0.serie != nil && $0.serie == sonde.serie }?.chemin ?? "" },
+                        set: { c in if let p = sonde.ports.first(where: { $0.chemin == c }) { sonde.choisir(p) } })) {
+                        Text("—").tag("")
+                        ForEach(sonde.ports) { p in Text(verbatim: p.libelle).tag(p.chemin) }
+                    }
+                    LabeledContent("État", value: Self.texteEtatSonde(sonde.etat))
+                    if case .connectee(let b) = sonde.etat {
+                        LabeledContent("Firmware", value: b.version)
+                        if !b.appairee, let code = b.code {
+                            LabeledContent("Code d'appairage", value: code)
+                            Text("Dans Maison : + › Ajouter un accessoire › Plus d'options, puis ce code.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let e = sonde.etatSonde {
+                        LabeledContent("Partition", value: e.partition ?? "—")
+                        if e.suspendue {
+                            Text("Sonde suspendue dans Maison (interrupteur « Sonde maillage » éteint) : pas de relevé.")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    if let d = sonde.derniereTournee {
+                        LabeledContent("Dernier relevé", value: d.formatted(date: .omitted, time: .standard))
+                    }
+                    if let e = sonde.erreurTournee {
+                        Text(e).font(.caption).foregroundStyle(.red)
+                    }
+                    if sonde.serie != nil {
+                        Button("Oublier la sonde") { sonde.oublier() }
+                    }
+                    Text("Seul le port choisi est ouvert. Le pont Halo est aussi un ESP32-C6 : ne le choisissez pas.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section("Diagnostic") {
                 LabeledContent("Écoute", value: etatEcoute)
                 LabeledContent("Dernier relevé",
@@ -111,6 +154,17 @@ struct FenetreReglages: View {
         .frame(width: 560)
         // Etat de l'ouverture a la connexion relu a chaque ouverture (Reglages Systeme).
         .onAppear { ouverture.actualiser() }
+    }
+
+    static func texteEtatSonde(_ e: SondeMaillage.Etat) -> String {
+        switch e {
+        case .sansSonde: String(localized: "aucune sonde choisie")
+        case .absente: String(localized: "absente (débranchée ?)")
+        case .connexion: String(localized: "connexion…")
+        case .connectee: String(localized: "connectée")
+        case .refusee(let m): String(localized: "refusée : \(m)")
+        case .erreur(let m): String(localized: "erreur : \(m)")
+        }
     }
 
     private var etatEcoute: String {

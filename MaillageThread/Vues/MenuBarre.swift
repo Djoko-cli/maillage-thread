@@ -38,6 +38,7 @@ struct MenuBarre: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(OuvertureSession.self) private var ouverture
     @Environment(DossierNoms.self) private var nomsMaison
+    @Environment(SondeMaillage.self) private var sonde
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
@@ -105,6 +106,21 @@ struct MenuBarre: View {
         }
         if surveillance.mode == .demo {
             Text("Mode démo : panne du 27/09 rejouée").font(.caption).foregroundStyle(.secondary)
+        } else if let t = Self.ligneSonde(sonde.etat, derniere: sonde.derniereTournee, maintenant: Date()) {
+            Text(t).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Ligne de la sonde ; rien tant qu'aucune n'est choisie.
+    static func ligneSonde(_ e: SondeMaillage.Etat, derniere: Date?, maintenant: Date) -> String? {
+        switch e {
+        case .sansSonde: return nil
+        case .absente: return String(localized: "Sonde : absente")
+        case .connexion: return String(localized: "Sonde : connexion…")
+        case .connectee:
+            guard let d = derniere else { return String(localized: "Sonde : connectée") }
+            return String(localized: "Sonde : connectée · relevé \(FicheNoeud.relatif(d, maintenant))")
+        case .refusee, .erreur: return String(localized: "Sonde : erreur (voir les Réglages)")
         }
     }
 

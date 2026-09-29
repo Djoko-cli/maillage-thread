@@ -15,6 +15,8 @@ struct FicheNoeud: View {
                 colonnesRouteur(r)
             } else if let a = surveillance.appareil(id) {
                 colonnesAppareil(a)
+            } else if let m = sonde, let n = m.noeud(id) {
+                colonnesSonde(n, m)
             } else {
                 Text("Ce nœud n'est plus visible.").foregroundStyle(.secondary)
             }
@@ -65,6 +67,7 @@ struct FicheNoeud: View {
                     }
                 }
             }
+            lignesSonde(a.id)
         }
         .frame(minWidth: 200, alignment: .leading)
         VStack(alignment: .leading, spacing: 4) {
@@ -173,6 +176,61 @@ struct FicheNoeud: View {
         return morceaux.joined(separator: " · ")
     }
 
+    // MARK: Sonde
+
+    /// Maillage de la sonde pour le reseau affiche.
+    private var sonde: MaillageAffiche? { surveillance.reseau.flatMap { surveillance.maillageAffiche(pour: $0) } }
+
+    /// Ce que la sonde sait du noeud : son parent (enfant), ses voisins et ses enfants (routeur).
+    @ViewBuilder
+    private func lignesSonde(_ id: String) -> some View {
+        if let m = sonde, let n = m.noeud(id) {
+            Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud)).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Noeud que seule la sonde connait (routeur de bordure muet sans identite, enfant inconnu).
+    @ViewBuilder
+    private func colonnesSonde(_ n: NoeudSonde, _ m: MaillageAffiche) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(GrapheCanvas.libelleInconnu(n)).font(.title3.weight(.semibold))
+            Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud)).foregroundStyle(.secondary)
+            Text(n.genre == .routeur ? "Vu par la sonde, sans annonce reconnue sur le réseau local."
+                                     : "Vu par la sonde : son ExtMac ne correspond à aucun appareil annoncé.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(minWidth: 200, alignment: .leading)
+    }
+
+    /// Nom d'un noeud du graphe : routeur de bordure, appareil, ou noeud de la sonde.
+    private func nomNoeud(_ id: String) -> String {
+        if let r = surveillance.instantane?.routeur(id) { return surveillance.nom(r) }
+        if let a = surveillance.appareil(id) { return surveillance.nom(a) }
+        if let n = sonde?.noeud(id) { return GrapheCanvas.libelleInconnu(n) }
+        return id
+    }
+
+    /// « RLOC16 5004 · parent HomePod bureau, qualité 3 » ; « RLOC16 5000 · voisins : 4 · enfants : 2 ».
+    static func ligneSonde(_ n: NoeudSonde, maillage m: MaillageAffiche, nom: (String) -> String) -> String {
+        let rloc = String(format: "%04X", n.rloc16)
+        switch n.genre {
+        case .enfant:
+            guard let p = m.parent(de: n.id) else { return String(localized: "RLOC16 \(rloc)") }
+            let q = m.liens.first { $0.genre == .parent && $0.de == n.id }?.qualite
+            return String(localized: "RLOC16 \(rloc) · parent \(nom(p)), \(texteQualite(q))")
+        case .routeur:
+            let voisins = m.liens.filter { $0.genre == .radio && ($0.de == n.id || $0.vers == n.id) }.count
+            let enfants = m.liens.filter { $0.genre == .parent && $0.vers == n.id }.count
+            return String(localized: "RLOC16 \(rloc) · voisins : \(voisins) · enfants : \(enfants)")
+        }
+    }
+
+    /// « qualité 3 » ; « qualité inconnue » sous un routeur muet.
+    static func texteQualite(_ q: Int?) -> String {
+        q.map { String(localized: "qualité \($0)") } ?? String(localized: "qualité inconnue")
+    }
+
     // MARK: Routeur
 
     @ViewBuilder
@@ -191,6 +249,7 @@ struct FicheNoeud: View {
         .frame(minWidth: 200, alignment: .leading)
         VStack(alignment: .leading, spacing: 4) {
             Text("Routeur de bordure").foregroundStyle(.secondary)
+            lignesSonde(r.instance)
             if let nn = r.nomReseau { Text("Réseau \(nn)").foregroundStyle(.secondary) }
             ForEach(r.adressesLien, id: \.self) { ad in
                 Text(ad.description).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)

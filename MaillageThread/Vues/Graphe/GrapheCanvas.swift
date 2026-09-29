@@ -1,8 +1,9 @@
 import MaillageCoeur
 import SwiftUI
 
-/// Dessin du graphe : zones des partitions, pointilles vers le centre de
-/// chaque zone (rattachement, pas un lien radio), routeurs et appareils.
+/// Dessin du graphe : zones des partitions, liens (ceux de la sonde en traits
+/// pleins colores par la qualite, sinon des pointilles vers le centre de la
+/// zone : rattachement, pas un lien radio), routeurs et appareils.
 struct GrapheCanvas: View {
     let disposition: Disposition
     let reseau: Reseau
@@ -10,6 +11,8 @@ struct GrapheCanvas: View {
     let appareils: [String: AppareilAffiche]
     /// Instance -> nom affiche du routeur.
     let nomsRouteurs: [String: String]
+    /// Maillage de la sonde : noms des noeuds qu'elle seule connait.
+    var maillage: MaillageAffiche?
     let projection: Projection
     let selection: String?
     let survol: String?
@@ -55,14 +58,24 @@ struct GrapheCanvas: View {
 
     private func dessinerLiens(_ ctx: inout GraphicsContext) {
         let positions = Dictionary(disposition.noeuds.map { ($0.id, $0.position) }, uniquingKeysWith: { a, _ in a })
-        for l in disposition.liens {
+        // Rattachements dessous, puis enfant-parent, puis liens radio.
+        let ordre: [Disposition.Lien.Genre] = [.rattachement, .parent, .radio]
+        for l in disposition.liens.sorted(by: { ordre.firstIndex(of: $0.genre)! < ordre.firstIndex(of: $1.genre)! }) {
             guard let a = positions[l.de], let b = positions[l.vers] else { continue }
             var p = Path()
             p.move(to: projection.vue(a))
             p.addLine(to: projection.vue(b))
-            let eclaire = l.de == selection || l.de == survol
-            ctx.stroke(p, with: .color(eclaire ? palette.lienEclaire : palette.lien),
-                       style: StrokeStyle(lineWidth: eclaire ? 1.6 : 1, dash: [2, 4]))
+            switch l.genre {
+            case .rattachement:
+                let eclaire = l.de == selection || l.de == survol
+                ctx.stroke(p, with: .color(eclaire ? palette.lienEclaire : palette.lien),
+                           style: StrokeStyle(lineWidth: eclaire ? 1.6 : 1, dash: [2, 4]))
+            case .radio, .parent:
+                let eclaire = [l.de, l.vers].contains { $0 == selection || $0 == survol }
+                let epaisseur = l.genre == .radio ? 2.2 : 1.0
+                ctx.stroke(p, with: .color(palette.lienSonde(l.qualite).opacity(eclaire ? 1 : 0.75)),
+                           style: StrokeStyle(lineWidth: eclaire ? epaisseur + 1.2 : epaisseur, lineCap: .round))
+            }
         }
     }
 
@@ -79,14 +92,15 @@ struct GrapheCanvas: View {
             var pastille: String?
             switch n.genre {
             case .centre, .routeur:
-                let couleur = palette.routeur(principale: principales.contains(n.zone))
+                let inconnu = nomsRouteurs[n.id] == nil && maillage?.noeud(n.id) != nil
+                let couleur = inconnu ? palette.routeurInconnu : palette.routeur(principale: principales.contains(n.zone))
                 ctx.drawLayer { l in
                     l.addFilter(.shadow(color: couleur.opacity(0.8), radius: n.genre == .centre ? 10 : 5))
                     l.fill(Path(ellipseIn: rect), with: .radialGradient(Gradient(colors: [.white.opacity(0.9), couleur]),
                                                                         center: CGPoint(x: c.x - r / 3, y: c.y - r / 3),
                                                                         startRadius: 0, endRadius: r * 1.3))
                 }
-                libelle = nomsRouteurs[n.id] ?? n.id
+                libelle = nomsRouteurs[n.id] ?? maillage?.noeud(n.id).map(Self.libelleInconnu) ?? n.id
                 if chefs.contains(n.id) { libelle += " 👑" }
             case .appareil:
                 let a = appareils[n.id]
@@ -99,7 +113,7 @@ struct GrapheCanvas: View {
                         l.fill(Path(ellipseIn: rect), with: .color(couleur))
                     }
                 }
-                libelle = a?.nom ?? n.id
+                libelle = a?.nom ?? maillage?.noeud(n.id).map(Self.libelleInconnu) ?? n.id
                 pastille = Self.pastilleBatterie(a?.batterie)
                 if a?.endormi == true { libelle += " ☾" }
                 if a?.etat == .sansAdresse || a?.etat == .disparu { libelle += " ⚠︎" }
@@ -144,6 +158,18 @@ struct GrapheCanvas: View {
                     dessinerPastille(&ctx, pastille, at: CGPoint(x: place.point.x, y: cadre.maxY + 3), anchor: .top)
                 }
             }
+        }
+    }
+
+    /// Nom d'un noeud que seule la sonde connait : « Routeur de bordure · B400 »,
+    /// « Routeur · 5000 », « Non identifié · AC05 ».
+    static func libelleInconnu(_ n: NoeudSonde) -> String {
+        let rloc = String(format: "%04X", n.rloc16)
+        switch n.genre {
+        case .routeur:
+            return n.bordure ? String(localized: "Routeur de bordure · \(rloc)") : String(localized: "Routeur · \(rloc)")
+        case .enfant:
+            return String(localized: "Non identifié · \(rloc)")
         }
     }
 

@@ -37,8 +37,8 @@ struct FenetreGraphe: View {
                     BandeauScission(reseau: r)
                 }
                 Spacer()
-                if surveillance.reseau != nil && selection == nil {
-                    LegendeLiens()
+                if let r = surveillance.reseau, selection == nil {
+                    LegendeLiens(sonde: surveillance.maillageAffiche(pour: r) != nil, ancien: surveillance.maillageAncien)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let selection {
@@ -61,7 +61,8 @@ struct FenetreGraphe: View {
 
     private func graphe(_ r: Reseau, _ palette: Palette) -> some View {
         let affiches = surveillance.appareilsAffiches(pour: r)
-        let disposition = Disposition(reseau: r, appareils: affiches)
+        let maillage = surveillance.maillageAffiche(pour: r)
+        let disposition = Disposition(reseau: r, appareils: affiches, maillage: maillage)
         let parId = Dictionary(affiches.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let nomsRouteurs = Dictionary(r.routeurs.map { ($0.instance, surveillance.nom($0)) }, uniquingKeysWith: { a, _ in a })
         return GeometryReader { geo in
@@ -71,7 +72,8 @@ struct FenetreGraphe: View {
                                         decalage: CGSize(width: decalage.width + decalageEnCours.width,
                                                          height: decalage.height + decalageEnCours.height))
             GrapheCanvas(disposition: disposition, reseau: r, appareils: parId, nomsRouteurs: nomsRouteurs,
-                         projection: projection, selection: selection, survol: survol, palette: palette)
+                         maillage: maillage, projection: projection, selection: selection, survol: survol,
+                         palette: palette)
                 .contentShape(Rectangle())
                 .onContinuousHover { phase in
                     switch phase {
@@ -106,6 +108,7 @@ struct FenetreGraphe: View {
 /// Barre d'outils flottante : reseau, appareils IP, journal, rafraichir.
 struct BarreOutils: View {
     @Environment(Surveillance.self) private var surveillance
+    @Environment(SondeMaillage.self) private var sonde
     @Environment(\.openWindow) private var openWindow
     @State private var appareilsIP = false
 
@@ -135,6 +138,7 @@ struct BarreOutils: View {
                 .buttonStyle(.glass)
                 Button {
                     surveillance.rafraichir()
+                    sonde.rafraichir()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -173,10 +177,25 @@ struct BandeauScission: View {
     }
 }
 
-/// Legende des pointilles du graphe (en bas a gauche, cachee sous une fiche).
+/// Legende des liens du graphe (en bas a gauche, cachee sous une fiche) : avec
+/// la sonde, traits pleins (lien radio, colore par la qualite) et pointilles
+/// (rattachement suppose) ; « ancien » si la sonde ne repond plus.
 struct LegendeLiens: View {
+    var sonde = false
+    var ancien = false
+
     var body: some View {
         HStack(spacing: 8) {
+            if sonde {
+                Path { p in
+                    p.move(to: CGPoint(x: 0, y: 1))
+                    p.addLine(to: CGPoint(x: 22, y: 1))
+                }
+                .stroke(Palette(sombre: true).lienSonde(3), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+                .frame(width: 22, height: 2)
+                .accessibilityHidden(true)
+                Text("lien radio (qualité)")
+            }
             Path { p in
                 p.move(to: CGPoint(x: 0, y: 1))
                 p.addLine(to: CGPoint(x: 22, y: 1))
@@ -184,7 +203,10 @@ struct LegendeLiens: View {
             .stroke(style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
             .frame(width: 22, height: 2)
             .accessibilityHidden(true)
-            Text("rattachement, pas un lien radio")
+            Text(sonde ? "rattachement supposé" : "rattachement, pas un lien radio")
+            if ancien {
+                Text("· relevé de la sonde ancien").foregroundStyle(.orange)
+            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)

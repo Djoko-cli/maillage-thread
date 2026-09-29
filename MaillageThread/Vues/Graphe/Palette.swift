@@ -27,6 +27,33 @@ struct Palette {
         return z.principale ? Color(red: 0.23, green: 0.51, blue: 0.96) : Color(red: 0.96, green: 0.62, blue: 0.04)
     }
 
+    /// Qualite d'un lien vu par la sonde : 3 bon, 2 moyen, 1 faible ; 0 ou inconnue.
+    enum NiveauLien: Equatable {
+        case bon, moyen, faible, inconnu
+
+        init(_ qualite: Int?) {
+            switch qualite {
+            case 3?: self = .bon
+            case 2?: self = .moyen
+            case 1?: self = .faible
+            default: self = .inconnu
+            }
+        }
+    }
+
+    /// Lien de la sonde : vert, jaune, orange ; gris si la qualite est inconnue (parent muet).
+    func lienSonde(_ qualite: Int?) -> Color {
+        switch NiveauLien(qualite) {
+        case .bon: Color(red: 0.29, green: 0.87, blue: 0.5)
+        case .moyen: Color(red: 0.98, green: 0.8, blue: 0.2)
+        case .faible: .orange
+        case .inconnu: sombre ? Color(white: 0.6) : Color(white: 0.5)
+        }
+    }
+
+    /// Routeur que l'instantane ne connait pas (routeur de bordure muet sans identite).
+    var routeurInconnu: Color { Color(white: 0.62) }
+
     func routeur(principale: Bool) -> Color {
         principale ? Color(red: 0.38, green: 0.65, blue: 0.98) : Color(red: 0.98, green: 0.75, blue: 0.14)
     }
