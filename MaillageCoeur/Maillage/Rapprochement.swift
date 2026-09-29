@@ -66,18 +66,19 @@ public struct MaillageAffiche: Hashable, Sendable {
     public let annoncesCandidates: Set<String>
 
     /// Rapproche le maillage des routeurs de bordure de sa partition et des appareils :
-    /// - routeur de bordure : son ExtMac est le `xa` de son annonce ; a defaut, le
-    ///   BBR principal des Network Data est celui dont `sb` le dit ;
+    /// - routeur de bordure : son ExtMac est le `xa` de son annonce ;
     /// - autre routeur ou enfant : son ExtMac est l'hote de l'appareil ; a defaut
     ///   (enfant), une adresse commune ;
-    /// - chef du maillage, routeur de bordure encore non identifie : l'annonce dont le role
-    ///   (bits 9-10 de `sb`, Thread 1.4) est chef ;
+    /// - BBR principal des Network Data, encore non identifie : l'annonce dont `sb` dit BBR
+    ///   primaire ; chef du maillage, routeur de bordure encore non identifie : l'annonce dont
+    ///   le role (bits 9-10 de `sb`, Thread 1.4) est chef ; chacune seulement s'il ne reste
+    ///   qu'une annonce de ce role ;
     /// - par elimination : le seul routeur de bordure non identifie est la seule annonce
     ///   de la partition qu'aucun routeur n'a reprise ;
     /// - sinon "rloc:XXXX", inconnu de l'instantane ; un routeur de bordure y garde ses
     ///   candidats, les annonces non reprises qui peuvent etre la sienne.
-    /// Ces trois dernieres regles ecartent une annonce dont le `xa` et l'ExtMac du routeur sont
-    /// connus tous deux et differents.
+    /// Ces quatre dernieres regles ecartent une annonce dont le `xa` et l'ExtMac du routeur sont
+    /// connus tous deux et differents, ou dont le `xa` est l'ExtMac connue d'un autre routeur.
     public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil]) {
         partition = maillage.partition
         date = maillage.date
@@ -85,15 +86,13 @@ public struct MaillageAffiche: Hashable, Sendable {
         let parId = Dictionary(appareils.map { ($0.id.uppercased(), $0) }, uniquingKeysWith: { a, _ in a })
         func rloc(_ r: UInt16) -> String { String(format: "rloc:%04X", r) }
 
-        // Routeurs reconnus (id de noeud, par identifiant de routeur).
+        // Routeurs reconnus par leur ExtMac (id de noeud, par identifiant de routeur) : le `xa`
+        // d'une annonce, sinon l'hote d'un appareil.
         var reconnus: [Int: String] = [:]
         var pris: Set<String> = []
         for r in maillage.routeurs {
             var id: String?
             if let ext = r.extMac, let br = bordures.first(where: { $0.adresseEtendue == ext }) {
-                id = br.instance
-            } else if r.bbrPrincipal, let br = bordures.first(where: { $0.etat?.bbrPrimaire == true }),
-                      !maillage.routeurs.contains(where: { $0.extMac == br.adresseEtendue && $0.id != r.id }) {
                 id = br.instance
             } else if let ext = r.extMac, let a = parId[ext] {
                 id = a.id
@@ -105,17 +104,26 @@ public struct MaillageAffiche: Hashable, Sendable {
             }
         }
         // Une annonce peut etre celle d'un routeur si l'ExtMac de l'un ou le `xa` de l'autre manque
-        // (connus tous deux, ils sont differents : la regle du `xa` les aurait rapproches).
-        func possible(_ r: RouteurMaillage, _ a: RouteurBordure) -> Bool { r.extMac == nil || a.adresseEtendue == nil }
-        // Chef du maillage, routeur de bordure non identifie : l'annonce de role chef de la
-        // partition (Thread 1.4, bits 9-10 de `sb`), comme pour le BBR principal ; seulement s'il
-        // n'en reste qu'une (un cache perime peut en garder une autre, avec le meme `pt`).
-        let chefs = bordures.filter { $0.role == .chef && !pris.contains($0.instance) }
-        if let r = maillage.routeurs.first(where: { $0.chef && $0.bordure && reconnus[$0.id] == nil }),
-           chefs.count == 1, let a = chefs.first, possible(r, a) {
+        // (connus tous deux, ils sont differents : la regle du `xa` les aurait rapproches), et si son
+        // `xa` n'est pas l'ExtMac connue d'un autre routeur (une annonce en double de celui-ci).
+        let extMacs = Set(maillage.routeurs.compactMap(\.extMac))
+        func possible(_ r: RouteurMaillage, _ a: RouteurBordure) -> Bool {
+            guard let xa = a.adresseEtendue else { return true }
+            return r.extMac == nil && !extMacs.contains(xa)
+        }
+        // Routeur d'un role (BBR principal, chef), encore non identifie : l'annonce de ce role dans
+        // la partition, seulement s'il n'en reste qu'une (un cache perime peut en garder une autre,
+        // avec le meme `pt`) et si elle peut etre la sienne.
+        func rapprocher(_ r: RouteurMaillage?, _ annonces: [RouteurBordure]) {
+            let libres = annonces.filter { !pris.contains($0.instance) }
+            guard let r, reconnus[r.id] == nil, libres.count == 1, let a = libres.first, possible(r, a) else { return }
             reconnus[r.id] = a.instance
             pris.insert(a.instance)
         }
+        // BBR principal des Network Data : l'annonce dont `sb` dit BBR primaire. Chef du maillage,
+        // routeur de bordure : l'annonce de role chef (Thread 1.4, bits 9-10 de `sb`).
+        rapprocher(maillage.routeurs.first(where: \.bbrPrincipal), bordures.filter { $0.etat?.bbrPrimaire == true })
+        rapprocher(maillage.routeurs.first(where: { $0.chef && $0.bordure }), bordures.filter { $0.role == .chef })
         // Annonces qu'aucun routeur n'a reprises ; routeurs de bordure non identifies.
         let restantes = bordures.filter { !pris.contains($0.instance) }
         let nonIdentifies = maillage.routeurs.filter { $0.bordure && reconnus[$0.id] == nil }

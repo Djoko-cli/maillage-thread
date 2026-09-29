@@ -268,6 +268,41 @@ struct RapprochementTests {
         #expect(m.routeurs[1]?.id == "rloc:0400" && m.routeurs[2]?.id == "rloc:0800")
     }
 
+    /// Regle du BBR principal, gardee comme les autres : pas si l'ExtMac du BBR principal (connue,
+    /// ici entendue) et le `xa` de l'annonce BBR primaire sont connus tous deux et differents ; pas
+    /// non plus si deux annonces de la partition se disent BBR primaire (ExtMac inventees).
+    @Test func regleDuBBRPrincipal() async throws {
+        let i = Self.instantane()
+        let r = try #require(i.reseaux.first)
+        let entendu = MaillageAffiche(maillage: try await Self.maillage(entendus: [0xB400: "E0000000000000F0"]), reseau: r,
+                                      appareils: i.appareils)
+        #expect(entendu.routeurs[45] == NoeudSonde(id: "rloc:B400", rloc16: 0xB400, genre: .routeur, reconnu: false,
+                                                   bordure: true))
+
+        var b = Banc()
+        b.routeur("Apple TV", partition: "46CBEBCD", primaire: true, lien: "fe80::1", omr: Self.omr, xa: "E0000000000000A1")
+        b.routeur("Apple TV ancienne", partition: "46CBEBCD", primaire: true, lien: "fe80::2", omr: Self.omr,
+                  xa: "E0000000000000A3")
+        b.routeur("HomePod bureau", partition: "46CBEBCD", lien: "fe80::3", omr: Self.omr, xa: "E000000000000007")
+        let deux = Instantane(annonces: b.annonces)
+        let m = MaillageAffiche(maillage: try await Self.maillage(), reseau: try #require(deux.reseaux.first),
+                                appareils: deux.appareils)
+        #expect(m.routeurs[45]?.reconnu == false)
+        #expect(Set(m.routeurs[45]?.candidats ?? []) == ["Apple TV", "Apple TV ancienne"])
+    }
+
+    /// Annonce en double (meme `xa` que celle d'un routeur reconnu, gardee par un cache perime) :
+    /// c'est ce routeur, pas un autre ; elle n'est la candidate d'aucun routeur non identifie.
+    @Test func annonceEnDouble() async throws {
+        let i = Self.instantane(autres: [("HomePod bureau", "E000000000000007"), ("HomePod bureau (2)", "E000000000000007"),
+                                         ("HomePod salon", "E0000000000000A2")])
+        let r = try #require(i.reseaux.first)
+        let m = MaillageAffiche(maillage: try await Self.maillage(), reseau: r, appareils: i.appareils)
+        #expect(m.routeurs[43]?.id == "HomePod bureau")
+        #expect(m.routeurs[1]?.candidats == ["HomePod salon"])
+        #expect(!m.annoncesCandidates.contains("HomePod bureau (2)"))
+    }
+
     /// Le centre de la zone peut etre candidat (ici le premier par nom : annonces Thread 1.3, sans
     /// role) ; il reste dessine, au centre. L'autre annonce candidate, non.
     @Test func centreCandidat() throws {
