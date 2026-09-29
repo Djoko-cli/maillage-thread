@@ -759,8 +759,24 @@ static void diagsFinis() {
 // ---------------------------------------------------------------------------
 
 // Ligne de reponse a cle nouvelle, au plus : RS, {"v":1,"t":"cle","id":<10>,
-// "cle":"<64>","empreinte":"<8>","hote":"<63>"}, LF : 204 octets.
+// "cle":"<64>","empreinte":"<8>","hote":"<63>"}, LF : 204 octets. Avec le msg
+// d'une cle non chargee (kMsgNonChargee, rare) : 251, sous les 256 du tampon.
 static constexpr int kLigneCleMax = 208;
+static const char *const kMsgNonChargee = "cle non chargee : active au redemarrage";
+
+// Effacement de la cle refuse par la NVS : la cle n'est plus en memoire (plus
+// d'acces reseau), mais elle reviendrait au demarrage. Jamais tu : la reponse
+// a cle le dit (effacement_en_echec), et un nouvel essai part a chaque tour
+// de surveillerAppairage (500 ms) jusqu'a ce que la NVS accepte.
+static bool sEffacementEnEchec = false;
+
+// Deux essais, comme Halo (matterDecommissionNow). true : plus aucune cle en
+// NVS (effacee, ou il n'y en avait pas).
+static bool effacerCle() {
+  const bool ok = reseauCleEfface() || reseauCleEfface();
+  sEffacementEnEchec = !ok;
+  return ok;
+}
 
 // Entier decimal de 1 a 10 chiffres, 4294967295 au plus.
 static bool lireEntier(const char *s, uint32_t *v) {
@@ -784,6 +800,8 @@ static void repondreCle() {
   debut("cle");
   if (reseauEmpreinte(kid)) ajoute(",\"empreinte\":\"%s\"", kid);
   else ajoute(",\"empreinte\":null");
+  // Cle sortie de la memoire mais pas de la NVS : elle reviendrait au demarrage.
+  ajoute(",\"effacement_en_echec\":%s", sEffacementEnEchec ? "true" : "false");
   ajouteHote();
   ajoute(",\"udp\":{\"port\":%u,\"ouvert\":%s,\"sessions\":%u,\"provisoire\":%s,\"rx\":%lu,\"rejets\":%lu,"
          "\"rx_perdus\":%lu,\"defis\":%lu,\"tx\":%lu,\"tx_perdus\":%lu,\"tx_erreurs\":%lu",
@@ -820,11 +838,14 @@ static void cleNouvelle(const char *hex, const char *idTexte) {
   h1::wipe(alea, sizeof(alea));
   if (res == ResultatCle::Crypto) return repondreErreur("crypto");
   if (res == ResultatCle::Nvs) return repondreErreur("ecriture");
-  // Cle ecrite mais pas chargee (Chargement) : elle vaut au prochain
-  // demarrage ; l'app doit la connaitre, elle part aussi.
+  // La nouvelle cle a remplace l'ancienne en NVS : plus rien a effacer.
+  sEffacementEnEchec = false;
   debut("cle");
   ajoute(",\"id\":%lu,\"cle\":\"%s\",\"empreinte\":\"%s\"", (unsigned long)id, cleHex, kid);
   ajouteHote();
+  // Cle ecrite mais pas chargee : elle vaut au prochain demarrage, l'app doit
+  // la connaitre ; la reponse le dit (msg, comme Halo).
+  if (res == ResultatCle::Chargement) ajoute(",\"msg\":\"%s\"", kMsgNonChargee);
   fin();
   h1::wipe(cleHex, sizeof(cleHex));
   h1::wipe(sLigne, sizeof(sLigne));
@@ -840,7 +861,7 @@ static void cmdCle(char *args) {
   for (char *m = strtok(args, " "); m && n < 4; m = strtok(nullptr, " ")) mots[n++] = m;
   if (n == 0) return repondreCle();
   if (n == 1 && !strcmp(mots[0], "efface")) {
-    if (!reseauCleEfface()) return repondreErreur("ecriture");
+    if (!effacerCle()) return repondreErreur("ecriture");
     return repondreCle();
   }
   if (n == 3 && !strcmp(mots[0], "nouvelle")) return cleNouvelle(mots[1], mots[2]);
@@ -850,11 +871,14 @@ static void cmdCle(char *args) {
 // oubli : la cle part aussi (deux essais : un echec la laisserait revenir au
 // demarrage), sinon l'ancien proprietaire garderait l'acces reseau apres un
 // nouvel appairage (comme Halo, matterDecommissionNow). Matter n'efface que
-// ses propres espaces NVS. USB seulement.
+// ses propres espaces NVS. La reponse dit si la cle est bien partie
+// (cle_effacee false : la NVS a refuse, la cle reviendra au redemarrage ;
+// cle efface ensuite). USB seulement.
 static void cmdOubli() {
   if (sSortie.reseau) return repondreErreur("refuse");
-  if (!reseauCleEfface()) reseauCleEfface();
+  const bool effacee = effacerCle();
   debut("oubli");
+  ajoute(",\"cle_effacee\":%s", effacee ? "true" : "false");
   fin();
   Serial.flush();
   Matter.decommission();  // efface l'appairage et redemarre
@@ -864,7 +888,8 @@ static void cmdOubli() {
 // l'appairage ; la cle part aussi, sinon l'ancien proprietaire garderait
 // l'acces reseau apres qu'un autre a ajoute la sonde (comme Halo, ownerPoll).
 // Seul un passage observe de « appairee » a « plus appairee » compte (pas
-// l'etat au demarrage).
+// l'etat au demarrage). Un effacement refuse par la NVS (ici ou par cle
+// efface) est retente a chaque tour, et dit par la reponse a cle.
 static void surveillerAppairage(uint32_t maintenant) {
   static int8_t sVu = -1;  // -1 : pas encore lu
   static uint32_t sA = 0;
@@ -872,9 +897,7 @@ static void surveillerAppairage(uint32_t maintenant) {
   sA = maintenant;
   const bool appairee = Matter.isDeviceCommissioned();
   char kid[h1::kKidHex + 1];
-  if (sVu == 1 && !appairee && reseauEmpreinte(kid)) {
-    if (!reseauCleEfface()) reseauCleEfface();  // deux essais, comme oubli
-  }
+  if ((sVu == 1 && !appairee && reseauEmpreinte(kid)) || sEffacementEnEchec) effacerCle();
   sVu = appairee ? 1 : 0;
 }
 
