@@ -248,10 +248,10 @@ struct CanalReseauTests {
     /// Reponse d'un `diag` perdue une fois apres le vol (la carte, muette pendant le vol, la garde
     /// et la rend a un renvoi du meme rid) : le renvoi suivant la ramene, avant l'echeance de
     /// `SondeUSB`. Ici tout divise par 10 : renvois a 200 et 400 ms, puis 100 ms apres le delai
-    /// du diag (600 ms) et tous les 300 ms ; vol de 450 ms, marge de 500 ms (echeance a 1,1 s,
-    /// renvois a 0,7 et 1 s).
+    /// du diag (600 ms) et tous les 300 ms, soit 0,7 et 1 s ; vol de 550 ms, a 150 ms des
+    /// renvois de 400 et 700 ms ; marge de 500 ms (echeance a 1,1 s).
     @Test(.timeLimit(.minutes(1))) func diagRedemandeApresLeVol() async throws {
-        let vol: Duration = .milliseconds(450)
+        let vol: Duration = .milliseconds(550)
         let premiers = Mutex<[Int: ContinuousClock.Instant]>([:])
         let carte = CarteSimulee(cle: VecteursH1.psk) { charge in
             guard let (rid, commande) = Self.decouper(charge), commande.hasPrefix("diag ") else { return Self.sonde(charge) }
