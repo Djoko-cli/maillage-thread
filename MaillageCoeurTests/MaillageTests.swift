@@ -60,6 +60,46 @@ struct MaillageTests {
         #expect(m.liens(de: 45).count == 2, "muet : ses liens viennent des autres")
     }
 
+    /// Reponse d'un routeur qui ne donne que sa Route64 : pour chaque voisin, la qualite sortante (du routeur
+    /// qui repond vers lui) et la qualite entrante.
+    static func reponseVoisins(_ voisins: (id: Int, sortante: Int, entrante: Int)...) throws -> ReponseDiagnostic {
+        let routes = voisins.map { (id: $0.id, sortante: $0.sortante, entrante: $0.entrante, cout: 1) }
+        let tlv = DiagnosticThreadTests.tlv(TypeTLV.route64, DiagnosticThreadTests.route64(routes))
+        return try #require(ReponseDiagnostic(hexa: DiagnosticThreadTests.hexa(tlv)))
+    }
+
+    /// Lien lu aux deux bouts. La regle : chaque bout donne les deux sens, et le dernier rapport remplace les
+    /// deux sens du precedent (ni moyenne, ni meilleure, ni pire valeur). La tournee applique les reponses par
+    /// identifiant croissant : quand les deux bouts repondent, celui de plus grand identifiant decide. Lu par un
+    /// seul bout, le lien garde ses deux sens, ranges de `a` vers `b` : par le plus petit identifiant tel quel,
+    /// par le plus grand a l'envers (les deux branches de `lien`).
+    @Test func lienLuAuxDeuxBouts() throws {
+        func lu(_ reponses: [(ReponseDiagnostic, Int)]) throws -> LienRadio {
+            var c = ConstructionMaillage(date: .now, partition: "46CBEBCD")
+            for (r, id) in reponses { c.reponse(r, routeur: id) }
+            let liens = c.maillage().liens
+            try #require(liens.count == 1)
+            return liens[0]
+        }
+        // 2 voit 5 : de 2 vers 5 en 3, de 5 vers 2 en 1. 5 voit 2 : de 5 vers 2 en 3, de 2 vers 5 en 2.
+        let de2 = try Self.reponseVoisins((id: 5, sortante: 3, entrante: 1))
+        let de5 = try Self.reponseVoisins((id: 2, sortante: 3, entrante: 2))
+
+        let parLePlusPetit = try lu([(de2, 2)])
+        #expect((parLePlusPetit.a, parLePlusPetit.b) == (2, 5))
+        #expect(parLePlusPetit.qualiteAB == 3 && parLePlusPetit.qualiteBA == 1, "sortante de 2 : de a vers b")
+        let parLePlusGrand = try lu([(de5, 5)])
+        #expect((parLePlusGrand.a, parLePlusGrand.b) == (2, 5))
+        #expect(parLePlusGrand.qualiteAB == 2 && parLePlusGrand.qualiteBA == 3, "sortante de 5 : de b vers a, donc a l'envers")
+
+        let plusGrandEnDernier = try lu([(de2, 2), (de5, 5)])
+        #expect(plusGrandEnDernier.qualiteAB == 2 && plusGrandEnDernier.qualiteBA == 3, "5 remplace les deux sens de 2")
+        #expect(plusGrandEnDernier.qualite == 2)
+        let plusPetitEnDernier = try lu([(de5, 5), (de2, 2)])
+        #expect(plusPetitEnDernier.qualiteAB == 3 && plusPetitEnDernier.qualiteBA == 1, "2 remplace les deux sens de 5")
+        #expect(plusPetitEnDernier.qualite == 1)
+    }
+
     /// Enfants : tables de 5000 et 6000, balayage sous AC00, la sonde.
     @Test func enfants() throws {
         let m = try Self.tournee()
@@ -91,6 +131,107 @@ struct MaillageTests {
         #expect(e.adresses == [adresse])
         #expect(e.qualite == 2, "qualite de la table gardee")
         #expect(e.source == .tableEnfants)
+    }
+
+    /// Enfant vu par deux sources aux valeurs en conflit : champ par champ, la premiere valeur connue est
+    /// gardee, et la seconde ne sert qu'a combler ce qui manque (adresses : les premieres, si elles ne sont pas
+    /// vides). La source reste celle de la premiere.
+    @Test func fusionEnConflit() throws {
+        let a1 = try #require(AdresseIPv6("fd00:5555:6666:0:a00::1"))
+        let a2 = try #require(AdresseIPv6("fd00:5555:6666:0:a00::2"))
+        let table = EnfantMaillage(rloc16: 0x5004, qualite: 2, delai: 256, endormi: true, source: .tableEnfants)
+        let balayage = EnfantMaillage(rloc16: 0x5004, extMac: "E0000000000000AA", qualite: 1, delai: 30, endormi: false,
+                                      adresses: [a1], source: .balayage)
+        let autre = EnfantMaillage(rloc16: 0x5004, extMac: "E0000000000000BB", qualite: 3, delai: 60, endormi: true,
+                                   adresses: [a2], source: .balayage)
+        func fusion(_ premier: EnfantMaillage, _ second: EnfantMaillage) throws -> EnfantMaillage {
+            var c = ConstructionMaillage(date: .now, partition: "46CBEBCD")
+            c.enfant(premier)
+            c.enfant(second)
+            let enfants = c.maillage().enfants
+            try #require(enfants.count == 1, "un seul RLOC16, une seule entree")
+            return enfants[0]
+        }
+        // Table d'abord, incomplete : ses valeurs restent, le balayage comble l'ExtMac et les adresses.
+        #expect(try fusion(table, balayage) == EnfantMaillage(rloc16: 0x5004, extMac: "E0000000000000AA", qualite: 2,
+                                                              delai: 256, endormi: true, adresses: [a1],
+                                                              source: .tableEnfants))
+        // Balayage d'abord, complet : rien n'est remplace, ni par la table, ni par sa source.
+        #expect(try fusion(balayage, table) == balayage)
+        // Deux entrees completes : la premiere gagne partout.
+        #expect(try fusion(balayage, autre) == balayage)
+        #expect(try fusion(autre, balayage) == autre)
+    }
+
+    /// Promotion `.sonde` : une entree connue devient celle de la sonde quand la sonde la donne, dans les deux
+    /// ordres, et `.sonde` n'est jamais repris par une autre source. Les valeurs restent celles du premier
+    /// arrive. La sonde n'est pas a identifier (`enfantsSansIdentite`), meme sans ExtMac.
+    @Test func promotionSonde() throws {
+        let table = EnfantMaillage(rloc16: 0x5004, qualite: 2, delai: 256, endormi: true, source: .tableEnfants)
+        let sonde = EnfantMaillage(rloc16: 0x5004, extMac: "E000000000000004", qualite: 3, source: .sonde)
+        var apres = ConstructionMaillage(date: .now, partition: "46CBEBCD")
+        apres.enfant(table)
+        apres.enfant(sonde)
+        let promue = try #require(apres.maillage().enfants.first)
+        #expect(promue == EnfantMaillage(rloc16: 0x5004, extMac: "E000000000000004", qualite: 2, delai: 256, endormi: true,
+                                         source: .sonde), "table d'abord : promue, valeurs de la table, ExtMac de la sonde")
+        var avant = ConstructionMaillage(date: .now, partition: "46CBEBCD")
+        avant.enfant(sonde)
+        avant.enfant(table)
+        let gardee = try #require(avant.maillage().enfants.first)
+        #expect(gardee == EnfantMaillage(rloc16: 0x5004, extMac: "E000000000000004", qualite: 3, delai: 256, endormi: true,
+                                         source: .sonde), "sonde d'abord : reste la sonde, completee par la table")
+        // Sans ExtMac, la sonde n'est pas a identifier ; une entree de table, si.
+        var sansExtMac = ConstructionMaillage(date: .now, partition: "46CBEBCD")
+        sansExtMac.enfant(EnfantMaillage(rloc16: 0x5004, source: .sonde))
+        sansExtMac.enfant(EnfantMaillage(rloc16: 0x5001, source: .tableEnfants))
+        #expect(sansExtMac.enfantsSansIdentite == [0x5001])
+    }
+
+    /// Sonde posee avant la ligne de sa table, comme la tournee le fait (l'enfant de la sonde est pose avec
+    /// `etat`, avant toute reponse) : la ligne de la table de son parent, qui arrive ensuite, complete l'entree
+    /// sans la reprendre.
+    @Test func sondeAvantSaLigneDeTable() throws {
+        var c = ConstructionMaillage(date: .now, partition: "46CBEBCD")
+        c.enfant(EnfantMaillage(rloc16: 0x5004, qualite: 3, source: .sonde))
+        c.reponse(try Self.reponse(104), routeur: 20)
+        let enfants = c.maillage().enfants
+        #expect(enfants.map(\.rloc16) == [0x5001, 0x5004], "la table de 5000 donne 5004 et 5001")
+        let sonde = try #require(enfants.first { $0.rloc16 == 0x5004 })
+        #expect(sonde.source == .sonde)
+        #expect(sonde.qualite == 3, "la sienne, posee la premiere")
+        #expect(sonde.delai == 256 && sonde.endormi == true, "completee par sa ligne de table")
+        #expect(try #require(enfants.first { $0.rloc16 == 0x5001 }).source == .tableEnfants)
+        #expect(c.enfantsSansIdentite == [0x5001], "la sonde n'est pas a identifier")
+    }
+
+    /// Reponse et identite : l'ExtMac que le routeur donne lui-meme passe avant une identite apprise ailleurs, que
+    /// celle-ci vienne avant ou apres ; une reponse sans ExtMac garde l'identite apprise.
+    @Test func reponseAvantIdentite() throws {
+        var c = ConstructionMaillage(date: .now, partition: "46CBEBCD")
+        c.identite("E0000000000000AA", routeur: 20)
+        #expect(c.maillage().routeur(20)?.extMac == "E0000000000000AA", "sans reponse : l'identite apprise")
+        c.reponse(try Self.reponse(104), routeur: 20)
+        #expect(c.maillage().routeur(20)?.extMac == "E000000000000002", "sa reponse, arrivee apres l'identite")
+        c.identite("E0000000000000BB", routeur: 20)
+        #expect(c.maillage().routeur(20)?.extMac == "E000000000000002", "une identite apprise ensuite ne la remplace pas")
+        // La reponse du chef n'a pas d'ExtMac : l'identite apprise reste.
+        #expect(try Self.reponse(101).extMac == nil)
+        c.identite("E0000000000000CC", routeur: 24)
+        c.reponse(try Self.reponse(101), routeur: 24)
+        #expect(c.maillage().routeur(24)?.extMac == "E0000000000000CC")
+    }
+
+    /// Un routeur marque muet qui repond ensuite n'est plus muet ; marque muet apres sa reponse, il l'est.
+    @Test func muetRemisAFaux() throws {
+        var c = ConstructionMaillage(date: .now, partition: "46CBEBCD")
+        c.muet(20)
+        #expect(c.maillage().routeur(20)?.muet == true)
+        c.reponse(try Self.reponse(104), routeur: 20)
+        #expect(c.maillage().routeur(20)?.muet == false, "il a repondu")
+        c.muet(20)
+        #expect(c.maillage().routeur(20)?.muet == true, "muet apres sa reponse")
+        #expect(c.maillage().routeur(24)?.muet == false, "cite par la Route64 de 20, sans avoir ete marque")
     }
 
     // BBR principal, comme OpenThread : le chef s'il est parmi les serveurs BBR, meme avec une sequence

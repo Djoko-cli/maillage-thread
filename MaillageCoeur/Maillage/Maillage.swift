@@ -185,6 +185,11 @@ public struct ConstructionMaillage: Sendable {
     }
 
     /// Lien vu par `de` : qualite sortante (de -> vers) et entrante (vers -> de).
+    /// Un lien est souvent lu aux deux bouts (chaque routeur qui repond le voit dans sa Route64). Les
+    /// rapports ne sont pas fusionnes : le dernier remplace les deux sens du precedent (ni moyenne, ni
+    /// meilleure, ni pire valeur). La tournee applique les reponses par identifiant croissant : quand les
+    /// deux bouts repondent, celui de plus grand identifiant decide. Un lien lu par un seul bout garde
+    /// ses deux sens, ranges de `a` vers `b` (le plus petit identifiant d'abord).
     mutating func lien(_ de: Int, _ vers: Int, sortante: Int, entrante: Int) {
         let (a, b) = (min(de, vers), max(de, vers))
         var l = liens[a * 64 + b] ?? LienRadio(a: a, b: b)
