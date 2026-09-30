@@ -884,6 +884,19 @@ sonde dans la maison.
   après un redémarrage ; rallumé, les tournées reprennent (une tournée
   ordinaire dure moins d'une seconde par l'USB).
 
+**Vérifié le 30/09 et le 01/10 avec Djoko** (plan 3b, firmware 1.0.3 inchangé) :
+la tournée demande `voisins` ; une ligne d'historique de 984 octets en moyenne
+par tournée sur 20 tournées (7 routeurs, 22 enfants identifiés), soit
+8,5 Mo par mois ; le premier maillage n'écrit rien au journal ; les durées de
+la fiche ouverte (« relevé il y a … ») avancent chaque minute ; après deux
+heures, les courbes de qualité des routeurs `5000` et `6000` et le signal vu
+par la sonde de `AC00` et `E400` (seuls routeurs qu'elle entend : aucune
+fiche n'a donc les deux) ; 24 h, 7 j et 30 j changent l'échelle ; rien
+d'écrit ni de montré en démo ; la sonde déplacée d'un HomePod vers l'Apple TV :
+changement de parent noté au journal. Une capture de la 1.0.3 passe
+l'anonymiseur sans refus (3 ExtMac et 1 /48 remplacés) ; elle n'est pas
+commitée, car elle garde la partition réelle.
+
 ## 9. Suite prévue : vue spatiale (souhait de Djoko, 28/09)
 
 Après le plan 3a : une représentation du réseau **par pièce et par étage**,
