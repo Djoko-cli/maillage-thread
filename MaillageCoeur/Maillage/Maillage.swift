@@ -112,13 +112,21 @@ public struct Maillage: Hashable, Sendable {
     public var parentSonde: Int? { enfants.first { $0.source == .sonde }?.parent }
 
     /// Enfants identifies (ExtMac connue), un par ExtMac. Vu deux fois (il a change de parent),
-    /// l'entree fraiche (table d'un routeur qui repond, la sonde) passe avant celle d'un
-    /// balayage, qui peut dater de 30 minutes ; a egalite, la premiere par RLOC16.
+    /// l'entree la plus fraiche l'emporte : la sonde (elle sait son parent), puis la table d'un
+    /// routeur qui repond (l'ancien parent garde l'enfant jusqu'a son echeance), puis le balayage
+    /// d'un routeur muet, qui peut dater de 30 minutes ; a egalite, la premiere par RLOC16.
     public var enfantsIdentifies: [String: EnfantMaillage] {
+        func rang(_ s: SourceEnfant) -> Int {
+            switch s {
+            case .sonde: 0
+            case .tableEnfants: 1
+            case .balayage: 2
+            }
+        }
         var parExtMac: [String: EnfantMaillage] = [:]
         for e in enfants {
             guard let x = e.extMac else { continue }
-            if let deja = parExtMac[x], deja.source != .balayage || e.source == .balayage { continue }
+            if let deja = parExtMac[x], rang(deja.source) <= rang(e.source) { continue }
             parExtMac[x] = e
         }
         return parExtMac

@@ -41,15 +41,29 @@ struct HistoriqueTests {
         #expect(r.cle(routeur: 1) == "rloc:0400", "sans ExtMac : son RLOC16")
     }
 
-    /// Un enfant vu deux fois (il a change de parent) : l'entree fraiche (table d'un routeur qui
-    /// repond) passe avant celle du balayage d'un routeur muet, qui peut dater de 30 minutes.
-    @Test func enfantVuDeuxFois() {
+    /// Un enfant vu deux fois (il a change de parent) : la sonde passe avant une table, une table
+    /// avant le balayage d'un routeur muet (qui peut dater de 30 minutes), quel que soit l'ordre
+    /// des RLOC16 (donc des insertions). La sonde compte : son ancien parent la garde dans sa
+    /// table jusqu'a l'echeance de l'enfant, et peut avoir le plus petit identifiant.
+    @Test(arguments: [
+        // (source de l'entree au plus petit RLOC16, parent ; source de l'autre, parent ; parent attendu)
+        (SourceEnfant.balayage, 1, SourceEnfant.tableEnfants, 2, 2),
+        (.tableEnfants, 2, .balayage, 1, 2),
+        (.tableEnfants, 1, .sonde, 2, 2),
+        (.sonde, 1, .tableEnfants, 2, 1),
+        (.balayage, 1, .sonde, 2, 2),
+        (.sonde, 1, .balayage, 2, 1),
+    ])
+    func enfantVuDeuxFois(premiere: SourceEnfant, parentPremiere: Int, seconde: SourceEnfant, parentSeconde: Int,
+                          attendu: Int) {
         var c = ConstructionMaillage(date: Self.date("2026-09-30T10:00:00Z"), partition: "0000000A")
-        c.enfant(EnfantMaillage(rloc16: 0x0402, extMac: "E0000000000000B2", source: .balayage))
-        c.enfant(EnfantMaillage(rloc16: 0x0805, extMac: "E0000000000000B2", qualite: 2, source: .tableEnfants))
+        c.enfant(EnfantMaillage(rloc16: UInt16(parentPremiere << 10) | 2, extMac: "E0000000000000B2", qualite: 3,
+                                source: premiere))
+        c.enfant(EnfantMaillage(rloc16: UInt16(parentSeconde << 10) | 5, extMac: "E0000000000000B2", qualite: 2,
+                                source: seconde))
         let m = c.maillage()
-        #expect(m.enfantsIdentifies["E0000000000000B2"]?.parent == 2)
-        #expect(ReleveMaillage(m).enfants == [ReleveMaillage.Enfant(extMac: "E0000000000000B2", parent: 2, qualite: 2)])
+        #expect(m.enfantsIdentifies["E0000000000000B2"]?.parent == attendu)
+        #expect(ReleveMaillage(m).enfants.map(\.parent) == [attendu])
     }
 
     /// Un octet non UTF-8 (0xC3 isole : un caractere accentue coupe) abime sa ligne seulement : les
