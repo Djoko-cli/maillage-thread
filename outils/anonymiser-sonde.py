@@ -14,12 +14,39 @@ diagnostic :
 Garde les RLOC16, partitions, qualites, delais et versions de pile.
 Aucune valeur reelle n'est ecrite dans ce script : il les repere dans la
 capture. A la fin, il verifie qu'aucune ne reste dans la sortie.
+
+Garde : l'outil ne connait que les messages bonjour, etat et diag de la
+capture du 29/09/2026 (tables CHAMPS_CONNUS, CHAMPS_PARENT, TLV_CONNUS), et ne
+traite que les TLV 0, 7 et 8. Tout autre type de message, champ ou TLV, et tout
+TLV a longueur etendue ou tronque, le fait echouer AVANT toute ecriture, avec la
+liste de ce qu'il ne connait pas (des noms, jamais une valeur) : une valeur
+qu'il ne connait pas pourrait etre une ExtMac, une adresse ou un nom, et
+passerait sans etre vue, car le controle final ne porte que sur les valeurs
+qu'il a reperees. Une capture de la sonde 1.0.2 est donc refusee (etat.ext,
+bonjour.hote, bonjour.nom, messages voisins et routeurs...) tant que
+l'anonymiseur ne les traite pas. Pour ajouter un champ : verifier qu'il ne
+porte rien d'identifiant, sinon le traiter dans message() ; puis l'inscrire
+dans la table.
 """
 import ipaddress
 import json
+import re
 import sys
 
 MAILLE_RLOC = bytes.fromhex("000000fffe00")
+
+# Ce que l'outil connait (voir la garde dans la docstring). Les champs sont ceux de
+# la capture du 29/09 : les traiter ou verifier qu'ils ne portent rien d'identifiant.
+CHAMPS_COMMUNS = frozenset({"t", "v", "heure"})  # type, version du protocole, heure ajoutee par sonde_essai.py
+CHAMPS_CONNUS = {
+    "bonjour": frozenset({"produit", "version", "mac", "appairee", "code", "qr"}),
+    "etat": frozenset({"role", "rloc16", "mode", "parent", "partition", "chef", "canal", "prefixeMaille", "xp",
+                       "suspendue"}),
+    "diag": frozenset({"id", "cible", "ms", "ok", "code", "erreur", "tlv"}),
+}
+CHAMPS_PARENT = frozenset({"rloc16", "ext", "lqIn", "lqOut", "rssi", "rssiDernier", "age"})
+# TLV de diagnostic : 0, 7 et 8 sont traites ; les autres n'ont ni ExtMac ni adresse.
+TLV_CONNUS = frozenset({0, 1, 2, 5, 6, 7, 8, 16, 24, 25, 26, 27, 28})
 
 
 class Anonymiseur:
@@ -147,10 +174,96 @@ class Anonymiseur:
         return {x.lower() for x in s if len(x) >= 8}
 
 
+def nom_sur(x):
+    """Nom de champ ou de type pour un message d'erreur : jamais une valeur (un nom abime peut porter une ExtMac)."""
+    ok = isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9_]{1,32}", x) and not re.search(r"[0-9A-Fa-f]{16}", x)
+    return x if ok else "(illisible)"
+
+
+def controler_tlv(hexa):
+    """Pourquoi la charge TLV d'un diag n'est pas connue (liste vide si elle l'est)."""
+    try:
+        o = bytes.fromhex(hexa)
+    except (TypeError, ValueError):
+        return ["tlv illisible (diag.tlv)"]
+    raisons, i = [], 0
+    while i < len(o):
+        if i + 2 > len(o):
+            return raisons + ["TLV tronque (diag.tlv)"]
+        t, n = o[i], o[i + 1]
+        if n == 0xFF:
+            return raisons + ["TLV a longueur etendue (diag.tlv)"]
+        if i + 2 + n > len(o):
+            return raisons + ["TLV tronque (diag.tlv)"]
+        if t not in TLV_CONNUS:
+            raisons.append("TLV inconnu : %d (diag.tlv)" % t)
+        i += 2 + n
+    return raisons
+
+
+def controler(numerotes):
+    """La garde. `numerotes` : [(numero de ligne, message)]. Rend {raison: [numeros de ligne]}, vide si tout est
+    connu. Ne cite jamais une valeur de la capture, seulement des noms de type et de champ (nom_sur)."""
+    inconnu = {}
+
+    def noter(raison, numero):
+        inconnu.setdefault(raison, []).append(numero)
+
+    for numero, m in numerotes:
+        if not isinstance(m, dict):
+            noter("ligne qui n'est pas un objet JSON", numero)
+            continue
+        t = m.get("t")
+        if not isinstance(t, str) or t not in CHAMPS_CONNUS:
+            noter("type de message inconnu : %s" % nom_sur(t), numero)
+            continue
+        for champ in m:
+            if champ not in CHAMPS_COMMUNS and champ not in CHAMPS_CONNUS[t]:
+                noter("champ inconnu : %s.%s" % (t, nom_sur(champ)), numero)
+        parent = m.get("parent") if t == "etat" else None
+        if isinstance(parent, dict):
+            for champ in parent:
+                if champ not in CHAMPS_PARENT:
+                    noter("champ inconnu : etat.parent.%s" % nom_sur(champ), numero)
+        elif parent is not None:
+            noter("forme inconnue : etat.parent", numero)
+        if t == "diag" and m.get("tlv") is not None:
+            for raison in controler_tlv(m["tlv"]):
+                noter(raison, numero)
+    return inconnu
+
+
+def texte_refus(inconnu):
+    lignes = ["refus : la capture contient ce que l'anonymiseur ne connait pas ; rien n'a ete ecrit."]
+    for raison, numeros in inconnu.items():
+        lignes.append("  %s (%d ligne(s), la premiere : %d)" % (raison, len(numeros), numeros[0]))
+    lignes.append("Un champ ou un message inconnu peut porter une ExtMac, une adresse ou un nom : le traiter dans "
+                  "l'anonymiseur (message(), puis les tables CHAMPS_CONNUS et TLV_CONNUS) avant de lui confier "
+                  "cette capture.")
+    return "\n".join(lignes)
+
+
+def lire(chemin):
+    """Les messages de la capture avec leur numero de ligne (les lignes vides sont sautees)."""
+    res = []
+    with open(chemin, encoding="utf-8") as f:
+        for numero, ligne in enumerate(f, 1):
+            if ligne.strip():
+                try:
+                    res.append((numero, json.loads(ligne)))
+                except ValueError:
+                    sys.exit("refus : la ligne %d n'est pas du JSON ; rien n'a ete ecrit." % numero)
+    return res
+
+
 def main():
     entree, sortie = sys.argv[1], sys.argv[2]
     a = Anonymiseur()
-    messages = [json.loads(l) for l in open(entree, encoding="utf-8") if l.strip()]
+    numerotes = lire(entree)
+    inconnu = controler(numerotes)
+    if inconnu:
+        sys.exit(texte_refus(inconnu))
+    messages = [m for _, m in numerotes]
     # Le prefixe du reseau maille (sonde attachee) d'abord : il recoit toujours
     # le premier /48 factice.
     for m in messages:
