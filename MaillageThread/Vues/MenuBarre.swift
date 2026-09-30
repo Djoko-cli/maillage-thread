@@ -36,7 +36,7 @@ struct IconeBarre: View {
 /// evenements, et les actions.
 struct MenuBarre: View {
     @Environment(Surveillance.self) private var surveillance
-    @Environment(DossierNoms.self) private var nomsMaison
+    @Environment(NomsInternes.self) private var nomsMaison
     @Environment(SondeMaillage.self) private var sonde
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
@@ -63,7 +63,9 @@ struct MenuBarre: View {
                 Button("Ouvrir le graphe") { ouvrir("graphe") }
                 Button("Journal…") { ouvrir("journal") }
                 if surveillance.mode == .direct {
+                    // Une demande pendant un releve serait ignoree.
                     Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
+                        .disabled(nomsMaison.releveEnCours)
                     if let p = nomsMaison.probleme {
                         Text(p).font(.caption).foregroundStyle(.red).padding(.horizontal, 8)
                     }

@@ -8,7 +8,7 @@ import SwiftUI
 struct MaillageThreadApp: App {
     @State private var surveillance: Surveillance
     @State private var ouverture: OuvertureSession
-    @State private var nomsMaison: DossierNoms
+    @State private var nomsMaison: NomsInternes
     @State private var sonde: SondeMaillage
     private let notifications = Notifications()
     private static let demo = CommandLine.arguments.contains("-demo")
@@ -20,9 +20,8 @@ struct MaillageThreadApp: App {
     init() {
         let s = Surveillance(mode: Self.demo ? .demo : .direct, dossier: Self.demo ? nil : Surveillance.dossierParDefaut)
         let o = OuvertureSession()
-        // Sans memoire en demo et sous tests : ni les vraies preferences ni le vrai signet.
-        let d = DossierNoms(cache: Self.demo || Surveillance.sousTests
-                            ? nil : Surveillance.dossierParDefaut.appendingPathComponent("noms-maison.json"))
+        // Sans memoire en demo et sous tests : aucun releve lu, ecrit ni demande au passeur.
+        let d = NomsInternes(cache: NomsInternes.fichierCache(demo: Self.demo, sousTests: Surveillance.sousTests))
         _surveillance = State(initialValue: s)
         _ouverture = State(initialValue: o)
         _nomsMaison = State(initialValue: d)

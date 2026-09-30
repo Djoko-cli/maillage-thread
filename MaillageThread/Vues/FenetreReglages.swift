@@ -4,12 +4,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Reglages : notifications par categorie, ouverture a la connexion, langue,
-/// noms de Maison (dossier du passeur), sonde (liaison USB ou reseau Thread, acces
+/// noms de Maison (releve du passeur), sonde (liaison USB ou reseau Thread, acces
 /// reseau), diagnostic et capture.
 struct FenetreReglages: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(OuvertureSession.self) private var ouverture
-    @Environment(DossierNoms.self) private var nomsMaison
+    @Environment(NomsInternes.self) private var nomsMaison
     @Environment(SondeMaillage.self) private var sonde
     @AppStorage(Notifications.cle(.scission)) private var scission = CategorieAlerte.scission.parDefaut
     @AppStorage(Notifications.cle(.routeurDisparu)) private var routeurDisparu = CategorieAlerte.routeurDisparu.parDefaut
@@ -59,19 +59,14 @@ struct FenetreReglages: View {
                 }
             }
             Section("Noms de Maison") {
-                LabeledContent("Dossier des noms") {
-                    HStack {
-                        Text(nomsMaison.dossier?.path(percentEncoded: false) ?? "—")
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Button("Choisir…") { nomsMaison.choisir() }
-                            .disabled(surveillance.mode == .demo)
-                    }
-                }
                 if let n = nomsMaison.noms {
                     LabeledContent("Noms lus",
                                    value: String(localized: "\(n.accessoires.count) accessoires · \(n.date.formatted(date: .abbreviated, time: .shortened))"))
-                    if DossierNoms.estAncien(n, maintenant: .now) {
+                    // Rien pour un releve d'avant les zones.
+                    if let zones = n.zones {
+                        LabeledContent("Zones", value: Self.texteZones(zones))
+                    }
+                    if NomsInternes.estAncien(n, maintenant: .now) {
                         Text("Noms du \(n.date.formatted(date: .abbreviated, time: .omitted)) : relance outils/passeur.sh pour les rafraîchir.")
                             .font(.caption)
                             .foregroundStyle(.orange)
@@ -80,8 +75,14 @@ struct FenetreReglages: View {
                 if let p = nomsMaison.probleme {
                     Text(p).font(.caption).foregroundStyle(.red)
                 }
-                Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
-                    .disabled(surveillance.mode == .demo)
+                HStack {
+                    // Une demande pendant un releve serait ignoree.
+                    Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
+                        .disabled(surveillance.mode == .demo || nomsMaison.releveEnCours)
+                    if nomsMaison.releveEnCours {
+                        ProgressView().controlSize(.small)
+                    }
+                }
             }
             Section("Sonde") {
                 if surveillance.mode == .demo {
@@ -160,6 +161,11 @@ struct FenetreReglages: View {
         .frame(width: 560)
         // Etat de l'ouverture a la connexion relu a chaque ouverture (Reglages Systeme).
         .onAppear { ouverture.actualiser() }
+    }
+
+    /// Zones de Maison lues par le passeur, dans l'ordre de Maison : « Rez-de-chaussee, Etage ».
+    static func texteZones(_ zones: [ZoneMaison]) -> String {
+        zones.isEmpty ? String(localized: "aucune zone dans Maison") : zones.map(\.nom).joined(separator: ", ")
     }
 
     /// Libelle d'un port dans le choix : la sonde retenue sous son nom seul ; tout autre port,

@@ -945,22 +945,6 @@
         }
       }
     },
-    "Choisir…" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose…"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choisir…"
-          }
-        }
-      }
-    },
     "Clé absente de ce Mac pour %@.local : brancher la sonde en USB, puis « Autoriser l'accès réseau »." : {
       "localizations" : {
         "en" : {
@@ -1117,70 +1101,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diagnostic"
-          }
-        }
-      }
-    },
-    "Dossier des noms" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Names folder"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dossier des noms"
-          }
-        }
-      }
-    },
-    "Dossier des noms inaccessible : choisis-le de nouveau (Réglages › Noms de Maison)." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Names folder not accessible: choose it again (Settings › Home names)."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dossier des noms inaccessible : choisis-le de nouveau (Réglages › Noms de Maison)."
-          }
-        }
-      }
-    },
-    "Dossier des noms introuvable : choisis-le de nouveau (Réglages › Noms de Maison)." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Names folder not found: choose it again (Settings › Home names)."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dossier des noms introuvable : choisis-le de nouveau (Réglages › Noms de Maison)."
-          }
-        }
-      }
-    },
-    "Dossier où le passeur écrit noms.json, hors iCloud et hors du dépôt (par exemple « Maillage Thread » dans ton dossier personnel)." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Folder where Passeur Noms writes noms.json, outside iCloud and the repository (for example “Maillage Thread” in your home folder)."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dossier où le passeur écrit noms.json, hors iCloud et hors du dépôt (par exemple « Maillage Thread » dans ton dossier personnel)."
           }
         }
       }
@@ -1985,22 +1905,6 @@
         }
       }
     },
-    "Pas encore de noms.json dans ce dossier : lance le passeur." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No noms.json in this folder yet: run Passeur Noms."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pas encore de noms.json dans ce dossier : lance le passeur."
-          }
-        }
-      }
-    },
     "Passeur Noms introuvable : lance outils/passeur.sh." : {
       "localizations" : {
         "en" : {
@@ -2013,6 +1917,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Passeur Noms introuvable : lance outils/passeur.sh."
+          }
+        }
+      }
+    },
+    "Passeur Noms n'a rien envoyé en 2 minutes." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms sent nothing within 2 minutes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms n'a rien envoyé en 2 minutes."
           }
         }
       }
@@ -2269,6 +2189,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Relancer maintenant"
+          }
+        }
+      }
+    },
+    "Relevé de Maison illisible : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unreadable Home reading: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relevé de Maison illisible : %@"
+          }
+        }
+      }
+    },
+    "Relevé de Maison illisible : longueur fausse." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unreadable Home reading: wrong length."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relevé de Maison illisible : longueur fausse."
+          }
+        }
+      }
+    },
+    "Relevé de Maison refusé : jeton faux." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home reading refused: wrong token."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relevé de Maison refusé : jeton faux."
           }
         }
       }
@@ -2977,6 +2945,22 @@
         }
       }
     },
+    "Zones" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zones"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zones"
+          }
+        }
+      }
+    },
     "absente (débranchée ?)" : {
       "localizations" : {
         "en" : {
@@ -3053,6 +3037,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "aucune sonde choisie"
+          }
+        }
+      }
+    },
+    "aucune zone dans Maison" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "no zones in Home"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "aucune zone dans Maison"
           }
         }
       }
@@ -3617,22 +3617,6 @@
         }
       }
     },
-    "noms.json illisible : %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unreadable noms.json: %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "noms.json illisible : %@"
-          }
-        }
-      }
-    },
     "non autorisé" : {
       "localizations" : {
         "en" : {
@@ -3725,6 +3709,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "port fermé par l'app"
+          }
+        }
+      }
+    },
+    "port inconnu" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "unknown port"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "port inconnu"
           }
         }
       }
@@ -3997,6 +3997,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Écoute"
+          }
+        }
+      }
+    },
+    "Écoute du relevé impossible : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cannot listen for the Home reading: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écoute du relevé impossible : %@"
           }
         }
       }

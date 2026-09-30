@@ -26,14 +26,10 @@ struct GrapheTests {
     }
 
     /// Le bouton rafraichir du graphe lance aussi le passeur des noms de Maison, en mode direct
-    /// et seulement si un dossier des noms est choisi (« Rafraichir depuis Maison », lui, demande
-    /// le dossier s'il manque).
-    @Test func rafraichirLanceLePasseurAvecUnDossier() {
-        #expect(BarreOutils.lancePasseur(mode: .direct, dossierChoisi: true))
-        #expect(!BarreOutils.lancePasseur(mode: .direct, dossierChoisi: false),
-                "sans dossier : pas de passeur au premier plan a chaque clic")
-        #expect(!BarreOutils.lancePasseur(mode: .demo, dossierChoisi: true))
-        #expect(!BarreOutils.lancePasseur(mode: .demo, dossierChoisi: false))
+    /// seulement : plus de dossier des noms a choisir.
+    @Test func rafraichirLanceLePasseurEnModeDirect() {
+        #expect(BarreOutils.lancePasseur(mode: .direct))
+        #expect(!BarreOutils.lancePasseur(mode: .demo))
     }
 
     /// L'aide du bouton rafraichir dit ce qu'il lancera vraiment : le reseau toujours, une
@@ -72,7 +68,7 @@ struct GrapheTests {
         let scinde = Surveillance(mode: .demo, dossier: nil)
         scinde.demarrer()
         let sansReseau = Surveillance(mode: .direct, dossier: nil)
-        let noms = DossierNoms(cache: nil)
+        let noms = NomsInternes(cache: nil)
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         let journal = JournalCanaux()
@@ -110,7 +106,7 @@ struct GrapheTests {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         let surveillance = Surveillance(mode: .direct, dossier: nil)
-        let noms = DossierNoms(cache: nil)
+        let noms = NomsInternes(cache: nil)
         let journal = JournalCanaux()
         let sonde = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in SondeMaillageTests.canalRetenu(journal) })
         func taille(_ vue: some View) -> CGSize {

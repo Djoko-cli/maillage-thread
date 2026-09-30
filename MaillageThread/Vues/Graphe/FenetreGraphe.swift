@@ -10,7 +10,7 @@ struct NoeudChoisi: Identifiable {
 /// bandeau d'alerte, legende des pointilles et fiche flottent par-dessus, en verre.
 struct FenetreGraphe: View {
     @Environment(Surveillance.self) private var surveillance
-    @Environment(DossierNoms.self) private var nomsMaison
+    @Environment(NomsInternes.self) private var nomsMaison
     /// Sonde retenue ou non : la marge du haut garde la place de la ligne de la tournee.
     @Environment(SondeMaillage.self) private var sonde
     @Environment(\.colorScheme) private var apparence
@@ -157,15 +157,14 @@ struct EnTeteGraphe: View {
 struct BarreOutils: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(SondeMaillage.self) private var sonde
-    @Environment(DossierNoms.self) private var nomsMaison
+    @Environment(NomsInternes.self) private var nomsMaison
     @Environment(\.openWindow) private var openWindow
     @State private var appareilsIP = false
 
-    /// Rafraichir lance aussi le passeur des noms de Maison, en mode direct, et seulement si un
-    /// dossier des noms est choisi : sans dossier, le passeur passerait au premier plan a chaque
-    /// clic pour en demander un (« Rafraichir depuis Maison », lui, le demande s'il manque).
-    static func lancePasseur(mode: Surveillance.Mode, dossierChoisi: Bool) -> Bool {
-        mode == .direct && dossierChoisi
+    /// Rafraichir lance aussi le passeur des noms de Maison, en mode direct seulement (sauf
+    /// pendant un releve, qui ignore la demande).
+    static func lancePasseur(mode: Surveillance.Mode) -> Bool {
+        mode == .direct
     }
 
     /// Aide du bouton rafraichir : ce qu'il lancera vraiment. Le reseau toujours ; une tournee
@@ -208,7 +207,7 @@ struct BarreOutils: View {
                 Button {
                     surveillance.rafraichir()
                     sonde.rafraichir()
-                    if Self.lancePasseur(mode: surveillance.mode, dossierChoisi: nomsMaison.dossier != nil) {
+                    if Self.lancePasseur(mode: surveillance.mode) {
                         nomsMaison.lancerPasseur()
                     }
                 } label: {
@@ -216,8 +215,7 @@ struct BarreOutils: View {
                 }
                 .buttonStyle(.glass)
                 .help(Self.aideRafraichir(tournee: sonde.tourneeAuRafraichir,
-                                          passeur: Self.lancePasseur(mode: surveillance.mode,
-                                                                     dossierChoisi: nomsMaison.dossier != nil)))
+                                          passeur: Self.lancePasseur(mode: surveillance.mode)))
             }
         }
     }
