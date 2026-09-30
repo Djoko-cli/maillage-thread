@@ -1,5 +1,6 @@
 import HomeKit
 import Network
+import os
 import SwiftUI
 
 /// Passeur des noms de Maison : app iOS lancee sur le Mac (« concue pour
@@ -8,6 +9,7 @@ import SwiftUI
 /// `--port` et `--jeton`, elle lui envoie le releve par la boucle locale du Mac
 /// (TCP sur 127.0.0.1, `EnvoiPasseur`), puis se ferme aussitot. Ouverte a la
 /// main, elle n'envoie rien : elle montre ce qu'elle a lu, puis se ferme apres 10 s.
+/// Chaque lancement et chaque sortie laissent une trace au journal du Mac (`quitter`).
 @main
 struct PasseurApp: App {
     @State private var passeur = Passeur(cible: EnvoiPasseur.Cible(arguments: ProcessInfo.processInfo.arguments))
@@ -75,6 +77,14 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
 
     func demarrer() {
         guard gestionnaire == nil else { return }
+        // Premiere trace du lancement : la cible est-elle arrivee ? Le port seulement, jamais le jeton.
+        // Sans cible, le nombre d'arguments dit si ceux du lancement ne sont pas arrives (1 : le
+        // chemin de l'executable seul) ou s'ils sont arrives sans etre lisibles (plus de 1).
+        if let cible {
+            journal.notice("démarrage : cible reçue, port \(cible.port)")
+        } else {
+            journal.notice("démarrage : aucune cible (arguments de lancement : \(ProcessInfo.processInfo.arguments.count))")
+        }
         let g = HMHomeManager()
         g.delegate = self
         gestionnaire = g
@@ -200,27 +210,37 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
             return
         }
         etat = "Envoi à Maillage Thread…"
-        guard let json = try? n.donnees() else { exit(0) }
+        let json: Data
+        do {
+            json = try n.donnees()
+        } catch {
+            quitter("relevé impossible à encoder, rien envoyé", erreur: error)
+        }
         Self.envoyer(EnvoiPasseur.trame(jeton: cible.jeton, json: json), port: cible.port)
     }
 
     /// Envoie la trame a 127.0.0.1:<port> et ferme son cote, attend que l'app ferme la
     /// connexion (elle a tout lu), puis quitte. L'app injoignable (ecoute deja fermee) : quitte
     /// aussi. Jamais plus de `delaiEnvoi` : un passeur qui resterait ouvert ne recevrait pas les
-    /// arguments du lancement suivant.
+    /// arguments du lancement suivant. Chaque sortie passe par `quitter`, qui dit pourquoi.
     private static func envoyer(_ trame: Data, port: UInt16) {
-        guard let p = NWEndpoint.Port(rawValue: port) else { exit(0) }
+        guard let p = NWEndpoint.Port(rawValue: port) else { quitter("port \(port) invalide", echec: true) }
         let c = NWConnection(host: "127.0.0.1", port: p, using: .tcp)
         c.stateUpdateHandler = { etat in
             switch etat {
             case .ready:
                 c.send(content: trame, contentContext: .finalMessage, isComplete: true,
                        completion: .contentProcessed { erreur in
-                    guard erreur == nil else { exit(0) }
-                    c.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in exit(0) }
+                    if let erreur { quitter("envoi de la trame impossible", erreur: erreur) }
+                    c.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, erreur in
+                        if let erreur { quitter("connexion coupée après l'envoi", erreur: erreur) }
+                        quitter("l'app a fermé la connexion après l'envoi")
+                    }
                 })
-            case .waiting, .failed:
-                exit(0)
+            case .waiting(let erreur):
+                quitter("connexion au port \(port) impossible (en attente)", erreur: erreur)
+            case .failed(let erreur):
+                quitter("connexion au port \(port) échouée", erreur: erreur)
             default:
                 break
             }
@@ -228,7 +248,7 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
         c.start(queue: .main)
         Task {
             try? await Task.sleep(for: delaiEnvoi)
-            exit(0)
+            quitter("délai de \(delaiEnvoi.components.seconds) s dépassé, connexion : \(c.state)", echec: true)
         }
     }
 
@@ -239,7 +259,29 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
                 self?.fermetureDans = n
                 try? await Task.sleep(for: .seconds(1))
             }
-            exit(0)
+            quitter("ouvert à la main : relevé montré, rien envoyé")
         }
     }
+}
+
+/// Journal du passeur, a lire apres coup avec
+/// `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`
+/// (en zsh, `log` seul est une commande interne : donner le chemin complet).
+/// Jamais le jeton, jamais de donnees de Maison : des raisons et des erreurs de reseau seulement.
+private let journal = Logger(subsystem: "fr.djoko.maillage.passeur", category: "releve")
+
+/// Seule sortie du passeur : la raison au journal, puis `exit(0)` (l'app n'attend aucun code de
+/// retour). Fin normale en `.notice` ; echec en `.error`, avec l'erreur (celle de Network par
+/// exemple) quand il y en a une. Sans cette trace, un echec (connexion refusee, delai) ressemble
+/// a une fin normale : l'app ne voit que l'absence de releve. `privacy: .public` est necessaire :
+/// sinon le journal masque les chaines (`<private>`).
+private func quitter(_ raison: String, erreur: (any Error)? = nil, echec: Bool = false) -> Never {
+    if let erreur {
+        journal.error("échec : \(raison, privacy: .public) ; erreur : \(String(describing: erreur), privacy: .public)")
+    } else if echec {
+        journal.error("échec : \(raison, privacy: .public)")
+    } else {
+        journal.notice("fin : \(raison, privacy: .public)")
+    }
+    exit(0)
 }
