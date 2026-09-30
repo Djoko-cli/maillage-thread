@@ -20,6 +20,8 @@ final class NomsInternes {
         case recu(Data)
         case jetonFaux
         case longueurFausse
+        /// Connexion coupee par une erreur avant la fin de la trame : la trame n'est pas en cause.
+        case interrompu
         /// Aucun releve dans le delai.
         case delai
         /// Passeur introuvable ou lancement refuse : le probleme a montrer.
@@ -39,8 +41,8 @@ final class NomsInternes {
 
     /// Dernier releve valide.
     private(set) var noms: NomsMaison?
-    /// Dernier probleme : releve refuse ou illisible, rien dans le delai, passeur introuvable ou
-    /// qui ne se lance pas, acces a Maison refuse, ecriture impossible.
+    /// Dernier probleme : releve refuse, illisible ou interrompu, rien dans le delai, passeur
+    /// introuvable ou qui ne se lance pas, acces a Maison refuse, ecriture impossible.
     private(set) var probleme: String?
     /// Une ecoute est ouverte : le passeur est lance, ou va l'etre.
     private(set) var releveEnCours = false
@@ -128,6 +130,8 @@ final class NomsInternes {
             }
         case .jetonFaux: probleme = String(localized: "Relevé de Maison refusé : jeton faux.")
         case .longueurFausse: probleme = String(localized: "Relevé de Maison illisible : longueur fausse.")
+        case .interrompu:
+            probleme = String(localized: "Relevé de Maison interrompu : la connexion avec Passeur Noms a été coupée.")
         case .delai: probleme = String(localized: "Passeur Noms n'a rien envoyé en 2 minutes.")
         case .lancement(let p): probleme = p
         case .ecoute(let cause): probleme = String(localized: "Écoute du relevé impossible : \(cause)")

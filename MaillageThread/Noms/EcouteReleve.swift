@@ -6,7 +6,8 @@ import Network
 /// systeme (Network.framework, comme le reste de l'app). La premiere connexion est la seule
 /// acceptee : l'ecoute se ferme aussitot. Sa trame est lue au fil de l'eau
 /// (`EnvoiPasseur.Lecture`, au plus 8 Mo de JSON), puis la connexion est fermee : le passeur,
-/// qui attend cette fermeture, sait alors que tout a ete lu. Tout se passe sur la file principale.
+/// qui attend cette fermeture, sait alors que tout a ete lu. Une connexion coupee par une erreur
+/// avant la fin de la trame finit par `.interrompu`. Tout se passe sur la file principale.
 /// Le bac a sable de l'app exige `com.apple.security.network.server` pour ecouter, meme sur
 /// la boucle locale.
 @MainActor
@@ -98,7 +99,13 @@ final class EcouteReleve {
                 guard let self, self.connexion === c else { return }
                 var issue = EnvoiPasseur.Lecture.Issue.incomplete
                 if let donnees, !donnees.isEmpty { issue = self.lecture.ajouter(donnees) }
-                if issue == .incomplete, finie || erreur != nil { issue = self.lecture.fin() }
+                // Une erreur avant la fin de la trame : la connexion a ete coupee, la trame n'est
+                // pas en cause. Une fin propre sans trame complete, elle, est une trame fausse.
+                if issue == .incomplete, erreur != nil {
+                    self.terminer(.interrompu)
+                    return
+                }
+                if issue == .incomplete, finie { issue = self.lecture.fin() }
                 switch issue {
                 case .incomplete: self.recevoir(c)
                 case .json(let json): self.terminer(.recu(json))

@@ -2225,6 +2225,22 @@
         }
       }
     },
+    "Relevé de Maison interrompu : la connexion avec Passeur Noms a été coupée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home survey interrupted: the connection with Passeur Noms was cut."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relevé de Maison interrompu : la connexion avec Passeur Noms a été coupée."
+          }
+        }
+      }
+    },
     "Relevé de Maison refusé : jeton faux." : {
       "localizations" : {
         "en" : {

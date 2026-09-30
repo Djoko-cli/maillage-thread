@@ -211,6 +211,7 @@ struct NomsInternesTests {
     static let refus = String(localized: "Accès à Maison refusé au passeur : Réglages Système › Confidentialité et sécurité › Maison.")
     static let jetonFaux = String(localized: "Relevé de Maison refusé : jeton faux.")
     static let longueurFausse = String(localized: "Relevé de Maison illisible : longueur fausse.")
+    static let interrompu = String(localized: "Relevé de Maison interrompu : la connexion avec Passeur Noms a été coupée.")
 
     /// Un releve reussi remplace les noms ; un echec du passeur les garde et dit
     /// pourquoi, avec les textes de l'app : le message du passeur (en francais
@@ -346,6 +347,46 @@ struct NomsInternesTests {
             await Self.releve(n)
             #expect(n.noms == Self.noms(), "longueur \(longueur)")
             #expect(n.probleme == Self.longueurFausse, "longueur \(longueur)")
+        }
+    }
+
+    /// Une connexion coupee par une erreur avant la fin de la trame se dit interrompue, et non
+    /// « jeton faux » ni « longueur fausse » : la trame n'est pas en cause. Une fin propre (le
+    /// passeur ferme son cote) sans trame complete garde son message. Dans tous les cas, le
+    /// dernier releve valide reste.
+    @Test func connexionCoupee() async throws {
+        let jeton = 2 * EnvoiPasseur.octetsJeton
+        let json = try Self.noms(nom: "Intrus").donnees()
+        // Ou la trame s'arrete, et le message d'une fin propre a cet endroit.
+        let arrets: [(String, (Data) -> Data, String)] = [
+            ("dans le jeton", { $0.prefix(jeton / 2) }, Self.jetonFaux),
+            ("apres le jeton", { $0.prefix(jeton + 1) }, Self.longueurFausse),
+            ("dans le json", { $0.dropLast(3) }, Self.longueurFausse),
+        ]
+        for (ou, tronquer, propre) in arrets {
+            for coupee in [false, true] {
+                let cache = Self.cache()
+                defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
+                let lancements = LancementsPasseur()
+                let n = NomsInternes(cache: cache, lanceur: Self.lanceur(lancements))
+                n.integrer(Self.noms())
+                n.lancerPasseur()
+                let cible = try #require(await Self.cible(lancements))
+                let debut = tronquer(EnvoiPasseur.trame(jeton: cible.jeton, json: json))
+                if coupee {
+                    let client = try #require(FauxPasseur.Client(port: cible.port))
+                    #expect(await client.attendre())
+                    #expect(await client.envoyer(debut))
+                    // Plus rien n'ecoute : l'app a accepte la connexion, la coupure vient ensuite.
+                    #expect(await Self.ecouteFermee(port: cible.port))
+                    client.couper()
+                } else {
+                    #expect(await FauxPasseur.envoyer(debut, port: cible.port))
+                }
+                await Self.attendre(n)
+                #expect(n.noms == Self.noms(), "\(ou), coupee \(coupee) : le dernier releve valide reste")
+                #expect(n.probleme == (coupee ? Self.interrompu : propre), "\(ou), coupee \(coupee)")
+            }
         }
     }
 
