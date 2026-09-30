@@ -8,6 +8,9 @@ public protocol InterlocuteurSonde: Sendable {
     /// de la partition par leur RLOC16, l'ExtMac de ceux qu'elle entend. Requete locale, sans
     /// delai reseau.
     func routeurs() async throws -> [RouteurSonde]
+    /// Routeurs voisins que la sonde entend (`voisins`), avec leur signal ; son parent n'y est
+    /// pas (`etat` le donne). Requete locale, sans delai reseau.
+    func voisins() async throws -> [VoisinSonde]
     /// `DIAG_GET` vers un RLOC16 : la reponse, ou l'echec (`delai`, `occupee`...).
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag
 }
@@ -23,7 +26,7 @@ public protocol InterlocuteurSonde: Sendable {
 public struct AvancementTournee: Hashable, Sendable {
     /// Etapes d'une tournee, dans l'ordre.
     public enum Etape: CaseIterable, Hashable, Sendable {
-        /// `etat` de la sonde, puis sa table des routeurs (`routeurs`).
+        /// `etat` de la sonde, puis sa table des routeurs (`routeurs`) et ses voisins (`voisins`).
         case etatSonde
         /// Route64 : au chef, aux secours, puis recherche.
         case listeRouteurs
@@ -140,6 +143,8 @@ public enum Tournee {
     /// celle d'avant (remise a zero dans une autre partition), avec les seules identites
     /// apprises par `etat` et la table des routeurs, qu'une sonde promenee garde ainsi, et la
     /// date d'une recherche complete vaine.
+    /// Le maillage porte aussi le signal des routeurs que la sonde entend (`voisins`) et celui
+    /// de son parent (`etat`), pour l'historique (spec de la sonde, section 6).
     /// `avancement` est appele au debut de chaque etape atteinte, puis a chaque requete
     /// revenue (voir `AvancementTournee`), depuis la tache de la tournee.
     public static func executer(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,
@@ -149,9 +154,9 @@ public enum Tournee {
             avancement?(AvancementTournee(etape: etape, fait: fait, total: total))
         }
         var mem = memoire
-        signaler(.etatSonde, 0, 2)
+        signaler(.etatSonde, 0, 3)
         let etat = try await sonde.etat()
-        signaler(.etatSonde, 1, 2)
+        signaler(.etatSonde, 1, 3)
         guard etat.estAttachee, !etat.suspendue, let partition = etat.partition, let chef = etat.chef,
               let moi = etat.rloc16Valeur else { return (nil, memoire) }
         // Autre partition : les identifiants de routeur y sont redistribues, rien ne vaut plus.
@@ -160,11 +165,20 @@ public enum Tournee {
         // Table des routeurs de la sonde (requete locale, sans delai reseau) : ExtMac des routeurs
         // qu'elle entend. Sans table (firmware sans `routeurs`, sonde occupee), la tournee continue.
         let table = (try? await sonde.routeurs()) ?? []
-        signaler(.etatSonde, 2, 2)
+        signaler(.etatSonde, 2, 3)
+        // Voisins de la sonde (requete locale) : le signal de chaque routeur qu'elle entend. Sans
+        // reponse, la tournee continue sans eux.
+        let voisins = (try? await sonde.voisins()) ?? []
+        signaler(.etatSonde, 3, 3)
         var c = ConstructionMaillage(date: maintenant, partition: partition)
+        for v in voisins where v.routeur {
+            if let r = UInt16(v.rloc16, radix: 16) { c.signal(SignalSonde(routeur: Int(r >> 10), rssi: v.rssi)) }
+        }
         if let p = etat.parent, let rp = UInt16(p.rloc16, radix: 16) {
             mem.retenir(p.ext, rloc16: rp)
             c.enfant(EnfantMaillage(rloc16: moi, extMac: etat.ext, qualite: p.lqOut, source: .sonde))
+            // Apres les voisins : le signal du parent, donne par `etat`, passe avant.
+            c.signal(SignalSonde(routeur: Int(rp >> 10), rssi: p.rssi))
         }
         for r in table {
             if let ext = r.ext, let rloc = r.rloc16Valeur { mem.retenir(ext, rloc16: rloc) }

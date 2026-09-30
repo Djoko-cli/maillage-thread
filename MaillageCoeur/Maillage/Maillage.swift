@@ -73,6 +73,20 @@ public struct EnfantMaillage: Hashable, Sendable, Identifiable {
     public var parent: Int { Int(rloc16 >> 10) }
 }
 
+/// Signal d'un routeur tel que la sonde l'entend a une tournee (spec de la sonde, section 6) :
+/// son parent (`etat`) ou un routeur voisin (`voisins`).
+public struct SignalSonde: Hashable, Sendable {
+    /// Identifiant du routeur.
+    public let routeur: Int
+    /// RSSI moyen, en dBm.
+    public let rssi: Int
+
+    public init(routeur: Int, rssi: Int) {
+        self.routeur = routeur
+        self.rssi = rssi
+    }
+}
+
 /// Le maillage d'une partition, tel qu'une tournee de la sonde le voit.
 public struct Maillage: Hashable, Sendable {
     public let date: Date
@@ -83,11 +97,16 @@ public struct Maillage: Hashable, Sendable {
     public let liens: [LienRadio]
     /// Par RLOC16 croissant.
     public let enfants: [EnfantMaillage]
+    /// Signal des routeurs de la liste que la sonde entend, son parent compris, par identifiant
+    /// croissant.
+    public let signaux: [SignalSonde]
 
     public func routeur(_ id: Int) -> RouteurMaillage? { routeurs.first { $0.id == id } }
     public func liens(de id: Int) -> [LienRadio] { liens.filter { $0.a == id || $0.b == id } }
     public func enfants(de id: Int) -> [EnfantMaillage] { enfants.filter { $0.parent == id } }
     public var chef: RouteurMaillage? { routeurs.first(where: \.chef) }
+    /// Identifiant de routeur du parent de la sonde.
+    public var parentSonde: Int? { enfants.first { $0.source == .sonde }?.parent }
 }
 
 /// Assemble un `Maillage` au fil des reponses d'une tournee.
@@ -97,6 +116,7 @@ public struct ConstructionMaillage: Sendable {
     private var routeurs: [Int: RouteurMaillage] = [:]
     private var liens: [Int: LienRadio] = [:]
     private var enfants: [UInt16: EnfantMaillage] = [:]
+    private var signaux: [Int: SignalSonde] = [:]
 
     public init(date: Date, partition: String) {
         self.date = date
@@ -176,6 +196,13 @@ public struct ConstructionMaillage: Sendable {
         enfants[e.rloc16] = connu
     }
 
+    /// Signal d'un routeur entendu par la sonde ; le dernier donne pour un routeur l'emporte. Un
+    /// RSSI positif ou nul est ignore (127 : RSSI invalide d'OpenThread, rien d'entendu encore).
+    public mutating func signal(_ s: SignalSonde) {
+        guard s.rssi < 0 else { return }
+        signaux[s.routeur] = s
+    }
+
     /// Roles poses a la main (maillage de demo).
     mutating func marquer(_ id: Int, bordure: Bool, bbrPrincipal: Bool = false) {
         var r = routeurs[id, default: RouteurMaillage(id: id)]
@@ -210,10 +237,12 @@ public struct ConstructionMaillage: Sendable {
         enfants.values.filter { $0.extMac == nil && $0.source != .sonde }.map(\.rloc16).sorted()
     }
 
+    /// Le maillage ; les signaux des seuls routeurs de la liste.
     public func maillage() -> Maillage {
         Maillage(date: date, partition: partition,
                  routeurs: routeurs.values.sorted { $0.id < $1.id },
                  liens: liens.values.sorted { ($0.a, $0.b) < ($1.a, $1.b) },
-                 enfants: enfants.values.sorted { $0.rloc16 < $1.rloc16 })
+                 enfants: enfants.values.sorted { $0.rloc16 < $1.rloc16 },
+                 signaux: signaux.values.filter { routeurs[$0.routeur] != nil }.sorted { $0.routeur < $1.routeur })
     }
 }

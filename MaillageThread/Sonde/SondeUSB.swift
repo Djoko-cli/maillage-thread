@@ -33,7 +33,7 @@ struct CanalSerie: CanalSonde {
     func fermer() { liaison.fermer() }
 }
 
-/// Attentes d'une commande sans id (`bonjour`, `etat`, `routeurs`) : les reponses les servent
+/// Attentes d'une commande sans id (`bonjour`, `etat`, `routeurs`, `voisins`) : les reponses les servent
 /// dans l'ordre. Chaque attente a son jeton : son echeance n'expire qu'elle, et plus rien une
 /// fois qu'elle est servie (par le reseau, une reponse lente ne fait plus echouer la requete
 /// suivante).
@@ -69,8 +69,8 @@ private struct FileAttentes<Valeur: Sendable> {
 }
 
 /// Sonde branchee en USB : envoie les commandes et apparie les reponses, par
-/// ordre pour `bonjour`, `etat` et `routeurs`, par id et cible pour `diag` (8 en vol, dans le
-/// desordre). Chaque requete a sa propre echeance.
+/// ordre pour `bonjour`, `etat`, `routeurs` et `voisins`, par id et cible pour `diag` (8 en vol,
+/// dans le desordre). Chaque requete a sa propre echeance.
 actor SondeUSB: InterlocuteurSonde {
     enum Erreur: Error, LocalizedError, Equatable {
         case fermee
@@ -87,7 +87,7 @@ actor SondeUSB: InterlocuteurSonde {
         }
     }
 
-    /// Attente de `bonjour`, `etat`, `routeurs` et `cle nouvelle` : 3 s en USB, qui ne perd rien ;
+    /// Attente de `bonjour`, `etat`, `routeurs`, `voisins` et `cle nouvelle` : 3 s en USB, qui ne perd rien ;
     /// 6 s par le reseau, au-dela du renvoi de 4 s du canal (comme les delais de Halo : 3 s en
     /// USB, 6 s a distance).
     static let delaiCommandeUSB: Duration = .seconds(3)
@@ -101,12 +101,13 @@ actor SondeUSB: InterlocuteurSonde {
     private let marge: Duration
     let delaiCommande: Duration
     private var prochainId = 1
-    /// Jetons des attentes de `bonjour`, `etat` et `routeurs` (jamais envoyes a la sonde).
+    /// Jetons des attentes de `bonjour`, `etat`, `routeurs` et `voisins` (jamais envoyes a la sonde).
     private var prochainJeton = 1
     private var attenteDiag: [Int: (cible: UInt16, suite: CheckedContinuation<ResultatDiag, Never>)] = [:]
     private var attenteEtat = FileAttentes<EtatSonde>()
     private var attenteBonjour = FileAttentes<Bonjour>()
     private var attenteRouteurs = FileAttentes<[RouteurSonde]>()
+    private var attenteVoisins = FileAttentes<[VoisinSonde]>()
     /// Parties de la table des routeurs deja recues (lignes `suite`), en attendant la derniere.
     private var routeursRecus: [RouteurSonde] = []
     private var attenteCle: [(id: Int, suite: CheckedContinuation<Result<ReponseCle, Erreur>?, Never>)] = []
@@ -192,6 +193,24 @@ actor SondeUSB: InterlocuteurSonde {
         }
         guard let t else { throw fermee ? Erreur.fermee : Erreur.sansReponse("routeurs") }
         return t
+    }
+
+    /// Routeurs voisins que la sonde entend, avec leur signal. `sansReponse` si la sonde ne rend
+    /// pas de liste dans le delai : une ligne `voisins` en erreur (`occupee`, verrou d'OpenThread)
+    /// ou `erreur` (liste trop longue par le reseau) n'est pas une liste.
+    func voisins() async throws -> [VoisinSonde] {
+        guard !fermee else { throw Erreur.fermee }
+        let jeton = nouveauJeton()
+        let v = await withCheckedContinuation { c in
+            attenteVoisins.ajouter(jeton, c)
+            canal.envoyer(CommandeSonde.voisins.ligne)
+            Task {
+                try? await Task.sleep(for: self.delaiCommande)
+                self.attenteVoisins.expirer(jeton)
+            }
+        }
+        guard let v else { throw fermee ? Erreur.fermee : Erreur.sansReponse("voisins") }
+        return v
     }
 
     private func nouveauJeton() -> Int {
@@ -280,6 +299,8 @@ actor SondeUSB: InterlocuteurSonde {
             attenteEtat.servir(e)
         case .routeurs(let p)?:
             recevoirRouteurs(p)
+        case .voisins(let v)?:
+            attenteVoisins.servir(v)
         case .bonjour(let b)?:
             if attenteBonjour.estVide {
                 bonjourSpontane = b
@@ -306,6 +327,7 @@ actor SondeUSB: InterlocuteurSonde {
         attenteEtat.liberer()
         attenteBonjour.liberer()
         attenteRouteurs.liberer()
+        attenteVoisins.liberer()
         routeursRecus = []
         attenteCle.forEach { $0.suite.resume(returning: nil) }
         attenteCle = []

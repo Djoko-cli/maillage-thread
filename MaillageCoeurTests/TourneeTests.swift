@@ -35,12 +35,17 @@ struct SondeRejouee: InterlocuteurSonde {
         var requetes: [String] = []
         /// Demandes de la table des routeurs (`routeurs`).
         var tables = 0
+        /// Demandes des voisins (`voisins`).
+        var voisins = 0
         func noter(_ r: String) { requetes.append(r) }
         func noterTable() { tables += 1 }
+        func noterVoisins() { voisins += 1 }
     }
 
     /// La sonde ne rend pas sa table (firmware sans `routeurs`, verrou d'OpenThread refuse).
     struct SansTable: Error {}
+    /// La sonde ne rend pas ses voisins (verrou d'OpenThread refuse, liste trop longue).
+    struct SansVoisins: Error {}
 
     let etatSonde: EtatSonde
     /// "<cible>|<tlv,...>" -> TLV hexa.
@@ -54,6 +59,8 @@ struct SondeRejouee: InterlocuteurSonde {
     var refus: @Sendable (String) -> String? = { _ in nil }
     /// "<cible>|<tlv,...>" dont la reponse arrive plus tard ; les autres reviennent aussitot.
     var retards: [String: Duration] = [:]
+    /// Routeurs voisins que la sonde entend ; nil : elle ne rend pas la liste.
+    var listeVoisins: [VoisinSonde]? = []
     let registre = Registre()
 
     /// Cle d'une requete : "<cible>|<tlv,...>".
@@ -67,6 +74,12 @@ struct SondeRejouee: InterlocuteurSonde {
         await registre.noterTable()
         guard let table else { throw SansTable() }
         return table
+    }
+
+    func voisins() async throws -> [VoisinSonde] {
+        await registre.noterVoisins()
+        guard let listeVoisins else { throw SansVoisins() }
+        return listeVoisins
     }
 
     /// Table des 7 routeurs de la capture, telle qu'une sonde en FED la donne : tous par leur
@@ -95,11 +108,13 @@ struct SondeRejouee: InterlocuteurSonde {
         return ResultatDiag(id: 0, cible: String(format: "%04X", cible), ok: true, ms: 50, code: "2.04", tlv: t)
     }
 
-    /// Etat de la capture apres le changement de parent : AC09, enfant de AC00 (muet) ; `ext` :
-    /// l'ExtMac de la sonde (absente de la capture) ; `table` : celle des routeurs de la sonde,
-    /// sans ExtMac par defaut (la capture vient d'une sonde en MED).
+    /// Etat de la capture apres le changement de parent : AC09, enfant de AC00 (muet), qu'elle entend
+    /// a -89 dBm ; `ext` : l'ExtMac de la sonde (absente de la capture) ; `table` : celle des routeurs
+    /// de la sonde, sans ExtMac par defaut (la capture vient d'une sonde en MED) ; `voisins` : aucun par
+    /// defaut (la capture n'en a pas).
     static func capture(chef: Int = 24, ext: String? = nil, reponsesEnPlus: [String: String] = [:],
-                        table: [RouteurSonde]? = SondeRejouee.table(), tropLongs: Set<String> = []) throws -> SondeRejouee {
+                        table: [RouteurSonde]? = SondeRejouee.table(), tropLongs: Set<String> = [],
+                        voisins: [VoisinSonde]? = []) throws -> SondeRejouee {
         let champExt = ext.map { #","ext":"\#($0)""# } ?? ""
         let base = #"{"v":1,"t":"etat","role":"child","rloc16":"AC09"\#(champExt),"mode":"rn","parent":{"rloc16":"AC00","ext":"E000000000000007","lqIn":3,"lqOut":3,"rssi":-89},"partition":"46CBEBCD","chef":\#(chef),"canal":25,"prefixeMaille":"FD00111122220C87","xp":"A0A1A2A3A4A5A6A7","suspendue":false}"#
         guard case .etat(let e)? = MessageSonde.lire(Data(base.utf8)) else { throw CaptureSonde.ErreurCapture(id: 0) }
@@ -117,19 +132,19 @@ struct SondeRejouee: InterlocuteurSonde {
         ]
         for (n, id) in zip(3...8, 503...508) { r[String(format: "AC%02X|0,1,2,8", n)] = try CaptureSonde.tlv(id) }
         r.merge(reponsesEnPlus) { _, b in b }
-        return SondeRejouee(etatSonde: e, reponses: r, table: table, tropLongs: tropLongs)
+        return SondeRejouee(etatSonde: e, reponses: r, table: table, tropLongs: tropLongs, listeVoisins: voisins)
     }
 
     /// La meme sonde, avec seulement les reponses dont la cle est gardee ; registre neuf.
     func filtree(_ garder: (String) -> Bool) -> SondeRejouee {
         SondeRejouee(etatSonde: etatSonde, reponses: reponses.filter { garder($0.key) }, table: table, tropLongs: tropLongs,
-                     refus: refus, retards: retards)
+                     refus: refus, retards: retards, listeVoisins: listeVoisins)
     }
 
     /// La meme sonde, qui refuse (`erreur`) les requetes dont la cle est choisie ; registre neuf.
     func refusant(_ erreur: String = "occupee", _ choisies: @escaping @Sendable (String) -> Bool) -> SondeRejouee {
         SondeRejouee(etatSonde: etatSonde, reponses: reponses, table: table, tropLongs: tropLongs,
-                     refus: { choisies($0) ? erreur : nil }, retards: retards)
+                     refus: { choisies($0) ? erreur : nil }, retards: retards, listeVoisins: listeVoisins)
     }
 }
 
@@ -143,6 +158,7 @@ struct SondeFermee: InterlocuteurSonde {
 
     func etat() async throws -> EtatSonde { try await base.etat() }
     func routeurs() async throws -> [RouteurSonde] { try await base.routeurs() }
+    func voisins() async throws -> [VoisinSonde] { try await base.voisins() }
 
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
         if SondeRejouee.cle(cible, tlv) == sur { throw Fermee() }
@@ -1020,18 +1036,19 @@ struct TourneeTests {
         #expect(r.memoire == mem, "memoire inchangee")
         #expect(await sonde.registre.requetes.isEmpty)
         #expect(await sonde.registre.tables == 0, "ni la table des routeurs")
+        #expect(await sonde.registre.voisins == 0, "ni les voisins")
     }
 
     /// Avancement de la premiere tournee : les six etapes dans l'ordre, chacune annoncee a 0
     /// puis une requete a la fois jusqu'a son total, connu des son debut ici. Les totaux sont
-    /// les requetes envoyees : `etat` et `routeurs` pour la sonde, 48 pour le balayage.
+    /// les requetes envoyees : `etat`, `routeurs` et `voisins` pour la sonde, 48 pour le balayage.
     @Test func avancementPremiere() async throws {
         let sonde = try SondeRejouee.capture()
         let releve = ReleveAvancement()
         _ = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
                                                    avancement: { releve.noter($0) }))
         #expect(releve.etapes == AvancementTournee.Etape.allCases)
-        let totaux: [AvancementTournee.Etape: Int] = [.etatSonde: 2, .listeRouteurs: 1, .routeurs: 7, .pileEtReseau: 3,
+        let totaux: [AvancementTournee.Etape: Int] = [.etatSonde: 3, .listeRouteurs: 1, .routeurs: 7, .pileEtReseau: 3,
                                                        .balayage: 48, .identites: 6]
         for (etape, total) in totaux {
             let a = releve.de(etape)
@@ -1039,8 +1056,10 @@ struct TourneeTests {
             #expect(a.allSatisfy { $0.total == total }, "\(etape)")
         }
         let requetes = await sonde.registre.requetes
-        #expect(requetes.count == totaux.values.reduce(0, +) - 2, "une requete diag par pas, hors etat et routeurs de la sonde")
+        #expect(requetes.count == totaux.values.reduce(0, +) - 3,
+                "une requete diag par pas, hors etat, routeurs et voisins de la sonde")
         #expect(await sonde.registre.tables == 1)
+        #expect(await sonde.registre.voisins == 1)
         #expect(requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48)
     }
 
@@ -1130,6 +1149,32 @@ struct TourneeTests {
         }
     }
 
+    /// Signal des routeurs que la sonde entend (valeurs inventees) : son parent AC00 par `etat`
+    /// (-89 dBm), qui passe avant sa ligne de `voisins` ; E400 par `voisins`. Ni un RSSI invalide
+    /// (127, CC00), ni un enfant, ni un routeur hors de la liste (0800). Une demande par tournee.
+    @Test func signauxDeLaSonde() async throws {
+        let voisins = [VoisinSonde(rloc16: "E400", ext: "E0000000000000E4", rssi: -72, lqi: 3, routeur: true),
+                       VoisinSonde(rloc16: "CC00", ext: "E0000000000000CC", rssi: 127, lqi: 0, routeur: true),
+                       VoisinSonde(rloc16: "AC00", ext: "E000000000000007", rssi: -60, lqi: 3, routeur: true),
+                       VoisinSonde(rloc16: "0800", ext: "E0000000000000EE", rssi: -80, lqi: 2, routeur: true),
+                       VoisinSonde(rloc16: "5003", ext: "E0000000000000A3", rssi: -50, lqi: 3, routeur: false)]
+        let sonde = try SondeRejouee.capture(voisins: voisins)
+        let (m, _) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(m.signaux == [SignalSonde(routeur: 43, rssi: -89), SignalSonde(routeur: 57, rssi: -72)])
+        #expect(m.parentSonde == 43)
+        #expect(await sonde.registre.voisins == 1)
+    }
+
+    /// Pas de liste des voisins (verrou d'OpenThread refuse...) : la tournee continue, avec le seul
+    /// signal du parent.
+    @Test func sansVoisins() async throws {
+        let sonde = try SondeRejouee.capture(voisins: nil)
+        let (m, _) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(m.routeurs.count == 7)
+        #expect(m.signaux == [SignalSonde(routeur: 43, rssi: -89)])
+        #expect(await sonde.registre.voisins == 1)
+    }
+
     /// Sonde pas encore dans le reseau.
     @Test func nonAttachee() async throws {
         let base = #"{"v":1,"t":"etat","role":"disabled","rloc16":"FFFE","mode":"rn","parent":null,"partition":null,"chef":null,"canal":11,"prefixeMaille":null,"xp":null,"suspendue":false}"#
@@ -1143,8 +1188,9 @@ struct TourneeTests {
                                            avancement: { releve.noter($0) })
         #expect(r.maillage == nil && r.memoire == MemoireTournee())
         #expect(await sonde.registre.tables == 0, "pas de table hors d'une partition")
-        #expect(releve.avancements == [AvancementTournee(etape: .etatSonde, fait: 0, total: 2),
-                                       AvancementTournee(etape: .etatSonde, fait: 1, total: 2)],
+        #expect(await sonde.registre.voisins == 0, "ni de voisins")
+        #expect(releve.avancements == [AvancementTournee(etape: .etatSonde, fait: 0, total: 3),
+                                       AvancementTournee(etape: .etatSonde, fait: 1, total: 3)],
                 "l'etape s'arrete avant son total")
     }
 }

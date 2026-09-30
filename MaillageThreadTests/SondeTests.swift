@@ -77,18 +77,25 @@ final class CanalRejoue: CanalSonde {
         return #"{"v":1,"t":"routeurs","liste":[\#(liste.joined(separator: ","))],"suite":\#(suite)}"#
     }
 
+    /// Ligne `voisins` : chaque routeur par son RLOC16 et son signal (ExtMac inventee).
+    static func voisins(_ liste: [(rloc16: String, rssi: Int)]) -> String {
+        let l = liste.map { #"{"rloc16":"\#($0.rloc16)","ext":"E0000000000000\#($0.rloc16.prefix(2))","rssi":\#($0.rssi),"lqi":3,"routeur":true}"# }
+        return #"{"v":1,"t":"voisins","liste":[\#(l.joined(separator: ","))]}"#
+    }
+
     /// Sonde attachee (valeurs inventees) : enfant 0001 du routeur 0, qui est le chef.
     static let etatAttache = #"{"v":1,"t":"etat","role":"child","rloc16":"0001","mode":"rn","parent":null,"partition":"0000000A","chef":0,"canal":25,"prefixeMaille":"FD00000000000000","xp":null,"suspendue":false}"#
 
     /// Reseau d'un seul routeur, le chef 0, qui ne donne que sa Route64 : la tournee
     /// aboutit (maillage d'un routeur muet, sans enfant). `diag <cible> <tlv> <id> <ms>` :
     /// la Route64 a la demande de la liste des routeurs, `delai` a toute autre requete ;
-    /// `routeurs` : le chef seul, parent de la sonde, donc sans ExtMac.
+    /// `routeurs` : le chef seul, parent de la sonde, donc sans ExtMac ; `voisins` : aucun.
     static func reseauMinimal(_ ligne: String) -> [String] {
         switch ligne {
         case "bonjour\n": return [bonjour]
         case "etat\n": return [etatAttache]
         case "routeurs\n": return [routeurs([("0000", nil)], suite: false)]
+        case "voisins\n": return [voisins([])]
         default: break
         }
         let mots = ligne.trimmingCharacters(in: .newlines).split(separator: " ").map(String.init)
@@ -356,6 +363,17 @@ struct SondeUSBTests {
         await #expect(throws: SondeUSB.Erreur.fermee) { _ = try await requete.value }
     }
 
+    /// `voisins` : les routeurs que la sonde entend, avec leur signal (valeurs inventees).
+    @Test func voisins() async throws {
+        let canal = CanalRejoue { l in l == "voisins\n" ? [CanalRejoue.voisins([("E400", -72), ("CC00", -80)])] : [] }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        let v = try await s.voisins()
+        #expect(v.map(\.rloc16) == ["E400", "CC00"])
+        #expect(v.map(\.rssi) == [-72, -80])
+        #expect(canal.envoyes == ["voisins\n"])
+    }
+
     /// Un bonjour non demande : la sonde vient de redemarrer.
     @Test func bonjourSpontane() async throws {
         let canal = CanalRejoue { _ in [] }
@@ -389,7 +407,7 @@ struct SondeUSBTests {
     /// L'echeance d'une requete deja servie n'expire pas la suivante : la premiere est servie
     /// tard (a 0,45 s, delai de 0,8 s), la seconde part aussitot et sa reponse arrive a 0,9 s,
     /// apres l'echeance de la premiere (0,8 s) et avant la sienne (1,25 s).
-    @Test(.timeLimit(.minutes(1)), arguments: ["bonjour", "etat", "routeurs"])
+    @Test(.timeLimit(.minutes(1)), arguments: ["bonjour", "etat", "routeurs", "voisins"])
     func echeanceDUneRequeteServie(_ commande: String) async throws {
         let canal = CanalRejoue { _ in [] }
         let s = SondeUSB(canal: canal, delaiCommande: .milliseconds(800))
@@ -397,12 +415,14 @@ struct SondeUSBTests {
         let reponse = switch commande {
         case "bonjour": CanalRejoue.bonjour
         case "etat": CanalRejoue.etatDetache
+        case "voisins": CanalRejoue.voisins([("0400", -70)])
         default: CanalRejoue.routeurs([("0400", nil)], suite: false)
         }
         @Sendable func requete() async throws {
             switch commande {
             case "bonjour": _ = try await s.bonjour()
             case "etat": _ = try await s.etat()
+            case "voisins": _ = try await s.voisins()
             default: _ = try await s.routeurs()
             }
         }
