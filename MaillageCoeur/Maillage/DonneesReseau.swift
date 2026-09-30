@@ -13,8 +13,6 @@ public struct DonneesReseau: Hashable, Sendable {
     /// forcement en tete : `ConstructionMaillage.reseau(_:)`, qui seul le connait, le prefere s'il
     /// est parmi les serveurs.
     public private(set) var bbr: [UInt16] = []
-    /// Ceux qui publient un prefixe /64 en Border Router (le prefixe OMR).
-    public private(set) var publientOMR: [UInt16] = []
 
     static let prefixe: UInt8 = 1, service: UInt8 = 5
     static let aUneRoute: UInt8 = 0, routeurDeBordure: UInt8 = 2, serveur: UInt8 = 6
@@ -48,9 +46,7 @@ public struct DonneesReseau: Hashable, Sendable {
         for (t, s) in sous {
             switch t {
             case Self.routeurDeBordure:
-                let r = stride(from: 0, to: s.count - 3, by: 4).map { UInt16(s[$0]) << 8 | UInt16(s[$0 + 1]) }
-                routeursDeBordure.formUnion(r)
-                if bits == 64 { publientOMR += r.filter { !publientOMR.contains($0) } }
+                routeursDeBordure.formUnion(stride(from: 0, to: s.count - 3, by: 4).map { UInt16(s[$0]) << 8 | UInt16(s[$0 + 1]) })
             case Self.aUneRoute:
                 routeursDeBordure.formUnion(stride(from: 0, to: s.count - 2, by: 3).map { UInt16(s[$0]) << 8 | UInt16(s[$0 + 1]) })
             default: break
