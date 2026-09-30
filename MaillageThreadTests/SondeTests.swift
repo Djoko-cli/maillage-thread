@@ -689,6 +689,43 @@ struct SondeMaillageTests {
         await s.oublier()
     }
 
+    /// Le nouvel essai planifie est perime si la sonde est debranchee, oubliee, ou si un autre port
+    /// est choisi pendant son attente : il n'ouvre rien (aucun port qu'on ne lui a pas designe).
+    @Test(.timeLimit(.minutes(1)), arguments: ["debranchee", "oubliee", "autre port choisi"])
+    func nouvelEssaiPerime(_ cas: String) async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
+        let autre = PortUSB(chemin: "/dev/cu.usbmodemFACTICE02", vid: 0x303A, pid: 0x1001, serie: "B0:00:00:00:00:02",
+                            produit: nil)
+        let journal = JournalCanaux()
+        var ouverts: [String] = []
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { chemin -> any CanalSonde in
+            ouverts.append(chemin)
+            return chemin == autre.chemin ? CanalTemoin("autre", journal: journal, retenirBonjour: true) : CanalEnPanne()
+        }, delaiNouvelEssai: .milliseconds(50))
+        // Connexion automatique en echec : a son retour, le nouvel essai est planifie, et le
+        // changement suit dans le meme tour de l'acteur principal, avant qu'il ne parte.
+        await s.connecter(Self.port, choisi: false)
+        guard case .erreur = s.etat else {
+            Issue.record("etat \(s.etat)")
+            return
+        }
+        switch cas {
+        case "debranchee": s.portsChanges([])
+        case "oubliee": await s.oublier()
+        default: s.choisir(autre)
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(ouverts.filter { $0 == Self.port.chemin }.count == 1, "\(cas) : \(ouverts)")
+        switch cas {
+        case "debranchee": #expect(s.etat == .absente)
+        case "oubliee": #expect(s.etat == .sansSonde)
+        default: #expect(s.etat == .connexion, "le choix continue")
+        }
+        await s.oublier()
+    }
+
     /// Reseau minimal dans une partition donnee ; la table des routeurs donne l'ExtMac du chef 0
     /// (muet : il ne rend que sa Route64) s'il est entendu (valeur inventee).
     static func canalIdentites(ext: String?, partition: String) -> CanalRejoue {
