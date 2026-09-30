@@ -167,7 +167,10 @@ struct FicheNoeud: View {
         let f = RelativeDateTimeFormatter()
         f.dateTimeStyle = .named
         f.unitsStyle = .full
-        return f.localizedString(for: d, relativeTo: reference)
+        // L'heure de la fiche est un debut de minute (TimelineView de la fenetre) : une date plus
+        // recente, d'un releve fait depuis, se lirait « dans 20 secondes ». Jamais dans le futur :
+        // « maintenant » jusqu'a la minute suivante (la spec admet une minute de retard).
+        return f.localizedString(for: d, relativeTo: max(d, reference))
     }
 
     /// Present : l'instantane integre (un releve vide ne compte pas) ; disparu : sa premiere absence.

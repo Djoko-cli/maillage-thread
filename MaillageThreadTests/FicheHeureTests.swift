@@ -38,4 +38,12 @@ struct FicheHeureTests {
         #expect(rendu(vu.addingTimeInterval(60)) == uneMinute)
         #expect(rendu(vu.addingTimeInterval(3 * 3600)) != uneMinute)
     }
+
+    /// L'heure de la fiche est un debut de minute : une date plus recente se lit « maintenant »,
+    /// jamais dans le futur ; une date passee reste relative. Independant de la langue.
+    @Test func jamaisDansLeFutur() {
+        let t = Date(timeIntervalSince1970: 1_790_000_000)
+        #expect(FicheNoeud.relatif(t.addingTimeInterval(20), t) == FicheNoeud.relatif(t, t))
+        #expect(FicheNoeud.relatif(t.addingTimeInterval(-120), t) != FicheNoeud.relatif(t, t))
+    }
 }

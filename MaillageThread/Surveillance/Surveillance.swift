@@ -243,7 +243,8 @@ final class Surveillance {
 
     var instantane: Instantane? { suivi.instantane }
 
-    /// Reference des durees affichees ("vu il y a...") : la fin de la panne rejouee en demo.
+    /// Reference a l'heure du Mac : la fraicheur du graphe et le maillage de la demo ; la fin de la
+    /// panne rejouee en demo. La fiche passe par `maintenant(a:)`, a l'heure de sa fenetre.
     var maintenant: Date { maintenant(a: Date()) }
 
     /// Reference des durees a l'heure `horloge` (celle de la fenetre du graphe, que sa `TimelineView`
