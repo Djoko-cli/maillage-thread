@@ -191,43 +191,4 @@ Reprises reprisesDiag(uint32_t delaiMs) {
   return r;
 }
 
-// ===========================================================================
-//  LED de la carte
-// ===========================================================================
-
-void Voyant::demarrer(bool suspendue, uint32_t maintenant) {
-  sequence_ = kAucune;
-  suspendue_ = suspendue;
-  prochain_ = maintenant;
-}
-
-void Voyant::changer(bool suspendue, uint32_t maintenant) {
-  sequence_ = suspendue ? kOrangeLong : kDeuxVerts;
-  debut_ = maintenant;
-  suspendue_ = suspendue;
-  prochain_ = maintenant + kPeriodeMs;
-}
-
-Voyant::Couleur Voyant::couleur(uint32_t maintenant) {
-  const uint32_t t = maintenant - debut_;
-  if (sequence_ == kDeuxVerts) {
-    // Vert, pause, vert, d'une duree kVertMs chacun.
-    if (t < 3 * kVertMs) return t / kVertMs == 1 ? kNoire : kVerte;
-    sequence_ = kAucune;
-  } else if (sequence_ == kOrangeLong) {
-    if (t < kExtinctionMs) return kOrange;
-    sequence_ = kAucune;
-  }
-  if (!suspendue_) return kNoire;
-  // Ecart depuis le prochain bref eclair : au-dela de 2^31 ms, il est encore a
-  // venir (prochain_ n'est jamais a plus d'une periode en avance).
-  const uint32_t e = maintenant - prochain_;
-  if (e >= 0x80000000u) return kNoire;
-  if (e % kPeriodeMs < kBrefMs) return kOrange;
-  // Eclair fini (plusieurs si loop() a ete retenue) : le suivant, sur la meme
-  // grille de 10 s.
-  prochain_ += (e / kPeriodeMs + 1) * kPeriodeMs;
-  return kNoire;
-}
-
 }  // namespace distant

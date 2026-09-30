@@ -1,7 +1,9 @@
 #!/bin/sh
 # Tests hote purs de la sonde, sans carte : enveloppe H1 (test_h1.cpp, repris
-# du pont Halo de benq) et commandes a distance (test_distant.cpp : rid, liste
-# blanche, reponses gardees, cadence).
+# du pont Halo de benq) et briques pures (test_distant.cpp : commandes a
+# distance, soit rid, liste blanche, reponses gardees et cadence ; depuis la
+# 1.0.3, entiers des commandes, reprises CoAP d'un diag et LED de la carte,
+# voyant.h).
 #
 #   sh sonde/test/lancer.sh
 #

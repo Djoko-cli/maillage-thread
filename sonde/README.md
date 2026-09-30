@@ -194,7 +194,7 @@ par `outils/anonymiser-sonde.py` avant de les mettre dans le dépôt.
 
 `sh sonde/test/lancer.sh` : les tests hôte purs, sans carte (clang, ASan et
 UBSan ; ce ne sont pas des tests `pio test`) : l'enveloppe H1
-(`test_h1.cpp`, repris de benq) et les briques pures de `distant.cpp`
-(`test_distant.cpp` : rid, liste blanche, réponses gardées, cadence ; depuis
-la 1.0.3, lecture des entiers, reprises CoAP d'un `diag` et séquence de la
-LED).
+(`test_h1.cpp`, repris de benq) et les briques pures de `distant.cpp` et
+de `voyant.h` (`test_distant.cpp` : rid, liste blanche, réponses gardées,
+cadence ; depuis la 1.0.3, lecture des entiers, reprises CoAP d'un `diag` et
+séquence de la LED).

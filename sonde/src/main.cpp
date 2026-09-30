@@ -97,6 +97,7 @@
 #include "distant.h"
 #include "h1_proto.h"
 #include "reseau.h"
+#include "voyant.h"
 
 static const char *const kVersion = "1.0.3";
 
@@ -185,8 +186,10 @@ static MatterOnOffPlugin sInterrupteur;  // « Sonde maillage »
 // MatterOnOffPlugin d'Arduino-ESP32 : relu au demarrage, allume par defaut.
 static Preferences sPreferences;
 static const char *const kCleInterrupteur = "interrupteur";
-// Pose par demarrerMatter(), puis par le rappel Matter (tache CHIP) ; lu par
-// loop(), qui en tire aussi la LED.
+// Pose par demarrerMatter(), puis par le rappel de l'interrupteur
+// (surInterrupteur) : dans la tache CHIP quand Maison le change, dans celle
+// de loop() pour updateAccessory() au demarrage et pour setOnOff() d'oubli.
+// Lu par loop(), qui en tire aussi la LED.
 static std::atomic<bool> sSuspendue{false};
 static bool sThreadPret = false;  // pile Thread creee par Matter.begin()
 static char sMac[13] = "?";
@@ -904,9 +907,11 @@ static void cmdCle(char *args) {
 // (cle_effacee false : la NVS a refuse, la cle reviendra au redemarrage ;
 // cle efface ensuite). USB seulement.
 // La sonde revient allumee, comme a sa premiere mise en service (1.0.3) :
-// setOnOff(true) allume l'interrupteur dans Matter et passe par le rappel
-// (surInterrupteur), qui garde l'etat dans la NVS de la sonde, que
-// decommission() n'efface pas. Deja allume : rien a faire.
+// setOnOff(true) met l'attribut de Matter a allume (et, s'il change, passe
+// par le rappel surInterrupteur), puis l'etat allume est ecrit dans la NVS
+// de la sonde, que decommission() n'efface pas. Ecrit ici dans tous les
+// cas : setOnOff rend sans appeler le rappel quand onOffState ou l'attribut
+// valent deja allume, et la NVS pourrait alors dire eteint.
 static void cmdOubli() {
   if (sSortie.reseau) return repondreErreur("refuse");
   const bool effacee = effacerCle();
@@ -915,6 +920,7 @@ static void cmdOubli() {
   fin();
   Serial.flush();
   sInterrupteur.setOnOff(true);
+  sPreferences.putBool(kCleInterrupteur, true);
   Matter.decommission();  // efface l'appairage et redemarre
 }
 
@@ -1005,19 +1011,19 @@ void reseauRecu(uint8_t place, char *charge) {
 // plus fort que son rouge). Ordre GRB par defaut de rgbLedWrite.
 static constexpr uint8_t kBrocheVoyant = 8;
 static constexpr uint8_t kVoyantMax = 24;
-static distant::Voyant sVoyant;
+static Voyant sVoyant;
 static bool sVoyantSuspendue = false;  // etat de l'interrupteur que la LED montre
 static int sVoyantEcrit = -1;          // couleur ecrite ; -1 : rien encore
 
 // rgbLedWrite (Arduino-ESP32 3.x) : 24 bits par le RMT, environ 30 us ; le
 // canal RMT est cree au premier appel, puis reutilise. Seulement si la
 // couleur change.
-static void ecrireVoyant(distant::Voyant::Couleur c) {
+static void ecrireVoyant(Voyant::Couleur c) {
   if ((int)c == sVoyantEcrit) return;
   sVoyantEcrit = (int)c;
   switch (c) {
-    case distant::Voyant::kVerte: rgbLedWrite(kBrocheVoyant, 0, kVoyantMax, 0); break;
-    case distant::Voyant::kOrange: rgbLedWrite(kBrocheVoyant, kVoyantMax, kVoyantMax / 4, 0); break;
+    case Voyant::kVerte: rgbLedWrite(kBrocheVoyant, 0, kVoyantMax, 0); break;
+    case Voyant::kOrange: rgbLedWrite(kBrocheVoyant, kVoyantMax, kVoyantMax / 4, 0); break;
     default: rgbLedWrite(kBrocheVoyant, 0, 0, 0); break;
   }
 }
@@ -1063,7 +1069,7 @@ void setup() {
   // LED au noir d'abord : une WS2812 garde sa couleur a travers un redemarrage
   // (son alimentation ne coupe pas). IO8, broche de strapping, est deja
   // echantillonnee a ce stade.
-  ecrireVoyant(distant::Voyant::kNoire);
+  ecrireVoyant(Voyant::kNoire);
   demarrerMatter();
   reseauDebut();
   // Etat relu de la NVS : suspendue, un bref eclair orange des le premier tour.

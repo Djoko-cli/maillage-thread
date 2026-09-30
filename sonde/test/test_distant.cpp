@@ -1,6 +1,7 @@
-// Tests hote de sonde/src/distant.{h,cpp} : rid, liste blanche, reponses
-// gardees, cadence ; entiers des commandes, reprises CoAP d'un diag, LED de
-// la carte (1.0.3). Lancer : sh sonde/test/lancer.sh
+// Tests hote de sonde/src/distant.{h,cpp} (rid, liste blanche, reponses
+// gardees, cadence ; depuis la 1.0.3, entiers des commandes et reprises CoAP
+// d'un diag) et de sonde/src/voyant.h (LED de la carte, 1.0.3).
+// Lancer : sh sonde/test/lancer.sh
 #include <stdio.h>
 #include <string.h>
 
@@ -8,6 +9,7 @@
 #include <vector>
 
 #include "distant.h"
+#include "voyant.h"
 
 using namespace distant;
 

@@ -1,6 +1,7 @@
 #pragma once
 // ===========================================================================
-//  Briques pures de la sonde (contrat de la 1.0.2, complete en 1.0.3)
+//  Commandes de la sonde : briques pures (contrat de la 1.0.2, complete en
+//  1.0.3)
 //
 //  Commandes recues par le reseau. Charge d'un message H1 de l'app :
 //  "<rid> <commande>". rid : entier decimal choisi par l'app
@@ -24,8 +25,9 @@
 //    (Cadence, copie de celle du pont Halo) ; au-dela, rien (l'app renvoie).
 //    main.cpp compte ces refus (1.0.3 : cle, udp.refus_cadence).
 //
-//  Aussi, pour main.cpp (1.0.3) : les entiers des commandes (lireEntier), les
-//  reprises CoAP d'un diag (reprisesDiag) et la LED de la carte (Voyant).
+//  Aussi (1.0.3), pour les commandes de l'USB comme du reseau : les entiers
+//  de leurs arguments (lireEntier : id et delai de diag, id de cle nouvelle)
+//  et les reprises CoAP d'un diag (reprisesDiag).
 //
 //  Pur et sans Arduino : teste sur l'hote par sonde/test/test_distant.cpp ;
 //  lancer : sh sonde/test/lancer.sh (clang, ASan et UBSan, avec le test H1).
@@ -123,40 +125,5 @@ struct Reprises {
   uint8_t reprises;
 };
 Reprises reprisesDiag(uint32_t delaiMs);
-
-// LED de la carte (WS2812 de la SuperMini, 1.0.3) : la couleur a montrer a
-// chaque instant, d'apres l'interrupteur « Sonde maillage » de Maison.
-//  - allume : deux eclairs verts rapides ;
-//  - eteint : un eclair orange d'une demi-seconde ;
-//  - tant que la sonde est suspendue : un bref eclair orange toutes les 10 s,
-//    aussi apres un redemarrage (le premier des le demarrage) ;
-//  - sinon, eteinte.
-// main.cpp la pilote dans loop(), jamais sous le verrou OpenThread ni depuis
-// le rappel Matter (qui ne fait que poser l'etat). Instants de millis() :
-// des ecarts non signes, et une sequence finie est oubliee au premier appel
-// qui la voit finie, si bien que le retour a zero de millis() ne ranime rien.
-class Voyant {
- public:
-  enum Couleur : uint8_t { kNoire, kVerte, kOrange };
-  static constexpr uint32_t kVertMs = 100;         // chaque eclair vert, et la pause entre eux
-  static constexpr uint32_t kExtinctionMs = 500;   // eclair orange quand l'interrupteur s'eteint
-  static constexpr uint32_t kBrefMs = 100;         // bref eclair orange de la suspension...
-  static constexpr uint32_t kPeriodeMs = 10000;    // ... toutes les 10 s
-
-  // Demarrage, avec l'etat relu de la NVS : aucun eclair de changement.
-  void demarrer(bool suspendue, uint32_t maintenant);
-  // L'interrupteur vient de changer : eclairs verts ou eclair orange, puis,
-  // suspendue, le premier bref eclair une periode plus tard.
-  void changer(bool suspendue, uint32_t maintenant);
-  // Couleur a montrer maintenant ; a appeler a chaque tour de loop().
-  Couleur couleur(uint32_t maintenant);
-
- private:
-  enum Sequence : uint8_t { kAucune, kDeuxVerts, kOrangeLong };
-  Sequence sequence_ = kAucune;
-  uint32_t debut_ = 0;  // debut de la sequence
-  bool suspendue_ = false;
-  uint32_t prochain_ = 0;  // debut du prochain bref eclair, ou de celui en cours
-};
 
 }  // namespace distant
