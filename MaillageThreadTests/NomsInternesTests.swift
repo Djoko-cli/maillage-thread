@@ -46,6 +46,72 @@ enum FauxPasseur {
             suite.withLock { $0.take() }?.resume(returning: fermee)
         }
     }
+
+    /// Client de la boucle locale qui reste connecte : il envoie les octets qu'on lui donne sans
+    /// fermer son cote, puis se ferme proprement (`terminer`, comme le passeur) ou est coupe net
+    /// (`couper`, la connexion est reinitialisee). Il se connecte des sa creation, sans attendre.
+    final class Client: Sendable {
+        private let connexion: NWConnection
+        private let etat = Mutex<NWConnection.State>(.setup)
+
+        init?(port: UInt16) {
+            guard let p = NWEndpoint.Port(rawValue: port) else { return nil }
+            connexion = NWConnection(host: "127.0.0.1", port: p, using: .tcp)
+            connexion.stateUpdateHandler = { [weak self] nouvel in self?.etat.withLock { $0 = nouvel } }
+            connexion.start(queue: .global())
+        }
+
+        deinit {
+            connexion.cancel()
+        }
+
+        /// La connexion est etablie.
+        var pret: Bool { etat.withLock { $0 == .ready } }
+
+        /// Attend que la connexion soit etablie, au plus `delai` ; faux si elle echoue (rien
+        /// n'ecoute sur ce port).
+        func attendre(delai: Duration = .seconds(5)) async -> Bool {
+            let fin = ContinuousClock.now + delai
+            while ContinuousClock.now < fin {
+                switch etat.withLock({ $0 }) {
+                case .ready: return true
+                case .waiting, .failed, .cancelled: return false
+                default: try? await Task.sleep(for: .milliseconds(2))
+                }
+            }
+            return false
+        }
+
+        /// Envoie ces octets sans fermer son cote ; vrai s'ils sont partis.
+        func envoyer(_ octets: Data) async -> Bool {
+            await withCheckedContinuation { (suite: CheckedContinuation<Bool, Never>) in
+                connexion.send(content: octets, completion: .contentProcessed { erreur in
+                    suite.resume(returning: erreur == nil)
+                })
+            }
+        }
+
+        /// Envoie ces octets (s'il y en a) et ferme son cote, puis attend que l'app ferme la
+        /// connexion, au plus 5 s ; vrai si elle l'a fermee.
+        func terminer(_ octets: Data = Data()) async -> Bool {
+            await withCheckedContinuation { (suite: CheckedContinuation<Bool, Never>) in
+                let reprise = Reprise(suite)
+                DispatchQueue.global().asyncAfter(deadline: .now() + 5) { reprise.reprendre(false) }
+                connexion.send(content: octets.isEmpty ? nil : octets, contentContext: .finalMessage,
+                               isComplete: true, completion: .contentProcessed { [connexion] erreur in
+                    guard erreur == nil else { return reprise.reprendre(false) }
+                    connexion.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, fin, e in
+                        reprise.reprendre(fin || e != nil)
+                    }
+                })
+            }
+        }
+
+        /// Coupe net, sans fermeture propre : l'app recoit une erreur de connexion.
+        func couper() {
+            connexion.forceCancel()
+        }
+    }
 }
 
 /// Lancements du passeur demandes par l'app, dans l'ordre (leurs arguments).
@@ -105,6 +171,40 @@ struct NomsInternesTests {
         let fin = ContinuousClock.now + delai
         while n.releveEnCours, ContinuousClock.now < fin { try? await Task.sleep(for: .milliseconds(5)) }
         #expect(!n.releveEnCours, "releve fini")
+    }
+
+    /// Attend que le faux lanceur ait ete appele `fois` fois, au plus 10 s ; rend la cible du
+    /// dernier lancement.
+    static func cible(_ lancements: LancementsPasseur, fois: Int = 1) async -> EnvoiPasseur.Cible? {
+        let fin = ContinuousClock.now + .seconds(10)
+        while lancements.tous.count < fois, ContinuousClock.now < fin { try? await Task.sleep(for: .milliseconds(5)) }
+        return lancements.cible
+    }
+
+    /// Attend la fin du releve en cours, au plus `delai`.
+    static func attendre(_ n: NomsInternes, delai: Duration = .seconds(10)) async {
+        let fin = ContinuousClock.now + delai
+        while n.releveEnCours, ContinuousClock.now < fin { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(!n.releveEnCours, "releve fini")
+    }
+
+    /// Attend que plus rien n'ecoute sur ce port, au plus 5 s : l'app a alors accepte une
+    /// connexion. Chaque essai est un client de plus, que l'app ferme aussitot si l'ecoute
+    /// n'est pas encore fermee.
+    static func ecouteFermee(port: UInt16) async -> Bool {
+        let fin = ContinuousClock.now + .seconds(5)
+        while ContinuousClock.now < fin {
+            if await !FauxPasseur.envoyer(Data("essai".utf8), port: port) { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return false
+    }
+
+    /// Occupe le fil principal, sans rendre la main a sa file, jusqu'a `condition` (au plus 5 s) :
+    /// l'ecoute, qui livre ses connexions sur cette file, n'en traite aucune pendant ce temps.
+    static func occuper(jusqua condition: () -> Bool) {
+        let fin = ContinuousClock.now + .seconds(5)
+        while !condition(), ContinuousClock.now < fin { usleep(1000) }
     }
 
     /// Textes de l'app, dans la langue de l'hote des tests.
@@ -322,6 +422,76 @@ struct NomsInternesTests {
         #expect(seconde.jeton != cible.jeton, "jeton a usage unique")
         #expect(await FauxPasseur.envoyer(try Self.bonneTrame(Self.noms(nom: "Pont"))(seconde.jeton), port: seconde.port))
         #expect(n.noms == Self.noms(nom: "Pont"))
+    }
+
+    /// Un NomsInternes qui disparait pendant un releve ne laisse pas d'ecoute ouverte : a la fin
+    /// du delai, la minuterie la ferme.
+    @Test func ecouteFermeeSiNomsInternesDisparait() async throws {
+        let cache = Self.cache()
+        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
+        let lancements = LancementsPasseur()
+        var n: NomsInternes? = NomsInternes(cache: cache, delai: .milliseconds(100),
+                                            lanceur: Self.lanceur(lancements))
+        n?.lancerPasseur()
+        let cible = try #require(await Self.cible(lancements))
+        n = nil
+        try? await Task.sleep(for: .seconds(1))
+        #expect(await !FauxPasseur.envoyer(Data("x".utf8), port: cible.port), "ecoute fermee par la minuterie")
+    }
+
+    /// Une seule connexion par releve : des que la premiere est acceptee, meme sans sa trame
+    /// finie, l'ecoute est fermee. Un second client ne trouve plus personne, et le releve reste
+    /// celui du premier.
+    @Test func uneSeuleConnexion() async throws {
+        let cache = Self.cache()
+        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
+        let lancements = LancementsPasseur()
+        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(lancements))
+        n.lancerPasseur()
+        let cible = try #require(await Self.cible(lancements))
+        let trame = EnvoiPasseur.trame(jeton: cible.jeton, json: try Self.noms().donnees())
+        let moitie = trame.count / 2
+        let premier = try #require(FauxPasseur.Client(port: cible.port))
+        #expect(await premier.attendre(), "premier client connecte")
+        #expect(await premier.envoyer(trame.prefix(moitie)))
+        #expect(await Self.ecouteFermee(port: cible.port), "ecoute fermee des la premiere connexion")
+        #expect(n.releveEnCours, "le premier client n'a pas fini : le releve continue")
+        #expect(n.noms == nil && n.probleme == nil)
+        #expect(await premier.terminer(trame.dropFirst(moitie)))
+        await Self.attendre(n)
+        #expect(n.noms == Self.noms(), "le releve est celui du premier client")
+        #expect(n.probleme == nil)
+    }
+
+    /// Deux connexions arrivees avant que l'app ait traite la premiere (le fil principal est
+    /// occupe pendant que les clients se connectent) : l'ecoute a les deux a livrer, et la
+    /// seconde, meme avec un jeton et un releve complets, est refusee. Le releve est celui du
+    /// premier client.
+    @Test func deuxConnexionsEnSimultane() async throws {
+        let cache = Self.cache()
+        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
+        let lancements = LancementsPasseur()
+        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(lancements))
+        n.lancerPasseur()
+        let cible = try #require(await Self.cible(lancements))
+        let trame = EnvoiPasseur.trame(jeton: cible.jeton, json: try Self.noms().donnees())
+        let intrus = EnvoiPasseur.trame(jeton: cible.jeton, json: try Self.noms(nom: "Intrus").donnees())
+        let moitie = trame.count / 2
+        let premier = try #require(FauxPasseur.Client(port: cible.port))
+        Self.occuper { premier.pret }
+        let second = try #require(FauxPasseur.Client(port: cible.port))
+        Self.occuper { second.pret }
+        // Le temps que l'ecoute mette les deux connexions dans la file du fil principal.
+        usleep(100_000)
+        #expect(premier.pret && second.pret, "deux connexions etablies avant que l'app en traite une")
+        #expect(await premier.envoyer(trame.prefix(moitie)))
+        _ = await second.terminer(intrus)
+        #expect(n.releveEnCours, "le second client n'a pas pris la place du premier")
+        #expect(n.noms == nil && n.probleme == nil)
+        #expect(await premier.terminer(trame.dropFirst(moitie)))
+        await Self.attendre(n)
+        #expect(n.noms == Self.noms(), "le releve est celui du premier client")
+        #expect(n.probleme == nil)
     }
 
     /// Reglages › Noms de Maison : les zones lues, dans l'ordre de Maison.

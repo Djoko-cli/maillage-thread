@@ -87,7 +87,10 @@ final class NomsInternes {
         minuterie = Task { [weak self, delai] in
             try? await Task.sleep(for: delai)
             guard !Task.isCancelled else { return }
-            self?.finir(e, .delai)
+            // Sans NomsInternes, personne ne finira ce releve : on ferme l'ecoute, que seul
+            // `fermer()` libere (la fermeture donnee a `ouvrir` la retient, et elle la garde).
+            guard let self else { e.fermer(); return }
+            self.finir(e, .delai)
         }
         e.ouvrir { [weak self] evenement in
             self?.surEcoute(e, evenement)
