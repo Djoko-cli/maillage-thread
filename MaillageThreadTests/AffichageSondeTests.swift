@@ -114,8 +114,9 @@ struct AffichageSondeTests {
         #expect(FicheNoeud.texteQualite(3) == String(localized: "qualité \(3)"))
     }
 
-    /// « Renommer… » : pour un routeur de l'instantane ou un appareil connu, pas pour un noeud
-    /// que la sonde seule connait (son RLOC16 est volatil : rien ne lirait le surnom).
+    /// « Renommer… » : pour un routeur de l'instantane, un appareil connu ou un appareil disparu
+    /// (plus dans l'instantane, mais le suivi le garde, avec sa fiche), pas pour un noeud que la
+    /// sonde seule connait (son RLOC16 est volatil : rien ne lirait le surnom).
     @Test func renommable() throws {
         let s = Surveillance(mode: .demo, dossier: nil)
         s.demarrer()
@@ -123,10 +124,14 @@ struct AffichageSondeTests {
         let m = try #require(s.maillageAffiche(pour: r))
         let routeur = try #require(r.routeurs.first)
         let appareil = try #require(s.instantane?.appareils.first)
+        let disparu = try #require(s.suivi.disparus.keys.sorted().first)
         let inconnu = try #require(m.inconnus.first)
         #expect(m.noeud(inconnu.id) != nil, "connu de la sonde")
+        #expect(s.instantane?.appareil(disparu) == nil && s.instantane?.routeur(disparu) == nil,
+                "le disparu n'est plus dans l'instantane : seul le suivi le connait")
         #expect(FicheNoeud.renommable(routeur.instance, dans: s))
         #expect(FicheNoeud.renommable(appareil.id, dans: s))
+        #expect(FicheNoeud.renommable(disparu, dans: s), "appareil disparu : sa fiche garde « Renommer… »")
         #expect(!FicheNoeud.renommable(inconnu.id, dans: s))
         #expect(!FicheNoeud.renommable("rloc:5000", dans: s), "ni la sonde ni l'instantane : « Ce nœud n'est plus visible. »")
     }
