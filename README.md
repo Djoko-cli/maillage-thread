@@ -113,7 +113,7 @@ catalog match.
 | `MaillageThread/Noms/` | Home names: launching Passeur Noms, receiving its reading over the loopback (TCP listener on 127.0.0.1, one-time token), last valid names kept in the app's container |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | app model: surveys → tracking → log and notifications; sleep of the Mac; login item |
-| `MaillageThread/Vues/` | menu bar, graph window (Canvas, glass overlays), log window, settings |
+| `MaillageThread/Vues/` | menu bar, graph window (Canvas, glass overlays), log window, settings (AppKit window with tabs: General, Notifications, Home, Probe, Diagnostics; ⌘,) |
 | `Passeur/` | Passeur Noms: iOS app run on the Mac (Designed for iPad) that reads Home and sends its names, rooms and zones to the app over the loopback |
 | `sonde/` | probe firmware (ESP32-C6, PlatformIO) and trial tools |
 | `outils/anonymiser-sonde.py` | anonymizes a probe capture before it becomes test data |
@@ -155,9 +155,8 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
 - Priority of names: nickname > Home > HomeKit (`_hap._udp`) > host.
 - The last valid reading is kept. A failure (for example Passeur Noms not
   found or refused, nothing within 2 minutes, wrong token, unreadable length
-  or JSON, Home access denied) keeps it and shows in Settings › Home names
-  and in the menu; after 7 days, Settings says to run `outils/passeur.sh`
-  again. Passeur Noms logs why it quit:
+  or JSON, Home access denied) keeps it and shows in Settings › Home and in
+  the menu; after 7 days, Settings says to run `outils/passeur.sh` again. Passeur Noms logs why it quit:
   `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
 - Refreshing: the graph window launches Passeur Noms when it opens (if the
   last reading and the last request are older than 15 min), then every hour;
@@ -165,8 +164,7 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   do it on demand. One reading at a time: a request during a reading is
   ignored. The window of Passeur Noms only flashes behind the others.
 - Zones: Home's zones (usually floors) and their rooms, in Home's order;
-  Settings › Home names lists the zone names. A reading from before zones has
-  none.
+  Settings › Home lists the zone names. A reading from before zones has none.
 - The `noms.json` written in a chosen folder by an older Passeur Noms (at the
   root of this repository, for example) is no longer read: delete it (git
   ignores it).

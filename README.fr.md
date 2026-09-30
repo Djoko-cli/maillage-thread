@@ -115,7 +115,7 @@ catalogue vont ensemble.
 | `MaillageThread/Noms/` | noms de Maison : lancement de Passeur Noms, réception de son relevé par la boucle locale (écoute TCP sur 127.0.0.1, jeton à usage unique), derniers noms valides gardés dans le conteneur de l'app |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | modèle de l'app : relevés → suivi → journal et notifications ; veille du Mac ; ouverture à la connexion |
-| `MaillageThread/Vues/` | barre des menus, fenêtre du graphe (Canvas, surcouches en verre), journal, réglages |
+| `MaillageThread/Vues/` | barre des menus, fenêtre du graphe (Canvas, surcouches en verre), journal, réglages (fenêtre AppKit à onglets : Général, Notifications, Maison, Sonde, Diagnostic ; ⌘,) |
 | `Passeur/` | Passeur Noms : app iOS lancée sur le Mac (« conçue pour iPad ») qui lit Maison et envoie ses noms, pièces et zones à l'app par la boucle locale |
 | `sonde/` | firmware de la sonde (ESP32-C6, PlatformIO) et outils d'essai |
 | `outils/anonymiser-sonde.py` | anonymise une capture de la sonde avant d'en faire des données de test |
@@ -158,9 +158,9 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
 - Priorité des noms : surnom > Maison > HomeKit (`_hap._udp`) > hôte.
 - Le dernier relevé valide est gardé. Un échec (par exemple Passeur Noms
   introuvable ou refusé, rien en 2 minutes, jeton faux, longueur ou JSON
-  illisible, accès à Maison refusé) le garde et se lit dans Réglages › Noms
-  de Maison et dans le menu ; au-delà de 7 jours, les Réglages disent de
-  relancer `outils/passeur.sh`. Passeur Noms note au journal pourquoi il
+  illisible, accès à Maison refusé) le garde et se lit dans Réglages › Maison
+  et dans le menu ; au-delà de 7 jours, les Réglages disent de relancer
+  `outils/passeur.sh`. Passeur Noms note au journal pourquoi il
   s'est fermé :
   `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
 - Rafraîchissement : la fenêtre du graphe lance Passeur Noms à son ouverture
@@ -170,8 +170,8 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
   demande pendant un relevé est ignorée. La fenêtre de Passeur Noms ne fait
   que passer derrière les autres.
 - Zones : les zones de Maison (en général les étages) et leurs pièces, dans
-  l'ordre de Maison ; Réglages › Noms de Maison en liste les noms. Un relevé
-  d'avant les zones n'en a pas.
+  l'ordre de Maison ; Réglages › Maison en liste les noms. Un relevé d'avant
+  les zones n'en a pas.
 - Le `noms.json` écrit dans un dossier choisi par un ancien Passeur Noms (à la
   racine de ce dépôt, par exemple) n'est plus lu : l'effacer (git l'ignore).
 - Batteries : niveau, état de charge et alerte de l'accessoire lui-même, pour
