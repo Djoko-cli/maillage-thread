@@ -555,12 +555,32 @@ struct TourneeTests {
         return Data(gardees).hexa
     }
 
-    /// TLV Route64 (hexa) des routeurs `ids`, croissants : sequence 1, aucun lien.
-    static func route64(_ ids: [Int]) -> String {
+    /// TLV Route64 (hexa) des routeurs `ids`, croissants : sequence 1 ; un lien vers chaque routeur
+    /// de `qualites` (qualite sortante et entrante vues par celui qui repond, cout 1), aucun vers
+    /// les autres.
+    static func route64(_ ids: [Int], qualites: [Int: (sortante: Int, entrante: Int)] = [:]) -> String {
         let masque = ids.reduce(UInt64(0)) { $0 | UInt64(1) << (63 - $1) }
+        let routes = ids.map { id in qualites[id].map { UInt8($0.sortante << 6 | $0.entrante << 4 | 1) } ?? 0 }
         let octets: [UInt8] = [TypeTLV.route64, UInt8(9 + ids.count), 1]
-            + (0..<8).map { UInt8(truncatingIfNeeded: masque >> (56 - 8 * $0)) } + ids.map { _ in 0 }
+            + (0..<8).map { UInt8(truncatingIfNeeded: masque >> (56 - 8 * $0)) } + routes
         return Data(octets).hexa
+    }
+
+    /// Lien lu aux deux bouts, avec d'autres qualites dans chaque Route64 : la tournee applique
+    /// les reponses par identifiant croissant, et celle du plus grand decide (regle de
+    /// `ConstructionMaillage.lien`), meme revenue la premiere (le 10 est lent ; routeurs inventes).
+    @Test func lienDecideParLePlusGrandIdentifiant() async throws {
+        var sonde = try SondeRejouee.capture(chef: 12, reponsesEnPlus: [
+            "3000|5,6": Self.route64([10, 12]),
+            // Vu par le 10 : 10 -> 12 de qualite 1, 12 -> 10 de qualite 2.
+            "2800|0,1,5,16,8,24": Self.route64([10, 12], qualites: [12: (sortante: 1, entrante: 2)]),
+            // Vu par le 12 : 12 -> 10 de qualite 1, 10 -> 12 de qualite 3.
+            "3000|0,1,5,16,8,24": Self.route64([10, 12], qualites: [10: (sortante: 1, entrante: 3)]),
+        ], table: [])
+        sonde.retards = ["2800|0,1,5,16,8,24": .milliseconds(100)]
+        let (m, _) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(m.routeurs.map(\.id) == [10, 12] && !m.routeurs.contains(where: \.muet), "les deux repondent")
+        #expect(m.liens == [LienRadio(a: 10, b: 12, qualiteAB: 3, qualiteBA: 1)], "le rapport du 12")
     }
 
     /// TLV Child Table (hexa) des enfants `numeros` : qualite 3, delai 2^8 s, endormis (mode 04).
