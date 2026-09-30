@@ -97,15 +97,24 @@ public struct ReponseDiagnostic: Hashable, Sendable {
     public private(set) var versionLogicielle: String?
     public private(set) var pile: String?
 
+    /// Longueur qui annonce une TLV etendue (valeur de plus de 254 octets, une liste de 16 adresses ou
+    /// plus par exemple) : la vraie longueur suit sur 2 octets, grand-boutiste.
+    static let longueurEtendue: UInt8 = 0xFF
+
     /// TLV en hexa, telles que la sonde les transmet ; nil si l'hexa ou une TLV est tronque.
     public init?(hexa: String) {
         guard let d = Data(hexa: hexa) else { return nil }
         let o = [UInt8](d)
         var i = 0
         while i < o.count {
-            guard i + 2 <= o.count, i + 2 + Int(o[i + 1]) <= o.count else { return nil }
-            let t = o[i], v = Array(o[(i + 2)..<(i + 2 + Int(o[i + 1]))])
-            i += 2 + v.count
+            guard i + 2 <= o.count else { return nil }
+            let etendue = o[i + 1] == Self.longueurEtendue
+            let entete = etendue ? 4 : 2
+            guard i + entete <= o.count else { return nil }
+            let longueur = etendue ? Int(o[i + 2]) << 8 | Int(o[i + 3]) : Int(o[i + 1])
+            guard i + entete + longueur <= o.count else { return nil }
+            let t = o[i], v = Array(o[(i + entete)..<(i + entete + longueur)])
+            i += entete + v.count
             switch t {
             case TypeTLV.extMac where v.count == 8: extMac = Data(v).hexa
             case TypeTLV.address16 where v.count == 2: rloc16 = UInt16(v[0]) << 8 | UInt16(v[1])
