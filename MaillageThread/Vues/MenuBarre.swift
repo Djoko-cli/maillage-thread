@@ -36,7 +36,6 @@ struct IconeBarre: View {
 /// evenements, et les actions.
 struct MenuBarre: View {
     @Environment(Surveillance.self) private var surveillance
-    @Environment(OuvertureSession.self) private var ouverture
     @Environment(DossierNoms.self) private var nomsMaison
     @Environment(SondeMaillage.self) private var sonde
     @Environment(\.openWindow) private var openWindow
@@ -67,11 +66,6 @@ struct MenuBarre: View {
                         Text(p).font(.caption).foregroundStyle(.red)
                     }
                 }
-                Toggle("Ouvrir à la connexion", isOn: Binding(get: { ouverture.active }, set: { ouverture.basculer($0) }))
-                    .toggleStyle(.checkbox)
-                if ouverture.approbationRequise {
-                    Button("Approuver dans Réglages Système…") { ouverture.ouvrirReglagesSysteme() }
-                }
                 Button("Réglages…") {
                     NSApp.activate()
                     openSettings()
@@ -82,8 +76,6 @@ struct MenuBarre: View {
         }
         .padding(14)
         .frame(width: 320, alignment: .leading)
-        // Etat de l'ouverture a la connexion relu a chaque ouverture du menu (Reglages Systeme).
-        .onAppear { ouverture.actualiser() }
     }
 
     @ViewBuilder
