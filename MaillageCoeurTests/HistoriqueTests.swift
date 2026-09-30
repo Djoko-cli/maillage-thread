@@ -52,6 +52,50 @@ struct HistoriqueTests {
         #expect(ReleveMaillage(m).enfants == [ReleveMaillage.Enfant(extMac: "E0000000000000B2", parent: 2, qualite: 2)])
     }
 
+    /// Un identifiant de routeur hors de 0...62 (un RLOC16 ne porte que 6 bits de routeur) rend la
+    /// ligne illisible, donc ignoree : ni plantage, ni repli sur un autre routeur (64 donnerait 0).
+    /// Les lignes voisines restent lues.
+    @Test(arguments: [
+        #""routeurs":[[70000,null]]"#,
+        #""routeurs":[[-1,null]]"#,
+        #""routeurs":[[64,null]]"#,
+        #""routeurs":[[0,null]],"liens":[[0,70000,3,2]]"#,
+        #""routeurs":[[0,null]],"liens":[[-1,0,3,2]]"#,
+        #""routeurs":[[0,null]],"enfants":[["E0000000000000B1",64,3]]"#,
+        #""routeurs":[[0,null]],"signaux":[[70000,-60]]"#,
+        #""routeurs":[[0,null]],"parentSonde":64"#,
+    ])
+    func identifiantHorsPlageIgnore(champs: String) throws {
+        let d = Self.dossier()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let h = HistoriqueFichiers(dossier: d, calendrier: JournalTests.calendrier)
+        let bon = ReleveMaillage(Self.maillage(Self.date("2026-09-20T10:00:00Z")))
+        try h.ajouter(bon)
+        let ligne = "{" + #""date":"2026-09-30T10:00:00.000Z","partition":"0000000A","# + Self.complete(champs) + "}"
+        let f = try FileHandle(forWritingTo: d.appendingPathComponent("maillage-2026-09.jsonl"))
+        try f.seekToEnd()
+        try f.write(contentsOf: Data((ligne + "\n").utf8))
+        try f.close()
+        #expect(try h.lire(depuis: .distantPast) == [bon], "seule la ligne valide est lue : \(ligne)")
+    }
+
+    /// Les champs du cas, avec les tableaux vides pour ceux qu'il ne donne pas.
+    private static func complete(_ champs: String) -> String {
+        var texte = champs
+        for cle in ["routeurs", "liens", "enfants", "signaux"] where !texte.contains("\"\(cle)\"") {
+            texte += ",\"\(cle)\":[]"
+        }
+        return texte
+    }
+
+    /// `cle(routeur:)` est totale : un identifiant hors plage rend "rloc:?" au lieu d'arreter le
+    /// programme (`UInt16(70000)`) ou de replier sur un autre routeur (`64 << 10` donne 0).
+    @Test func cleDUnRouteurHorsPlage() {
+        let r = ReleveMaillage(Self.maillage(Self.date("2026-09-30T10:00:00Z")))
+        for id in [70000, -1, 63, 64, 1 << 40] { #expect(r.cle(routeur: id) == "rloc:?", "\(id)") }
+        #expect(r.cle(routeur: 62) == "rloc:F800")
+    }
+
     /// Tournee de la capture, avec des voisins : 7 routeurs et 10 enfants identifies tiennent en
     /// moins de 700 octets ; avec 20 enfants (26 octets chacun), en moins de 1 Ko.
     @Test func tailleDUneLigne() async throws {

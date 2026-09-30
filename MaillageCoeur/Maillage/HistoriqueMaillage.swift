@@ -66,9 +66,15 @@ public struct ReleveMaillage: Hashable, Sendable {
                   signaux: m.signaux, parentSonde: m.parentSonde)
     }
 
-    /// Cle d'un routeur du releve : son ExtMac, sinon "rloc:XXXX" (valable dans sa partition).
+    /// Identifiants de routeur possibles : 0 a 62 (un RLOC16 porte 6 bits de routeur ; 63 n'est pas
+    /// attribue).
+    static let identifiantsRouteur = 0...62
+
+    /// Cle d'un routeur du releve : son ExtMac, sinon "rloc:XXXX" (valable dans sa partition) ;
+    /// "rloc:?" pour un identifiant hors plage (fonction totale : jamais d'arret du programme).
     public func cle(routeur id: Int) -> String {
-        routeurs.first { $0.id == id }?.extMac ?? String(format: "rloc:%04X", UInt16(id) << 10)
+        guard Self.identifiantsRouteur.contains(id) else { return "rloc:?" }
+        return routeurs.first { $0.id == id }?.extMac ?? String(format: "rloc:%04X", UInt16(id) << 10)
     }
 }
 
@@ -77,37 +83,50 @@ extension ReleveMaillage: Codable {
         case date, partition, routeurs, liens, enfants, signaux, parentSonde
     }
 
+    /// Decode un identifiant de routeur ; hors de 0...62, la ligne entiere est refusee.
+    private static func identifiant(_ l: inout any UnkeyedDecodingContainer) throws -> Int {
+        let id = try l.decode(Int.self)
+        guard identifiantsRouteur.contains(id) else {
+            throw DecodingError.dataCorruptedError(in: l, debugDescription: "identifiant de routeur hors de 0...62 : \(id)")
+        }
+        return id
+    }
+
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         var routeurs: [Routeur] = []
         var r = try c.nestedUnkeyedContainer(forKey: .routeurs)
         while !r.isAtEnd {
             var l = try r.nestedUnkeyedContainer()
-            routeurs.append(Routeur(id: try l.decode(Int.self), extMac: try l.decodeIfPresent(String.self)))
+            routeurs.append(Routeur(id: try Self.identifiant(&l), extMac: try l.decodeIfPresent(String.self)))
         }
         var liens: [LienRadio] = []
         var li = try c.nestedUnkeyedContainer(forKey: .liens)
         while !li.isAtEnd {
             var l = try li.nestedUnkeyedContainer()
-            liens.append(LienRadio(a: try l.decode(Int.self), b: try l.decode(Int.self),
+            liens.append(LienRadio(a: try Self.identifiant(&l), b: try Self.identifiant(&l),
                                    qualiteAB: try l.decodeIfPresent(Int.self), qualiteBA: try l.decodeIfPresent(Int.self)))
         }
         var enfants: [Enfant] = []
         var e = try c.nestedUnkeyedContainer(forKey: .enfants)
         while !e.isAtEnd {
             var l = try e.nestedUnkeyedContainer()
-            enfants.append(Enfant(extMac: try l.decode(String.self), parent: try l.decode(Int.self),
+            enfants.append(Enfant(extMac: try l.decode(String.self), parent: try Self.identifiant(&l),
                                   qualite: try l.decodeIfPresent(Int.self)))
         }
         var signaux: [SignalSonde] = []
         var s = try c.nestedUnkeyedContainer(forKey: .signaux)
         while !s.isAtEnd {
             var l = try s.nestedUnkeyedContainer()
-            signaux.append(SignalSonde(routeur: try l.decode(Int.self), rssi: try l.decode(Int.self)))
+            signaux.append(SignalSonde(routeur: try Self.identifiant(&l), rssi: try l.decode(Int.self)))
+        }
+        let parentSonde = try c.decodeIfPresent(Int.self, forKey: .parentSonde)
+        if let p = parentSonde, !Self.identifiantsRouteur.contains(p) {
+            throw DecodingError.dataCorruptedError(forKey: .parentSonde, in: c,
+                                                   debugDescription: "identifiant de routeur hors de 0...62 : \(p)")
         }
         self.init(date: try c.decode(Date.self, forKey: .date), partition: try c.decode(String.self, forKey: .partition),
-                  routeurs: routeurs, liens: liens, enfants: enfants, signaux: signaux,
-                  parentSonde: try c.decodeIfPresent(Int.self, forKey: .parentSonde))
+                  routeurs: routeurs, liens: liens, enfants: enfants, signaux: signaux, parentSonde: parentSonde)
     }
 
     public func encode(to encoder: any Encoder) throws {
