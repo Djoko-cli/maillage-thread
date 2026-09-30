@@ -226,7 +226,8 @@ final class CanalTemoin: CanalSonde {
     }
 }
 
-@Suite("Sonde USB : commandes et reponses")
+/// Chaque test borne a une minute : une attente sans fin echoue au lieu de bloquer la suite.
+@Suite("Sonde USB : commandes et reponses", .timeLimit(.minutes(1)))
 struct SondeUSBTests {
     /// bonjour et etat, dans l'ordre.
     @Test func bonjourEtat() async throws {
@@ -417,8 +418,9 @@ struct SondeUSBTests {
     }
 }
 
+/// Chaque test borne a une minute : une attente sans fin echoue au lieu de bloquer la suite.
 @MainActor
-@Suite("Sonde dans l'app : port retenu, refus, fraicheur du maillage")
+@Suite("Sonde dans l'app : port retenu, refus, fraicheur du maillage", .timeLimit(.minutes(1)))
 struct SondeMaillageTests {
     static func preferences() throws -> (UserDefaults, String) {
         let domaine = "fr.djoko.maillage.tests.sonde.\(UUID().uuidString)"

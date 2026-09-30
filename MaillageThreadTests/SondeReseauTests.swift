@@ -137,9 +137,9 @@ final class ReseauFactice {
 }
 
 /// Acces a la sonde par le reseau Thread dans l'app : cle par l'USB, choix de la liaison,
-/// connexion et reprise. Trousseau en memoire, reseau factice.
+/// connexion et reprise. Trousseau en memoire, reseau factice. Chaque test borne a une minute.
 @MainActor
-@Suite("Sonde par le reseau Thread : cle, liaison, reprise")
+@Suite("Sonde par le reseau Thread : cle, liaison, reprise", .timeLimit(.minutes(1)))
 struct SondeReseauTests {
     static let hote = "0123456789ABCDEF"
     static let port = SondeMaillageTests.port
@@ -556,7 +556,7 @@ struct SondeReseauTests {
     }
 
     /// Session perdue (chemin perdu, veille sans reponse) : sa cause est montree, comme dans Halo
-    /// (« Connexion réseau perdue : <cause> ») ; ici par le vrai canal, sur la carte simulee.
+    /// (« Connexion reseau perdue : <cause> ») ; ici par le vrai canal, sur la carte simulee.
     @Test(.timeLimit(.minutes(1))) func causeDeLaPerteMontree() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -581,7 +581,7 @@ struct SondeReseauTests {
         await s.oublier()
     }
 
-    /// La cause de la derniere session perdue reste dans Reglages › Sonde (« Dernière perte »)
+    /// La cause de la derniere session perdue reste dans Reglages › Sonde (« Derniere perte »)
     /// pendant la reprise, meme quand un essai echoue a son tour, jusqu'a la connexion suivante
     /// reussie ; l'heure est celle de la perte.
     @Test(.timeLimit(.minutes(1))) func dernierePerteGardeeJusquALaReconnexion() async throws {
@@ -666,7 +666,7 @@ struct SondeReseauTests {
         #expect(FenetreReglages.texteHote(nil) == "—")
     }
 
-    /// Reglages › Sonde : « Dernier relevé » donne la date avec l'heure (la sonde peut rester des
+    /// Reglages › Sonde : « Dernier releve » donne la date avec l'heure (la sonde peut rester des
     /// jours sans relever).
     @Test func texteDernierReleve() {
         let d = Date(timeIntervalSince1970: 1_790_000_000)
@@ -798,7 +798,7 @@ struct SondeReseauTests {
         await s.oublier()
     }
 
-    /// En USB, rien ne change : 3 s, puis « ne répond pas ».
+    /// En USB, rien ne change : 3 s, puis « ne repond pas ».
     @Test(.timeLimit(.minutes(1))) func delaiDeCommandeEnUSB() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }

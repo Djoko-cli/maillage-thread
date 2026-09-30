@@ -196,7 +196,7 @@ struct FenetreReglages: View {
         hote.map { "\($0).local" } ?? "—"
     }
 
-    /// « Dernier relevé » de la sonde : la date et l'heure (la sonde peut rester des jours sans
+    /// « Dernier releve » de la sonde : la date et l'heure (la sonde peut rester des jours sans
     /// relever), comme le dernier releve du reseau local (section Diagnostic).
     static func texteDernierReleve(_ d: Date) -> String {
         d.formatted(date: .abbreviated, time: .standard)
