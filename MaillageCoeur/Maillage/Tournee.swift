@@ -15,9 +15,11 @@ public protocol InterlocuteurSonde: Sendable {
 /// Avancement d'une tournee : l'etape en cours, ses requetes revenues et le total prevu a
 /// ce moment. Au cours d'une etape, `fait` monte de un a chaque requete revenue et le total
 /// ne baisse jamais. Liste des routeurs : le chef et les secours, puis, s'il faut chercher,
-/// tous les autres identifiants ; l'etape s'arrete a la premiere Route64, souvent avant son
-/// total. Balayage : pour chaque routeur, les numeros jusqu'a 8 apres le dernier enfant
-/// trouve ; le total grandit quand un enfant repond loin, et finit egal aux requetes envoyees.
+/// les autres routeurs de la table de la sonde et tous les autres identifiants (ceux-ci pas
+/// dans les 30 min qui suivent une recherche complete vaine) ; l'etape s'arrete a la premiere
+/// Route64, souvent avant son total. Balayage : pour chaque routeur, les numeros jusqu'a 8
+/// apres le dernier enfant trouve ; le total grandit quand un enfant repond loin, et finit
+/// egal aux requetes envoyees.
 public struct AvancementTournee: Hashable, Sendable {
     /// Etapes d'une tournee, dans l'ordre.
     public enum Etape: CaseIterable, Hashable, Sendable {
@@ -80,6 +82,10 @@ public struct MemoireTournee: Hashable, Sendable {
     /// Routeurs qui ont repondu a la derniere tournee ou l'un a repondu : Route64 de
     /// secours quand le chef ne la donne pas.
     public var repondants: [Int] = []
+    /// Derniere recherche complete de la Route64 restee vaine, sur un silence au moins (une
+    /// recherche dont la sonde a refuse toutes les requetes ne compte pas) : pas de nouvelle
+    /// recherche complete avant `Tournee.periodeRecherche`.
+    public var rechercheVaine: Date?
     /// Dernieres Network Data lues : elles servent quand leur requete echoue ou n'est pas faite
     /// (aucun routeur ne repond) ; sinon les routeurs de bordure, le BBR principal et les
     /// candidats disparaitraient d'une tournee a l'autre.
@@ -120,13 +126,16 @@ public enum Tournee {
     public static let apresDernier = 8
     public static let periodeBalayage: TimeInterval = 30 * 60
     public static let periodeMuet: TimeInterval = 3600
+    /// Apres une recherche complete de la Route64 vaine, delai avant la suivante.
+    public static let periodeRecherche: TimeInterval = 30 * 60
 
     /// Une tournee, et le balayage s'il est du : le maillage et la memoire a garder. Pas de
     /// maillage si la sonde n'est pas attachee, ou suspendue dans Maison (ses requetes
     /// echoueraient toutes : aucun routeur ne doit passer pour muet ; memoire inchangee), ou si
     /// aucun routeur n'a donne la liste des routeurs (Route64) : la memoire rendue est alors
     /// celle d'avant (remise a zero dans une autre partition), avec les seules identites
-    /// apprises par `etat` et la table des routeurs, qu'une sonde promenee garde ainsi.
+    /// apprises par `etat` et la table des routeurs, qu'une sonde promenee garde ainsi, et la
+    /// date d'une recherche complete vaine.
     /// `avancement` est appele au debut de chaque etape atteinte, puis a chaque requete
     /// revenue (voir `AvancementTournee`), depuis la tache de la tournee.
     public static func executer(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,
@@ -158,7 +167,8 @@ public enum Tournee {
         }
 
         // 1. Liste des routeurs : Route64 du chef, puis des routeurs qui ont repondu a la
-        // tournee precedente (avant le chef s'il est muet) ; sinon, des autres identifiants.
+        // tournee precedente (avant le chef s'il est muet) ; sinon, des autres routeurs de la
+        // table de la sonde, puis des autres identifiants.
         let secours = mem.repondants.filter { $0 != chef }
         let essais = mem.estMuet(chef) ? secours + [chef] : [chef] + secours
         var route64: Route64?
@@ -172,9 +182,16 @@ public enum Tournee {
             }
         }
         if route64 == nil {
-            route64 = try await chercherRoute64(sonde, sauf: essais) { faites, prevues in
+            // Les autres identifiants, pas dans les 30 min qui suivent une recherche complete
+            // vaine : sans reponse, elle coute 63 requetes, pres d'une minute.
+            let deLaTable = Set(table.map(\.id)).subtracting(essais).filter { (0...62).contains($0) }.sorted()
+            let complete = mem.rechercheVaine.map { maintenant.timeIntervalSince($0) >= periodeRecherche } ?? true
+            let autres = complete ? (0...62).filter { !essais.contains($0) && !deLaTable.contains($0) } : []
+            let recherche = try await chercherRoute64(sonde, groupes: groupes(deLaTable) + groupes(autres)) { faites, prevues in
                 signaler(.listeRouteurs, essais.count + faites, essais.count + prevues)
             }
+            route64 = recherche.route64
+            if route64 == nil, complete, !recherche.refusee { mem.rechercheVaine = maintenant }
         }
         guard let route64 else { return (nil, mem) }
         c.routeurs(route64, chef: chef)
@@ -351,24 +368,35 @@ public enum Tournee {
         return [Array(tlv[..<milieu]), Array(tlv[milieu...])].filter { !$0.isEmpty }
     }
 
+    /// Identifiants par groupes de `enVol`, dans l'ordre.
+    static func groupes(_ ids: [Int]) -> [[Int]] {
+        stride(from: 0, to: ids.count, by: enVol).map { Array(ids[$0..<min($0 + enVol, ids.count)]) }
+    }
+
     /// Route64 quand ni le chef ni les secours ne l'ont donnee (chef muet des le lancement) :
-    /// les autres identifiants de routeur, de 0 a 62, par groupes de 8 dans l'ordre croissant ;
-    /// au premier groupe ou l'un la donne, celle du plus petit. `suivi` : requetes revenues
-    /// et prevues (tous ces identifiants), au debut puis a chaque requete revenue.
-    static func chercherRoute64(_ sonde: some InterlocuteurSonde, sauf essayes: [Int],
-                                suivi: (_ faites: Int, _ prevues: Int) -> Void = { _, _ in }) async throws -> Route64? {
-        let ids = (0...62).filter { !essayes.contains($0) }
-        suivi(0, ids.count)
-        for debut in stride(from: 0, to: ids.count, by: enVol) {
-            let groupe = Array(ids[debut..<min(debut + enVol, ids.count)])
+    /// les `groupes` d'identifiants dans l'ordre, chacun en parallele ; au premier groupe ou l'un
+    /// la donne, celle du premier du groupe (le plus petit). `refusee` : la sonde a refuse toutes
+    /// les requetes. `suivi` : requetes revenues et prevues (tous ces identifiants), au debut
+    /// puis a chaque requete revenue.
+    static func chercherRoute64(_ sonde: some InterlocuteurSonde, groupes: [[Int]],
+                                suivi: (_ faites: Int, _ prevues: Int) -> Void = { _, _ in }) async throws
+        -> (route64: Route64?, refusee: Bool) {
+        let prevues = groupes.reduce(0) { $0 + $1.count }
+        suivi(0, prevues)
+        var faites = 0
+        var refusee = true
+        for groupe in groupes {
+            let avant = faites
             let resultats = try await parallele(groupe, {
                 try await sonde.diag(rloc16($0), tlvChef, delaiMs: delaiRouteur)
-            }, apresChacune: { n, _, _ in suivi(debut + n, ids.count) })
+            }, apresChacune: { n, _, _ in suivi(avant + n, prevues) })
+            faites += groupe.count
             for (_, r) in resultats {
-                if let route64 = r.reponse?.route64 { return route64 }
+                if let route64 = r.reponse?.route64 { return (route64, false) }
+                refusee = refusee && r.refus
             }
         }
-        return nil
+        return (nil, refusee)
     }
 
     /// Dernier numero d'enfant connu sous un routeur avant son balayage : celui de la

@@ -145,6 +145,11 @@ extension Tournee {
 struct TourneeTests {
     static let t0 = Date(timeIntervalSince1970: 1_790_000_000)
 
+    /// Identifiant de routeur de la cible d'une requete "<cible>|<tlv,...>".
+    static func routeur(_ requete: String) -> Int? {
+        UInt16(requete.prefix(4), radix: 16).map { Int($0 >> 10) }
+    }
+
     /// Premiere tournee : routeurs, roles, liens, enfants des tables et du balayage, memoire.
     @Test func premiere() async throws {
         let sonde = try SondeRejouee.capture()
@@ -231,23 +236,37 @@ struct TourneeTests {
         #expect(await sonde.registre.requetes.first == "5000|5,6")
     }
 
-    /// Chef muet des le lancement : memoire neuve, aucun secours connu. La Route64
-    /// vient du premier groupe de 8 identifiants ou un routeur repond (16 a 23 : le 20).
+    /// Chef muet des le lancement : memoire neuve, aucun secours connu. La Route64 vient
+    /// d'abord des autres routeurs de la table de la sonde, en un groupe (le 20 et le 24 la
+    /// donnent) : pas de recherche sur les autres identifiants.
     @Test func chefMuetSansSecours() async throws {
         let sonde = try SondeRejouee.capture(chef: 45, reponsesEnPlus: ["5000|5,6": try CaptureSonde.tlv(104)])
         let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         #expect(m.routeurs.map(\.id) == [1, 20, 24, 43, 45, 51, 57])
         #expect(m.chef?.id == 45)
-        let requetes = await sonde.registre.requetes
+        let requetes = await sonde.registre.requetes.filter { $0.hasSuffix("|5,6") }
         #expect(requetes.first == "B400|5,6", "le chef d'abord")
-        let attendues = ["B400|5,6"] + (0...23).map { String(format: "%04X|5,6", UInt16($0) << 10) }
-        #expect(requetes.filter { $0.hasSuffix("|5,6") }.sorted() == attendues.sorted(), "puis 0 a 23 : arret au groupe du 20")
+        #expect(requetes.dropFirst().compactMap(Self.routeur).sorted() == [1, 20, 24, 43, 51, 57], "puis la table")
+        #expect(mem.repondants == [20, 24])
+        #expect(mem.rechercheVaine == nil)
+    }
+
+    /// Chef muet des le lancement, sans table des routeurs (firmware 1.0.1) : la Route64 vient
+    /// des autres identifiants, par groupes de 8 dans l'ordre croissant ; arret au groupe du 20.
+    @Test func chefMuetSansSecoursNiTable() async throws {
+        let sonde = try SondeRejouee.capture(chef: 45, reponsesEnPlus: ["5000|5,6": try CaptureSonde.tlv(104)], table: nil)
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(m.routeurs.map(\.id) == [1, 20, 24, 43, 45, 51, 57])
+        let ids = await sonde.registre.requetes.filter { $0.hasSuffix("|5,6") }.compactMap(Self.routeur)
+        #expect(ids.first == 45, "le chef d'abord")
+        #expect(ids.dropFirst().sorted() == Array(0...23), "puis 0 a 23 : arret au groupe du 20")
         #expect(mem.repondants == [20, 24])
     }
 
-    /// Rien ne repond, sonde attachee : pas de maillage ; la memoire rendue n'a que la partition
-    /// et l'identite du parent. La liste des routeurs est demandee au plus une fois a chaque
-    /// identifiant.
+    /// Rien ne repond, sonde attachee : pas de maillage ; la memoire rendue n'a que la partition,
+    /// l'identite du parent et la date de cette recherche vaine. La liste des routeurs est
+    /// demandee une fois a chaque identifiant, 63 en tout : au chef, aux autres routeurs de la
+    /// table de la sonde, puis aux autres identifiants.
     @Test func rienNeRepond() async throws {
         let sonde = try SondeRejouee.capture().filtree { _ in false }
         let r = try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0)
@@ -255,11 +274,54 @@ struct TourneeTests {
         var attendue = MemoireTournee()
         attendue.partition = "46CBEBCD"
         attendue.identites = [0xAC00: "E000000000000007"]
+        attendue.rechercheVaine = Self.t0
         #expect(r.memoire == attendue)
         let requetes = await sonde.registre.requetes
         #expect(requetes.allSatisfy { $0.hasSuffix("|5,6") })
-        #expect(requetes.count <= 63)
-        #expect(Set(requetes).count == requetes.count, "une fois par identifiant")
+        let ids = requetes.compactMap(Self.routeur)
+        #expect(ids.count == 63 && Set(ids) == Set(0...62), "une fois chaque identifiant")
+        #expect(ids.first == 24, "le chef")
+        #expect(Set(ids.dropFirst().prefix(6)) == [1, 20, 43, 45, 51, 57], "puis les autres routeurs de la table")
+    }
+
+    /// Apres une recherche complete vaine, pas de nouvelle recherche complete avant 30 min : le
+    /// chef et les autres routeurs de la table seulement (7 requetes au lieu de 63), et la date
+    /// est gardee ; l'avancement a ce total. A 30 min, de nouveau partout.
+    @Test func rechercheBorneeApresUnEchec() async throws {
+        let sonde = try SondeRejouee.capture().filtree { _ in false }
+        let r1 = try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0)
+        #expect(r1.memoire.rechercheVaine == Self.t0)
+        let n1 = await sonde.registre.requetes.count
+        let releve = ReleveAvancement()
+        let r2 = try await Tournee.executer(sonde, memoire: r1.memoire, maintenant: Self.t0 + 1799,
+                                            avancement: { releve.noter($0) })
+        let n2 = await sonde.registre.requetes.count
+        #expect(n2 - n1 == 7, "le chef et les 6 autres routeurs de la table")
+        #expect(r2.memoire.rechercheVaine == Self.t0, "date gardee")
+        let liste = releve.de(.listeRouteurs)
+        #expect(liste.last == AvancementTournee(etape: .listeRouteurs, fait: 7, total: 7))
+        #expect(ReleveAvancement.croissants(liste))
+        let r3 = try await Tournee.executer(sonde, memoire: r2.memoire, maintenant: Self.t0 + 1800)
+        #expect(await sonde.registre.requetes.count - n2 == 63, "30 min apres : partout")
+        #expect(r3.memoire.rechercheVaine == Self.t0 + 1800)
+    }
+
+    /// Recherche dont la sonde refuse toutes les requetes (`occupee`) : ce n'est pas un echec, la
+    /// suivante cherche de nouveau partout. Sans table ni secours, dans les 30 min d'une recherche
+    /// vaine : le chef seul.
+    @Test func rechercheRefuseeOuSansTable() async throws {
+        let refusee = try SondeRejouee.capture().filtree { _ in false }.refusant { _ in true }
+        let r = try await Tournee.executer(refusee, memoire: MemoireTournee(), maintenant: Self.t0)
+        #expect(await refusee.registre.requetes.count == 63)
+        #expect(r.memoire.rechercheVaine == nil)
+
+        let sansTable = try SondeRejouee.capture(table: nil).filtree { _ in false }
+        var mem = MemoireTournee()
+        mem.partition = "46CBEBCD"
+        mem.rechercheVaine = Self.t0
+        let r2 = try await Tournee.executer(sansTable, memoire: mem, maintenant: Self.t0 + 300)
+        #expect(r2.maillage == nil)
+        #expect(await sansTable.registre.requetes == ["6000|5,6"], "le chef seul")
     }
 
     /// Echec passager : le 20, qui repond d'habitude, rate une tournee. Muet dans ce
@@ -510,8 +572,9 @@ struct TourneeTests {
 
     /// Pas de liste des routeurs (plus rien ne repond apres `etat`) : pas de maillage, mais la
     /// memoire rendue garde les identites apprises (parent, table des routeurs), pour qu'une sonde
-    /// promenee les garde ; le reste est la memoire d'avant, aucun routeur ne passe pour muet.
-    /// Dans une autre partition, elle est remise a zero, sauf ces identites (ExtMac inventee).
+    /// promenee les garde, et la date de la recherche vaine ; le reste est la memoire d'avant,
+    /// aucun routeur ne passe pour muet. Dans une autre partition, elle est remise a zero, sauf
+    /// ces identites et cette date (ExtMac inventee).
     @Test func identitesSansListe() async throws {
         let (_, mem1) = try #require(try await Tournee.complete(try SondeRejouee.capture(), memoire: MemoireTournee(),
                                                                maintenant: Self.t0))
@@ -521,7 +584,8 @@ struct TourneeTests {
         #expect(r.maillage == nil)
         var attendue = mem1
         attendue.identites[0xE400] = "E0000000000000E4"
-        #expect(r.memoire == attendue, "la memoire d'avant, plus le routeur entendu")
+        attendue.rechercheVaine = Self.t0 + 300
+        #expect(r.memoire == attendue, "la memoire d'avant, plus le routeur entendu et la recherche vaine")
 
         var ailleurs = mem1
         ailleurs.partition = "73586B68"
@@ -530,6 +594,7 @@ struct TourneeTests {
         var neuve = MemoireTournee()
         neuve.partition = "46CBEBCD"
         neuve.identites = [0xAC00: "E000000000000007", 0xE400: "E0000000000000E4"]
+        neuve.rechercheVaine = Self.t0 + 300
         #expect(r2.memoire == neuve)
     }
 
@@ -723,20 +788,24 @@ struct TourneeTests {
     }
 
     /// Chef muet des le lancement : le total de la liste des routeurs grandit quand la
-    /// recherche commence (le chef, puis les 62 autres identifiants) ; elle s'arrete au
-    /// groupe du 20, avant son total, apres 25 requetes.
+    /// recherche commence (le chef, puis les 6 autres routeurs de la table et les 56 autres
+    /// identifiants) ; elle s'arrete au groupe de la table, avant son total, apres 7 requetes.
+    /// Sans table (les 62 autres identifiants), au groupe du 20, apres 25 requetes.
     @Test func avancementRecherche() async throws {
-        let sonde = try SondeRejouee.capture(chef: 45, reponsesEnPlus: ["5000|5,6": try CaptureSonde.tlv(104)])
-        let releve = ReleveAvancement()
-        _ = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
-                                                   avancement: { releve.noter($0) }))
-        let liste = releve.de(.listeRouteurs)
-        #expect(Array(liste.prefix(3)) == [AvancementTournee(etape: .listeRouteurs, fait: 0, total: 1),
-                                           AvancementTournee(etape: .listeRouteurs, fait: 1, total: 1),
-                                           AvancementTournee(etape: .listeRouteurs, fait: 1, total: 63)])
-        #expect(liste.last == AvancementTournee(etape: .listeRouteurs, fait: 25, total: 63))
-        #expect(ReleveAvancement.croissants(liste))
-        #expect(await sonde.registre.requetes.filter { $0.hasSuffix("|5,6") }.count == 25)
+        let tlv20 = try CaptureSonde.tlv(104)
+        for (table, faites) in [(SondeRejouee.table(), 7), (nil, 25)] as [([RouteurSonde]?, Int)] {
+            let sonde = try SondeRejouee.capture(chef: 45, reponsesEnPlus: ["5000|5,6": tlv20], table: table)
+            let releve = ReleveAvancement()
+            _ = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                       avancement: { releve.noter($0) }))
+            let liste = releve.de(.listeRouteurs)
+            #expect(Array(liste.prefix(3)) == [AvancementTournee(etape: .listeRouteurs, fait: 0, total: 1),
+                                               AvancementTournee(etape: .listeRouteurs, fait: 1, total: 1),
+                                               AvancementTournee(etape: .listeRouteurs, fait: 1, total: 63)])
+            #expect(liste.last == AvancementTournee(etape: .listeRouteurs, fait: faites, total: 63))
+            #expect(ReleveAvancement.croissants(liste))
+            #expect(await sonde.registre.requetes.filter { $0.hasSuffix("|5,6") }.count == faites)
+        }
     }
 
     /// Un enfant repond loin sous un routeur muet (le numero 8 du routeur 1) : le total du
