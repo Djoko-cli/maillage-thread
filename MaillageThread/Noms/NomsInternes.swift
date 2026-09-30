@@ -5,14 +5,15 @@ import Observation
 
 /// Noms de Maison, releves par le passeur (app iOS lancee sur le Mac) et gardes dans le
 /// conteneur de l'app (`noms.json`), sans dossier a choisir. Un releve : une ecoute TCP sur
-/// 127.0.0.1 (`EcouteReleve`) et un jeton a usage unique ; le passeur, lance sans activation
-/// avec `--port` et `--jeton`, lit Maison, envoie le releve (`EnvoiPasseur`) et se ferme.
+/// 127.0.0.1 (`EcouteReleve`) et un jeton a usage unique ; le passeur, ouvert sans activation
+/// avec l'URL `maillage-passeur://releve?port=<port>&jeton=<jeton>`, lit Maison, envoie le
+/// releve (`EnvoiPasseur`) et se ferme.
 /// Le dernier releve valide est garde : un echec ne l'efface jamais, il se dit dans `probleme`.
 @MainActor
 @Observable
 final class NomsInternes {
-    /// Lance le passeur avec ces arguments ; nil s'il est lance, sinon le probleme a montrer.
-    typealias Lanceur = @MainActor (_ arguments: [String]) async -> String?
+    /// Ouvre le passeur avec cette cible (son URL) ; nil s'il est ouvert, sinon le probleme a montrer.
+    typealias Lanceur = @MainActor (_ cible: EnvoiPasseur.Cible) async -> String?
 
     /// Fin d'un releve.
     enum Fin: Equatable {
@@ -103,9 +104,9 @@ final class NomsInternes {
         guard ecoute === e else { return }
         switch evenement {
         case .prete(let port):
-            let arguments = EnvoiPasseur.Cible(port: port, jeton: e.jeton).arguments
+            let cible = EnvoiPasseur.Cible(port: port, jeton: e.jeton)
             Task { [weak self] in
-                guard let self, let p = await self.lanceur(arguments) else { return }
+                guard let self, let p = await self.lanceur(cible) else { return }
                 self.finir(e, .lancement(p))
             }
         case .fin(let fin):
@@ -156,18 +157,18 @@ final class NomsInternes {
         surNoms?(garde)
     }
 
-    /// Lanceur reel : Passeur Noms, installe par outils/passeur.sh, sans activation ; ses
-    /// arguments lui donnent le port et le jeton.
-    static func lancerPasseurDuMac(_ arguments: [String]) async -> String? {
+    /// Lanceur reel : Passeur Noms, installe par outils/passeur.sh, ouvert sans activation avec
+    /// l'URL de la cible (port et jeton). Pas d'arguments de lancement : macOS retire ceux d'une
+    /// app du bac a sable (verifie le 30/09, le passeur n'a recu que le chemin de son executable).
+    static func lancerPasseurDuMac(_ cible: EnvoiPasseur.Cible) async -> String? {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: idPasseur) else {
             return String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
         }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = false
         configuration.addsToRecentItems = false
-        configuration.arguments = arguments
         do {
-            _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+            _ = try await NSWorkspace.shared.open([cible.url], withApplicationAt: url, configuration: configuration)
             return nil
         } catch {
             // Cause la plus probable apres quelques jours : le profil gratuit a expire.

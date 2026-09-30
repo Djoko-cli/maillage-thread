@@ -114,17 +114,17 @@ enum FauxPasseur {
     }
 }
 
-/// Lancements du passeur demandes par l'app, dans l'ordre (leurs arguments).
+/// Lancements du passeur demandes par l'app, dans l'ordre (leurs cibles : port et jeton).
 final class LancementsPasseur: Sendable {
-    private let liste = Mutex<[[String]]>([])
+    private let liste = Mutex<[EnvoiPasseur.Cible]>([])
 
-    func noter(_ arguments: [String]) {
-        liste.withLock { $0.append(arguments) }
+    func noter(_ cible: EnvoiPasseur.Cible) {
+        liste.withLock { $0.append(cible) }
     }
 
-    var tous: [[String]] { liste.withLock { $0 } }
+    var tous: [EnvoiPasseur.Cible] { liste.withLock { $0 } }
     /// Port et jeton du dernier lancement.
-    var cible: EnvoiPasseur.Cible? { tous.last.flatMap { EnvoiPasseur.Cible(arguments: $0) } }
+    var cible: EnvoiPasseur.Cible? { tous.last }
 }
 
 @MainActor
@@ -149,10 +149,10 @@ struct NomsInternesTests {
     /// lancement echoue, rien n'est envoye.
     static func lanceur(_ lancements: LancementsPasseur, probleme: String? = nil,
                         trame: (@Sendable (String) -> Data)? = nil) -> NomsInternes.Lanceur {
-        { arguments in
-            lancements.noter(arguments)
+        { cible in
+            lancements.noter(cible)
             if let probleme { return probleme }
-            if let trame, let cible = EnvoiPasseur.Cible(arguments: arguments) {
+            if let trame {
                 Task.detached { _ = await FauxPasseur.envoyer(trame(cible.jeton), port: cible.port) }
             }
             return nil

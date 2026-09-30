@@ -21,19 +21,50 @@ struct EnvoiPasseurTests {
         return l.fin()
     }
 
-    /// Port et jeton passent par les arguments de lancement et s'y relisent, parmi d'autres
-    /// arguments ; ouvert a la main, le passeur n'en a pas.
-    @Test func arguments() {
-        let c = EnvoiPasseur.Cible(port: 54_321, jeton: Self.jeton)
-        #expect(c.arguments == ["--port", "54321", "--jeton", Self.jeton])
-        #expect(EnvoiPasseur.Cible(arguments: ["/Applications/Passeur Noms.app/Passeur Noms"] + c.arguments) == c)
-        #expect(EnvoiPasseur.Cible(arguments: ["Passeur Noms", "-NSDocumentRevisionsDebugMode", "YES"] + c.arguments) == c)
-        #expect(EnvoiPasseur.Cible(arguments: ["Passeur Noms"]) == nil, "ouvert a la main")
-        #expect(EnvoiPasseur.Cible(arguments: ["Passeur Noms", "--port", "54321"]) == nil, "sans jeton")
-        #expect(EnvoiPasseur.Cible(arguments: ["Passeur Noms", "--jeton", Self.jeton, "--port"]) == nil, "port sans valeur")
-        for port in ["0", "70000", "abc", "-1"] {
-            #expect(EnvoiPasseur.Cible(arguments: ["Passeur Noms", "--port", port, "--jeton", Self.jeton]) == nil, "port \(port)")
+    /// Lit un texte comme l'URL du passeur. Un texte qui n'est meme pas une URL fait echouer le
+    /// test : sans cela, une faute de frappe passerait pour une URL refusee.
+    static func cible(url texte: String) -> EnvoiPasseur.Cible? {
+        guard let url = URL(string: texte) else {
+            Issue.record("texte qui n'est pas une URL : \(texte)")
+            return nil
         }
+        return EnvoiPasseur.Cible(url: url)
+    }
+
+    /// Port et jeton passent par l'URL que l'app ouvre avec le passeur, et s'y relisent : le
+    /// texte exact de l'URL, puis l'aller-retour.
+    @Test func url() {
+        let c = EnvoiPasseur.Cible(port: 54_321, jeton: Self.jeton)
+        #expect(c.url.absoluteString == "maillage-passeur://releve?port=54321&jeton=\(Self.jeton)")
+        #expect(EnvoiPasseur.Cible(url: c.url) == c)
+        for port: UInt16 in [1, 80, 65_535] {
+            let autre = EnvoiPasseur.Cible(port: port, jeton: Self.jeton)
+            #expect(EnvoiPasseur.Cible(url: autre.url) == autre, "port \(port)")
+        }
+    }
+
+    /// Une URL qui n'est pas celle du passeur ne donne pas de cible : autre schema, autre hote,
+    /// jeton absent ou vide, port absent, vide, nul, trop grand, illisible ou signe.
+    @Test func urlRefusee() {
+        let j = Self.jeton
+        #expect(Self.cible(url: "https://releve?port=54321&jeton=\(j)") == nil, "autre schema")
+        #expect(Self.cible(url: "maillage-passeur://autre?port=54321&jeton=\(j)") == nil, "autre hote")
+        #expect(Self.cible(url: "maillage-passeur://releve?port=54321") == nil, "sans jeton")
+        #expect(Self.cible(url: "maillage-passeur://releve?port=54321&jeton=") == nil, "jeton vide")
+        #expect(Self.cible(url: "maillage-passeur://releve?jeton=\(j)") == nil, "sans port")
+        #expect(Self.cible(url: "maillage-passeur://releve") == nil, "sans requete")
+        for port in ["", "0", "70000", "abc", "-1"] {
+            #expect(Self.cible(url: "maillage-passeur://releve?port=\(port)&jeton=\(j)") == nil, "port « \(port) »")
+        }
+    }
+
+    /// Le reste de l'URL ne gene pas la lecture : un parametre de plus, l'autre ordre, le schema
+    /// et l'hote en majuscules.
+    @Test func urlTolerante() {
+        let c = EnvoiPasseur.Cible(port: 54_321, jeton: Self.jeton)
+        #expect(Self.cible(url: c.url.absoluteString + "&x=1") == c, "un parametre de plus")
+        #expect(Self.cible(url: "maillage-passeur://releve?x=1&jeton=\(Self.jeton)&port=54321") == c, "autre ordre")
+        #expect(Self.cible(url: "MAILLAGE-PASSEUR://RELEVE?port=54321&jeton=\(Self.jeton)") == c, "majuscules")
     }
 
     /// Jeton a usage unique : 32 octets aleatoires, en 64 chiffres hexadecimaux, neuf a chaque tirage.

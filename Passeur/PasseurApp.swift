@@ -5,19 +5,23 @@ import SwiftUI
 
 /// Passeur des noms de Maison : app iOS lancee sur le Mac (« concue pour
 /// iPad »), seule forme qui ait HomeKit avec une equipe gratuite. Elle lit
-/// Maison (noms, pieces, zones, batteries). Lancee par Maillage Thread avec
-/// `--port` et `--jeton`, elle lui envoie le releve par la boucle locale du Mac
-/// (TCP sur 127.0.0.1, `EnvoiPasseur`), puis se ferme aussitot. Ouverte a la
-/// main, elle n'envoie rien : elle montre ce qu'elle a lu, puis se ferme apres 10 s.
+/// Maison (noms, pieces, zones, batteries). Ouverte par Maillage Thread avec
+/// l'URL `maillage-passeur://releve?port=<port>&jeton=<jeton>` (`EnvoiPasseur.Cible`, recue par
+/// `onOpenURL`), elle lui envoie le releve par la boucle locale du Mac (TCP sur 127.0.0.1,
+/// `EnvoiPasseur`), puis se ferme aussitot. L'URL peut arriver avant, pendant ou apres la lecture
+/// de Maison : un seul envoi dans tous les cas (`Passeur.recevoir`, `livrer`, `transmettre`).
+/// Ouverte a la main, elle n'envoie rien, sauf si l'app l'appelle pendant ses 10 s : elle montre
+/// ce qu'elle a lu, puis se ferme apres 10 s.
 /// Chaque lancement et chaque sortie laissent une trace au journal du Mac (`quitter`).
 @main
 struct PasseurApp: App {
-    @State private var passeur = Passeur(cible: EnvoiPasseur.Cible(arguments: ProcessInfo.processInfo.arguments))
+    @State private var passeur = Passeur()
 
     var body: some Scene {
         WindowGroup {
             VuePasseur()
                 .environment(passeur)
+                .onOpenURL { passeur.recevoir($0) }
         }
     }
 }
@@ -49,11 +53,18 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
     private(set) var etat = "Lecture de Maison…"
     /// Ouvert a la main : secondes avant la fermeture, apres le releve.
     private(set) var fermetureDans: Int?
-    /// Ou envoyer le releve : donne par Maillage Thread ; nil ouvert a la main.
-    @ObservationIgnored private let cible: EnvoiPasseur.Cible?
+    /// Ou envoyer le releve : donne par l'URL de Maillage Thread (`recevoir`). nil tant qu'elle
+    /// n'est pas arrivee, ou ouvert a la main. La premiere gagne.
+    @ObservationIgnored private var cible: EnvoiPasseur.Cible?
     @ObservationIgnored private var gestionnaire: HMHomeManager?
-    /// Un releve est parti (envoye, ou montre) : un seul par lancement.
-    @ObservationIgnored private var livre = false
+    /// Releve livre par la lecture de Maison (`livrer`), envoye ou montre : un seul par
+    /// lancement. nil tant que Maison n'a pas fini.
+    @ObservationIgnored private var releve: NomsMaison?
+    /// Le releve est parti vers l'app (`transmettre`) : un seul envoi par lancement.
+    @ObservationIgnored private var envoye = false
+    /// Ouvert a la main : compte a rebours avant la fermeture, que `recevoir` annule si l'app
+    /// appelle pendant ce temps.
+    @ObservationIgnored private var compteARebours: Task<Void, Never>?
     /// Maison a donne ses domiciles : avant `homeManagerDidUpdateHomes`, la
     /// liste est vide (HMHomeManager.h).
     @ObservationIgnored private var maisonChargee = false
@@ -70,30 +81,48 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
     @ObservationIgnored private var lecturesRestantes = 0
     @ObservationIgnored private var apresLectures: (@MainActor () -> Void)?
 
-    init(cible: EnvoiPasseur.Cible?) {
-        self.cible = cible
+    override init() {
         super.init()
     }
 
     func demarrer() {
         guard gestionnaire == nil else { return }
-        // Premiere trace du lancement : la cible est-elle arrivee ? Le port seulement, jamais le jeton.
-        // Sans cible, le nombre d'arguments dit si ceux du lancement ne sont pas arrives (1 : le
-        // chemin de l'executable seul) ou s'ils sont arrives sans etre lisibles (plus de 1).
-        if let cible {
-            journal.notice("démarrage : cible reçue, port \(cible.port)")
-        } else {
-            journal.notice("démarrage : aucune cible (arguments de lancement : \(ProcessInfo.processInfo.arguments.count))")
-        }
+        // Premiere trace du lancement. La cible, si elle est deja la ou quand elle arrive, a la
+        // sienne (`recevoir`) : son port seulement, jamais l'URL ni le jeton.
+        journal.notice("démarrage")
         let g = HMHomeManager()
         g.delegate = self
         gestionnaire = g
         Task { [weak self] in
             try? await Task.sleep(for: Self.delaiMaison)
             // Rien de livre, ni lecture en cours : Maison n'a pas repondu.
-            guard let self, !self.livre, self.apresLectures == nil else { return }
+            guard let self, self.releve == nil, self.apresLectures == nil else { return }
             self.livrer(NomsMaison(date: .now, statut: .erreur, message: "Maison n'a pas répondu"))
         }
+    }
+
+    /// URL recue de Maillage Thread (`onOpenURL`) : avant, pendant ou apres la lecture de Maison.
+    /// - Avant ou pendant : la cible est gardee, et `livrer` envoie le releve des qu'il est pret.
+    /// - Apres, ouvert a la main (releve deja montre, compte a rebours en cours) : le compte a
+    ///   rebours est annule et ce releve part aussitot.
+    /// Un seul envoi dans tous les cas : la premiere cible gagne, et `transmettre` ne part qu'une
+    /// fois. Jamais l'URL au journal : elle porte le jeton.
+    func recevoir(_ url: URL) {
+        guard let c = EnvoiPasseur.Cible(url: url) else {
+            journal.error("URL illisible, ignorée")
+            return
+        }
+        guard cible == nil else {
+            journal.notice("autre URL ignorée")
+            return
+        }
+        journal.notice("cible reçue, port \(c.port)")
+        cible = c
+        guard let n = releve, !envoye else { return }
+        compteARebours?.cancel()
+        compteARebours = nil
+        fermetureDans = nil
+        transmettre(n, a: c)
     }
 
     // HomeKit ne dit pas sur quel fil il appelle son delegue : passer par l'acteur principal.
@@ -132,7 +161,7 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
             return
         }
         // Un releve a la fois : les deux rappels de HomeKit peuvent arriver pendant les lectures.
-        guard apresLectures == nil, !livre else { return }
+        guard apresLectures == nil, releve == nil else { return }
         let caracteristiques = manager.homes.flatMap(\.accessories).compactMap(Self.batterie)
             .flatMap { [$0.niveau, $0.charge, $0.alerte].compactMap { $0 } }
         lire(caracteristiques) { self.livrerReleve(manager) }
@@ -197,18 +226,27 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
         fin()
     }
 
-    /// Livre le releve, une fois : a Maillage Thread, puis fermeture ; ouvert a la main, il le
-    /// montre, sans rien envoyer, et se ferme 10 s plus tard.
+    /// Livre le releve, une fois : avec une cible, a Maillage Thread, puis fermeture ; sans cible
+    /// (ouvert a la main, ou URL pas encore arrivee), il le montre, sans rien envoyer, et se
+    /// ferme 10 s plus tard, sauf si l'URL arrive pendant ce temps (`recevoir`).
     private func livrer(_ n: NomsMaison) {
-        guard !livre else { return }
-        livre = true
-        guard let cible else {
-            etat = n.statut == .ok
-                ? "\(n.accessoires.count) accessoires et \(n.zones?.count ?? 0) zones lus dans Maison. Ouvert à la main, Passeur Noms n'envoie rien : Maillage Thread le lance lui-même."
-                : (n.message ?? "Accès à Maison refusé.")
-            fermerApres(secondes: 10)
+        guard releve == nil else { return }
+        releve = n
+        if let cible {
+            transmettre(n, a: cible)
             return
         }
+        etat = n.statut == .ok
+            ? "\(n.accessoires.count) accessoires et \(n.zones?.count ?? 0) zones lus dans Maison. Ouvert à la main, Passeur Noms n'envoie rien : Maillage Thread le lance lui-même."
+            : (n.message ?? "Accès à Maison refusé.")
+        fermerApres(secondes: 10)
+    }
+
+    /// Seul chemin d'envoi du releve, pour `livrer` (la cible etait la avant le releve) comme
+    /// pour `recevoir` (elle est arrivee apres) : une seule fois par lancement.
+    private func transmettre(_ n: NomsMaison, a cible: EnvoiPasseur.Cible) {
+        guard !envoye else { return }
+        envoye = true
         etat = "Envoi à Maillage Thread…"
         let json: Data
         do {
@@ -221,8 +259,9 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
 
     /// Envoie la trame a 127.0.0.1:<port> et ferme son cote, attend que l'app ferme la
     /// connexion (elle a tout lu), puis quitte. L'app injoignable (ecoute deja fermee) : quitte
-    /// aussi. Jamais plus de `delaiEnvoi` : un passeur qui resterait ouvert ne recevrait pas les
-    /// arguments du lancement suivant. Chaque sortie passe par `quitter`, qui dit pourquoi.
+    /// aussi. Jamais plus de `delaiEnvoi` : un passeur qui resterait ouvert ignorerait l'URL du
+    /// lancement suivant (`recevoir` : la premiere cible gagne). Chaque sortie passe par `quitter`,
+    /// qui dit pourquoi.
     private static func envoyer(_ trame: Data, port: UInt16) {
         guard let p = NWEndpoint.Port(rawValue: port) else { quitter("port \(port) invalide", echec: true) }
         let c = NWConnection(host: "127.0.0.1", port: p, using: .tcp)
@@ -252,13 +291,18 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
         }
     }
 
-    /// Ouvert a la main : fermeture apres un compte a rebours.
+    /// Ouvert a la main : fermeture apres un compte a rebours, que `recevoir` annule si l'app
+    /// appelle. Une tache annulee ne quitte pas : `Task.sleep` rend alors la main aussitot, et
+    /// `try?` avale l'annulation ; sans ces tests, la boucle irait jusqu'a `quitter`. Le premier
+    /// couvre aussi une annulation arrivee avant le premier tour.
     private func fermerApres(secondes: Int) {
-        Task { [weak self] in
+        compteARebours = Task { [weak self] in
             for n in stride(from: secondes, to: 0, by: -1) {
+                if Task.isCancelled { return }
                 self?.fermetureDans = n
                 try? await Task.sleep(for: .seconds(1))
             }
+            if Task.isCancelled { return }
             quitter("ouvert à la main : relevé montré, rien envoyé")
         }
     }

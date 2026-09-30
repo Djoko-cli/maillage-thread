@@ -78,6 +78,11 @@ targets:
       path: Passeur/Info.plist
       properties:
         CFBundleDisplayName: Passeur Noms
+        # Schema d'URL par lequel Maillage Thread lui donne le port et le jeton (EnvoiPasseur.schema).
+        CFBundleURLTypes:
+          - CFBundleURLName: fr.djoko.maillage.passeur
+            CFBundleURLSchemes:
+              - maillage-passeur
         NSHomeKitUsageDescription: "Passeur Noms lit les noms, pièces, zones, fabricants et batteries de vos accessoires Maison pour Maillage Thread. Rien ne sort de ce Mac."
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:

@@ -3,7 +3,9 @@ import Foundation
 /// Envoi du releve du passeur a l'app par la boucle locale du Mac (TCP sur 127.0.0.1), sans
 /// dossier partage ni App Group :
 /// 1. l'app ecoute sur 127.0.0.1, sur un port choisi par le systeme, et tire un jeton a usage unique ;
-/// 2. elle lance le passeur sans l'activer, avec `--port <port> --jeton <jeton>` (`Cible`) ;
+/// 2. elle ouvre le passeur, sans l'activer, avec l'URL `maillage-passeur://releve?port=<port>&jeton=<jeton>`
+///    (`Cible`) : une app du bac a sable ne peut pas passer d'arguments de lancement, macOS les
+///    retire (verifie le 30/09) ;
 /// 3. le passeur lit Maison, se connecte et envoie la trame : le jeton sur une ligne, la longueur
 ///    du JSON (entier decimal) sur une ligne, puis le JSON de `NomsMaison` ; puis il se ferme ;
 /// 4. l'app verifie le jeton, en comparaison a temps constant, et lit au plus `tailleMax` octets
@@ -14,8 +16,14 @@ public enum EnvoiPasseur {
     public static let tailleMax = 8 * 1024 * 1024
     /// Jeton : autant d'octets aleatoires, en chiffres hexadecimaux (64).
     public static let octetsJeton = 32
+    /// Schema d'URL du passeur : il le declare dans son Info.plist (`CFBundleURLTypes`, `project.yml`).
+    public static let schema = "maillage-passeur"
+    /// Hote de l'URL du passeur : elle demande un releve.
+    private static let hote = "releve"
 
-    /// Ou le passeur envoie le releve : port et jeton, donnes par ses arguments de lancement.
+    /// Ou le passeur envoie le releve : port et jeton, donnes par l'URL que l'app ouvre avec lui.
+    /// Toute app peut ouvrir cette URL, comme elle pourrait lancer le passeur avec des arguments :
+    /// le passeur n'envoie qu'a 127.0.0.1, et l'app n'accepte que le bon jeton.
     public struct Cible: Hashable, Sendable {
         public var port: UInt16
         public var jeton: String
@@ -25,18 +33,30 @@ public enum EnvoiPasseur {
             self.jeton = jeton
         }
 
-        /// Arguments de lancement du passeur.
-        public var arguments: [String] { ["--port", String(port), "--jeton", jeton] }
+        /// URL que l'app ouvre avec le passeur : `maillage-passeur://releve?port=<port>&jeton=<jeton>`.
+        public var url: URL {
+            var c = URLComponents()
+            c.scheme = EnvoiPasseur.schema
+            c.host = EnvoiPasseur.hote
+            c.queryItems = [URLQueryItem(name: "port", value: String(port)),
+                            URLQueryItem(name: "jeton", value: jeton)]
+            // Toujours une URL : schema et hote fixes, requete encodee par URLComponents.
+            guard let url = c.url else { preconditionFailure("URL du passeur impossible a construire") }
+            return url
+        }
 
-        /// Lue dans les arguments du passeur, parmi d'autres ; nil s'il a ete ouvert a la main
-        /// (ni port ni jeton), ou si l'un d'eux est illisible.
-        public init?(arguments: [String]) {
-            func valeur(_ option: String) -> String? {
-                guard let i = arguments.firstIndex(of: option), i + 1 < arguments.count else { return nil }
-                return arguments[i + 1]
+        /// Lue dans l'URL recue par le passeur ; nil si ce n'est pas la sienne (autre schema ou
+        /// autre hote, sans tenir compte de la casse), ou si le port ou le jeton manque ou est
+        /// illisible. Les autres parametres de la requete sont ignores.
+        public init?(url: URL) {
+            guard let c = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  c.scheme?.lowercased() == EnvoiPasseur.schema,
+                  c.host?.lowercased() == EnvoiPasseur.hote else { return nil }
+            func valeur(_ nom: String) -> String? {
+                c.queryItems?.first { $0.name == nom }?.value
             }
-            guard let port = valeur("--port").flatMap({ UInt16($0) }), port != 0,
-                  let jeton = valeur("--jeton"), !jeton.isEmpty else { return nil }
+            guard let port = valeur("port").flatMap({ UInt16($0) }), port != 0,
+                  let jeton = valeur("jeton"), !jeton.isEmpty else { return nil }
             self.init(port: port, jeton: jeton)
         }
     }
