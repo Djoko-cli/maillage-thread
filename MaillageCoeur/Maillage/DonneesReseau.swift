@@ -6,11 +6,12 @@ public struct DonneesReseau: Hashable, Sendable {
     /// Routeurs de bordure : ceux qui publient un prefixe (Border Router), une
     /// route (Has Route) ou le service SRP.
     public private(set) var routeursDeBordure: Set<UInt16> = []
-    /// Serveurs du service BBR (donnees 01), le principal d'abord, dans l'ordre d'OpenThread
-    /// (`Manager::IsBackboneRouterPreferredTo`, network_data_service.cpp) : sequence la plus haute
-    /// (comparaison simple), puis RLOC16 le plus haut ; un serveur dont les donnees font moins de
-    /// 7 octets est ignore. Le chef, que cette regle place avant tous, est traite par
-    /// `ConstructionMaillage.reseau(_:)`, qui seul le connait.
+    /// Serveurs du service BBR (donnees 01), du plus au moins prefere, hors chef, dans l'ordre
+    /// d'OpenThread (`Manager::IsBackboneRouterPreferredTo`, network_data_service.cpp) : sequence la
+    /// plus haute (comparaison simple), puis RLOC16 le plus haut ; un serveur dont les donnees font
+    /// moins de 7 octets est ignore. Le chef, que cette regle place avant tous, n'est donc pas
+    /// forcement en tete : `ConstructionMaillage.reseau(_:)`, qui seul le connait, le prefere s'il
+    /// est parmi les serveurs.
     public private(set) var bbr: [UInt16] = []
     /// Ceux qui publient un prefixe /64 en Border Router (le prefixe OMR).
     public private(set) var publientOMR: [UInt16] = []
@@ -21,6 +22,8 @@ public struct DonneesReseau: Hashable, Sendable {
     static let serviceBBR: UInt8 = 0x01, serviceSRPAnycast: UInt8 = 0x5C, serviceSRPUnicast: UInt8 = 0x5D
     /// Donnees de serveur d'un BBR : sequence (1 octet), delai de reenregistrement (2), delai MLR (4).
     static let octetsDonneesBBR = 7
+    /// Numero d'entreprise de Thread (44970, 0xAFAA) : celui des services ou T vaut 1, ou il est omis.
+    static let entrepriseThread: UInt32 = 44970
 
     /// nil si une TLV depasse la fin des donnees.
     public init?(_ o: [UInt8]) {
@@ -56,10 +59,17 @@ public struct DonneesReseau: Hashable, Sendable {
     }
 
     /// Service : T et identifiant, numero d'entreprise (si T vaut 0), donnees, puis ses serveurs.
+    /// T vaut 1 : le numero est celui de Thread, omis. T vaut 0 : il suit sur 4 octets, et seul celui
+    /// de Thread (44970) compte ; le service d'un autre fabricant est ignore, car ses donnees n'ont
+    /// pas le sens de 01, 5C ou 5D.
     /// Chaque serveur : RLOC16, puis ses donnees ; celles d'un BBR commencent par la sequence.
     private mutating func service(_ v: [UInt8], serveursBBR: inout [(rloc: UInt16, sequence: UInt8)]) {
         guard let premier = v.first else { return }
-        var j = premier & 0x80 != 0 ? 1 : 5
+        var j = 1
+        if premier & 0x80 == 0 {
+            guard v.count >= 5, v[1...4].reduce(UInt32(0), { $0 << 8 | UInt32($1) }) == Self.entrepriseThread else { return }
+            j = 5
+        }
         guard j < v.count else { return }
         let longueur = Int(v[j])
         guard j + 1 + longueur <= v.count else { return }

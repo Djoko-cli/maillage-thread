@@ -27,9 +27,130 @@ struct DonneesReseauTests {
         #expect(d.bbr.isEmpty)
     }
 
-    @Test func tronquees() {
+    @Test func tronquees() throws {
         #expect(DonneesReseau([0x03, 10, 0x00]) == nil)
-        #expect(DonneesReseau([]) == DonneesReseau([0x10, 0]), "vides, ou TLV inconnue : rien")
+        let vide = try #require(DonneesReseau([]))
+        let inconnue = try #require(DonneesReseau([0x10, 0]), "une TLV inconnue n'est pas une erreur")
+        #expect(vide == inconnue, "vides, ou TLV inconnue : rien")
+        #expect(vide.routeursDeBordure.isEmpty && vide.bbr.isEmpty)
+    }
+
+    // TLV de Network Data construites a la main : type (7 bits) et bit stable, longueur, valeur.
+
+    static func tlv(_ type: UInt8, _ valeur: [UInt8], stable: Bool = true) -> [UInt8] {
+        [type << 1 | (stable ? 1 : 0), UInt8(valeur.count)] + valeur
+    }
+
+    /// Prefix (type 1) : domaine 0, longueur en bits, octets du prefixe, puis ses sous-TLV.
+    static func prefixe(_ bits: Int, _ octets: [UInt8], _ sousTLV: [UInt8]...) -> [UInt8] {
+        tlv(1, [0x00, UInt8(bits)] + octets + sousTLV.flatMap { $0 })
+    }
+
+    /// Border Router (type 2) : RLOC16 et 2 octets de drapeaux par routeur.
+    static func routeurDeBordure(_ rlocs: UInt16...) -> [UInt8] {
+        tlv(2, rlocs.flatMap { [UInt8($0 >> 8), UInt8($0 & 0xFF), 0x00, 0x00] }, stable: false)
+    }
+
+    /// Server (type 6) : RLOC16, puis les donnees du serveur.
+    static func serveur(_ rloc: UInt16, _ donnees: [UInt8] = []) -> [UInt8] {
+        tlv(6, [UInt8(rloc >> 8), UInt8(rloc & 0xFF)] + donnees)
+    }
+
+    /// Service (type 5) : T et identifiant, numero d'entreprise (sur 4 octets, si `entreprise` : T vaut 0 ;
+    /// sinon T vaut 1 et celui de Thread est omis), donnees de service, puis les serveurs.
+    static func service(entreprise: UInt32? = nil, id: UInt8 = 0, donnees: [UInt8], serveurs: [[UInt8]]) -> [UInt8] {
+        var v: [UInt8]
+        if let e = entreprise {
+            v = [id & 0x0F, UInt8(e >> 24), UInt8((e >> 16) & 0xFF), UInt8((e >> 8) & 0xFF), UInt8(e & 0xFF)]
+        } else {
+            v = [0x80 | (id & 0x0F)]
+        }
+        return tlv(5, v + [UInt8(donnees.count)] + donnees + serveurs.flatMap { $0 })
+    }
+
+    /// Donnees d'un serveur BBR : sequence 0x57, reenregistrement 5 s, delai MLR 3600 s.
+    static let donneesBBR: [UInt8] = [0x57, 0x00, 0x05, 0x00, 0x00, 0x0E, 0x10]
+
+    /// Adresse IPv6 et port d'un service SRP en unicast.
+    static let adresseEtPort = [UInt8](repeating: 0x20, count: 16) + [0x1F, 0x90]
+
+    /// Service SRP, en anycast (donnees 5C, puis la sequence) et en unicast (5D, l'adresse et le port dans les
+    /// donnees du serveur, ou dans celles du service) : ses serveurs sont des routeurs de bordure, sans prefixe
+    /// ni route. Pas des BBR.
+    @Test func serviceSRP() throws {
+        let anycast = Self.service(donnees: [0x5C, 0x02], serveurs: [Self.serveur(0x3800), Self.serveur(0x4400)])
+        let unicastServeur = Self.service(id: 1, donnees: [0x5D], serveurs: [Self.serveur(0x7D8B, Self.adresseEtPort)])
+        let unicastService = Self.service(id: 2, donnees: [0x5D] + Self.adresseEtPort, serveurs: [Self.serveur(0x8C00)])
+        let d = try #require(DonneesReseau(anycast + unicastServeur + unicastService))
+        #expect(d.routeursDeBordure == [0x3800, 0x4400, 0x7D8B, 0x8C00])
+        #expect(d.bbr.isEmpty)
+    }
+
+    /// Service dont T vaut 0 : le numero d'entreprise suit, sur 4 octets. Celui de Thread (44970, 0xAFAA) donne
+    /// les memes roles que T = 1.
+    @Test func serviceAvecLeNumeroDEntrepriseDeThread() throws {
+        let bbr = Self.service(entreprise: 44970, donnees: [0x01], serveurs: [Self.serveur(0xB400, Self.donneesBBR)])
+        let srp = Self.service(entreprise: 44970, id: 1, donnees: [0x5C, 0x02], serveurs: [Self.serveur(0x3800)])
+        let d = try #require(DonneesReseau(bbr + srp))
+        #expect(d.bbr == [0xB400])
+        #expect(d.routeursDeBordure == [0x3800])
+    }
+
+    /// Service d'un autre fabricant (T vaut 0, un autre numero d'entreprise) : ses donnees n'ont pas le sens de
+    /// 01, 5C ou 5D ; il n'est ni BBR ni SRP, meme si ses donnees commencent par ces octets.
+    @Test func serviceDUnAutreFabricant() throws {
+        for entreprise: UInt32 in [0, 1, 44969, 44971, 0x0001_AFAA, 0xAFAA_0000] {
+            let bbr = Self.service(entreprise: entreprise, donnees: [0x01], serveurs: [Self.serveur(0xB400, Self.donneesBBR)])
+            let anycast = Self.service(entreprise: entreprise, id: 1, donnees: [0x5C, 0x02], serveurs: [Self.serveur(0x3800)])
+            let unicast = Self.service(entreprise: entreprise, id: 2, donnees: [0x5D],
+                                       serveurs: [Self.serveur(0x7D8B, Self.adresseEtPort)])
+            let d = try #require(DonneesReseau(bbr + anycast + unicast), "entreprise \(entreprise)")
+            #expect(d.bbr.isEmpty, "BBR, entreprise \(entreprise)")
+            #expect(d.routeursDeBordure.isEmpty, "SRP, entreprise \(entreprise)")
+        }
+        // Un service de Thread a la suite d'un autre fabricant reste lu.
+        let autre = Self.service(entreprise: 7, donnees: [0x01], serveurs: [Self.serveur(0x5000, Self.donneesBBR)])
+        let thread = Self.service(id: 1, donnees: [0x01], serveurs: [Self.serveur(0xB400, Self.donneesBBR)])
+        #expect(try #require(DonneesReseau(autre + thread)).bbr == [0xB400])
+        // Numero d'entreprise coupe : le service est ignore, pas les donnees.
+        let coupe = Self.tlv(5, [0x00, 0x00, 0x00])
+        let d = try #require(DonneesReseau(coupe + thread))
+        #expect(d.bbr == [0xB400])
+    }
+
+    /// Un routeur qui publie un prefixe est de bordure, quelle que soit la longueur du prefixe (/48, /64, /128) ;
+    /// un Border Router peut en nommer plusieurs.
+    @Test func routeurDeBordureQuelleQueSoitLaLongueurDuPrefixe() throws {
+        let p48 = Self.prefixe(48, [0xFD, 0x00, 0x00, 0x01, 0x00, 0x02], Self.routeurDeBordure(0x4800, 0x5000))
+        let p64 = Self.prefixe(64, [0xFD, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03], Self.routeurDeBordure(0x6400))
+        let p128 = Self.prefixe(128, [UInt8](repeating: 0xFD, count: 16), Self.routeurDeBordure(0x8000))
+        #expect(try #require(DonneesReseau(p48)).routeursDeBordure == [0x4800, 0x5000])
+        #expect(try #require(DonneesReseau(p64)).routeursDeBordure == [0x6400])
+        #expect(try #require(DonneesReseau(p128)).routeursDeBordure == [0x8000])
+        #expect(try #require(DonneesReseau(p48 + p64 + p128)).routeursDeBordure == [0x4800, 0x5000, 0x6400, 0x8000])
+    }
+
+    /// Sous-TLV qui deborde de son Prefix, ou Server qui deborde de son Service : le Prefix ou le Service est
+    /// ignore en silence, sans perdre les TLV suivantes ; si le bloc lui-meme deborde, c'est nil.
+    @Test func sousTLVTronque() throws {
+        let route = Self.prefixe(0, [], Self.tlv(0, [0x5C, 0x00, 0x00], stable: false))
+        let thread = Self.service(id: 1, donnees: [0x01], serveurs: [Self.serveur(0xB400, Self.donneesBBR)])
+        // Prefix dont le Border Router annonce 9 octets et n'en a que 2 : le bloc est entier, pas ce qu'il contient.
+        let prefixeCoupe = Self.tlv(1, [0x00, 64, 0xFD, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x04, 9, 0x48, 0x00])
+        let d1 = try #require(DonneesReseau(prefixeCoupe + route + thread))
+        #expect(d1.routeursDeBordure == [0x5C00], "le Prefix coupe ne donne rien, le suivant est lu")
+        #expect(d1.bbr == [0xB400])
+        // Service dont le second Server annonce 9 octets et n'en a que 2 : tout le service est ignore.
+        let serviceCoupe = Self.tlv(5, [0x80, 1, 0x01] + Self.serveur(0xAC00, Self.donneesBBR) + [0x0D, 9, 0x50, 0x00])
+        let d2 = try #require(DonneesReseau(serviceCoupe + route))
+        #expect(d2.bbr.isEmpty)
+        #expect(d2.routeursDeBordure == [0x5C00])
+        // Donnees de service plus longues que le service : ignore aussi.
+        let donneesCoupees = Self.tlv(5, [0x80, 9, 0x01])
+        #expect(try #require(DonneesReseau(donneesCoupees + thread)).bbr == [0xB400])
+        // Le bloc lui-meme deborde : nil.
+        #expect(DonneesReseau(Array(prefixeCoupe.dropLast())) == nil)
+        #expect(DonneesReseau(route + Array(thread.dropLast())) == nil)
     }
 
     // Ordre des serveurs BBR : celui d'OpenThread (Manager::IsBackboneRouterPreferredTo), le chef mis a part.
