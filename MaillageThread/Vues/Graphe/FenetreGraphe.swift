@@ -26,28 +26,31 @@ struct FenetreGraphe: View {
 
     var body: some View {
         let palette = Palette(sombre: apparence == .dark)
-        ZStack {
-            RadialGradient(gradient: palette.fond, center: UnitPoint(x: 0.3, y: 0.35), startRadius: 0, endRadius: 900)
-                .ignoresSafeArea()
-            if let r = surveillance.reseau {
-                graphe(r, palette)
-            } else {
-                EtatVide()
-            }
-            VStack(spacing: Self.espacement) {
-                EnTeteGraphe()
-                Spacer()
-                if let r = surveillance.reseau, selection == nil {
-                    LegendeLiens(sonde: surveillance.maillageAffiche(pour: r) != nil, ancien: surveillance.maillageAncien)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+        // Redessin chaque minute (`horloge`) : le contenu lit l'heure, que rien n'observe.
+        TimelineView(Self.horloge) { _ in
+            ZStack {
+                RadialGradient(gradient: palette.fond, center: UnitPoint(x: 0.3, y: 0.35), startRadius: 0, endRadius: 900)
+                    .ignoresSafeArea()
+                if let r = surveillance.reseau {
+                    graphe(r, palette)
+                } else {
+                    EtatVide()
                 }
-                if let selection {
-                    FicheNoeud(id: selection, aRenommer: $aRenommer, choisir: { self.selection = $0 }) {
-                        self.selection = nil
+                VStack(spacing: Self.espacement) {
+                    EnTeteGraphe()
+                    Spacer()
+                    if let r = surveillance.reseau, selection == nil {
+                        LegendeLiens(sonde: surveillance.maillageAffiche(pour: r) != nil, ancien: surveillance.maillageAncien)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if let selection {
+                        FicheNoeud(id: selection, aRenommer: $aRenommer, choisir: { self.selection = $0 }) {
+                            self.selection = nil
+                        }
                     }
                 }
+                .padding(Self.bord)
             }
-            .padding(Self.bord)
         }
         .frame(minWidth: 820, minHeight: 560)
         .sheet(item: $aRenommer) { FeuilleRenommer(id: $0.id) }
@@ -64,6 +67,12 @@ struct FenetreGraphe: View {
     /// Bord des elements poses sur le graphe, et ecart entre eux (pt).
     static let bord: CGFloat = 16
     static let espacement: CGFloat = 10
+
+    /// Redessin de la fenetre au debut de chaque minute. « Ancien » (6 min) et « perime » (15 min)
+    /// ne dependent que de l'heure (`Surveillance.maintenant`), que rien n'observe : quand la
+    /// sonde se tait, aucun evenement ne redessine le graphe. Une minute de retard au plus, que
+    /// cette fenetre seule paie, tant qu'elle est ouverte.
+    static let horloge = EveryMinuteTimelineSchedule()
 
     /// Marge du haut du graphe (pt) : la barre d'outils et la bande des titres des zones, puis
     /// une ligne de 40 pt pour le bandeau d'un reseau scinde, et une pour la tournee tant qu'une

@@ -114,6 +114,28 @@ struct AffichageSondeTests {
         #expect(FicheNoeud.texteQualite(3) == String(localized: "qualité \(3)"))
     }
 
+    /// « Ancien » (6 min) et « perime » (15 min) ne dependent que de l'heure, que rien n'observe
+    /// (`Surveillance.maintenant`) : quand la sonde se tait, aucun evenement ne redessine le
+    /// graphe. Sa fenetre est donc une `TimelineView` qui se redessine chaque minute
+    /// (`FenetreGraphe.horloge`) : le premier redessin apres chaque seuil montre le nouvel etat,
+    /// moins d'une minute plus tard.
+    @Test func grapheRedessineChaqueMinute() throws {
+        // Le corps de la fenetre est une TimelineView sur cette horloge (lu sur son type : on
+        // n'evalue pas le corps, qui lit l'environnement).
+        let horloge = String(reflecting: type(of: FenetreGraphe.horloge))
+        #expect(String(reflecting: FenetreGraphe.Body.self).contains("TimelineView<\(horloge)"))
+        let recu = Date(timeIntervalSince1970: 1_790_000_000)
+        let redessins = FenetreGraphe.horloge.entries(from: recu, mode: .normal).prefix(20).filter { $0 >= recu }
+        for etat in [Surveillance.Fraicheur.ancien, .perime] {
+            // Premiere seconde de l'etat, lue dans `Surveillance.fraicheur` : aucun seuil copie ici.
+            let seuil = try #require((0...1200).first {
+                Surveillance.fraicheur(recu, maintenant: recu + TimeInterval($0)) == etat
+            })
+            let premier = try #require(redessins.first { Surveillance.fraicheur(recu, maintenant: $0) == etat })
+            #expect(premier.timeIntervalSince(recu) - TimeInterval(seuil) < 60, "\(etat) : moins d'une minute apres son seuil")
+        }
+    }
+
     /// « Renommer… » : pour un routeur de l'instantane, un appareil connu ou un appareil disparu
     /// (plus dans l'instantane, mais le suivi le garde, avec sa fiche), pas pour un noeud que la
     /// sonde seule connait (son RLOC16 est volatil : rien ne lirait le surnom).
