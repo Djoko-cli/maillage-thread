@@ -58,7 +58,8 @@ public struct Sujet: Codable, Hashable, Sendable {
 
 /// Evenement du journal (une ligne JSON par evenement).
 public struct Evenement: Codable, Hashable, Sendable, Identifiable {
-    /// Moment du changement (premiere absence pour une disparition).
+    /// Moment du changement (premiere absence pour une disparition ; exception : « n'a plus de
+    /// parent » est date de la seconde absence, celle qui le declenche).
     public var date: Date
     public var type: TypeEvenement
     public var gravite: Gravite

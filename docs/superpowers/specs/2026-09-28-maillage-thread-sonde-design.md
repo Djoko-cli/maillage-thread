@@ -409,7 +409,12 @@ jusqu'à la connexion suivante réussie.
    « Rapprochement »). Sans table (firmware 1.0.1, sonde occupée), la tournée
    continue sans elle. Enfin `voisins` (requête locale, ajout du 30/09) : le
    signal de chaque routeur que la sonde entend, pour l'historique
-   (section 6) ; sans réponse, la tournée continue sans.
+   (section 6) ; sans réponse, la tournée continue sans. Par le réseau, une
+   liste de plus de 1100 octets ne passe pas : la sonde répond une ligne
+   `erreur` (« ligne trop longue »), sans nom de commande, que l'app ignore.
+   `voisins` attend donc son échéance (6 s par le réseau) à chaque tournée,
+   puis la tournée continue sans le signal des voisins ; celui du parent, lu
+   dans `etat`, reste. (La sonde répond `occupee`, elle, tout de suite.)
 2. **Liste des routeurs :** Route64 (5) et Leader Data (6), demandés jusqu'à
    ce que l'un réponde avec une Route64 :
    - au chef, sauf s'il est muet : il passe alors après les autres ;
@@ -751,7 +756,10 @@ choisi) : « Sonde : … ».
   7 routeurs et 20 enfants, soit 8 Mo par mois (5 Mo estimés à la
   conception ; mesuré au plan 3b).
 - Affichage : courbes dans la fiche (Swift Charts) sur 24 h, 7 j et 30 j,
-  avec les changements de parent marqués. Dans la fiche d'un routeur, une
+  avec les changements de parent marqués. Elles s'affichent pour tout nœud
+  dès que l'historique compte un relevé (jamais en démo) : la fiche garde sa
+  hauteur d'un nœud à l'autre, et le bas du graphe lui réserve jusqu'à 360 pt
+  de marge. Dans la fiche d'un routeur, une
   courbe « Signal vu par la sonde » (24 h, 7 j, 30 j), où les changements de
   parent de la sonde sont marqués, car le signal dépend d'abord de l'endroit
   où la sonde est posée (ajout du 30/09).
@@ -766,7 +774,11 @@ choisi) : « Sonde : … ».
   l'absence doit être vue par deux balayages distincts (décision de Djoko,
   30/09) : un balayage est réutilisé à chaque tournée jusqu'au suivant, et
   un seul balayage raté ne doit pas donner d'alerte. En général 30 à 60 min ;
-  moins si l'ensemble des routeurs à balayer change (balayage refait) ;
+  moins si l'ensemble des routeurs à balayer change (balayage refait). Limite
+  connue : un routeur qui sort de la liste des routeurs peut donner un faux
+  « n'a plus de parent » à ses enfants partis sous un routeur muet, car le
+  balayage n'est pas refait pour eux ; leur changement de parent est noté
+  dès que l'enfant est revu ;
 - le premier maillage d'un lancement, le premier d'une autre partition, et
   le premier après l'oubli de la sonde, sont un point de départ : aucun
   événement ;

@@ -96,7 +96,8 @@ public struct EtatSonde: Hashable, Sendable, Codable {
     public var rloc16Valeur: UInt16? { UInt16(rloc16, radix: 16) }
 }
 
-/// Voisin entendu par la sonde (son parent, pour un MED).
+/// Voisin entendu par la sonde (`voisins`) ; son parent n'y est pas : `etat` le donne (la sonde
+/// est FED depuis la 1.0.2, comme le dit `InterlocuteurSonde.voisins`).
 public struct VoisinSonde: Hashable, Sendable, Codable {
     public let rloc16: String
     public let ext: String

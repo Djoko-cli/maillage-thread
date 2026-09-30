@@ -160,8 +160,9 @@ struct HistoriqueTests {
 
     /// Fichiers `maillage-AAAA-MM.jsonl` du dossier de l'app : un releve par ligne, au mois de sa
     /// date (calendrier local) ; relus depuis une date, du plus ancien au plus recent, sans ligne
-    /// illisible ; purges 90 jours apres la fin de leur mois ; les autres fichiers du dossier (le
-    /// journal, les identites) ne sont ni lus ni purges.
+    /// illisible ; purges 90 jours apres la fin de leur mois ; les autres fichiers du dossier (un
+    /// journal, ici dans le meme dossier ; dans l'app, il a son sous-dossier `Journal` ; et les
+    /// identites) ne sont ni lus ni purges.
     @Test func fichiersMensuels() throws {
         let d = Self.dossier()
         defer { try? FileManager.default.removeItem(at: d) }

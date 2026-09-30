@@ -56,7 +56,7 @@ final class MesureTextes {
 /// l'echelle ou les textes changent : ni au survol, ni pendant un glisser. L'echelle suit
 /// le zoom (borne, meme pendant un pincement) et la taille de la fenetre, et aussi la
 /// selection quand la hauteur limite : la fiche ouverte reserve le bas de la vue (marge
-/// de 30 a 190 pt). Coordonnees de la vue, l'origine du plan en (0, 0) :
+/// de 30 a 360 pt, selon la fiche et ses courbes : `FenetreGraphe.margeBas`). Coordonnees de la vue, l'origine du plan en (0, 0) :
 /// `decale(projection.origine)` les pose dans la vue, sans rien recalculer.
 @MainActor
 final class MemoirePlacement {

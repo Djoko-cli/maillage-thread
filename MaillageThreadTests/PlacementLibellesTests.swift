@@ -509,7 +509,7 @@ struct LibellesGrapheTests {
         #expect(memoire.calculs == 3, "noms")
         _ = memoire.placement(demo.disposition, libelles: renomme, echelle: 1.25)
         #expect(memoire.calculs == 3)
-        // Une selection ouvre la fiche (marge basse de 30 a 190 pt) : si la hauteur limite,
+        // Une selection ouvre la fiche (marge basse de 30 a 360 pt ; 190 ici, sans courbes) : si la hauteur limite,
         // l'echelle change, et le placement avec elle.
         let taille = CGSize(width: 1400, height: 700)
         let haut = FenetreGraphe.margeHaut(scinde: demo.scinde, sondeRetenue: true)

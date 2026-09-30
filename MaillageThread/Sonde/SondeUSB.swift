@@ -75,7 +75,9 @@ actor SondeUSB: InterlocuteurSonde {
     enum Erreur: Error, LocalizedError, Equatable {
         case fermee
         case sansReponse(String)
-        /// Ligne `erreur` de la sonde pendant une demande de cle (firmware sans acces reseau...).
+        /// La sonde refuse, pour une autre raison qu'`occupee` : une ligne `erreur` pendant une
+        /// demande de cle (firmware sans acces reseau...), ou le refus d'`etat`, de `voisins` ou de
+        /// `routeurs` (la raison, telle que la sonde la donne).
         case refusee(String)
         /// La sonde n'a pas servi `etat`, `voisins` ou `routeurs` (`occupee` : verrou d'OpenThread
         /// refuse) : elle le dit tout de suite, sans attendre l'echeance.
