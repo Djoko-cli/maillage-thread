@@ -515,6 +515,30 @@ struct SondeMaillageTests {
         #expect(s.etat == .absente)
     }
 
+    /// La sonde retenue absente, un autre port choisi dans les Reglages : un changement de ports
+    /// pendant sa connexion (evenement IOKit) ne l'annule pas ; le port choisi est retenu.
+    @Test(.timeLimit(.minutes(1))) func choixDUnAutrePortSansLaSondeRetenue() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
+        let autre = PortUSB(chemin: "/dev/cu.usbmodemFACTICE02", vid: 0x303A, pid: 0x1001, serie: "B0:00:00:00:00:02",
+                            produit: nil)
+        let journal = JournalCanaux()
+        let canal = CanalTemoin("2", journal: journal, retenirBonjour: true)
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        s.portsChanges([autre])
+        #expect(s.etat == .absente)
+        s.choisir(autre)
+        await journal.attendre("bonjour 2")
+        s.portsChanges([autre])
+        try #require(s.etat == .connexion, "choix annule : \(s.etat)")
+        canal.libererBonjour()
+        await Self.attendre { Self.connectee(s) }
+        #expect(s.serie == "B0:00:00:00:00:02")
+        #expect(journal.cycle == ["ouvrir 2"])
+        await s.oublier()
+    }
+
     /// La sonde retenue debranchee : absente.
     @Test func debranchee() throws {
         let (p, domaine) = try Self.preferences()

@@ -307,9 +307,15 @@ final class SondeMaillage {
         if let p = ports.first(where: { $0.serie == serie }) {
             // `lancerConnexion` passe tout de suite a `.connexion` : un second appel n'en lance pas d'autre.
             if sonde == nil && etat != .connexion { lancerConnexion(p, choisi: false) }
-        } else if sonde != nil || etat != .absente {
+        } else if (sonde != nil || etat != .absente) && !versUnAutrePort {
             deconnecter(.absente)
         }
+    }
+
+    /// Une connexion, en cours ou etablie, vise un autre port que celui de la sonde retenue (un
+    /// choix des Reglages) : l'absence de la sonde retenue ne l'annule pas.
+    private var versUnAutrePort: Bool {
+        (etat == .connexion || sonde != nil) && serieEtat != serie
     }
 
     /// Connexion au port : ferme la liaison en place et attend qu'elle le soit
