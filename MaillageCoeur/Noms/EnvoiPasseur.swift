@@ -20,6 +20,9 @@ public enum EnvoiPasseur {
     public static let schema = "maillage-passeur"
     /// Hote de l'URL du passeur : elle demande un releve.
     private static let hote = "releve"
+    /// Chiffres d'un jeton : hexadecimaux, en minuscules. `nouveauJeton()` les tire, `Cible(url:)`
+    /// n'en accepte pas d'autres.
+    private static let chiffresJeton = "0123456789abcdef"
 
     /// Ou le passeur envoie le releve : port et jeton, donnes par l'URL que l'app ouvre avec lui.
     /// Toute app du Mac, du bac a sable ou non, peut ouvrir cette URL (des arguments de lancement,
@@ -28,6 +31,8 @@ public enum EnvoiPasseur {
     /// n'accepte que son propre jeton ; mais un processus local qui ecoute sur 127.0.0.1 peut ainsi
     /// recevoir le releve (noms, pieces, zones, fabricants, batteries) : le passeur ne peut pas
     /// reconnaitre l'app, faute de secret partage (ni App Group ni equipe commune).
+    /// La lecture de l'URL est stricte (`init?(url:)`) : le passeur n'ecrit jamais que
+    /// `<64 hexa>\n<longueur>\n<JSON>` ; celui qui ouvre l'URL choisit le port, pas les octets.
     public struct Cible: Hashable, Sendable {
         public var port: UInt16
         public var jeton: String
@@ -50,8 +55,12 @@ public enum EnvoiPasseur {
         }
 
         /// Lue dans l'URL recue par le passeur ; nil si ce n'est pas la sienne (autre schema ou
-        /// autre hote, sans tenir compte de la casse), ou si le port ou le jeton manque ou est
-        /// illisible. Les autres parametres de la requete sont ignores.
+        /// autre hote, sans tenir compte de la casse). Lecture stricte : `URLComponents` decode le
+        /// pourcent-encodage (`%0D%0A`, `%00` et `%20` arrivent en octets), et le passeur ecrit le
+        /// jeton tel quel sur le port nomme. Le jeton est donc exactement `2 * octetsJeton` chiffres
+        /// hexadecimaux minuscules, comme `nouveauJeton()` en tire ; le port, un entier de 1 a 65535
+        /// en chiffres seuls (ni signe, ni espace, ni zero de tete). Tout le reste donne nil. Les
+        /// autres parametres de la requete sont ignores.
         public init?(url: URL) {
             guard let c = URLComponents(url: url, resolvingAgainstBaseURL: false),
                   c.scheme?.lowercased() == EnvoiPasseur.schema,
@@ -59,9 +68,23 @@ public enum EnvoiPasseur {
             func valeur(_ nom: String) -> String? {
                 c.queryItems?.first { $0.name == nom }?.value
             }
-            guard let port = valeur("port").flatMap({ UInt16($0) }), port != 0,
-                  let jeton = valeur("jeton"), !jeton.isEmpty else { return nil }
+            guard let port = valeur("port").flatMap(Self.lirePort),
+                  let jeton = valeur("jeton"), Self.estUnJeton(jeton) else { return nil }
             self.init(port: port, jeton: jeton)
+        }
+
+        /// Port ecrit en chiffres decimaux seuls (`Lecture.entier` : ni signe, ni espace), sans zero
+        /// de tete : de 1 a 65535.
+        private static func lirePort(_ texte: String) -> UInt16? {
+            let chiffres = Array(texte.utf8)
+            guard chiffres.first != 0x30, let n = EnvoiPasseur.Lecture.entier(chiffres) else { return nil }
+            return UInt16(exactly: n)
+        }
+
+        /// Jeton de `2 * octetsJeton` chiffres hexadecimaux minuscules, lu octet par octet.
+        private static func estUnJeton(_ texte: String) -> Bool {
+            let permis = Set(EnvoiPasseur.chiffresJeton.utf8)
+            return texte.utf8.count == 2 * EnvoiPasseur.octetsJeton && texte.utf8.allSatisfy { permis.contains($0) }
         }
     }
 
@@ -69,7 +92,7 @@ public enum EnvoiPasseur {
     /// en hexadecimal minuscule.
     public static func nouveauJeton() -> String {
         var generateur = SystemRandomNumberGenerator()
-        let chiffres = Array("0123456789abcdef")
+        let chiffres = Array(chiffresJeton)
         var jeton = ""
         for _ in 0..<octetsJeton {
             let o = UInt8.random(in: .min ... .max, using: &generateur)

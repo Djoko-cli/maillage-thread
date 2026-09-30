@@ -127,6 +127,16 @@ final class LancementsPasseur: Sendable {
     var cible: EnvoiPasseur.Cible? { tous.last }
 }
 
+extension NomsInternes {
+    /// Lanceur des tests qui ne doivent jamais lancer le passeur : s'il est appele, le test echoue.
+    /// `NomsInternes` n'a pas de lanceur par defaut (l'oublier lancerait le vrai passeur) : tout test
+    /// qui ne prevoit pas de lancement donne celui-ci.
+    static let lanceurInterdit: Lanceur = { _ in
+        Issue.record("le passeur ne doit pas etre lance par ce test")
+        return "lanceur interdit"
+    }
+}
+
 @MainActor
 @Suite("Noms de Maison : releve du passeur par la boucle locale", .timeLimit(.minutes(1)))
 struct NomsInternesTests {
@@ -244,7 +254,7 @@ struct NomsInternesTests {
     @Test func memoireDesNoms() throws {
         let cache = Self.cache()
         defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-        let n = NomsInternes(cache: cache)
+        let n = NomsInternes(cache: cache, lanceur: NomsInternes.lanceurInterdit)
         #expect(n.noms == nil)
         var recus: [NomsMaison?] = []
         n.surNoms = { recus.append($0) }
@@ -253,7 +263,7 @@ struct NomsInternesTests {
         #expect(n.noms == Self.noms(), "l'echec n'efface pas les noms")
         #expect(n.probleme == Self.refus)
         #expect(recus == [Self.noms()], "un seul changement")
-        #expect(NomsInternes(cache: cache).noms == Self.noms(), "relus au lancement")
+        #expect(NomsInternes(cache: cache, lanceur: NomsInternes.lanceurInterdit).noms == Self.noms(), "relus au lancement")
     }
 
     /// Relance a l'ouverture du graphe : releve absent ou de plus de 15 min, et
@@ -299,7 +309,7 @@ struct NomsInternesTests {
         #expect(n.probleme == nil)
         #expect(recus == [Self.noms()])
         #expect(try NomsMaison.lire(Data(contentsOf: cache)) == Self.noms(), "ecrit dans le conteneur")
-        #expect(NomsInternes(cache: cache).noms == Self.noms(), "relu au lancement")
+        #expect(NomsInternes(cache: cache, lanceur: NomsInternes.lanceurInterdit).noms == Self.noms(), "relu au lancement")
         let cible = try #require(lancements.cible)
         #expect(lancements.tous.count == 1)
         #expect(cible.jeton.count == 64)

@@ -21,7 +21,8 @@ struct MaillageThreadApp: App {
         let s = Surveillance(mode: Self.demo ? .demo : .direct, dossier: Self.demo ? nil : Surveillance.dossierParDefaut)
         let o = OuvertureSession()
         // Sans memoire en demo et sous tests : aucun releve lu, ecrit ni demande au passeur.
-        let d = NomsInternes(cache: NomsInternes.fichierCache(demo: Self.demo, sousTests: Surveillance.sousTests))
+        let d = NomsInternes(cache: NomsInternes.fichierCache(demo: Self.demo, sousTests: Surveillance.sousTests),
+                             lanceur: NomsInternes.lancerPasseurDuMac)
         _surveillance = State(initialValue: s)
         _ouverture = State(initialValue: o)
         _nomsMaison = State(initialValue: d)

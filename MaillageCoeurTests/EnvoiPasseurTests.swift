@@ -32,7 +32,8 @@ struct EnvoiPasseurTests {
     }
 
     /// Port et jeton passent par l'URL que l'app ouvre avec le passeur, et s'y relisent : le
-    /// texte exact de l'URL, puis l'aller-retour.
+    /// texte exact de l'URL, puis l'aller-retour, avec le jeton d'essai et avec des jetons tires par
+    /// `nouveauJeton()` : la lecture stricte du jeton accepte tout ce que le tirage produit.
     @Test func url() {
         let c = EnvoiPasseur.Cible(port: 54_321, jeton: Self.jeton)
         #expect(c.url.absoluteString == "maillage-passeur://releve?port=54321&jeton=\(Self.jeton)")
@@ -41,10 +42,21 @@ struct EnvoiPasseurTests {
             let autre = EnvoiPasseur.Cible(port: port, jeton: Self.jeton)
             #expect(EnvoiPasseur.Cible(url: autre.url) == autre, "port \(port)")
         }
+        for _ in 0..<50 {
+            let tire = EnvoiPasseur.Cible(port: 54_321, jeton: EnvoiPasseur.nouveauJeton())
+            #expect(EnvoiPasseur.Cible(url: tire.url) == tire, "jeton de nouveauJeton()")
+        }
     }
 
-    /// Une URL qui n'est pas celle du passeur ne donne pas de cible : autre schema, autre hote,
-    /// jeton absent ou vide, port absent, vide, nul, trop grand, illisible ou signe.
+    /// Une URL qui n'est pas celle du passeur ne donne pas de cible, et sa lecture est stricte : le
+    /// passeur ecrit le jeton tel quel sur le port que l'URL nomme, et `URLComponents` decode le
+    /// pourcent-encodage (`%0D%0A`, `%00` et `%20` arrivent en octets). Refuses :
+    /// - un autre schema ou hote, une requete absente ;
+    /// - un jeton absent, vide, de 63 ou de 65 caracteres, ou qui n'est pas fait de chiffres
+    ///   hexadecimaux minuscules : lettre hors a-f, majuscules, espace, fin de ligne ou octet nul
+    ///   (meme encodes en pourcent), caractere non ASCII ;
+    /// - un port absent, vide, nul, au-dela de 65535, ou pas ecrit en chiffres seuls : signe (`-1`,
+    ///   `+80`), espace, lettres, zero de tete, chiffres non ASCII.
     @Test func urlRefusee() {
         let j = Self.jeton
         #expect(Self.cible(url: "https://releve?port=54321&jeton=\(j)") == nil, "autre schema")
@@ -53,7 +65,30 @@ struct EnvoiPasseurTests {
         #expect(Self.cible(url: "maillage-passeur://releve?port=54321&jeton=") == nil, "jeton vide")
         #expect(Self.cible(url: "maillage-passeur://releve?jeton=\(j)") == nil, "sans port")
         #expect(Self.cible(url: "maillage-passeur://releve") == nil, "sans requete")
-        for port in ["", "0", "70000", "abc", "-1"] {
+        // Le port est celui d'un autre service local (Redis) : seul le jeton peut faire refuser ces
+        // URL. La plupart des jetons sont le jeton d'essai avec un caractere de moins, de plus ou
+        // change.
+        let court = String(j.dropLast())  // 63 caracteres
+        let jetons: [(raison: String, jeton: String)] = [
+            ("63 caracteres", court),
+            ("65 caracteres", j + "5"),
+            ("lettre hors a-f", court + "g"),
+            ("majuscules", j.uppercased()),
+            ("espace encode, 64 caracteres", court + "%20"),
+            ("fin de ligne encodee, 64 caracteres", court + "%0A"),
+            ("retour chariot encode, 64 caracteres", court + "%0D"),
+            ("octet nul encode, 64 caracteres", court + "%00"),
+            ("caractere non ASCII, 64 caracteres et 65 octets", court + "%C3%A9"),
+            ("espace apres le jeton", j + "%20"),
+            ("fin de ligne apres le jeton", j + "%0A"),
+            ("CRLF apres le jeton", j + "%0D%0A"),
+            ("octet nul apres le jeton", j + "%00"),
+            ("commande d'un autre service", "FLUSHALL%0D%0A"),
+        ]
+        for (raison, jeton) in jetons {
+            #expect(Self.cible(url: "maillage-passeur://releve?port=6379&jeton=\(jeton)") == nil, "jeton : \(raison)")
+        }
+        for port in ["", "0", "65536", "70000", "abc", "-1", "+80", "080", "8%200", "%D9%A8%D9%A0"] {
             #expect(Self.cible(url: "maillage-passeur://releve?port=\(port)&jeton=\(j)") == nil, "port « \(port) »")
         }
     }

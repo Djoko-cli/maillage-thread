@@ -38,6 +38,7 @@ final class NomsInternes {
     /// Plus recent, un releve suffit : l'ouverture du graphe ne relance pas le passeur.
     nonisolated static let fraicheur: TimeInterval = 15 * 60
     /// Attente d'un releve : le premier lancement attend la reponse a la demande d'acces a Maison.
+    /// Le texte du delai (`finir`, cas `.delai`) dit "2 minutes" en dur : a changer avec cette valeur.
     nonisolated static let delaiParDefaut: Duration = .seconds(120)
 
     /// Dernier releve valide.
@@ -59,9 +60,9 @@ final class NomsInternes {
     @ObservationIgnored private var minuterie: Task<Void, Never>?
 
     /// `cache` : le `noms.json` de l'app ; nil (mode demo, tests) : aucun releve lu, ecrit ni
-    /// demande. `lanceur` : le vrai passeur par defaut, un faux dans les tests.
-    init(cache: URL?, delai: Duration = NomsInternes.delaiParDefaut,
-         lanceur: @escaping Lanceur = NomsInternes.lancerPasseurDuMac) {
+    /// demande. `lanceur` : `lancerPasseurDuMac` pour l'app, un faux dans les tests. Il n'a pas de
+    /// valeur par defaut : un test qui l'oublierait lancerait le vrai passeur.
+    init(cache: URL?, delai: Duration = NomsInternes.delaiParDefaut, lanceur: @escaping Lanceur) {
         self.cache = cache
         self.delai = delai
         self.lanceur = lanceur
@@ -133,6 +134,8 @@ final class NomsInternes {
         case .longueurFausse: probleme = String(localized: "Relevé de Maison illisible : longueur fausse.")
         case .interrompu:
             probleme = String(localized: "Relevé de Maison interrompu : la connexion avec Passeur Noms a été coupée.")
+        // "2 minutes" : `delaiParDefaut` (120 s). Le texte est en dur, meme si `delai` se regle : les
+        // deux changent ensemble (le catalogue aussi).
         case .delai: probleme = String(localized: "Passeur Noms n'a rien envoyé en 2 minutes.")
         case .lancement(let p): probleme = p
         case .ecoute(let cause): probleme = String(localized: "Écoute du relevé impossible : \(cause)")

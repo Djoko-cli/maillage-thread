@@ -68,7 +68,7 @@ struct GrapheTests {
         let scinde = Surveillance(mode: .demo, dossier: nil)
         scinde.demarrer()
         let sansReseau = Surveillance(mode: .direct, dossier: nil)
-        let noms = NomsInternes(cache: nil)
+        let noms = NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit)
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         let journal = JournalCanaux()
@@ -106,7 +106,7 @@ struct GrapheTests {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         let surveillance = Surveillance(mode: .direct, dossier: nil)
-        let noms = NomsInternes(cache: nil)
+        let noms = NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit)
         let journal = JournalCanaux()
         let sonde = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in SondeMaillageTests.canalRetenu(journal) })
         func taille(_ vue: some View) -> CGSize {
