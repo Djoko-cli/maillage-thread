@@ -95,11 +95,13 @@ struct SondeRejouee: InterlocuteurSonde {
         return ResultatDiag(id: 0, cible: String(format: "%04X", cible), ok: true, ms: 50, code: "2.04", tlv: t)
     }
 
-    /// Etat de la capture apres le changement de parent : AC09, enfant de AC00 (muet) ; `table` :
-    /// celle des routeurs de la sonde, sans ExtMac par defaut (la capture vient d'une sonde en MED).
-    static func capture(chef: Int = 24, reponsesEnPlus: [String: String] = [:],
+    /// Etat de la capture apres le changement de parent : AC09, enfant de AC00 (muet) ; `ext` :
+    /// l'ExtMac de la sonde (absente de la capture) ; `table` : celle des routeurs de la sonde,
+    /// sans ExtMac par defaut (la capture vient d'une sonde en MED).
+    static func capture(chef: Int = 24, ext: String? = nil, reponsesEnPlus: [String: String] = [:],
                         table: [RouteurSonde]? = SondeRejouee.table(), tropLongs: Set<String> = []) throws -> SondeRejouee {
-        let base = #"{"v":1,"t":"etat","role":"child","rloc16":"AC09","mode":"rn","parent":{"rloc16":"AC00","ext":"E000000000000007","lqIn":3,"lqOut":3,"rssi":-89},"partition":"46CBEBCD","chef":\#(chef),"canal":25,"prefixeMaille":"FD00111122220C87","xp":"A0A1A2A3A4A5A6A7","suspendue":false}"#
+        let champExt = ext.map { #","ext":"\#($0)""# } ?? ""
+        let base = #"{"v":1,"t":"etat","role":"child","rloc16":"AC09"\#(champExt),"mode":"rn","parent":{"rloc16":"AC00","ext":"E000000000000007","lqIn":3,"lqOut":3,"rssi":-89},"partition":"46CBEBCD","chef":\#(chef),"canal":25,"prefixeMaille":"FD00111122220C87","xp":"A0A1A2A3A4A5A6A7","suspendue":false}"#
         guard case .etat(let e)? = MessageSonde.lire(Data(base.utf8)) else { throw CaptureSonde.ErreurCapture(id: 0) }
         var r: [String: String] = [
             "6000|5,6": try CaptureSonde.tlv(204),
@@ -710,6 +712,32 @@ struct TourneeTests {
         #expect(mem2.identifies[0x0801] == nil && mem2.identiteDemandee[0x0801] == nil, "le 2 n'est plus dans la liste")
         #expect(mem2.identifies[0xAC01] != nil && mem2.identiteDemandee[0xAC01] == demande, "parent muet")
         #expect(mem2.identifies[0x5001] != nil && mem2.identiteDemandee[0x5001] == demande, "table du 20 pas venue")
+    }
+
+    /// Enfant balaye sous un routeur muet (AC05) passe a un routeur qui repond (5002, dans sa
+    /// table) : a la tournee suivante, avant le balayage suivant, son identite le reconnait, et il
+    /// n'est plus affiche sous l'ancien parent. Les autres enfants balayes restent.
+    @Test func enfantAyantChangeDeParent() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(mem1.balayes[0xAC05]?.extMac == "E00000000000000B")
+        let table20 = try Self.garder(try CaptureSonde.tlv(104), [0, 1, 5, 8, 24]) + Self.tableEnfants([4, 1, 2])
+        let parti = try SondeRejouee.capture(reponsesEnPlus: ["5000|0,1,5,16,8,24": table20, "5002|0,8": "0008E00000000000000B"])
+        let (m2, mem2) = try #require(try await Tournee.complete(parti, memoire: mem1, maintenant: Self.t0 + 300))
+        #expect(mem2.dernierBalayage == Self.t0, "pas de nouveau balayage")
+        #expect(m2.enfants.filter { $0.extMac == "E00000000000000B" }.map(\.rloc16) == [0x5002], "une seule fois")
+        #expect(m2.enfants(de: 43).map(\.rloc16) == [0xAC01, 0xAC03, 0xAC04, 0xAC06, 0xAC07, 0xAC08, 0xAC09])
+    }
+
+    /// Enfant balaye qui porte l'ExtMac de la sonde (balayage d'avant un changement de RLOC16 de
+    /// la sonde) : ecarte, la sonde n'est affichee qu'une fois (ExtMac inventee).
+    @Test func sondeBalayeeEcartee() async throws {
+        let sonde = try SondeRejouee.capture(ext: "E0000000000000AA")
+        var mem = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0)).memoire
+        mem.balayes[0xAC0A] = EnfantMaillage(rloc16: 0xAC0A, extMac: "E0000000000000AA", source: .balayage)
+        let (m, _) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0 + 300))
+        #expect(m.enfants.filter { $0.extMac == "E0000000000000AA" }.map(\.rloc16) == [0xAC09], "la sonde, une fois")
+        #expect(m.enfants(de: 43).count == 8)
     }
 
     /// Autre partition (panne, fusion) : les identifiants de routeur y sont

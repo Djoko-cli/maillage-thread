@@ -294,7 +294,7 @@ public enum Tournee {
         // 4. Balayage des enfants des routeurs sans reponse qui sont muets (deux echecs de
         // suite) ou n'ont jamais repondu ; pas d'un routeur qui rate une seule tournee.
         // Toutes les 30 min, ou si cet ensemble change. Les enfants trouves restent
-        // affiches sous leur parent tant qu'il ne repond pas.
+        // affiches sous leur parent tant qu'il ne repond pas (ajoutes a la fin, etape 5).
         let aBalayer = muets.filter { mem.estMuet($0) || !mem.dejaRepondu.contains($0) }
         let du = mem.dernierBalayage.map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
         if du || (!aBalayer.isEmpty && aBalayer != mem.muetsBalayes) {
@@ -326,9 +326,6 @@ public enum Tournee {
         } else {
             signaler(.balayage, 0, 0)
         }
-        for e in mem.balayes.values.sorted(by: { $0.rloc16 < $1.rloc16 }) where muets.contains(e.parent) {
-            c.enfant(e)
-        }
 
         // 5. Enfants des tables : ExtMac et adresses, gardees jusqu'a une nouvelle reponse ;
         // demandees de nouveau apres 30 min, que l'enfant ait repondu ou non.
@@ -356,6 +353,13 @@ public enum Tournee {
         }
         for cible in c.enfantsSansIdentite {
             if let e = mem.identifies[cible] { c.enfant(e) }
+        }
+        // Enfants balayes, sous leur parent muet, apres les identites : pas celui dont l'ExtMac est
+        // celle d'un enfant des tables ou de la sonde (il a change de parent depuis le balayage).
+        let dejaLa = Set(c.maillage().enfants.compactMap(\.extMac))
+        for e in mem.balayes.values.sorted(by: { $0.rloc16 < $1.rloc16 }) where muets.contains(e.parent) {
+            if let ext = e.extMac, dejaLa.contains(ext) { continue }
+            c.enfant(e)
         }
         return (c.maillage(), mem)
     }
