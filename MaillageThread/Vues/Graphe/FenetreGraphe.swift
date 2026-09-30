@@ -70,8 +70,8 @@ struct FenetreGraphe: View {
 
     /// Redessin de la fenetre au debut de chaque minute. « Ancien » (6 min) et « perime » (15 min)
     /// ne dependent que de l'heure (`Surveillance.maintenant`), que rien n'observe : quand la
-    /// sonde se tait, aucun evenement ne redessine le graphe. Une minute de retard au plus, que
-    /// cette fenetre seule paie, tant qu'elle est ouverte.
+    /// sonde se tait, aucun evenement ne redessine le graphe ; l'etat parait avec une minute de
+    /// retard au plus, et le redessin n'a lieu que dans cette fenetre, tant qu'elle est ouverte.
     static let horloge = EveryMinuteTimelineSchedule()
 
     /// Marge du haut du graphe (pt) : la barre d'outils et la bande des titres des zones, puis
