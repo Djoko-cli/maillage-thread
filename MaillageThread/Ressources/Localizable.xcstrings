@@ -2721,18 +2721,18 @@
         }
       }
     },
-    "Seul le port choisi est ouvert. Le pont Halo est aussi un ESP32-C6 : ne le choisissez pas." : {
+    "Seul le port choisi est ouvert. Un autre ESP32-C6 branché n'est jamais ouvert : ne le choisissez pas." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Only the chosen port is opened. The Halo bridge is also an ESP32-C6: don't choose it."
+            "value" : "Only the chosen port is opened. Another plugged-in ESP32-C6 is never opened: don't choose it."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Seul le port choisi est ouvert. Le pont Halo est aussi un ESP32-C6 : ne le choisissez pas."
+            "value" : "Seul le port choisi est ouvert. Un autre ESP32-C6 branché n'est jamais ouvert : ne le choisissez pas."
           }
         }
       }

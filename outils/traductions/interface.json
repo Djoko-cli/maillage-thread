@@ -168,7 +168,7 @@
   "Réseau scindé en %lld partitions, constaté le %@ · à part : %@": "Network split into %1$lld partitions, found on %2$@ · separate: %3$@",
   "Sans partition connue": "No known partition",
   "Services vus": "Services seen",
-  "Seul le port choisi est ouvert. Le pont Halo est aussi un ESP32-C6 : ne le choisissez pas.": "Only the chosen port is opened. The Halo bridge is also an ESP32-C6: don't choose it.",
+  "Seul le port choisi est ouvert. Un autre ESP32-C6 branché n'est jamais ouvert : ne le choisissez pas.": "Only the chosen port is opened. Another plugged-in ESP32-C6 is never opened: don't choose it.",
   "Sonde": "Probe",
   "Sonde introuvable (%@) : éteinte, hors du réseau Thread, ou routeurs de bordure injoignables.": "Probe not found (%@): powered off, outside the Thread network, or border routers unreachable.",
   "Sonde suspendue dans Maison (interrupteur « Sonde maillage » éteint) : pas de relevé.": "Probe suspended in Home (“Sonde maillage” switch off): no survey.",

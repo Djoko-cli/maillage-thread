@@ -125,7 +125,7 @@ struct FenetreReglages: View {
                         AccesReseauSonde()
                         Button("Oublier la sonde") { Task { await sonde.oublier() } }
                     }
-                    Text("Seul le port choisi est ouvert. Le pont Halo est aussi un ESP32-C6 : ne le choisissez pas.")
+                    Text("Seul le port choisi est ouvert. Un autre ESP32-C6 branché n'est jamais ouvert : ne le choisissez pas.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
