@@ -4,7 +4,11 @@
 # Compile, enveloppe l'app comme Xcode (Wrapper/ et WrappedBundle), puis la
 # lance. Seul le passeur est signe avec l'equipe (l'app reste ad hoc : changer
 # sa signature ferait redemander ses autorisations).
-# Equipe gratuite : profil de 7 jours ; relancer ce script pour rafraichir.
+# Lance ainsi, a la main, le passeur lit Maison et n'envoie rien : ce premier
+# lancement de chaque compilation passe Gatekeeper et, la premiere fois, la
+# demande d'acces a Maison. Ensuite, Maillage Thread le lance lui-meme, avec un
+# port et un jeton, et recoit le releve par la boucle locale (127.0.0.1).
+# Equipe gratuite : profil de 7 jours ; relancer ce script pour le renouveler.
 #
 #   outils/passeur.sh [--sans-lancer]
 #

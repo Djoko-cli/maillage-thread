@@ -153,36 +153,6 @@ struct NomsTests {
         #expect(BatterieMaison.depuisHomeKit(niveau: nil, charge: nil, alerte: nil) == nil)
     }
 
-    /// Le passeur consomme la demande apres son ecriture : il la retire dans
-    /// tous les cas, et ne se ferme aussitot que si elle est recente.
-    @Test func demandeConsommee() throws {
-        let dossier = FileManager.default.temporaryDirectory.appendingPathComponent("demande-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dossier) }
-        let fichier = dossier.appendingPathComponent(DemandePasseur.fichier)
-        let t = Date(timeIntervalSince1970: 1_790_000_000)
-        #expect(!DemandePasseur.consommer(dans: dossier, maintenant: t), "pas de demande : ouvert a la main")
-        try DemandePasseur(date: t).donnees().write(to: fichier)
-        #expect(DemandePasseur.consommer(dans: dossier, maintenant: t.addingTimeInterval(3)))
-        #expect(!FileManager.default.fileExists(atPath: fichier.path))
-        try DemandePasseur(date: t).donnees().write(to: fichier)
-        #expect(!DemandePasseur.consommer(dans: dossier, maintenant: t.addingTimeInterval(600)), "un reste")
-        #expect(!FileManager.default.fileExists(atPath: fichier.path))
-        try Data("pas du json".utf8).write(to: fichier)
-        #expect(!DemandePasseur.consommer(dans: dossier, maintenant: t))
-        #expect(!FileManager.default.fileExists(atPath: fichier.path))
-    }
-
-    /// Demande de l'app au passeur : relue telle quelle, recente 2 min seulement.
-    @Test func demandePasseur() throws {
-        let t = Date(timeIntervalSince1970: 1_790_000_000)
-        let d = DemandePasseur(date: t)
-        #expect(try DemandePasseur.lire(try d.donnees()) == d)
-        #expect(d.estRecente(t.addingTimeInterval(119)))
-        #expect(!d.estRecente(t.addingTimeInterval(121)), "reste d'un passeur qui ne s'est pas lance")
-        #expect(DemandePasseur.fichier == "passeur-demande.json")
-    }
-
     @Test func priorite() throws {
         let halo = try #require(instantane.appareil("56B1E064401F74EF"))
         let f = "30FC8F95E0E1A385"

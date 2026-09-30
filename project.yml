@@ -72,12 +72,13 @@ targets:
     sources:
       - path: Passeur
       - path: MaillageCoeur/Noms/NomsMaison.swift
+      - path: MaillageCoeur/Noms/EnvoiPasseur.swift
       - path: MaillageCoeur/Annonces/CodageJSON.swift
     info:
       path: Passeur/Info.plist
       properties:
         CFBundleDisplayName: Passeur Noms
-        NSHomeKitUsageDescription: "Passeur Noms lit les noms, pièces, fabricants et batteries de vos accessoires Maison pour Maillage Thread. Rien ne sort de ce Mac."
+        NSHomeKitUsageDescription: "Passeur Noms lit les noms, pièces, zones, fabricants et batteries de vos accessoires Maison pour Maillage Thread. Rien ne sort de ce Mac."
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

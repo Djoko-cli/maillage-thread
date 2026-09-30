@@ -129,9 +129,9 @@ public struct ZoneMaison: Codable, Hashable, Sendable {
     }
 }
 
-/// Contrat du fichier `noms.json`, ecrit d'un coup par le passeur (app iOS
-/// lancee sur le Mac) dans un dossier choisi une fois, sans App Group, et lu
-/// par l'app.
+/// Releve de Maison par le passeur (app iOS lancee sur le Mac, sans App Group) : il
+/// l'envoie a l'app par la boucle locale (`EnvoiPasseur`), et l'app garde le dernier
+/// releve valide dans son conteneur (`noms.json`).
 public struct NomsMaison: Codable, Hashable, Sendable {
     /// Les zones, champ facultatif ajoute ensuite, ne la changent pas.
     public static let versionActuelle = 1
@@ -167,45 +167,6 @@ public struct NomsMaison: Codable, Hashable, Sendable {
         let n = try CodageJSON.decodeur().decode(NomsMaison.self, from: donnees)
         guard n.version <= versionActuelle else { throw Erreur.versionTropRecente(n.version) }
         return n
-    }
-
-    public func donnees() throws -> Data {
-        try CodageJSON.encodeur(lisible: true).encode(self)
-    }
-}
-
-/// Demande de l'app au passeur, deposee dans le dossier des noms avant de le
-/// lancer en arriere-plan : il ecrit `noms.json`, retire la demande et se
-/// ferme aussitot, sans compte a rebours. Lance a la main, il n'en trouve pas.
-/// (Le passeur se croit toujours au premier plan : il ne peut pas le deviner.)
-public struct DemandePasseur: Codable, Hashable, Sendable {
-    public static let fichier = "passeur-demande.json"
-    /// Au-dela, une demande est un reste (passeur qui ne s'est pas lance) : ignoree.
-    public static let validite: TimeInterval = 120
-
-    public var date: Date
-
-    public init(date: Date) {
-        self.date = date
-    }
-
-    public func estRecente(_ maintenant: Date) -> Bool {
-        abs(maintenant.timeIntervalSince(date)) <= Self.validite
-    }
-
-    /// Pour le passeur, apres une ecriture reussie (acces au dossier ouvert) :
-    /// retire la demande du dossier, quelle qu'elle soit ; vrai si elle est
-    /// recente, donc s'il doit se fermer aussitot. Plus ancienne ou illisible,
-    /// c'est un reste : le passeur a ete ouvert a la main.
-    public static func consommer(dans dossier: URL, maintenant: Date) -> Bool {
-        let url = dossier.appendingPathComponent(fichier)
-        guard let donnees = try? Data(contentsOf: url) else { return false }
-        try? FileManager.default.removeItem(at: url)
-        return (try? lire(donnees))?.estRecente(maintenant) == true
-    }
-
-    public static func lire(_ donnees: Data) throws -> DemandePasseur {
-        try CodageJSON.decodeur().decode(DemandePasseur.self, from: donnees)
     }
 
     public func donnees() throws -> Data {
