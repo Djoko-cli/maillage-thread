@@ -60,6 +60,13 @@ def reseau_inventee():
             + tlv(0x0B, bytes([0x81, 1, 0x5D]) + tlv(0x0D, bytes.fromhex("5000") + omr + bytes.fromhex("1680"))))
 
 
+def prefixe_tlv(bits):
+    """Un Prefix de la Network Data (bit stable a 1, domaine 0, sans sous-TLV) de `bits` de long, dont les octets
+    sont ceux d'une adresse inventee : le prefixe de documentation, puis l'identifiant d'interface."""
+    adresse = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
+    return tlv(0x03, bytes([0, bits]) + (adresse + bytes(16))[:(bits + 7) // 8])
+
+
 def service_tlv(donnee, entreprise=False):
     """Un Service de la Network Data : bit T a 1 (numero d'entreprise implicite), ou a 0 avec un numero d'entreprise ;
     puis la donnee de service et un Server (RLOC16 seul)."""
@@ -282,10 +289,34 @@ class Garde(unittest.TestCase):
         self.assertEqual(controle(self.diag_reseau(tlv(0x08, bytes.fromhex("0B02D2FF")))), {})
         for nom, contenu in (("Steering Data en plus", "0B02D2FF0802FFFF"), ("Border Agent Locator", "0902B400"),
                              ("vide", ""), ("Session ID de 3 octets", "0B03D2FF00"),
-                             ("autre type MeshCoP", "0C02D2FF")):
+                             ("autre type MeshCoP", "0C02D2FF"), ("deux Session ID", "0B02D2FF0B02A1B2")):
             with self.subTest(contenu=nom):
                 self.assertEqual(controle(self.diag_reseau(tlv(0x08, bytes.fromhex(contenu)))),
                                  {"Commissioning Data inconnue dans la Network Data (diag.tlv)": [1]})
+
+    def test_commissioning_data_accepte_toute_valeur_de_session(self):
+        """Un identifiant de session sur 16 bits n'est pas une donnee personnelle : la valeur est libre (la capture
+        n'a que D2FF), seuls le type 11, la longueur 2 et l'unicite du sous-TLV comptent."""
+        for session in ("D2FF", "A1B2", "0000", "FFFF", "1234"):
+            for type_tlv in (0x08, 0x09):  # bit stable a 0 ou a 1
+                with self.subTest(session=session, stable=type_tlv & 1):
+                    self.assertEqual(controle(self.diag_reseau(tlv(type_tlv, bytes.fromhex("0B02" + session)))), {})
+
+    # --- Prefix de plus de 96 bits ---
+
+    def test_prefixe_de_plus_de_96_bits_fait_echouer(self):
+        """Au-dela de 96 bits, l'identifiant d'interface resterait en clair : donnees_reseau() ne remplace que les 6
+        premiers octets. Un /128 invente en est le cas."""
+        for bits in (97, 104, 120, 128, 129, 255):
+            with self.subTest(bits=bits):
+                self.assertEqual(controle(self.diag_reseau(prefixe_tlv(bits))),
+                                 {"prefixe de plus de 96 bits dans la Network Data (diag.tlv)": [1]})
+
+    def test_prefixe_de_96_bits_ou_moins_passe(self):
+        """La capture a un /7, un /64 et le /96 NAT64 : celui-ci passe."""
+        for bits in (0, 7, 48, 64, 95, 96):
+            with self.subTest(bits=bits):
+                self.assertEqual(controle(self.diag_reseau(prefixe_tlv(bits))), {})
 
     def test_donnee_de_service_de_plus_de_2_octets_fait_echouer(self):
         """Une donnee de service de plus de 2 octets pourrait porter une adresse, que donnees_reseau() ne remplace
@@ -316,10 +347,12 @@ class Garde(unittest.TestCase):
 
     def test_l_anonymiseur_laisserait_ces_donnees_en_clair(self):
         """Ce que la garde retient : donnees_reseau() ne remplace ni la donnee de service, ni un TLV qu'il ne connait
-        pas. Si l'anonymiseur apprend a le faire, la garde correspondante peut etre levee."""
+        pas, ni la fin d'un Prefix de plus de 96 bits. Si l'anonymiseur apprend a le faire, la garde correspondante
+        peut etre levee."""
         adresse = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
         self.assertIn(adresse, anon.Anonymiseur().donnees_reseau(service_tlv(adresse)))
         self.assertIn(adresse, anon.Anonymiseur().donnees_reseau(tlv(0x0D, adresse)))
+        self.assertIn(adresse[8:], anon.Anonymiseur().donnees_reseau(prefixe_tlv(128)))  # l'identifiant d'un /128
 
     def test_les_tlv_connus_sont_ceux_de_la_capture_actuelle(self):
         vus = set()
@@ -473,6 +506,14 @@ class Outil(unittest.TestCase):
                 self.assertRefus(r, "la ligne %d porte une valeur que l'anonymiseur ne sait pas lire" % numero)
                 if fragment:
                     self.assertNotIn(fragment.lower(), r.stderr.lower())
+
+    def test_prefixe_128_echoue_sans_rien_ecrire(self):
+        """Un /128 (prefixe de documentation, identifiant d'interface invente) : l'identifiant resterait en clair."""
+        messages = capture_inventee()
+        messages[2]["tlv"] = tlv(7, reseau_inventee() + prefixe_tlv(128)).hex().upper()
+        self.ecrire(messages)
+        self.assertRefus(self.lancer(),
+                         "prefixe de plus de 96 bits dans la Network Data (diag.tlv) (1 ligne(s), la premiere : 3)")
 
     def test_une_capture_1_0_2_est_refusee(self):
         """Ce que la sonde 1.0.2 ecrit en plus : hote et nom, etat.ext et eligible, voisins, routeurs."""

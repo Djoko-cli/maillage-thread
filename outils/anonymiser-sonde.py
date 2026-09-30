@@ -22,10 +22,11 @@ ce qu'il ne connait pas (des noms, jamais une valeur), devant :
 - un type de message, un champ ou un TLV inconnu, un TLV a longueur etendue ou
   tronque, un TLV 0 qui n'a pas 8 octets, un TLV 8 qui n'est pas fait
   d'adresses entieres ;
-- dans la Network Data (TLV 7), autre chose que des Prefix, des Service et la
-  Commissioner Session ID de la capture, ou une donnee de service de plus de
-  2 octets : donnees_reseau() ne remplace que le /48 des Prefix et l'adresse
-  des Server d'un Service ;
+- dans la Network Data (TLV 7), autre chose que des Prefix de 96 bits au plus,
+  des Service et une Commissioning Data qui ne porte qu'une Commissioner
+  Session ID (16 bits, quelle que soit sa valeur), ou une donnee de service de
+  plus de 2 octets : donnees_reseau() ne remplace que les 6 premiers octets des
+  Prefix et l'adresse des Server d'un Service ;
 - un champ connu qui porte un objet ou une liste (hors parent).
 Une valeur illisible dans un champ connu (adresse, hexa) le fait sortir avec le
 seul numero de ligne, jamais la valeur (la trace d'une exception la citerait).
@@ -56,10 +57,14 @@ CHAMPS_PARENT = frozenset({"rloc16", "ext", "lqIn", "lqOut", "rssi", "rssiDernie
 # TLV de diagnostic : 0, 7 et 8 sont traites ; les autres n'ont ni ExtMac ni adresse.
 TLV_CONNUS = frozenset({0, 1, 2, 5, 6, 7, 8, 16, 24, 25, 26, 27, 28})
 # Network Data (TLV 7), premier niveau : les Prefix (1) et les Service (5) sont traites par donnees_reseau() ; la
-# Commissioning Data (4) de la capture ne porte que la Commissioner Session ID (MeshCoP 11, deux octets tires au
-# hasard). Une donnee de service de plus de 2 octets (la capture : 01, 5d, 5cc5) pourrait porter une adresse.
+# Commissioning Data (4) n'est acceptee que si elle ne porte qu'un sous-TLV Commissioner Session ID (MeshCoP 11,
+# longueur 2), quelle que soit sa valeur : un identifiant de session sur 16 bits n'est pas une donnee personnelle.
 DONNEES_RESEAU_CONNUES = frozenset({1, 4, 5})
+# Une donnee de service de plus de 2 octets (la capture : 01, 5d, 5cc5) pourrait porter une adresse.
 DONNEE_SERVICE_MAX = 2
+# donnees_reseau() ne remplace que les 6 premiers octets d'un Prefix : au-dela de 96 bits (le /96 NAT64 de la capture
+# passe), l'identifiant d'interface resterait en clair.
+PREFIXE_MAX_BITS = 96
 
 
 class Anonymiseur:
@@ -205,7 +210,9 @@ def controler_donnees_reseau(o):
         v = o[i + 2:i + 2 + n]
         if t not in DONNEES_RESEAU_CONNUES:
             raisons.append("sous-TLV inconnu de la Network Data : %d (diag.tlv)" % t)
-        elif t == 4 and not (len(v) == 4 and v[0] == 11 and v[1] == 2):
+        elif t == 1 and len(v) >= 2 and v[1] > PREFIXE_MAX_BITS:  # v[1] : longueur du prefixe, en bits
+            raisons.append("prefixe de plus de %d bits dans la Network Data (diag.tlv)" % PREFIXE_MAX_BITS)
+        elif t == 4 and not (len(v) == 4 and v[0] == 11 and v[1] == 2):  # un seul sous-TLV, la valeur est libre
             raisons.append("Commissioning Data inconnue dans la Network Data (diag.tlv)")
         elif t == 5 and len(v) >= 1:
             j = 1 if v[0] & 0x80 else 5  # un numero d'entreprise (4 octets) suit si le bit T est a 0
