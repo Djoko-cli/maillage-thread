@@ -125,6 +125,65 @@ struct JournalMaillageTests {
         #expect(s.evenements(de: "rloc:ABCD").isEmpty)
     }
 
+    /// Une purge qui echoue (vieux fichier dans un dossier sans droit d'ecriture) n'empeche ni la
+    /// lecture du journal ni celle de l'historique.
+    @Test func purgeEnEchecNeBloquePasLaLecture() async throws {
+        let dossier = Self.dossier()
+        let journalDossier = dossier.appendingPathComponent("Journal")
+        defer {
+            for d in [journalDossier, dossier] { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: d.path) }
+            try? FileManager.default.removeItem(at: dossier)
+        }
+        let t = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down) - 600)
+        let e = Evenement(date: t, type: .veille)
+        try JournalFichiers(dossier: journalDossier).ajouter([e])
+        let r = ReleveMaillage(try Self.maillage(Self.surveillance(dossier: nil), t, parent: 1))
+        try HistoriqueFichiers(dossier: dossier).ajouter(r)
+        FileManager.default.createFile(atPath: journalDossier.appendingPathComponent("journal-2020-01.jsonl").path, contents: Data())
+        FileManager.default.createFile(atPath: dossier.appendingPathComponent("maillage-2020-01.jsonl").path, contents: Data())
+        for d in [journalDossier, dossier] { try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: d.path) }
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        s.chargerJournal()
+        #expect(s.erreurJournal == nil)
+        #expect(s.evenements == [e])
+        await s.chargerHistorique()
+        #expect(s.historique == [r])
+        #expect(FileManager.default.fileExists(atPath: journalDossier.appendingPathComponent("journal-2020-01.jsonl").path),
+                "la purge a bien echoue")
+    }
+
+    /// Les fichiers sont purges quand le mois change pendant que l'app tourne (elle peut durer des
+    /// semaines), pas a chaque tournee : deux tournees du meme mois ne purgent pas ; la premiere d'un
+    /// autre mois purge le journal et l'historique. Ni en demo, ni sans dossier.
+    @Test func purgeAuChangementDeMois() async throws {
+        let dossier = Self.dossier()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let s = Self.surveillance(dossier: dossier)
+        s.chargerJournal()
+        await s.chargerHistorique()
+        let anciens = [dossier.appendingPathComponent("Journal/journal-2020-01.jsonl"),
+                       dossier.appendingPathComponent("maillage-2020-01.jsonl")]
+        func creer() {
+            for u in anciens { FileManager.default.createFile(atPath: u.path, contents: Data()) }
+        }
+        func presents() -> [Bool] { anciens.map { FileManager.default.fileExists(atPath: $0.path) } }
+        let t = Date()
+        creer()
+        s.recevoir(try Self.maillage(s, t, parent: 1), a: t)
+        #expect(presents() == [true, true], "meme mois que la derniere purge (celle du chargement)")
+        // Un mois plus tard au moins : 45 jours.
+        let plus = t.addingTimeInterval(45 * 24 * 3600)
+        s.recevoir(try Self.maillage(s, plus, parent: 1), a: plus)
+        #expect(presents() == [false, false], "mois change : journal et historique purges")
+        creer()
+        s.recevoir(try Self.maillage(s, plus.addingTimeInterval(300), parent: 1), a: plus.addingTimeInterval(300))
+        #expect(presents() == [true, true], "une fois par mois")
+        // Demo : rien n'est ecrit ni purge.
+        let demo = Self.surveillance(.demo, dossier: dossier)
+        demo.recevoir(try Self.maillage(demo, plus, parent: 1), a: plus.addingTimeInterval(90 * 24 * 3600))
+        #expect(presents() == [true, true])
+    }
+
     /// Demo : ni releve en memoire, ni fichier, meme avec un dossier ; le journal du maillage reste
     /// en memoire. Direct sans dossier : l'historique en memoire seulement.
     @Test func rienSurDisqueEnDemo() throws {

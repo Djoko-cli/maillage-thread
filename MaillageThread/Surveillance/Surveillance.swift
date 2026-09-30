@@ -79,6 +79,8 @@ final class Surveillance {
     /// Scissions notifiees lues (au demarrage, en mode direct) : ecrites ensuite a
     /// chaque changement. Sinon (demo, surveillance pas demarree : tests), ni lues ni ecrites.
     @ObservationIgnored private var scissionsChargees = false
+    /// Mois (annee, mois) de la derniere purge des fichiers ; nil : pas encore purges.
+    @ObservationIgnored private var moisDernierePurge: DateComponents?
     @ObservationIgnored private var debutVeille: Date?
     @ObservationIgnored private var observateurs: [NSObjectProtocol] = []
 
@@ -130,19 +132,26 @@ final class Surveillance {
             }
         case .direct:
             chargerScissionsNotifiees()
-            if let journal {
-                do {
-                    try journal.purger(maintenant: Date())
-                    evenements = try journal.lire()
-                } catch {
-                    erreurJournal = error.localizedDescription
-                }
-            }
+            chargerJournal()
             Task { [weak self] in await self?.chargerHistorique() }
             recenseur?.surReleve = { [weak self] a in self?.integrer(a) }
             recenseur?.surEtat = { [weak self] e in self?.noterEtat(e) }
             recenseur?.demarrer()
             observerVeille()
+        }
+    }
+
+    /// Purge le journal (mois finis depuis plus de 90 jours) puis le lit. Une purge qui echoue
+    /// (droits sur un vieux fichier) n'empeche pas la lecture. Sans dossier : rien.
+    func chargerJournal() {
+        guard let journal else { return }
+        let maintenant = Date()
+        moisDernierePurge = Calendar.current.dateComponents([.year, .month], from: maintenant)
+        _ = try? journal.purger(maintenant: maintenant)
+        do {
+            evenements = try journal.lire()
+        } catch {
+            erreurJournal = error.localizedDescription
         }
     }
 
@@ -190,6 +199,7 @@ final class Surveillance {
         let r = ReleveMaillage(m)
         let limite = date.addingTimeInterval(-Self.dureeHistorique)
         historique = historique.filter { $0.date >= limite } + [r]
+        purgerSiNouveauMois(date)
         guard let f = fichiersHistorique else { return }
         do {
             try f.ajouter(r)
@@ -198,16 +208,30 @@ final class Surveillance {
         }
     }
 
+    /// Purge le journal et l'historique (mois finis depuis plus de 90 jours, comme au lancement)
+    /// quand le mois de `date` n'est pas celui de la derniere purge : l'app de la barre des menus
+    /// peut tourner des semaines sans etre relancee. Un echec est ignore : la purge reviendra au
+    /// lancement suivant. Sans dossier (demo, tests) : rien.
+    private func purgerSiNouveauMois(_ date: Date) {
+        let mois = Calendar.current.dateComponents([.year, .month], from: date)
+        guard mois != moisDernierePurge else { return }
+        moisDernierePurge = mois
+        _ = try? journal?.purger(maintenant: date)
+        _ = try? fichiersHistorique?.purger(maintenant: date)
+    }
+
     /// Relit les 30 derniers jours de l'historique, hors de l'acteur principal, apres avoir purge
     /// les mois finis depuis plus de 90 jours ; les releves recus entre-temps restent. Sans dossier
     /// (demo, tests) : rien.
     func chargerHistorique() async {
         guard let f = fichiersHistorique else { return }
         let maintenant = Date()
+        moisDernierePurge = Calendar.current.dateComponents([.year, .month], from: maintenant)
         let debut = maintenant.addingTimeInterval(-Self.dureeHistorique)
         do {
             let lus = try await Task.detached(priority: .utility) {
-                try f.purger(maintenant: maintenant)
+                // Une purge qui echoue n'empeche pas la lecture.
+                _ = try? f.purger(maintenant: maintenant)
                 return try f.lire(depuis: debut)
             }.value
             // Les dates relues sont tronquees a la milliseconde (codage) : un releve recu pendant la
