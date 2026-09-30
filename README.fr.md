@@ -112,11 +112,11 @@ catalogue vont ensemble.
 | `MaillageCoeur/` | framework sans interface : décodage des TXT, instantané (réseaux, partitions, préfixes, appareils), suivi et événements du journal, journal en fichiers, noms, disposition du graphe, table de routage ; testé sur le relevé réel et sur la panne rejouée |
 | `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, balayage des routeurs muets), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats) ; testé sur une capture anonymisée |
 | `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, accès par le réseau Thread (`Reseau/` : transport UDP et enveloppe H1 du pont Halo, clé dans le trousseau, rid et renvois), `SondeUSB` (requêtes appariées par id et par cible, chacune avec son échéance), modèle de l'app (sonde retenue par son numéro de série USB, liaison USB ou réseau, une tournée toutes les 5 minutes) |
-| `MaillageThread/Noms/` | noms de Maison : dossier choisi une fois (signet à portée de sécurité), lecture de `noms.json`, derniers noms gardés, lancement de Passeur Noms |
+| `MaillageThread/Noms/` | noms de Maison : lancement de Passeur Noms, réception de son relevé par la boucle locale (écoute TCP sur 127.0.0.1, jeton à usage unique), derniers noms valides gardés dans le conteneur de l'app |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | modèle de l'app : relevés → suivi → journal et notifications ; veille du Mac ; ouverture à la connexion |
 | `MaillageThread/Vues/` | barre des menus, fenêtre du graphe (Canvas, surcouches en verre), journal, réglages |
-| `Passeur/` | Passeur Noms : app iOS lancée sur le Mac (« conçue pour iPad ») qui lit Maison et écrit `noms.json` |
+| `Passeur/` | Passeur Noms : app iOS lancée sur le Mac (« conçue pour iPad ») qui lit Maison et envoie ses noms, pièces et zones à l'app par la boucle locale |
 | `sonde/` | firmware de la sonde (ESP32-C6, PlatformIO) et outils d'essai |
 | `outils/anonymiser-sonde.py` | anonymise une capture de la sonde avant d'en faire des données de test |
 | `docs/releves/` | relevés réels (les données des tests et de la démo) |
@@ -127,34 +127,46 @@ catalogue vont ensemble.
 HomeKit n'existe pas en macOS natif, et une équipe de développement Apple
 gratuite ne peut pas le donner à une app Mac Catalyst. Les noms de Maison
 viennent donc de **Passeur Noms**, une petite app iOS lancée sur le Mac
-(« conçue pour iPad ») : elle lit Maison (noms, pièces, fabricants,
-`matterNodeID`, batteries), écrit `noms.json` dans un dossier choisi une
-fois, et se ferme.
+(« conçue pour iPad ») : elle lit Maison (noms, pièces, zones, fabricants,
+`matterNodeID`, batteries), passe le relevé à Maillage Thread par la boucle
+locale du Mac, et se ferme. Aucun dossier à choisir.
 
 ```sh
 outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe, lance
 ```
 
 - L'équipe vient de ton certificat « Apple Development » (`EQUIPE=` pour
-  l'imposer). Une équipe gratuite a un profil de 7 jours : relancer le script
-  pour rafraîchir les noms. Seul Passeur Noms est signé avec l'équipe ;
-  Maillage Thread reste ad hoc.
+  l'imposer). Une équipe gratuite a un profil de 7 jours : au-delà, Maillage
+  Thread ne peut plus lancer Passeur Noms ; relancer le script. Seul Passeur
+  Noms est signé avec l'équipe ; Maillage Thread reste ad hoc.
 - Au premier lancement de chaque compilation, macOS dit que l'app est
   « endommagée » : cliquer Annuler, puis Réglages Système › Confidentialité et
-  sécurité › « Ouvrir quand même ». Autoriser ensuite l'accès à Maison.
-- Choisir un dossier **hors iCloud et hors de ce dépôt** (par exemple
-  `~/Maillage Thread`) ; ouvert à la main, Passeur Noms propose « Changer de
-  dossier… » pendant 10 s après l'écriture. `noms.json` est ignoré par git :
-  ne jamais le commiter.
-- Dans Maillage Thread : Réglages › Noms de Maison › Choisir… (le même
-  dossier). Les noms sont relus quand Passeur Noms se ferme.
-  Priorité : surnom > Maison > HomeKit (`_hap._udp`) > hôte.
-- Rafraîchissement : la fenêtre du graphe lance Passeur Noms en arrière-plan à
-  son ouverture (si le relevé a plus de 15 min), puis toutes les heures ;
-  « Rafraîchir depuis Maison » (menu ou réglages) le fait à la demande, comme
-  le bouton rafraîchir du graphe dès qu'un dossier des noms est choisi. L'app
-  dépose d'abord `passeur-demande.json` dans le dossier : Passeur Noms écrit
-  et se ferme aussitôt, sa fenêtre ne fait que passer derrière les autres.
+  sécurité › « Ouvrir quand même ». Autoriser ensuite l'accès à Maison. Ouvert
+  ainsi à la main, Passeur Noms lit Maison, montre ce qu'il a lu, n'envoie
+  rien et se ferme après 10 s.
+- Un relevé : Maillage Thread écoute sur `127.0.0.1` (TCP, sur un port choisi
+  par le système), tire un jeton à usage unique et lance Passeur Noms en
+  arrière-plan avec `--port` et `--jeton`. Passeur Noms lit Maison, se
+  connecte, envoie le jeton, la longueur du JSON puis le JSON, et se ferme
+  dès que l'app a tout lu. L'app vérifie le jeton, lit au plus 8 Mo et écrit
+  `noms.json` dans son conteneur (écriture atomique). La boucle locale ne
+  demande pas l'accès au réseau local. Priorité des noms : surnom > Maison >
+  HomeKit (`_hap._udp`) > hôte.
+- Le dernier relevé valide est gardé. Un échec (Passeur Noms introuvable ou
+  refusé, rien en 2 minutes, jeton faux, longueur ou JSON illisible, accès à
+  Maison refusé) le garde et se lit dans Réglages › Noms de Maison et dans le
+  menu ; au-delà de 7 jours, les Réglages disent de relancer
+  `outils/passeur.sh`.
+- Rafraîchissement : la fenêtre du graphe lance Passeur Noms à son ouverture
+  (si le relevé a plus de 15 min), puis toutes les heures ; « Rafraîchir
+  depuis Maison » (menu ou réglages) et le bouton rafraîchir du graphe le
+  font à la demande. Un relevé à la fois : une demande pendant un relevé est
+  ignorée. La fenêtre de Passeur Noms ne fait que passer derrière les autres.
+- Zones : les zones de Maison (en général les étages) et leurs pièces, dans
+  l'ordre de Maison ; Réglages › Noms de Maison les liste. Un relevé d'avant
+  les zones n'en a pas.
+- Le `noms.json` écrit dans un dossier choisi par un ancien Passeur Noms (à la
+  racine de ce dépôt, par exemple) n'est plus lu : l'effacer (git l'ignore).
 - Batteries : niveau, état de charge et alerte de l'accessoire lui-même, pour
   chaque accessoire de Maison qui a une batterie. La fiche de l'appareil les
   montre avec l'âge du relevé ; dans le graphe, une pastille orange en

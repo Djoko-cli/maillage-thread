@@ -69,8 +69,9 @@ Dépôt `~/Dev/maillage-thread`, XcodeGen, Swift Testing. Trois cibles :
      **Graphe** (fiche en bas), fenêtre **Journal** ; ouverture à la
      connexion (`SMAppService.mainApp`).
 3. **`Passeur Noms`** (app iOS lancée sur le Mac « conçue pour iPad »,
-   capacité HomeKit ; section 5) : lancé à la demande, lit Maison, écrit
-   `noms.json` dans un dossier choisi une fois, se ferme.
+   capacité HomeKit ; section 5) : lancé à la demande, lit Maison, passe le
+   relevé à l'app par la boucle locale du Mac, se ferme (sans dossier depuis
+   le plan 4a, 30/09).
 
 Flux : recenseur → instantané → journal et notifications ; instantané + noms
 → graphe. Le modèle prévoit dès l'étape 1 des **liens** (enfant → parent,
@@ -223,7 +224,8 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
 - Il relève, pour chaque accessoire : nom, pièce, fabricant, modèle,
   catégorie, `matterNodeID` (`UInt64?` en Swift ; « node identifier used to
   identify the device on Apple's Matter fabric »), ainsi que le nom du
-  domicile.
+  domicile et, depuis le 30/09 (plan 4a), les zones de Maison avec leurs
+  pièces, dans l'ordre de Maison (`ZoneMaison`, champ facultatif).
 - **Batteries (ajout du 28/09 au soir).** Pour chaque accessoire qui a un
   service Batterie : niveau (0 à 100), état de charge (hors charge, en charge,
   non rechargeable) et alerte « batterie faible » de l'accessoire
@@ -231,19 +233,28 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   (0,2 s pour 78 valeurs), sans réveiller les appareils ; un appareil
   injoignable garde sa dernière valeur connue. Essai du 28/09 : 46 accessoires
   avec batterie, tous avec l'alerte, 26 avec le niveau, 6 avec l'état de charge.
-- Il écrit `noms.json` d'un coup, au format `NomsMaison`, dans **un dossier
-  choisi une fois** (par défaut Documents/Maillage Thread ; signet gardé),
-  puis se ferme : aussitôt si l'app l'a lancé, sinon 10 s plus tard. L'app
-  dépose `passeur-demande.json` (`DemandePasseur`, valable 2 min, ignoré par
-  git) dans le dossier juste avant de le lancer ; le passeur le retire après
-  l'écriture. Il ne peut pas le deviner seul : lancé sans activation, il se dit
-  quand même au premier plan (essai du 28/09), et sa fenêtre passe un instant
-  derrière les autres.
+- **Révision du 30/09 (plan 4a ; spec de la vue par pièces, section 3) :
+  plus de dossier.** L'app écoute sur `127.0.0.1` (TCP, port choisi par le
+  système), tire un jeton à usage unique, puis lance le passeur sans
+  l'activer, avec `--port` et `--jeton` dans ses arguments de lancement. Le
+  passeur lit Maison, se connecte et envoie le jeton, la longueur du JSON puis
+  le JSON (`NomsMaison`, trame `EnvoiPasseur`) ; il se ferme dès que l'app a
+  tout lu (10 s d'envoi au plus). Ouvert à la main (sans port ni jeton), il
+  n'envoie rien : il montre ce qu'il a lu et se ferme 10 s plus tard. Sa
+  fenêtre passe toujours un instant derrière les autres. Aucune invite
+  « réseau local » : la boucle locale n'en demande pas (essai du
+  passeur-démon, 30/09).
+  Auparavant, il écrivait `noms.json` dans un dossier choisi une fois, et
+  l'app y déposait `passeur-demande.json` avant de le lancer.
 
 **Côté app.**
-- Elle lit ce fichier après **un choix unique** dans ses Réglages
-  (« Fichier des noms… », signet à portée de sécurité), et le relit quand il
-  change.
+- Elle reçoit le relevé par la boucle locale (`NomsInternes`) : jeton
+  vérifié à temps constant, au plus 8 Mo, 120 s d'attente (le premier
+  lancement attend la réponse à la demande d'accès à Maison), une seule
+  écoute à la fois. Elle écrit le dernier relevé valide dans son conteneur
+  (`noms.json`, écriture atomique) ; un échec le garde et se dit dans les
+  Réglages et le menu (révision du 30/09 ; auparavant, un fichier lu dans un
+  dossier choisi une fois, avec un signet à portée de sécurité).
 - Elle garde les derniers noms **indéfiniment**, avec leur date. Au-delà de
   7 jours, elle affiche : « Noms du <date> : relancer outils/passeur.sh ».
 - Batterie faible : l'alerte de l'accessoire, ou un niveau de 20 % ou moins
@@ -263,11 +274,10 @@ sécurité › Maison) et continue avec les surnoms, le fabricant et le modèle
 
 **Confidentialité.** Rien ne sort du Mac.
 
-- **Dossier conseillé (révision du 28/09, après essai)** : hors iCloud et hors
-  du dépôt, par exemple `~/Maillage Thread` ; ouvert à la main, le passeur
-  montre le dossier utilisé et « Changer de dossier… » pendant les 10 s qui
-  précèdent sa fermeture ; `noms.json` est ignoré par git (Djoko a gardé la racine du
-  dépôt : c'est le filet de sécurité).
+- **Dossier conseillé (révision du 28/09, après essai ; sans objet depuis le
+  plan 4a, 30/09)** : hors iCloud et hors du dépôt. Djoko avait gardé la
+  racine du dépôt ; le `noms.json` qui y reste n'est plus lu, et reste ignoré
+  par git.
 - **Vérifié le 28/09/2026 avec Djoko** : `outils/passeur.sh` (Gatekeeper
   autorisé), 131 accessoires écrits ; dans l'app, 22 des 23 nœuds visibles de
   la fabrique d'Apple nommés (le 23e n'est pas un accessoire de Maison), pièce
@@ -285,7 +295,9 @@ sécurité › Maison) et continue avec les surnoms, le fabricant et le modèle
   `NSBonjourServices` : `_meshcop._udp`, `_matter._tcp`, `_hap._udp`) ;
   notifications ; ouverture à la connexion (`SMAppService`, approbation dans
   Réglages Système › Général › Ouverture) ; HomeKit (passeur seulement) ;
-  fichier des noms choisi une fois (`files.user-selected`, signet).
+  écoute TCP sur la boucle locale pour le relevé du passeur
+  (`network.server`, plan 4a, 30/09 ; il remplace le signet du dossier des
+  noms ; `files.user-selected` reste pour « Enregistrer une capture… »).
   Bac à sable avec `network.client` ; lecture de la table de routage par
   `sysctl` (à vérifier au jour 1, repli : préfixes tirés des adresses).
 - **Erreurs visibles** : réseau local refusé (bandeau + état du menu, le

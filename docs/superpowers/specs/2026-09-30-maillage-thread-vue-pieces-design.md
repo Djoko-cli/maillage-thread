@@ -9,7 +9,7 @@
 > **Maquette de référence :** `docs/superpowers/specs/maquettes/vue-pieces-v13.html`. Maison et noms sont inventés ; ouvrir la page dans un navigateur, qui télécharge three.js. C'est elle qu'il faut livrer. Les valeurs qu'elle porte sont recopiées ci-dessous, et **la spec fait foi** en cas d'écart.
 >
 > **Deux plans d'implémentation (section 11) :**
-> - **4a** : le passeur sans dossier, et les zones de Maison ;
+> - **4a** : le passeur sans dossier, et les zones de Maison (`docs/superpowers/plans/2026-09-30-maillage-thread-plan4a-passeur-interne.md`) ;
 > - **4b** : la vue par pièces.
 
 ## 0. Contexte, but, décisions

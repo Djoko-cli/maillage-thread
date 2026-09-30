@@ -842,3 +842,9 @@ déplaçables plus tard), appareils en sphères, routeurs plus gros (couronne
 pour le chef), liens radio en fils colorés selon la qualité, qui traversent
 les dalles ; rotation, zoom, clic pour la fiche. À concevoir quand les liens
 existent.
+
+**Conçue le 30/09** dans `docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md`
+(vue par pièces en 2D et en 3D ; plans 4a et 4b), qui fait foi. Le rendu y
+passe par un Canvas SwiftUI avec une projection 3D faite à la main, et non
+par RealityKit. La scène reste séparée du rendu, pour qu'un rendu RealityKit
+puisse s'ajouter plus tard.
