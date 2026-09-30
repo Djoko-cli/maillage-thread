@@ -189,7 +189,9 @@ public struct ConstructionMaillage: Sendable {
     /// rapports ne sont pas fusionnes : le dernier remplace les deux sens du precedent (ni moyenne, ni
     /// meilleure, ni pire valeur). La tournee applique les reponses par identifiant croissant : quand les
     /// deux bouts repondent, celui de plus grand identifiant decide. Un lien lu par un seul bout garde
-    /// ses deux sens, ranges de `a` vers `b` (le plus petit identifiant d'abord).
+    /// ses deux sens, ranges de `a` vers `b` (le plus petit identifiant d'abord). Une entree de Route64
+    /// sans qualite (pas voisin, `estVoisin` faux) n'est pas appliquee : elle ne remplace pas le rapport
+    /// de l'autre bout.
     mutating func lien(_ de: Int, _ vers: Int, sortante: Int, entrante: Int) {
         let (a, b) = (min(de, vers), max(de, vers))
         var l = liens[a * 64 + b] ?? LienRadio(a: a, b: b)
