@@ -248,6 +248,19 @@ struct SondeUSBTests {
         #expect(canal.envoyes == ["diag 5000 1 1 3000\n", "diag 0400 1 2 3000\n"])
     }
 
+    /// Reponse tardive d'une connexion precedente, au meme id mais pour une autre cible (la carte
+    /// finit ses requetes en vol apres une reconnexion USB) : ignoree, la requete attend la sienne.
+    @Test(.timeLimit(.minutes(1))) func diagDUneAutreCibleIgnore() async throws {
+        let canal = CanalRejoue { l in
+            l.hasPrefix("diag 0400") ? [CanalRejoue.diag(1, "5000", tlv: "01025000"), CanalRejoue.diag(1, "0400", tlv: "01020400")] : []
+        }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        let r = try await s.diag(0x0400, [1], delaiMs: 3000)
+        #expect(r.cible == "0400")
+        #expect(r.reponse?.rloc16 == 0x0400)
+    }
+
     /// Sans reponse de la sonde : `delai` apres le delai donne et la marge.
     @Test func delai() async throws {
         let s = SondeUSB(canal: CanalRejoue { _ in [] }, marge: .milliseconds(50))

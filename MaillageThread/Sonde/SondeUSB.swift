@@ -69,8 +69,8 @@ private struct FileAttentes<Valeur: Sendable> {
 }
 
 /// Sonde branchee en USB : envoie les commandes et apparie les reponses, par
-/// ordre pour `bonjour`, `etat` et `routeurs`, par id pour `diag` (8 en vol, dans le desordre).
-/// Chaque requete a sa propre echeance.
+/// ordre pour `bonjour`, `etat` et `routeurs`, par id et cible pour `diag` (8 en vol, dans le
+/// desordre). Chaque requete a sa propre echeance.
 actor SondeUSB: InterlocuteurSonde {
     enum Erreur: Error, LocalizedError, Equatable {
         case fermee
@@ -270,7 +270,12 @@ actor SondeUSB: InterlocuteurSonde {
     private func recevoir(_ ligne: Data) {
         switch MessageSonde.lire(ligne) {
         case .diag(let r)?:
-            attenteDiag.removeValue(forKey: r.id)?.suite.resume(returning: r)
+            // Par l'id et la cible : une reponse tardive d'une connexion precedente (meme id,
+            // autre cible) ne sert pas cette requete, qui attend la sienne.
+            if let a = attenteDiag[r.id], UInt16(r.cible, radix: 16) == a.cible {
+                attenteDiag[r.id] = nil
+                a.suite.resume(returning: r)
+            }
         case .etat(let e)?:
             attenteEtat.servir(e)
         case .routeurs(let p)?:
