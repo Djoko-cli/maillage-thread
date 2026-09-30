@@ -40,6 +40,14 @@
 > identifier (section 4) ; la sonde est joignable par le réseau Thread, comme
 > le pont Halo, pour la débrancher du Mac et la promener dans la maison
 > (section 3 bis).
+>
+> **Sonde 1.0.3 et vague de défauts mineurs (30/09, après le plan 3a) :** la
+> LED de la carte et le retour allumé après `oubli` (section 2) ; des
+> corrections de la liaison et des Réglages (sections 3, 3 bis et 5) et de la
+> tournée (section 4 : recherche de la Route64 bornée dans le temps, refus de
+> la sonde qui ne comptent pas comme un silence, mémoire des routeurs sortis
+> de la liste et des identités d'enfants) ; l'anonymiseur, qui échoue devant
+> ce qu'il ne connaît pas (section 7).
 
 ## 0. Contexte, but, décisions
 
@@ -120,7 +128,7 @@ dessiner, les noter au journal et garder l'historique des qualités.
      `55.03.312-1` : Arduino-ESP32 3.3.12, ESP-IDF 5.5.5, Matter 1.5) ;
      environnement ESP32-C6 Thread.
    - **Rôle MED :** repris du pont Halo, qui intercepte l'appel d'esp_matter
-     fixant le type de nœud.
+     fixant le type de nœud (FED depuis la 1.0.2 : section 3 bis).
    - **Code :** un nœud Matter, un client CoAP de diagnostic, les commandes
      USB.
 2. **`MaillageCoeur/Maillage/`, en Swift pur, testé.**
@@ -150,7 +158,17 @@ Sans sonde, l'app marche exactement comme à l'étape 1.
   - Seul le port de la sonde est flashé, désigné par Djoko.
 - **Dans Maison,** un interrupteur « Sonde maillage » (prise On/Off), allumé
   par défaut. Éteint, la sonde refuse les requêtes de diagnostic et répond
-  « suspendue » : on peut ainsi vérifier qu'elle n'influe sur rien.
+  « suspendue » : on peut ainsi vérifier qu'elle n'influe sur rien. Son état
+  est gardé d'un démarrage à l'autre. Après un `oubli` (désappairage par
+  l'USB), la sonde revient allumée, interrupteur compris, comme à sa première
+  mise en service (1.0.3) ; retirée de Maison sans `oubli`, elle garde l'état
+  de son interrupteur.
+- **LED (1.0.3).** La LED couleur de la carte (WS2812 sur IO8), à faible
+  intensité, montre l'interrupteur : deux éclairs verts rapides quand il
+  s'allume, un éclair orange d'une demi-seconde quand il s'éteint, puis un
+  bref éclair orange toutes les 10 s tant que la sonde est suspendue, aussi
+  après un redémarrage. Seule la boucle principale la pilote : jamais sous le
+  verrou d'OpenThread, jamais depuis le rappel de Matter.
 - **Limites (révisées le 29/09) :**
   - jusqu'à 8 requêtes en vol, repérées par leur `id` ; les réponses peuvent
     arriver dans le désordre ;
@@ -162,8 +180,10 @@ Sans sonde, l'app marche exactement comme à l'étape 1.
 ## 3. Protocole USB (validée)
 
 **Trame.** Celle du pont Halo : RS (0x1E), JSON compact, fin de ligne ;
-ASCII imprimable seulement ; 4096 octets au plus ; `v` (version) et `t`
-(type) en tête. La ligne machine est retrouvée au dernier RS de la ligne,
+ASCII imprimable seulement ; 4096 octets au plus (l'app en accepte 4096, RS
+compris et fin de ligne non comprise ; le firmware n'en émet jamais plus de
+4095, RS et fin de ligne compris) ; `v` (version) et `t` (type) en tête. La
+ligne machine est retrouvée au dernier RS de la ligne,
 comme le récepteur du pont Halo : ce qui le précède (queue d'un journal sans
 fin de ligne, invite, ligne coupée) est abandonné. À l'ouverture du port,
 régler DTR et RTS **d'un seul coup** : sinon le C6 peut redémarrer, c'est le
@@ -181,7 +201,8 @@ piège décrit dans benq.
 - `diag <cible> <tlv,tlv,…> <id> [<délai ms>]` : `<cible>` est un RLOC16 en
   4 hexa (la sonde forme l'adresse RLOC à partir du préfixe du réseau maillé)
   ou une adresse IPv6 du réseau maillé. Le délai borne l'attente d'une
-  réponse ; au-delà, la requête échoue en `delai` ;
+  réponse ; au-delà, la requête échoue en `delai`. `<id>` et le délai sont des
+  entiers décimaux, sinon `syntaxe` (1.0.3) ;
 - `routeurs` (1.0.2) : la table des routeurs de la sonde (section 4) ;
 - `cle nouvelle <64 HEXA> <id>`, `cle`, `cle efface` (1.0.2, USB
   seulement) : la clé de l'accès par le réseau (section 3 bis).
@@ -208,17 +229,27 @@ piège décrit dans benq.
 - `diag`, en cas d'échec : `"ok":false` et `"erreur"` valant `delai`,
   `suspendue`, `occupee` (8 requêtes déjà en vol) ou `envoi` ; par le réseau
   seulement, `trop_long` (section 3 bis).
+- L'app apparie une réponse `diag` à sa requête par l'`id` et par la cible :
+  les `id` repartent de 1 à chaque connexion, et une réponse tardive de la
+  connexion précédente ne sert pas une autre cible.
 - `routeurs` (1.0.2) :
   `{"v":1,"t":"routeurs","liste":[{"id":…,"rloc16":"XXXX","ext":"<16 HEXA>"|null,"lqIn":…,"lqOut":…,"age":…,"lien":…}],"suite":true|false}`,
   sur plusieurs lignes si besoin, la dernière avec `"suite":false`.
 - `cle` (1.0.2) : `{"v":1,"t":"cle","id":<id>,"cle":"<64 HEXA>","empreinte":"<8 hexa>","hote":"<nom>"|null}`
-  en réponse à `cle nouvelle`, la seule fois où la clé sort ; l'empreinte
-  seule en réponse à `cle`.
+  en réponse à `cle nouvelle`, la seule fois où la clé sort. En réponse à
+  `cle` : l'empreinte, `effacement_en_echec`, le nom d'hôte, les compteurs du
+  transport (`udp`, dont `lignes_perdues` et, depuis la 1.0.3,
+  `refus_cadence`) et le tas.
 
 **Choix du port.** L'app n'ouvre **aucun port qu'on ne lui a pas désigné**.
 Le pont Halo est lui aussi un C6 : l'ouvrir par erreur peut le redémarrer.
 - **Réglages › Sonde :** choix du port parmi les `/dev/cu.usbmodem*`.
 - **Mémoire :** le numéro de série USB est retenu, pour se reconnecter seul.
+  Une reconnexion seule qui échoue (une sonde qui démarre en plus de 3 s) est
+  refaite une fois, 5 s plus tard, si rien n'a changé entre-temps ; ensuite,
+  l'app attend l'événement USB suivant. Un port choisi dans les Réglages n'est
+  jamais refait. Un autre port choisi pendant l'absence de la sonde retenue se
+  connecte : un événement USB ne l'annule pas.
 - **Vérification :** une sonde répond à `bonjour` avec
   `"produit":"sonde-maillage"`, sinon le port est refusé.
 - **Nom :** à chaque `bonjour`, l'app retient le nom de la sonde à côté de
@@ -250,7 +281,9 @@ lien, d'où leur ExtMac (`routeurs`, section 4).
   de benq (un bug du noyau de macOS la retire) ; sans elle, l'app le dit
   (« Pas de route IPv6… ») et renvoie au README (« Route vers le réseau
   Thread »), qui explique ce besoin. Résoudre un nom `.local` demande
-  l'autorisation « Réseau local » de macOS.
+  l'autorisation « Réseau local » de macOS, dont le texte
+  (`NSLocalNetworkUsageDescription`) cite l'écoute des annonces et la
+  connexion à la sonde.
 - Un datagramme, une charge. Requête de l'app : `<rid> <commande>` (rid
   décimal, croissant, jamais remis à zéro à une reconnexion ; commande = le
   même texte que sur l'USB, sans fin de ligne). Réponse : `<rid> <ligne JSON>`
@@ -283,9 +316,10 @@ local. Sans clé, la carte se tait : ni réponse, ni ICMP.
   service `fr.djoko.maillage.sonde`, compte = nom d'hôte (sans `.local`),
   commentaire = empreinte. Jamais dans un journal, une préférence ou un
   fichier ; les tests n'utilisent jamais le vrai trousseau.
-- « Oublier la sonde » efface la clé de ce Mac (la carte garde la sienne). Une
-  nouvelle autorisation remplace la clé de la carte et fait tomber les
-  sessions réseau en cours ; le désappairage (`oubli`) l'efface côté carte.
+- « Oublier la sonde » efface la clé de ce Mac (la carte garde la sienne), le
+  relevé de la sonde et son maillage dans le graphe. Une nouvelle autorisation
+  remplace la clé de la carte et fait tomber les sessions réseau en cours ; le
+  désappairage (`oubli`) l'efface côté carte.
 
 **Liste blanche à distance :** `bonjour`, `etat`, `voisins`, `routeurs`,
 `diag`. Tout le reste (`cle…`, `nom`, `oubli`) est refusé
@@ -311,7 +345,9 @@ demande l'USB.
   session, et se tait au-delà (le renvoi de 2 s rattrape). L'app envoie au
   plus 18 nouveaux rid par seconde glissante, dans l'ordre : les suivants
   attendent dans une file, sans rien bloquer d'autre que l'envoi suivant. Les
-  renvois ne comptent pas et partent à l'heure ; la veille compte.
+  renvois ne comptent pas et partent à l'heure ; la veille compte. La carte
+  compte ses refus depuis son démarrage (`udp.refus_cadence` de `cle`, 1.0.3) :
+  ce compteur dira si la marge de deux commandes suffit.
 - `SondeUSB` attend une réponse 6 s par le réseau, au-delà du renvoi de 4 s,
   et 3 s en USB, comme Halo ; chaque attente a sa propre échéance.
 - **Veille :** après 10 s sans aucune ligne, le canal envoie un `etat` de
@@ -366,7 +402,8 @@ jusqu'à la connexion suivante réussie.
    - au chef, sauf s'il est muet : il passe alors après les autres ;
    - aux routeurs qui ont répondu à la dernière tournée où l'un a répondu, un
      à un ;
-   - sinon, aux autres identifiants de routeur, de 0 à 62, par groupes de 8
+   - sinon, aux autres routeurs de la table de la sonde (point 1), puis aux
+     autres identifiants de routeur, de 0 à 62 ; chaque fois par groupes de 8
      dans l'ordre croissant. Au premier groupe où l'un donne une Route64, on
      prend celle du plus petit identifiant et on s'arrête ;
    - **sans Route64, pas de nouveau maillage :** la mémoire d'avant est
@@ -374,14 +411,29 @@ jusqu'à la connexion suivante réussie.
      apprises au point 1 (parent, table des routeurs) : une sonde promenée ne
      les perd pas. Le dernier maillage reste affiché en vieillissant (« Sonde
      muette », plus bas). Si rien ne répond, la recherche coûte au plus 63
-     requêtes, de l'ordre d'une minute, à chaque tournée.
+     requêtes, de l'ordre d'une minute. La mémoire garde la date de cette
+     recherche vaine : pendant les 30 minutes qui suivent, on n'interroge que
+     le chef, les secours et la table de la sonde. Une recherche dont la sonde
+     a refusé toutes les requêtes ne compte pas.
 3. **Rôles :** Network Data (7) à un routeur qui répond. On y lit :
    - les routeurs de bordure (préfixes, routes, service SRP) ;
    - le BBR principal (service 01), choisi comme OpenThread : l'entrée du
      chef d'abord, puis le numéro de séquence le plus haut (comparaison
      simple), puis le RLOC16 le plus haut. Un serveur dont les données font
-     moins de 7 octets est ignoré ;
-   - celui qui publie l'OMR.
+     moins de 7 octets est ignoré.
+
+   Seuls comptent les services du numéro d'entreprise de Thread (44970) ;
+   ceux d'un autre fabricant sont ignorés. L'OMR n'est pas lu ici : la fiche
+   montre celui de chaque annonce (TXT `omr`).
+
+   **Limite :** le RLOC16 d'un routeur de bordure (ou d'un serveur BBR) qui
+   est un enfant et non un routeur porte le numéro de routeur de son parent
+   (`RLOC16 >> 10`) : la tournée marque alors le parent, et non lui, routeur
+   de bordure (et BBR principal si c'est le serveur). De même, un RLOC16
+   absent de la Route64 crée un routeur dans le maillage. C'est rare : les
+   routeurs de bordure d'Apple sont des routeurs. On ne l'écarte pas :
+   ignorer ce RLOC16 laisserait son annonce libre, donc candidate à
+   l'élimination.
 
    Les dernières Network Data lues sont gardées dans la mémoire de la
    tournée (remise à zéro dans une autre partition). Quand la requête échoue,
@@ -392,6 +444,9 @@ jusqu'à la connexion suivante réussie.
 4. **À chaque routeur qui répond** (RLOC16 = identifiant << 10) :
    - Ext MAC (0), Address16 (1), Route64 (5), Child Table (16), IPv6 Address
      List (8), Version (24) ;
+   - une TLV de plus de 254 octets (une liste de 16 adresses ou plus) porte sa
+     longueur sur 3 octets, `0xFF` puis la longueur sur 2 octets : elle est
+     lue comme les autres ;
    - par le réseau, une réponse `trop_long` n'est pas un silence : la même
      requête, une fois, en deux moitiés de TLV (0, 1, 5 puis 16, 8, 24),
      réunies ; une moitié encore trop longue est laissée, sans échec ni
@@ -407,7 +462,13 @@ jusqu'à la connexion suivante réussie.
    muet, et on ne l'interroge plus qu'une fois par heure. Les routeurs de
    bordure d'Apple le sont tous. Le maillage rendu marque « muet »
    (`RouteurMaillage.muet`) tout routeur sans réponse à la tournée, dès le
-   premier échec ; aucune vue ne lit encore ce drapeau.
+   premier échec ; aucune vue ne lit encore ce drapeau. Seul un silence
+   compte (`delai` : la requête est partie, rien n'est revenu à temps) ; une
+   réponse illisible n'en est pas un. Un refus de la sonde (`occupee`,
+   `suspendue`, `envoi…`, ou une autre erreur d'OpenThread rendue après
+   l'envoi) ne dit rien de la cible : il ne compte pas comme un échec, et le
+   routeur n'en devient pas muet, même si le maillage le marque sans réponse à
+   cette tournée.
 6. **Identité des enfants des tables :** Ext MAC (0) et IPv6 Address List (8),
    demandés à chaque enfant lu dans une Child Table, au plus une fois par
    demi-heure (voir « Appareils endormis »).
@@ -425,7 +486,21 @@ jusqu'à la connexion suivante réussie.
 - **Résultat :** l'enfant et son parent (le RLOC16 le donne), sans qualité de
   lien ; le routeur muet ne dit rien.
 - **Entre deux balayages,** les enfants trouvés sont gardés, et affichés sous
-  leur parent tant qu'il ne répond pas.
+  leur parent tant qu'il ne répond pas, sauf celui dont l'ExtMac est celle
+  d'un enfant des tables (identifié) ou de la sonde : il a changé de parent
+  depuis le balayage, et n'est affiché qu'une fois, sous son nouveau parent.
+- **Balayage refusé :** un balayage dont la sonde a refusé toutes les
+  requêtes ne remplace pas le précédent : il est refait à la tournée
+  suivante. Tout autre balayage le remplace, même s'il ne trouve rien : un
+  silence est pris pour des enfants partis. Refusé en partie, il remplace
+  aussi, et les enfants des numéros refusés manquent jusqu'au balayage
+  suivant, 30 minutes au plus.
+- **Routeur balayé sorti de la liste :** il change l'ensemble à balayer : le
+  balayage des autres, s'il en reste, est refait, et ses enfants balayés ne
+  s'affichent plus. **Limite :** si son identifiant est réattribué alors
+  qu'il était le seul routeur balayé, le nouveau n'est balayé qu'à
+  l'échéance, 30 minutes au plus : ses enfants manquent en attendant, mais
+  aucun enfant de l'ancien ne s'affiche.
 
 **Appareils endormis :** le balayage les interroge sous les routeurs qui ne
 répondent pas. Sous un routeur qui répond, leur lien (parent, qualité) se lit
@@ -433,7 +508,12 @@ dans sa Child Table, mais elle ne donne pas leur ExtMac : l'identité de chaque
 enfant des tables (ExtMac, adresses) est donc demandée au plus une fois par
 demi-heure, endormis compris. C'est un écart assumé à « sans les réveiller » :
 au plus deux réveils par heure et par appareil endormi. Une identité obtenue
-est gardée jusqu'à une nouvelle réponse.
+est gardée jusqu'à une nouvelle réponse. Elle est oubliée, avec la date de sa
+demande, quand l'enfant manque à la Child Table que son parent a donnée à cette
+tournée, ou que ce parent sort de la liste des routeurs : un appareil qui
+reprend ce RLOC16 n'a pas l'ancien nom, et son identité est demandée tout de
+suite. Une demande que la sonde refuse ne compte pas : elle est refaite à la
+tournée suivante.
 
 **Rapprochement :**
 - **Appareil Matter :** son ExtMac est son nom d'hôte mDNS, donc
@@ -468,7 +548,9 @@ est gardée jusqu'à une nouvelle réponse.
   candidates. Ces deux règles, l'élimination et les candidats (plus bas)
   écartent une annonce si l'ExtMac du routeur et le `xa` de l'annonce sont
   connus tous deux et différents, ou si ce `xa` est l'ExtMac connue d'un
-  autre routeur (une annonce en double de celui-ci).
+  autre routeur (une annonce en double de celui-ci). Une annonce en double
+  n'est donc la candidate d'aucun routeur : elle reste dessinée à part, comme
+  sans sonde.
 
   **Mémoire des identités :** les paires retenues (parent de la sonde,
   routeurs qui répondent, routeurs entendus) sont gardées d'un lancement à
@@ -478,7 +560,11 @@ est gardée jusqu'à une nouvelle réponse.
   tournée, comme le reste de la mémoire. Une ExtMac n'a qu'un RLOC16 : un
   routeur qui change d'identifiant perd l'ancienne paire. Dès que la tournée
   a la Route64, les paires des routeurs sortis de la liste (routeur disparu,
-  identifiant libéré) sont oubliées. Un échec d'écriture du fichier est
+  identifiant libéré) sont oubliées, avec ce que la tournée retenait d'eux
+  (échecs, dernière interrogation de muet, réponse passée, pile, place de
+  secours, enfants balayés, identités des enfants) : un identifiant réattribué
+  repart de zéro, sauf pour le déclencheur du balayage (la limite du balayage,
+  plus haut). Un échec d'écriture du fichier est
   consigné dans le journal du Mac (Console, sous-système
   `fr.djoko.maillage`, sans données du réseau) ; les identités restent en
   mémoire et l'écriture est retentée à la tournée suivante.
@@ -511,7 +597,10 @@ est gardée jusqu'à une nouvelle réponse.
 15 min, marqué « ancien » au bout de 6 min, puis on revient aux pointillés.
 Ces durées se comptent depuis la réception du maillage, à la fin de sa
 tournée. Pendant une tournée, il n'est pas marqué « ancien » : le suivant
-arrive. En marche normale, il ne l'est donc jamais.
+arrive. En marche normale, il ne l'est donc jamais. La fenêtre du graphe se
+redessine au début de chaque minute (l'heure n'est observée par personne) :
+« ancien » et le retour aux pointillés y paraissent avec une minute de retard
+au plus.
 
 **Avancement :** la tournée signale le début de chaque étape qu'elle
 atteint (état de la sonde, liste des routeurs, routeurs, pile et Network
@@ -520,9 +609,10 @@ requêtes faites sur le total prévu de l'étape, 0 si elle n'a rien à faire. C
 total ne baisse jamais :
 - état de la sonde : `etat` puis `routeurs`, soit 2 ; l'étape s'arrête à 1
   si la sonde n'est pas attachée, ou suspendue ;
-- liste des routeurs : le chef et les secours, puis, s'il faut chercher,
-  tous les autres identifiants ; l'étape s'arrête à la première Route64,
-  souvent avant son total ;
+- liste des routeurs : le chef et les secours, puis, s'il faut chercher, les
+  autres routeurs de la table de la sonde et les autres identifiants (ceux-ci
+  pas dans les 30 minutes qui suivent une recherche vaine) ; l'étape s'arrête
+  à la première Route64, souvent avant son total ;
 - balayage : pour chaque routeur, les numéros jusqu'à 8 après le dernier
   enfant trouvé. Le total grandit quand un enfant répond loin, et finit égal
   aux requêtes envoyées (48 à la première tournée rejouée sur la capture de
@@ -533,7 +623,9 @@ total ne baisse jamais :
 - les routeurs : RLOC16, Ext MAC s'il est connu, identité, rôle (bordure,
   BBR principal, chef), muet ou non, version, pile ;
 - les liens entre routeurs, avec la qualité dans chaque sens, lue aux deux
-  bouts ou à un seul ;
+  bouts ou à un seul ; quand les deux bouts répondent, le dernier rapport de
+  la tournée (celui du plus grand identifiant) remplace les deux sens du
+  premier, sans moyenne ;
 - les enfants : parent, qualité (inconnue sous un routeur muet), délai,
   endormi ou non, identité ;
 - les nœuds non identifiés.
@@ -600,8 +692,9 @@ choisi) : « Sonde : … ».
   Halo avant la première connexion ;
 - l'état, précédé du nom de la sonde retenue quand il la concerne
   (« SONDE-01 · connectée »), l'état seul pour un autre port choisi (refus,
-  erreur) ; partition, dernier relevé ; pendant une tournée, « Tournée :
-  Balayage des routeurs muets · 24/48 · depuis 42 s » ;
+  erreur) ; pour la sonde connectée seulement, la partition, le dernier
+  relevé (date et heure) et l'erreur de la dernière tournée ; pendant une
+  tournée, « Tournée : Balayage des routeurs muets · 24/48 · depuis 42 s » ;
 - le QR code Matter de la sonde (noir sur blanc, agrandi sans lissage) et son
   code d'appairage mis en forme 4-3-4, même quand elle est dans Maison ; par
   le réseau, qui ne les transmet pas, une note dit de brancher la sonde en
@@ -612,7 +705,11 @@ choisi) : « Sonde : … ».
   réseau », « Régénérer une clé » une fois la clé créée (en USB), le choix de
   la liaison, le nom d'hôte visé par le réseau à la place du port, et la
   dernière perte de la session réseau (« Dernière perte », depuis quand, et
-  sa cause).
+  sa cause) ;
+- « Oublier la sonde » efface aussi son relevé (partition, dernier relevé,
+  erreur de tournée) et retire son maillage du graphe, qui revient aussitôt
+  aux pointillés, sans attendre les 15 minutes. Une autre sonde choisie repart
+  d'un relevé vide.
 
 ## 6. Journal et historique (plan 3b, validée)
 
@@ -639,7 +736,12 @@ choisi) : « Sonde : … ».
 **Tests.** Les réponses brutes capturées pendant l'essai, **anonymisées**,
 deviennent les données de test (décision de Djoko, 29/09). Les ExtMac, les
 préfixes (réseau maillé, OMR), les adresses et le `xp` sont remplacés par des
-valeurs inventées, de façon cohérente d'une réponse à l'autre. Elles servent à : décodage des TLV, reconstruction du maillage, tournée
+valeurs inventées, de façon cohérente d'une réponse à l'autre. Le code
+d'appairage et le QR code sont retirés. L'anonymiseur ne connaît que les
+messages `bonjour`, `etat` et `diag` de cette capture et échoue devant tout
+autre type de message, champ ou TLV inconnu : les captures de la 1.0.2
+(`etat.ext`, `voisins`, `routeurs`…) attendent l'anonymiseur complet de 3b.
+Ces données servent à : décodage des TLV, reconstruction du maillage, tournée
 (qui interroger, appareils endormis), rapprochement, et pour 3b les écarts du
 journal et l'historique. Le firmware est vérifié par sa compilation, puis sur
 la carte avec Djoko.

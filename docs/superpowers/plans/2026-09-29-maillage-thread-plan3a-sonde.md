@@ -5736,7 +5736,7 @@ Commit : `git add docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design
 
 | Spec | Tâches |
 |---|---|
-| 1. Firmware `sonde/` : pioarduino, MED, nœud Matter, client CoAP de diagnostic | 8 (sur la base de l'essai, commit `d568d7b`) |
+| 1. Firmware `sonde/` : pioarduino, MED (FED depuis la 1.0.2), nœud Matter, client CoAP de diagnostic | 8 (sur la base de l'essai, commit `d568d7b`) |
 | 1. `MaillageCoeur/Maillage/` : TLV, tournée, maillage, rapprochement | 2 à 7 |
 | 1. `MaillageThread/Sonde/` : liaison série, choix du port, numéro de série, boucle de tournée, `Surveillance` | 9, 10 |
 | 1. Sans sonde, l'app marche comme à l'étape 1 | 7 (disposition inchangée sans maillage), 10 |
@@ -5761,7 +5761,7 @@ Commit : `git add docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design
 
 ## Écarts d'exécution (29/09)
 
-Des relectures ont corrigé plusieurs comportements pendant l'exécution, par rapport au texte de ce plan. **Les blocs de code des tâches 2 à 11, et les textes des README des tâches 8 (la sonde) et 12, sont donc dépassés par les commits ci-dessous : le dépôt fait foi.** (Les corrections des tâches 3 et 10 touchent aussi des fichiers des tâches 5 et 9 ; celles de la revue finale, des fichiers des tâches 2, 5, 8, 9, 10 et 12.) Les effectifs de tests attendus ont aussi changé : à la fin de la revue finale, le cœur comptait 142 tests en 20 suites et l'app 69 en 17 suites, au lieu de 122 et 55 ; après les demandes de Djoko pendant la vérification sur la carte (les trois dernières entrées : interface, placement des libellés, sonde 1.0.2) et les dernières corrections, le cœur compte 180 tests en 21 suites et l'app 201 en 24 suites, verts en français et en anglais.
+Des relectures ont corrigé plusieurs comportements pendant l'exécution, par rapport au texte de ce plan. **Les blocs de code des tâches 2 à 11, et les textes des README des tâches 8 (la sonde) et 12, sont donc dépassés par les commits ci-dessous : le dépôt fait foi.** (Les corrections des tâches 3 et 10 touchent aussi des fichiers des tâches 5 et 9 ; celles de la revue finale, des fichiers des tâches 2, 5, 8, 9, 10 et 12.) Les effectifs de tests attendus ont aussi changé : à la fin de la revue finale, le cœur comptait 142 tests en 20 suites et l'app 69 en 17 suites, au lieu de 122 et 55 ; après les demandes de Djoko pendant la vérification sur la carte (les trois dernières entrées : interface, placement des libellés, sonde 1.0.2) et les dernières corrections, le cœur comptait 180 tests en 21 suites et l'app 201 en 24 suites, verts en français et en anglais ; après la vague de défauts mineurs du 30/09 (tournée, décodage, app, vues, tests), le cœur compte 229 tests en 21 suites et l'app 217 en 24 suites, verts en français et en anglais.
 
 - **Tâche 3, BBR principal** (`acff492`, qui touche aussi `Maillage.swift` et `MaillageTests.swift`, de la tâche 5).
   - Défaut : `bbr` gardait l'ordre des Network Data alors que `ConstructionMaillage.reseau(_:)` en prenait le premier comme BBR principal, ce qui est faux dès qu'il y a deux entrées BBR.
