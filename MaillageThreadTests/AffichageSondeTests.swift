@@ -114,18 +114,48 @@ struct AffichageSondeTests {
         #expect(FicheNoeud.texteQualite(3) == String(localized: "qualité \(3)"))
     }
 
+    /// Ce qui est entre les chevrons de la premiere `nom<…>` d'un type imprime, chevrons imbriques
+    /// compris ; nil sans `nom<` ni chevron fermant.
+    private static func entreChevrons(_ nom: String, dans type: String) -> Substring? {
+        guard let ouverture = type.range(of: nom + "<") else { return nil }
+        var profondeur = 1
+        var i = ouverture.upperBound
+        while i < type.endIndex {
+            switch type[i] {
+            case "<": profondeur += 1
+            case ">":
+                profondeur -= 1
+                if profondeur == 0 { return type[ouverture.upperBound..<i] }
+            default: break
+            }
+            i = type.index(after: i)
+        }
+        return nil
+    }
+
     /// « Ancien » (6 min) et « perime » (15 min) ne dependent que de l'heure, que rien n'observe
     /// (`Surveillance.maintenant`) : quand la sonde se tait, aucun evenement ne redessine le
     /// graphe. Sa fenetre est donc une `TimelineView` qui se redessine chaque minute
-    /// (`FenetreGraphe.horloge`) : le premier redessin apres chaque seuil montre le nouvel etat,
-    /// moins d'une minute plus tard.
+    /// (`FenetreGraphe.horloge`), avec dedans tout ce qui lit l'heure (la legende, le dessin, la
+    /// fiche) : le premier redessin apres chaque seuil montre le nouvel etat, moins d'une minute
+    /// plus tard.
     @Test func grapheRedessineChaqueMinute() throws {
-        // Le corps de la fenetre est une TimelineView sur cette horloge (lu sur son type : on
-        // n'evalue pas le corps, qui lit l'environnement).
+        // Cablage, lu sur le type du corps (on ne l'evalue pas : il lit l'environnement ;
+        // `String(reflecting:)` donne les types concrets, ceux des methodes en `some View` compris) :
+        // une TimelineView sur cette horloge, avec la legende, le dessin et la fiche dedans.
         let horloge = String(reflecting: type(of: FenetreGraphe.horloge))
-        #expect(String(reflecting: FenetreGraphe.Body.self).contains("TimelineView<\(horloge)"))
+        let corps = String(reflecting: FenetreGraphe.Body.self)
+        let dedans = try #require(Self.entreChevrons("TimelineView", dans: corps), "le corps est une TimelineView")
+        #expect(dedans.hasPrefix(horloge), "sur l'horloge")
+        for vue in ["LegendeLiens", "GrapheCanvas", "FicheNoeud"] {
+            #expect(dedans.contains(vue), "\(vue) est dans la TimelineView, pas a cote")
+        }
+        // Cadence : jamais plus d'une minute entre deux redessins, quelle que soit la phase ;
+        // puis, pour chaque seuil de `Surveillance.fraicheur`, un redessin qui suit de pres.
         let recu = Date(timeIntervalSince1970: 1_790_000_000)
         let redessins = FenetreGraphe.horloge.entries(from: recu, mode: .normal).prefix(20).filter { $0 >= recu }
+        #expect(zip(redessins, redessins.dropFirst()).allSatisfy { $1.timeIntervalSince($0) <= 60 },
+                "moins d'une minute entre deux redessins")
         for etat in [Surveillance.Fraicheur.ancien, .perime] {
             // Premiere seconde de l'etat, lue dans `Surveillance.fraicheur` : aucun seuil copie ici.
             let seuil = try #require((0...1200).first {
