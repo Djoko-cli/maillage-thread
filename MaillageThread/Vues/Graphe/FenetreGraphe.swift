@@ -84,6 +84,14 @@ struct FenetreGraphe: View {
         70 + (scinde ? 40 : 0) + (sondeRetenue ? 40 : 0)
     }
 
+    /// Marge du bas du graphe (pt) : la legende, ou la fiche ouverte, plus haute avec les courbes
+    /// de l'historique (la fiche les montre pour tout noeud des qu'il y en a : le graphe ne bouge
+    /// pas d'un noeud a l'autre).
+    static func margeBas(fiche: Bool, courbes: Bool) -> CGFloat {
+        guard fiche else { return 30 }
+        return courbes ? 360 : 190
+    }
+
     private func graphe(_ r: Reseau, _ palette: Palette) -> some View {
         let affiches = surveillance.appareilsAffiches(pour: r)
         let maillage = surveillance.maillageAffiche(pour: r)
@@ -95,7 +103,9 @@ struct FenetreGraphe: View {
         return GeometryReader { geo in
             let projection = Projection(cadre: disposition.cadre, taille: geo.size,
                                         marges: (haut: Self.margeHaut(scinde: r.estScinde, sondeRetenue: sonde.serie != nil),
-                                                 bas: selection == nil ? 30 : 190, cotes: 60),
+                                                 bas: Self.margeBas(fiche: selection != nil,
+                                                                    courbes: FicheNoeud.courbesVisibles(dans: surveillance)),
+                                                 cotes: 60),
                                         zoom: zoom * zoomEnCours,
                                         decalage: CGSize(width: decalage.width + decalageEnCours.width,
                                                          height: decalage.height + decalageEnCours.height))

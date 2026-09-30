@@ -529,6 +529,54 @@
         }
       }
     },
+    "24 h" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 h"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 h"
+          }
+        }
+      }
+    },
+    "30 j" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 d"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 j"
+          }
+        }
+      }
+    },
+    "7 j" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 d"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 j"
+          }
+        }
+      }
+    },
     "Accès au réseau local refusé" : {
       "localizations" : {
         "en" : {
@@ -1329,6 +1377,38 @@
         }
       }
     },
+    "Heure" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heure"
+          }
+        }
+      }
+    },
+    "Historique de la sonde" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Probe history"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Historique de la sonde"
+          }
+        }
+      }
+    },
     "HomeKit indisponible pour le passeur." : {
       "localizations" : {
         "en" : {
@@ -1565,6 +1645,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Liaison"
+          }
+        }
+      }
+    },
+    "Lien" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lien"
           }
         }
       }
@@ -1921,6 +2017,22 @@
         }
       }
     },
+    "Parent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parent"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parent"
+          }
+        }
+      }
+    },
     "Partition" : {
       "localizations" : {
         "en" : {
@@ -2001,6 +2113,22 @@
         }
       }
     },
+    "Pas encore d'historique de la sonde pour ce nœud sur cette période." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No probe history for this node over this period yet."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pas encore d'historique de la sonde pour ce nœud sur cette période."
+          }
+        }
+      }
+    },
     "Passeur Noms introuvable : lance outils/passeur.sh." : {
       "localizations" : {
         "en" : {
@@ -2045,6 +2173,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pile et Network Data"
+          }
+        }
+      }
+    },
+    "Pointillé : la sonde change de parent." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dotted line: the probe changes parent."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pointillé : la sonde change de parent."
           }
         }
       }
@@ -2109,6 +2253,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Préfixes du Mac"
+          }
+        }
+      }
+    },
+    "Période" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Period"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Période"
+          }
+        }
+      }
+    },
+    "Qualité" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quality"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qualité"
+          }
+        }
+      }
+    },
+    "Qualité des liens" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link quality"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qualité des liens"
+          }
+        }
+      }
+    },
+    "Qualité du lien vers le parent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link quality to the parent"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qualité du lien vers le parent"
           }
         }
       }
@@ -2849,6 +3057,38 @@
         }
       }
     },
+    "Signal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signal"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signal"
+          }
+        }
+      }
+    },
+    "Signal vu par la sonde (dBm)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signal seen by the probe (dBm)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signal vu par la sonde (dBm)"
+          }
+        }
+      }
+    },
     "Sonde" : {
       "localizations" : {
         "en" : {
@@ -3005,6 +3245,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tout"
+          }
+        }
+      }
+    },
+    "Tronçon" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segment"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tronçon"
           }
         }
       }

@@ -15,34 +15,45 @@ struct FicheNoeud: View {
     var fermer: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 28) {
-            if let r = surveillance.instantane?.routeur(id) {
-                colonnesRouteur(r)
-            } else if let a = surveillance.appareil(id) {
-                colonnesAppareil(a)
-            } else if let m = sonde, let n = m.noeud(id) {
-                colonnesSonde(n, m)
-            } else {
-                Text("Ce nœud n'est plus visible.").foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 28) {
+                if let r = surveillance.instantane?.routeur(id) {
+                    colonnesRouteur(r)
+                } else if let a = surveillance.appareil(id) {
+                    colonnesAppareil(a)
+                } else if let m = sonde, let n = m.noeud(id) {
+                    colonnesSonde(n, m)
+                } else {
+                    Text("Ce nœud n'est plus visible.").foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 8) {
+                    Button {
+                        fermer()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.glass)
+                    .help("Fermer")
+                    if Self.renommable(id, dans: surveillance) {
+                        Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
+                            .buttonStyle(.glass)
+                    }
+                }
             }
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 8) {
-                Button {
-                    fermer()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.glass)
-                .help("Fermer")
-                if Self.renommable(id, dans: surveillance) {
-                    Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
-                        .buttonStyle(.glass)
-                }
+            if Self.courbesVisibles(dans: surveillance) {
+                CourbesFiche(id: id, instant: instant)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
+    }
+
+    /// Courbes de l'historique sous les colonnes, pour tout noeud, des que l'historique de la
+    /// sonde a un releve (jamais en demo) : la fiche garde sa hauteur d'un noeud a l'autre.
+    static func courbesVisibles(dans surveillance: Surveillance) -> Bool {
+        !surveillance.historique.isEmpty
     }
 
     /// « Renommer… » : le surnom est indexe par l'instance d'un routeur de l'instantane ou

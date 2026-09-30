@@ -358,6 +358,51 @@ final class Surveillance {
         Dictionary(r.routeurs.map { ($0.instance, nom($0)) }, uniquingKeysWith: { a, _ in a })
     }
 
+    /// Cle d'un noeud du graphe dans l'historique : l'ExtMac de son routeur ou de son enfant dans
+    /// le dernier maillage ("rloc:XXXX" pour un routeur sans ExtMac), sinon le `xa` de l'annonce
+    /// d'un routeur de bordure, ou l'hote d'un appareil (l'ExtMac d'un appareil Matter) ; nil si
+    /// le noeud n'en a pas.
+    func cleHistorique(noeud id: String) -> String? {
+        if let m = maillage, let n = rapprochement(m)?.noeud(id) {
+            switch n.genre {
+            case .routeur:
+                if let r = m.routeur(Int(n.rloc16 >> 10)) { return r.extMac ?? String(format: "rloc:%04X", r.rloc16) }
+            case .enfant:
+                if let x = m.enfants.first(where: { $0.rloc16 == n.rloc16 })?.extMac { return x }
+            }
+        }
+        if let xa = instantane?.routeur(id)?.adresseEtendue { return xa }
+        if id.count == 16, id.allSatisfy(\.isHexDigit) { return id.uppercased() }
+        return nil
+    }
+
+    /// Noms de noeuds de l'historique, par cle : leur nom dans le graphe, si le dernier maillage
+    /// ou l'instantane les connait ; la cle sinon. Le rapprochement n'est fait qu'une fois.
+    func nomsHistorique(_ cles: Set<String>) -> [String: String] {
+        let affiche = maillage.flatMap(rapprochement)
+        func nomDe(_ cle: String) -> String {
+            if let m = maillage, let affiche {
+                if let r = m.routeurs.first(where: { ($0.extMac ?? String(format: "rloc:%04X", $0.rloc16)) == cle }),
+                   let n = affiche.routeurs[r.id], let x = nomNoeud(n.id, maillage: affiche) {
+                    return x
+                }
+                if let e = m.enfants.first(where: { $0.extMac == cle }), let n = affiche.enfants[e.rloc16],
+                   let x = nomNoeud(n.id, maillage: affiche) {
+                    return x
+                }
+            }
+            if let r = instantane?.routeurs.first(where: { $0.adresseEtendue == cle }) { return nom(r) }
+            if let a = (instantane?.appareils ?? []).first(where: { $0.id.uppercased() == cle }) { return nom(a) }
+            return cle
+        }
+        return Dictionary(uniqueKeysWithValues: cles.map { ($0, nomDe($0)) })
+    }
+
+    /// Courbes d'un noeud du graphe sur une periode qui finit a `fin` ; nil sans cle.
+    func courbes(noeud id: String, periode: PeriodeCourbes, fin: Date) -> CourbesNoeud? {
+        cleHistorique(noeud: id).map { CourbesNoeud(cle: $0, releves: historique, periode: periode, fin: fin) }
+    }
+
     /// Nom affiche d'un noeud du graphe : routeur de bordure, appareil, ou noeud que seule la sonde
     /// connait (« Routeur · 5000 », candidats d'un routeur de bordure non identifie) ; nil s'il
     /// n'est nulle part.
