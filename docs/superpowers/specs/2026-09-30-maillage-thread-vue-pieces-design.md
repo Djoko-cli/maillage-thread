@@ -109,7 +109,7 @@ Décisions de Djoko pendant la conception, dans l'ordre :
 
 ### 3.1 Transport
 
-Le passeur est l'app iOS « conçue pour iPad » lancée sur le Mac, avec l'équipe gratuite et sans App Group. La voie a été validée par l'essai du passeur-démon (30/09) :
+Le passeur est l'app iOS « conçue pour iPad » lancée sur le Mac, avec l'équipe gratuite et sans App Group. La voie a été validée par l'essai du passeur-démon (30/09), sauf le point 2, revu à la vérification réelle du même jour (note ci-dessous) :
 
 1. L'app ouvre une écoute TCP sur `127.0.0.1`, sur un port choisi par le système. Elle tire un **jeton à usage unique** : 32 octets aléatoires, en hexa.
 2. Elle ouvre le passeur sans l'activer, avec l'URL `maillage-passeur://releve?port=<port>&jeton=<jeton>`, par `NSWorkspace.open(_:withApplicationAt:configuration:)`.
@@ -142,6 +142,15 @@ L'app reste ad hoc, et le passeur garde son équipe gratuite. **Aucune invite «
 - `NomsMaison` gagne un champ **optionnel** `zones: [ZoneMaison]?`, où `ZoneMaison` vaut `{ nom: String, pieces: [String] }`. Les zones et leurs pièces sont dans l'ordre de Maison.
 - Un fichier sans ce champ, écrit par un ancien passeur, reste lisible : il donne une maison sans zones (section 2.1).
 - `versionActuelle` ne change pas : le champ est additif.
+
+**Vérifié le 30/09 avec Djoko** (plan 4a) : un relevé sans dossier, par la
+boucle locale ; 133 accessoires et 4 zones (13 pièces) reçus, zones
+affichées dans Réglages › Noms de Maison, dans l'ordre de Maison, et noms
+des appareils dans le graphe ; passeur fermé aussitôt ; aucune invite
+« réseau local » ni du coupe-feu ; noms relus au relancement de l'app. Le
+premier essai, par les arguments de lancement, n'a rien reçu : l'écoute
+s'est fermée au bout des 120 s ; d'où l'URL (section 3.1). Un passeur ouvert
+à la main, puis appelé par l'app pendant ses 10 s, a envoyé son relevé.
 
 ## 4. Scène et disposition
 
