@@ -32,7 +32,8 @@ public enum EnvoiPasseur {
     /// recevoir le releve (noms, pieces, zones, fabricants, batteries) : le passeur ne peut pas
     /// reconnaitre l'app, faute de secret partage (ni App Group ni equipe commune).
     /// La lecture de l'URL est stricte (`init?(url:)`) : le passeur n'ecrit jamais que
-    /// `<64 hexa>\n<longueur>\n<JSON>` ; celui qui ouvre l'URL choisit le port, pas les octets.
+    /// `<64 hexa>\n<longueur>\n<JSON>` ; celui qui ouvre l'URL ne choisit que le port et les 64
+    /// chiffres du jeton, rien d'autre.
     public struct Cible: Hashable, Sendable {
         public var port: UInt16
         public var jeton: String
@@ -60,7 +61,8 @@ public enum EnvoiPasseur {
         /// jeton tel quel sur le port nomme. Le jeton est donc exactement `2 * octetsJeton` chiffres
         /// hexadecimaux minuscules, comme `nouveauJeton()` en tire ; le port, un entier de 1 a 65535
         /// en chiffres seuls (ni signe, ni espace, ni zero de tete). Tout le reste donne nil. Les
-        /// autres parametres de la requete sont ignores.
+        /// autres parametres de la requete sont ignores ; un parametre repete ne compte que pour
+        /// sa premiere valeur, lue et verifiee une seule fois.
         public init?(url: URL) {
             guard let c = URLComponents(url: url, resolvingAgainstBaseURL: false),
                   c.scheme?.lowercased() == EnvoiPasseur.schema,

@@ -84,6 +84,9 @@ struct EnvoiPasseurTests {
             ("CRLF apres le jeton", j + "%0D%0A"),
             ("octet nul apres le jeton", j + "%00"),
             ("commande d'un autre service", "FLUSHALL%0D%0A"),
+            ("plus, 64 caracteres", court + "+"),
+            ("plus encode, 64 caracteres", court + "%2B"),
+            ("chiffre pleine chasse, 64 caracteres", court + "%EF%BC%91"),
         ]
         for (raison, jeton) in jetons {
             #expect(Self.cible(url: "maillage-passeur://releve?port=6379&jeton=\(jeton)") == nil, "jeton : \(raison)")
@@ -91,6 +94,11 @@ struct EnvoiPasseurTests {
         for port in ["", "0", "65536", "70000", "abc", "-1", "+80", "080", "8%200", "%D9%A8%D9%A0"] {
             #expect(Self.cible(url: "maillage-passeur://releve?port=\(port)&jeton=\(j)") == nil, "port « \(port) »")
         }
+        // Parametre repete : seule sa premiere valeur compte, et elle doit etre valide.
+        #expect(Self.cible(url: "maillage-passeur://releve?port=6379&jeton=FLUSHALL%0D%0A&jeton=\(j)") == nil,
+                "premier jeton invalide, second valide")
+        #expect(Self.cible(url: "maillage-passeur://releve?port=%2B80&port=54321&jeton=\(j)") == nil,
+                "premier port invalide, second valide")
     }
 
     /// Le reste de l'URL ne gene pas la lecture : un parametre de plus, l'autre ordre, le schema
