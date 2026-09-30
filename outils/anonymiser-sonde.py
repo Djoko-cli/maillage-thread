@@ -20,14 +20,26 @@ capture du 29/09/2026 (tables CHAMPS_CONNUS, CHAMPS_PARENT, TLV_CONNUS), et ne
 traite que les TLV 0, 7 et 8. Il echoue AVANT toute ecriture, avec la liste de
 ce qu'il ne connait pas (des noms, jamais une valeur), devant :
 - un type de message, un champ ou un TLV inconnu, un TLV a longueur etendue ou
-  tronque, un TLV 0 qui n'a pas 8 octets, un TLV 8 qui n'est pas fait
-  d'adresses entieres ;
+  tronque, ou de longueur inattendue : 8 octets pour le TLV 0 (ExtMac), 2 pour
+  le 1 (Address16), 1 pour le 2 (Mode), 9 plus un par routeur pour le 5
+  (Route64), 8 pour le 6 (Leader Data), des adresses entieres pour le 8, des
+  entrees de 3 octets pour le 16 (Child Table), 2 pour le 24 (Version), et au
+  plus 32, 32, 16 et 64 pour les textes des TLV 25 a 28 ;
+- un texte des TLV 25 a 28 (fabricant, modele, version logicielle, pile) qui
+  n'est pas de l'ASCII lisible, ou qui porte 12 hexa de suite, une MAC ou une
+  adresse IPv6 ;
 - dans la Network Data (TLV 7), autre chose que des Prefix de 16 bits au plus
   ou de 41 a 96 bits, des Service et une Commissioning Data qui ne porte qu'une
   Commissioner Session ID (16 bits, quelle que soit sa valeur), ou une donnee
   de service de plus de 2 octets : donnees_reseau() ne remplace que les 6
   premiers octets des Prefix, a partir de 41 bits, et l'adresse des Server d'un
   Service ;
+- dans un Prefix, autre chose que des Has Route (entrees de 3 octets), des
+  Border Router (entrees de 4) et un 6LoWPAN Context (2 octets) ; dans un
+  Service, autre chose que des Server, ou un Server qui n'est ni un RLOC16 seul
+  (2 octets), ni un RLOC16 suivi d'une adresse et d'un port (20 octets,
+  l'adresse remplacee), ni, pour le routeur de dorsale (donnee 01), un RLOC16
+  et ses 7 octets de reglages ;
 - un champ connu qui porte un objet ou une liste (hors parent), ou qui n'est
   pas du texte alors que l'anonymiseur le lit comme un hexa ou une adresse
   (mac, xp, prefixeMaille, cible, parent.ext).
@@ -62,6 +74,18 @@ CHAMPS_TEXTE = {"bonjour": frozenset({"mac"}), "etat": frozenset({"prefixeMaille
 CHAMPS_PARENT_TEXTE = frozenset({"ext"})
 # TLV de diagnostic : 0, 7 et 8 sont traites ; les autres n'ont ni ExtMac ni adresse.
 TLV_CONNUS = frozenset({0, 1, 2, 5, 6, 7, 8, 16, 24, 25, 26, 27, 28})
+# Longueur exacte : ExtMac (0), Address16 (1), Mode (2), Leader Data (6), Version (24). Un octet de plus porterait un
+# morceau de valeur que l'anonymiseur ne lit pas.
+TLV_LONGUEUR = {0: 8, 1: 2, 2: 1, 6: 8, 24: 2}
+# Faits d'entrees de cette taille : les adresses (8), la Child Table (16). Route64 (5) se lit a part : 9 octets, puis
+# un par routeur du masque.
+TLV_ENTREES = {8: 16, 16: 3}
+# Textes du fabricant (25), du modele (26), de la version logicielle (27) et de la pile (28) : longueur maximale.
+TLV_TEXTE_MAX = {25: 32, 26: 32, 27: 16, 28: 64}
+# Dans ces textes : 12 hexa de suite (une MAC, une ExtMac), ou une MAC ecrite avec des separateurs. Une version de pile
+# porte une date, une heure, parfois un condensat de commit (9 hexa dans la capture) : la limite est a 12.
+HEXA_12 = re.compile(r"[0-9A-Fa-f]{12}")
+MAC_TEXTE = re.compile(r"[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}")
 # Network Data (TLV 7), premier niveau : les Prefix (1) et les Service (5) sont traites par donnees_reseau() ; la
 # Commissioning Data (4) n'est acceptee que si elle ne porte qu'un sous-TLV Commissioner Session ID (MeshCoP 11,
 # longueur 2), quelle que soit sa valeur : un identifiant de session sur 16 bits n'est pas une donnee personnelle.
@@ -209,6 +233,69 @@ def nom_sur(x):
     return x if ok else "(illisible)"
 
 
+def controler_sous_tlv(o, admis):
+    """Les sous-TLV d'un Prefix ou d'un Service : `admis(type, valeur)` rend la raison de refuser un sous-TLV, ou
+    None s'il est connu. Le bit de poids faible du type est le drapeau "stable"."""
+    raisons, i = [], 0
+    while i < len(o):
+        if i + 2 > len(o) or i + 2 + o[i + 1] > len(o):
+            return raisons + ["Network Data tronquee (diag.tlv)"]
+        raison = admis(o[i] >> 1, o[i + 2:i + 2 + o[i + 1]])
+        if raison:
+            raisons.append(raison)
+        i += 2 + o[i + 1]
+    return raisons
+
+
+def sous_tlv_prefix(t, v):
+    """Has Route (0) : entrees de 3 octets (RLOC16, drapeaux) ; Border Router (2) : entrees de 4 (RLOC16, drapeaux) ;
+    6LoWPAN Context (3) : 2 octets (identifiant, longueur). Aucun ne porte d'adresse."""
+    if t not in (0, 2, 3):
+        return "sous-TLV inconnu d'un Prefix : %d (diag.tlv)" % t
+    if (t == 0 and len(v) % 3) or (t == 2 and len(v) % 4) or (t == 3 and len(v) != 2):
+        return "sous-TLV %d de longueur inattendue dans un Prefix (diag.tlv)" % t
+    return None
+
+
+def controler_prefixe(v):
+    """Un Prefix : domaine, longueur du prefixe en bits, ses octets, puis ses sous-TLV."""
+    if len(v) < 2:
+        return ["Network Data tronquee (diag.tlv)"]
+    if v[1] > PREFIXE_MAX_BITS:
+        return ["prefixe de plus de %d bits dans la Network Data (diag.tlv)" % PREFIXE_MAX_BITS]
+    if PREFIXE_COURT_MAX_BITS < v[1] < PREFIXE_REMPLACE_MIN_BITS:
+        return ["prefixe de %d a %d bits dans la Network Data (diag.tlv)"
+                % (PREFIXE_COURT_MAX_BITS + 1, PREFIXE_REMPLACE_MIN_BITS - 1)]
+    debut = 2 + (v[1] + 7) // 8
+    if debut > len(v):
+        return ["Network Data tronquee (diag.tlv)"]
+    return controler_sous_tlv(v[debut:], sous_tlv_prefix)
+
+
+def controler_service(v):
+    """Un Service : bit T et identifiant, numero d'entreprise (4 octets) si T est a 0, donnee de service, puis des
+    Server seulement. Un Server est un RLOC16 seul (2 octets), un RLOC16 suivi d'une adresse et d'un port (20 octets :
+    le serveur SRP, dont donnees_reseau() remplace l'adresse), ou, pour le routeur de dorsale (donnee 01), un RLOC16
+    et ses 7 octets de reglages. Un Server de 12 octets porterait une ExtMac en clair."""
+    j = 1 if v and v[0] & 0x80 else 5
+    if j >= len(v):
+        return ["Network Data tronquee (diag.tlv)"]
+    if v[j] > DONNEE_SERVICE_MAX:
+        return ["donnee de service de plus de %d octets dans la Network Data (diag.tlv)" % DONNEE_SERVICE_MAX]
+    donnee = v[j + 1:j + 1 + v[j]]
+    if len(donnee) < v[j]:
+        return ["Network Data tronquee (diag.tlv)"]
+
+    def admis(t, serveur):
+        if t != 6:
+            return "sous-TLV inconnu d'un Service : %d (diag.tlv)" % t
+        if len(serveur) not in (2, 20) and not (len(serveur) == 9 and donnee == b"\x01"):
+            return "Server de longueur inattendue dans la Network Data (diag.tlv)"
+        return None
+
+    return controler_sous_tlv(v[j + 1 + v[j]:], admis)
+
+
 def controler_donnees_reseau(o):
     """Pourquoi la Network Data (TLV 7) n'est pas connue (liste vide si elle l'est) : donnees_reseau() ne remplace
     que le /48 des Prefix et l'adresse des Server d'un Service ; le reste passerait en clair."""
@@ -220,20 +307,44 @@ def controler_donnees_reseau(o):
         v = o[i + 2:i + 2 + n]
         if t not in DONNEES_RESEAU_CONNUES:
             raisons.append("sous-TLV inconnu de la Network Data : %d (diag.tlv)" % t)
-        elif t == 1 and len(v) >= 2 and v[1] > PREFIXE_MAX_BITS:  # v[1] : longueur du prefixe, en bits
-            raisons.append("prefixe de plus de %d bits dans la Network Data (diag.tlv)" % PREFIXE_MAX_BITS)
-        elif t == 1 and len(v) >= 2 and PREFIXE_COURT_MAX_BITS < v[1] < PREFIXE_REMPLACE_MIN_BITS:
-            raisons.append("prefixe de %d a %d bits dans la Network Data (diag.tlv)"
-                           % (PREFIXE_COURT_MAX_BITS + 1, PREFIXE_REMPLACE_MIN_BITS - 1))
+        elif t == 1:
+            raisons += controler_prefixe(v)
         elif t == 4 and not (len(v) == 4 and v[0] == 11 and v[1] == 2):  # un seul sous-TLV, la valeur est libre
             raisons.append("Commissioning Data inconnue dans la Network Data (diag.tlv)")
-        elif t == 5 and len(v) >= 1:
-            j = 1 if v[0] & 0x80 else 5  # un numero d'entreprise (4 octets) suit si le bit T est a 0
-            if j < len(v) and v[j] > DONNEE_SERVICE_MAX:
-                raisons.append("donnee de service de plus de %d octets dans la Network Data (diag.tlv)"
-                               % DONNEE_SERVICE_MAX)
+        elif t == 5:
+            raisons += controler_service(v)
         i += 2 + n
     return raisons
+
+
+def longueur_tlv_attendue(t, v):
+    """La longueur du TLV connu `t` (voir TLV_LONGUEUR, TLV_ENTREES, TLV_TEXTE_MAX ; la Network Data se lit a part)."""
+    if t in TLV_LONGUEUR:
+        return len(v) == TLV_LONGUEUR[t]
+    if t in TLV_ENTREES:
+        return len(v) % TLV_ENTREES[t] == 0
+    if t in TLV_TEXTE_MAX:
+        return len(v) <= TLV_TEXTE_MAX[t]
+    if t == 5:  # numero de sequence, masque des routeurs (64 bits), un octet par routeur du masque
+        return len(v) >= 9 and len(v) == 9 + bin(int.from_bytes(v[1:9], "big")).count("1")
+    return True
+
+
+def texte_tlv_sur(v):
+    """Le texte d'un TLV 25 a 28 : de l'ASCII lisible, sans 12 hexa de suite, ni MAC, ni adresse IPv6."""
+    if any(c < 0x20 or c > 0x7E for c in v):
+        return False
+    texte = v.decode("ascii")
+    if HEXA_12.search(texte) or MAC_TEXTE.search(texte):
+        return False
+    for mot in re.split(r"[\s;,()\[\]]+", texte):
+        if ":" in mot:
+            try:
+                ipaddress.IPv6Address(mot.split("%")[0])
+                return False
+            except ValueError:
+                pass
+    return True
 
 
 def controler_tlv(hexa):
@@ -251,14 +362,15 @@ def controler_tlv(hexa):
             return raisons + ["TLV a longueur etendue (diag.tlv)"]
         if i + 2 + n > len(o):
             return raisons + ["TLV tronque (diag.tlv)"]
+        v = o[i + 2:i + 2 + n]
         if t not in TLV_CONNUS:
             raisons.append("TLV inconnu : %d (diag.tlv)" % t)
-        elif t == 0 and n != 8:
-            raisons.append("TLV 0 de longueur inattendue (diag.tlv)")
-        elif t == 8 and n % 16 != 0:
-            raisons.append("TLV 8 de longueur inattendue (diag.tlv)")
+        elif not longueur_tlv_attendue(t, v):
+            raisons.append("TLV %d de longueur inattendue (diag.tlv)" % t)
         elif t == 7:
-            raisons += controler_donnees_reseau(o[i + 2:i + 2 + n])
+            raisons += controler_donnees_reseau(v)
+        elif t in TLV_TEXTE_MAX and not texte_tlv_sur(v):
+            raisons.append("texte inconnu dans le TLV %d (diag.tlv)" % t)
         i += 2 + n
     return raisons
 

@@ -84,13 +84,13 @@ def charges_valides():
 
 
 def charge_diag():
-    """Charge TLV d'un diag de routeur : ExtMac, Address16, Network Data, adresses, version."""
+    """Charge TLV d'un diag de routeur : ExtMac, Address16, Network Data, adresses, version (2 octets)."""
     ext = bytes.fromhex(EXT_ROUTEUR)
     lien_local = ipv6("fe80::")[:8] + bytes([ext[0] ^ 0x02]) + ext[1:]
     omr = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
     rloc = ipv6("%s:0:0:ff:fe00:5000" % PREFIXE_MAILLE)
     return (tlv(0, ext) + tlv(1, bytes.fromhex("5000")) + tlv(7, reseau_inventee()) + tlv(8, lien_local + omr + rloc)
-            + tlv(24, b"\x04")).hex().upper()
+            + tlv(24, b"\x00\x04")).hex().upper()
 
 
 def tlv_de_premier_niveau(hexa):
@@ -280,6 +280,59 @@ class Garde(unittest.TestCase):
             with self.subTest(octets=n):
                 self.assertEqual(controle(self.diag_avec(tlv(8, bytes(n)))), {})
 
+    def test_tlv_de_longueur_fixe(self):
+        """Address16 (1) : 2 octets ; Mode (2) : 1 ; Leader Data (6) : 8 ; Version (24) : 2. Un octet de plus porterait
+        un morceau de valeur que l'anonymiseur ne lit pas."""
+        for t, n in ((1, 2), (2, 1), (6, 8), (24, 2)):
+            self.assertEqual(controle(self.diag_avec(tlv(t, bytes(n)))), {}, t)
+            for autre in sorted({0, n - 1, n + 1, 16} - {n}):
+                with self.subTest(tlv=t, octets=autre):
+                    self.assertEqual(controle(self.diag_avec(tlv(t, bytes(autre)))),
+                                     {"TLV %d de longueur inattendue (diag.tlv)" % t: [1]})
+
+    def test_route64_un_octet_par_routeur(self):
+        """Route64 (5) : numero de sequence, masque des routeurs (8 octets), puis un octet par routeur du masque."""
+        masque = (1 << 63 | 1 << 40 | 1 << 2).to_bytes(8, "big")  # 3 routeurs
+        self.assertEqual(controle(self.diag_avec(tlv(5, b"\x01" + masque + bytes(3)))), {})
+        self.assertEqual(controle(self.diag_avec(tlv(5, b"\x01" + bytes(8)))), {}, "aucun routeur")
+        for nom, charge in (("un octet de trop", b"\x01" + masque + bytes(4)),
+                            ("un octet de moins", b"\x01" + masque + bytes(2)),
+                            ("masque coupe", b"\x01" + masque[:5]), ("vide", b"")):
+            with self.subTest(charge=nom):
+                self.assertEqual(controle(self.diag_avec(tlv(5, charge))),
+                                 {"TLV 5 de longueur inattendue (diag.tlv)": [1]})
+
+    def test_table_des_enfants_par_entrees_de_3_octets(self):
+        for n in (0, 3, 6, 12, 60):
+            self.assertEqual(controle(self.diag_avec(tlv(16, bytes(n)))), {}, n)
+        for n in (1, 2, 4, 8, 16):
+            with self.subTest(octets=n):
+                self.assertEqual(controle(self.diag_avec(tlv(16, bytes(n)))),
+                                 {"TLV 16 de longueur inattendue (diag.tlv)": [1]})
+
+    def test_texte_des_tlv_25_a_28(self):
+        """Fabricant, modele, version logicielle, pile : du texte lisible, sans identifiant. Les versions de pile de la
+        capture passent (une date, une heure, un condensat de commit de 9 hexa)."""
+        for t, texte in ((25, b""), (25, b"Fabricant"), (26, b"Modele 2"), (27, b"1.4.2"),
+                         (28, b"OPENTHREAD/1.0.0; EFR32; May 15 2026 07:09:25"),
+                         (28, b"SL-OPENTHREAD/2.5.1.0_GitHub-1fceb225b; EFR32; Sep 18 2024 19:39")):
+            with self.subTest(tlv=t, texte=texte):
+                self.assertEqual(controle(self.diag_avec(tlv(t, texte))), {})
+        for t, texte in ((25, b"Fabricant " + EXT_INCONNU.encode()), (26, b"Modele " + MAC.encode()),
+                         (27, b"v" + MAC.encode()), (26, b"de:ad:be:ef:00:01"), (28, b"pile 2001:db8::1 ok"),
+                         (28, b"pile fe80::1%wpan0"),
+                         (25, b"Fabricant\x00"), (26, "Mod\u00e8le".encode()), (28, b"\xff\xfe")):
+            with self.subTest(tlv=t, texte=texte):
+                self.assertEqual(controle(self.diag_avec(tlv(t, texte))),
+                                 {"texte inconnu dans le TLV %d (diag.tlv)" % t: [1]})
+
+    def test_texte_des_tlv_25_a_28_de_longueur_maximale(self):
+        for t, n in ((25, 32), (26, 32), (27, 16), (28, 64)):
+            self.assertEqual(controle(self.diag_avec(tlv(t, b"x" * n))), {}, t)
+            with self.subTest(tlv=t):
+                self.assertEqual(controle(self.diag_avec(tlv(t, b"x" * (n + 1)))),
+                                 {"TLV %d de longueur inattendue (diag.tlv)" % t: [1]})
+
     # --- Network Data (TLV 7) ---
 
     def diag_reseau(self, *tlvs):
@@ -370,6 +423,60 @@ class Garde(unittest.TestCase):
             with self.subTest(reseau=nom):
                 self.assertEqual(controle(self.diag_avec(tlv(7, reseau))), {"Network Data tronquee (diag.tlv)": [1]})
 
+    def test_sous_tlv_d_un_prefix(self):
+        """Has Route (entrees de 3 octets), Border Router (4), 6LoWPAN Context (2) : ceux de la capture. Un autre type,
+        ou une autre longueur, pourrait porter une adresse que donnees_reseau() ne remplace pas."""
+        def prefixe(*sous):
+            return tlv(0x03, bytes([0, 64]) + ipv6(PREFIXE_OMR + "::")[:8] + b"".join(sous))
+
+        for sous in ((), (tlv(0x01, bytes(3)),), (tlv(0x01, bytes(15)),), (tlv(0x00, b""),), (tlv(0x05, bytes(8)),),
+                     (tlv(0x05, bytes(4)), tlv(0x07, bytes(2)))):
+            with self.subTest(sous=b"".join(sous).hex()):
+                self.assertEqual(controle(self.diag_reseau(prefixe(*sous))), {})
+        adresse = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
+        for t in (1, 4, 5, 6, 7, 64, 127):
+            with self.subTest(sous_tlv=t):
+                self.assertEqual(controle(self.diag_reseau(prefixe(tlv(t << 1 | 1, adresse)))),
+                                 {"sous-TLV inconnu d'un Prefix : %d (diag.tlv)" % t: [1]})
+        for t, n in ((0, 4), (0, 16), (2, 3), (2, 18), (3, 1), (3, 3), (3, 16)):
+            with self.subTest(sous_tlv=t, octets=n):
+                self.assertEqual(controle(self.diag_reseau(prefixe(tlv(t << 1 | 1, bytes(n))))),
+                                 {"sous-TLV %d de longueur inattendue dans un Prefix (diag.tlv)" % t: [1]})
+
+    def test_server_d_un_service(self):
+        """Un RLOC16 seul (2 octets), le serveur SRP (RLOC16, adresse, port : 20 octets, l'adresse remplacee), le
+        routeur de dorsale (donnee 01 : 9 octets). Un Server de 12 octets porterait une ExtMac en clair."""
+        def service(donnee, *serveurs):
+            return tlv(0x0B, b"\x81" + bytes([len(donnee)]) + donnee + b"".join(tlv(0x0D, s) for s in serveurs))
+
+        adresse = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
+        for nom, reseau in (("RLOC16 seuls", service(b"\x5c\xc5", bytes(2), bytes(2))),
+                            ("serveur SRP", service(b"\x5d", b"\x50\x00" + adresse + b"\x16\x80")),
+                            ("routeur de dorsale", service(b"\x01", bytes(9))), ("sans Server", service(b"\x5d"))):
+            with self.subTest(service=nom):
+                self.assertEqual(controle(self.diag_reseau(reseau)), {})
+        for nom, reseau in (("ExtMac", service(b"\x5d", b"\x50\x00" + bytes.fromhex(EXT_INCONNU) + b"\x16\x80")),
+                            ("9 octets hors dorsale", service(b"\x5d", bytes(9))),
+                            ("adresse sans port", service(b"\x5d", b"\x50\x00" + adresse)),
+                            ("vide", service(b"\x5d", b""))):
+            with self.subTest(service=nom):
+                self.assertEqual(controle(self.diag_reseau(reseau)),
+                                 {"Server de longueur inattendue dans la Network Data (diag.tlv)": [1]})
+        for t in (0, 1, 2, 3, 5, 7, 64):
+            with self.subTest(sous_tlv=t):
+                reseau = tlv(0x0B, b"\x81\x01\x5d" + tlv(t << 1 | 1, b"\x50\x00"))
+                self.assertEqual(controle(self.diag_reseau(reseau)),
+                                 {"sous-TLV inconnu d'un Service : %d (diag.tlv)" % t: [1]})
+
+    def test_prefix_ou_service_tronque(self):
+        for nom, reseau in (("sous-TLV du Prefix", tlv(0x03, bytes([0, 64]) + bytes(8) + bytes([0x01, 9, 0]))),
+                            ("Server", tlv(0x0B, b"\x81\x01\x5d" + bytes([0x0D, 20]) + b"\x50\x00")),
+                            ("octets du prefixe", tlv(0x03, bytes([0, 64]) + bytes(4))),
+                            ("Prefix vide", tlv(0x03, b"")),
+                            ("donnee de service", tlv(0x0B, b"\x81\x02\x5d")), ("Service vide", tlv(0x0B, b""))):
+            with self.subTest(reseau=nom):
+                self.assertEqual(controle(self.diag_reseau(reseau)), {"Network Data tronquee (diag.tlv)": [1]})
+
     def test_les_raisons_de_la_network_data_s_ajoutent_a_celles_du_diag(self):
         inconnu = controle(self.diag_avec(tlv(31, b"\x00") + tlv(7, bytes([0x0D, 0]))))
         self.assertEqual(list(inconnu),
@@ -384,6 +491,9 @@ class Garde(unittest.TestCase):
         self.assertIn(adresse, anon.Anonymiseur().donnees_reseau(tlv(0x0D, adresse)))
         self.assertIn(adresse[8:], anon.Anonymiseur().donnees_reseau(prefixe_tlv(128)))  # l'identifiant d'un /128
         self.assertIn(adresse[:5], anon.Anonymiseur().donnees_reseau(prefixe_tlv(40)))  # les 5 octets d'un /40
+        ext = bytes.fromhex(EXT_INCONNU)  # une ExtMac dans un Server de 12 octets
+        serveur = tlv(0x0B, b"\x81\x01\x5d" + tlv(0x0D, b"\x50\x00" + ext + b"\x16\x80"))
+        self.assertIn(ext, anon.Anonymiseur().donnees_reseau(serveur))
 
     def test_les_tlv_connus_sont_ceux_de_la_capture_actuelle(self):
         vus = set()
@@ -571,6 +681,15 @@ class Outil(unittest.TestCase):
         self.ecrire(messages)
         self.assertRefus(self.lancer(),
                          "prefixe de 17 a 40 bits dans la Network Data (diag.tlv) (1 ligne(s), la premiere : 3)")
+
+    def test_server_de_12_octets_echoue_sans_rien_ecrire(self):
+        """Une ExtMac dans un Server : donnees_reseau() ne remplace que l'adresse d'un Server de 18 octets ou plus."""
+        messages = capture_inventee()
+        serveur = tlv(0x0B, b"\x81\x01\x5d" + tlv(0x0D, b"\x50\x00" + bytes.fromhex(EXT_INCONNU) + b"\x16\x80"))
+        messages[2]["tlv"] = tlv(7, reseau_inventee() + serveur).hex().upper()
+        self.ecrire(messages)
+        self.assertRefus(self.lancer(), "Server de longueur inattendue dans la Network Data (diag.tlv) (1 ligne(s), "
+                                        "la premiere : 3)")
 
     def test_prefixe_128_echoue_sans_rien_ecrire(self):
         """Un /128 (prefixe de documentation, identifiant d'interface invente) : l'identifiant resterait en clair."""
