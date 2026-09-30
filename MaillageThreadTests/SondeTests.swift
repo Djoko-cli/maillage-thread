@@ -1068,6 +1068,36 @@ struct SondeMaillageTests {
         #expect(s.erreurTournee == nil)
     }
 
+    /// Un autre port choisi retient une autre sonde : le releve de la precedente (etat, dernier
+    /// releve, erreur de tournee) ne s'affiche pas pour elle.
+    @Test(.timeLimit(.minutes(1))) func autreSondeSansLeReleveDeLaPrecedente() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let autre = PortUSB(chemin: "/dev/cu.usbmodemFACTICE02", vid: 0x303A, pid: 0x1001, serie: "B0:00:00:00:00:02",
+                            produit: nil)
+        // Premiere sonde : une tournee complete, puis `etat` sans reponse (erreur de tournee a 3 s).
+        // Seconde sonde : `bonjour` seulement, sa tournee attend.
+        let muette = Mutex(false)
+        let premiere = CanalRejoue { l in
+            l == "etat\n" && muette.withLock({ $0 }) ? [] : CanalRejoue.reseauMinimal(l)
+        }
+        let seconde = CanalRejoue { l in l == "bonjour\n" ? [CanalRejoue.bonjour] : [] }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { $0 == autre.chemin ? seconde : premiere })
+        await s.connecter(Self.port, choisi: true)
+        await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        muette.withLock { $0 = true }
+        s.rafraichir()
+        await Self.attendre { s.erreurTournee != nil }
+        #expect(s.etatSonde != nil && s.derniereTournee != nil)
+        // Au retour de la connexion, la tournee de la seconde sonde n'a pas encore commence.
+        await s.connecter(autre, choisi: true)
+        #expect(s.serie == autre.serie)
+        #expect(s.etatSonde == nil)
+        #expect(s.derniereTournee == nil)
+        #expect(s.erreurTournee == nil)
+        await s.oublier()
+    }
+
     /// « Oublier la sonde » retire aussi son maillage du graphe, branche comme dans l'app
     /// (`surOubli`) : retour aux pointilles tout de suite, sans attendre qu'il soit perime.
     @Test(.timeLimit(.minutes(1))) func oublierRetireLeMaillage() async throws {

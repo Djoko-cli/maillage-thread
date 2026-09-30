@@ -375,8 +375,13 @@ final class SondeMaillage {
                 let autre = serieUSB != serie
                 preferences.set(serieUSB, forKey: Self.cleSerie)
                 serie = serieUSB
-                // Le nom d'hote retenu etait celui d'une autre sonde.
-                if autre { retenirHote(nil) }
+                // Le nom d'hote retenu etait celui d'une autre sonde, comme le releve.
+                if autre {
+                    retenirHote(nil)
+                    etatSonde = nil
+                    derniereTournee = nil
+                    erreurTournee = nil
+                }
             }
             // Le nom va avec la sonde retenue (un port sans numero de serie ne l'est pas).
             let retenue = port.serie != nil && port.serie == serie
