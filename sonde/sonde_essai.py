@@ -150,6 +150,44 @@ def mode_texte(m):
     return ("r" if m & 0x08 else "-") + ("d" if m & 0x02 else "-") + ("n" if m & 0x01 else "-")
 
 
+def network_data(o):
+    """Network Data (TLV 7) : prefixes, routeurs de bordure, routes et services, par RLOC16."""
+    res, i = [], 0
+    while i + 2 <= len(o):
+        t, n = o[i] >> 1, o[i + 1]
+        v = o[i + 2:i + 2 + n]
+        i += 2 + n
+        if t == 1 and len(v) >= 2:  # Prefix
+            bits = v[1]
+            pre = v[2:2 + (bits + 7) // 8]
+            pre16 = (pre + bytes(16))[:16]  # un prefixe de plus de 128 bits (TLV abime) ne plante pas
+            texte = f"{ipaddress.IPv6Address(pre16)}/{bits}"
+            j = 2 + (bits + 7) // 8
+            while j + 2 <= len(v):
+                st, sn = v[j] >> 1, v[j + 1]
+                sv = v[j + 2:j + 2 + sn]
+                j += 2 + sn
+                if st == 2:
+                    res.append(f"prefixe {texte} : routeurs de bordure " + " ".join(f"{int.from_bytes(sv[k:k+2],'big'):04X}" for k in range(0, len(sv) - 3, 4)))
+                elif st == 0:
+                    res.append(f"prefixe {texte} : route par " + " ".join(f"{int.from_bytes(sv[k:k+2],'big'):04X}" for k in range(0, len(sv) - 2, 3)))
+        elif t == 5 and len(v) >= 1:  # Service
+            j = 1 if v[0] & 0x80 else 5
+            if j >= len(v):
+                continue
+            dl = v[j]
+            donnees = v[j + 1:j + 1 + dl]
+            j += 1 + dl
+            serveurs = []
+            while j + 2 <= len(v):
+                st, sn = v[j] >> 1, v[j + 1]
+                if st == 6 and sn >= 2:
+                    serveurs.append(f"{int.from_bytes(v[j+2:j+4],'big'):04X}")
+                j += 2 + sn
+            res.append(f"service {donnees.hex()} : serveurs " + " ".join(serveurs))
+    return res
+
+
 def decoder(hexa):
     o, i, res = bytes.fromhex(hexa), 0, []
     while i + 2 <= len(o):
@@ -171,6 +209,12 @@ def decoder(hexa):
             d = f"seq {v[0]} ; " + " ".join(routes)
         elif t == 6 and len(v) >= 8:
             d = f"partition {v[0:4].hex().upper()} poids {v[4]} version {v[5]}/{v[6]} chef {v[7]}"
+        elif t == 7:
+            entrees = network_data(v)
+            if entrees:  # une ligne par prefixe ou par service
+                res.extend(f"{nom_tlv(t)}: {e}" for e in entrees)
+                continue
+            d = v.hex().upper()
         elif t == 8:
             d = ", ".join(str(ipaddress.IPv6Address(v[k:k + 16])) for k in range(0, len(v) - 15, 16))
         elif t == 16:
@@ -606,41 +650,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-def network_data(o):
-    """Network Data (TLV 7) : prefixes, routeurs de bordure, routes et services, par RLOC16."""
-    res, i = [], 0
-    while i + 2 <= len(o):
-        t, n = o[i] >> 1, o[i + 1]
-        v = o[i + 2:i + 2 + n]
-        i += 2 + n
-        if t == 1 and len(v) >= 2:  # Prefix
-            bits = v[1]
-            pre = v[2:2 + (bits + 7) // 8]
-            pre16 = pre + bytes(16 - len(pre))
-            texte = f"{ipaddress.IPv6Address(pre16)}/{bits}"
-            j = 2 + (bits + 7) // 8
-            while j + 2 <= len(v):
-                st, sn = v[j] >> 1, v[j + 1]
-                sv = v[j + 2:j + 2 + sn]
-                j += 2 + sn
-                if st == 2:
-                    res.append(f"prefixe {texte} : routeurs de bordure " + " ".join(f"{int.from_bytes(sv[k:k+2],'big'):04X}" for k in range(0, len(sv) - 3, 4)))
-                elif st == 0:
-                    res.append(f"prefixe {texte} : route par " + " ".join(f"{int.from_bytes(sv[k:k+2],'big'):04X}" for k in range(0, len(sv) - 2, 3)))
-        elif t == 5 and len(v) >= 1:  # Service
-            j = 1 if v[0] & 0x80 else 5
-            if j >= len(v):
-                continue
-            dl = v[j]
-            donnees = v[j + 1:j + 1 + dl]
-            j += 1 + dl
-            serveurs = []
-            while j + 2 <= len(v):
-                st, sn = v[j] >> 1, v[j + 1]
-                if st == 6 and sn >= 2:
-                    serveurs.append(f"{int.from_bytes(v[j+2:j+4],'big'):04X}")
-                j += 2 + sn
-            res.append(f"service {donnees.hex()} : serveurs " + " ".join(serveurs))
-    return res
