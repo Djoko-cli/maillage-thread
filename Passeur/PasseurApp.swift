@@ -87,8 +87,7 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
 
     func demarrer() {
         guard gestionnaire == nil else { return }
-        // Premiere trace du lancement. La cible, si elle est deja la ou quand elle arrive, a la
-        // sienne (`recevoir`) : son port seulement, jamais l'URL ni le jeton.
+        // Trace du lancement ; la cible a la sienne (`recevoir`), avant ou apres celle-ci.
         journal.notice("démarrage")
         let g = HMHomeManager()
         g.delegate = self
@@ -237,7 +236,7 @@ final class Passeur: NSObject, HMHomeManagerDelegate {
             return
         }
         etat = n.statut == .ok
-            ? "\(n.accessoires.count) accessoires et \(n.zones?.count ?? 0) zones lus dans Maison. Ouvert à la main, Passeur Noms n'envoie rien : Maillage Thread le lance lui-même."
+            ? "\(n.accessoires.count) accessoires et \(n.zones?.count ?? 0) zones lus dans Maison. Ouvert à la main, Passeur Noms n'envoie rien, sauf si Maillage Thread le demande dans les 10 s."
             : (n.message ?? "Accès à Maison refusé.")
         fermerApres(secondes: 10)
     }

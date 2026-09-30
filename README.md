@@ -149,7 +149,9 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   reads Home, connects, sends the token, the length of the JSON, then the
   JSON, and quits once the app has read it all. The app checks the token,
   reads at most 8 MB and writes `noms.json` in its own container (atomic
-  write). The loopback needs no local network permission.
+  write). The loopback needs no local network permission. Known limit: any
+  app on this Mac can open that URL with its own port and would get the
+  reading; nothing leaves the Mac.
 - Priority of names: nickname > Home > HomeKit (`_hap._udp`) > host.
 - The last valid reading is kept. A failure (for example Passeur Noms not
   found or refused, nothing within 2 minutes, wrong token, unreadable length

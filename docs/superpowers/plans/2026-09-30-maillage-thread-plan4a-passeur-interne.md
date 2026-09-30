@@ -19,7 +19,7 @@
 **Spec :** `docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md`, section 3 (transport et zones), avec ce qui la concerne dans les sections 9 (`NomsInternes`, `PasseurApp.swift`), 10 (tests de `NomsInternes`) et 11 (le plan 4a ne dépend pas de la vue). Le plan révise aussi la section 5 de la spec de l'étape 1 (`docs/superpowers/specs/2026-09-28-maillage-thread-design.md`), qui décrit le dossier choisi une fois.
 
 > **Révision du 30/09 (tâche 6a) :** à la vérification réelle (tâche 6), le port et le jeton passent par une URL, `maillage-passeur://releve?port=…&jeton=…`, et non plus par les arguments de lancement : macOS retire les arguments passés par une app du bac à sable.
-> Voir la tâche 6a au registre. Le reste du plan décrit l'état d'avant.
+> Voir la tâche 6a, au registre local du plan (non publié). Le reste du plan décrit l'état d'avant.
 
 **Quand l'exécuter.** Sur `main`, avant ou pendant le plan 4b (spec, section 11). Il ne dépend pas du plan 3b, et ses blocs ne visent pas les passages que le brouillon du 3b remplace (au 30/09) : l'un et l'autre peuvent passer en premier ; `interface.json` et le catalogue passent par les outils. **Les numéros de ligne cités sont indicatifs : l'exécutant se repère aux noms (types, fonctions, commentaires) et aux textes cités.** Si un texte à remplacer n'est plus exactement le même, il applique le même changement au texte du moment et le dit dans son rapport.
 

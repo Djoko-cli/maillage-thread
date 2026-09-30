@@ -121,6 +121,8 @@ Le passeur est l'app iOS « conçue pour iPad » lancée sur le Mac, avec l'équ
 
 **Révision du 30/09, à la vérification :** le relevé réel a montré que macOS retire les arguments de lancement passés par une app du bac à sable (le passeur n'a reçu que le chemin de son exécutable) ; l'essai du passeur-démon ne l'avait pas vu, car il lançait depuis le shell. Le port et le jeton passent donc par l'URL, et un passeur déjà ouvert la reçoit aussi : il envoie alors le relevé qu'il vient de montrer.
 
+**Compromis connu :** toute app du Mac, même dans le bac à sable, peut ouvrir cette URL avec son propre port, et le passeur lui enverrait le relevé. Rien ne sort du Mac, mais le passeur ne peut pas reconnaître l'app, faute de secret partagé.
+
 **Échecs :** passeur introuvable, lancement refusé, aucune connexion dans le délai, jeton faux, longueur ou JSON illisible.
 - Le **délai** est de 120 s : le premier lancement attend la réponse de Djoko à la demande d'accès à Maison.
 - L'app garde le **dernier relevé valide**. L'erreur s'affiche là où l'app montre déjà l'état du passeur, et l'alerte au-delà de 7 jours (profil gratuit) reste.

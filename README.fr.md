@@ -152,7 +152,9 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
   retire). Passeur Noms lit Maison, se connecte, envoie le jeton, la longueur
   du JSON puis le JSON, et se ferme dès que l'app a tout lu. L'app vérifie le
   jeton, lit au plus 8 Mo et écrit `noms.json` dans son conteneur (écriture
-  atomique). La boucle locale ne demande pas l'accès au réseau local.
+  atomique). La boucle locale ne demande pas l'accès au réseau local. Limite
+  connue : toute app de ce Mac peut ouvrir cette URL avec son propre port et
+  recevrait le relevé ; rien ne sort du Mac.
 - Priorité des noms : surnom > Maison > HomeKit (`_hap._udp`) > hôte.
 - Le dernier relevé valide est gardé. Un échec (par exemple Passeur Noms
   introuvable ou refusé, rien en 2 minutes, jeton faux, longueur ou JSON

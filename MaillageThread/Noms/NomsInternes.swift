@@ -158,8 +158,9 @@ final class NomsInternes {
     }
 
     /// Lanceur reel : Passeur Noms, installe par outils/passeur.sh, ouvert sans activation avec
-    /// l'URL de la cible (port et jeton). Pas d'arguments de lancement : macOS retire ceux d'une
-    /// app du bac a sable (verifie le 30/09, le passeur n'a recu que le chemin de son executable).
+    /// l'URL de la cible (port et jeton). Pas d'arguments de lancement : macOS retire ceux que
+    /// passe une app du bac a sable (verifie le 30/09, le passeur n'a recu que le chemin de son
+    /// executable).
     static func lancerPasseurDuMac(_ cible: EnvoiPasseur.Cible) async -> String? {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: idPasseur) else {
             return String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")

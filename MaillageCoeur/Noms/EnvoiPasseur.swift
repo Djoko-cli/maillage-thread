@@ -22,8 +22,12 @@ public enum EnvoiPasseur {
     private static let hote = "releve"
 
     /// Ou le passeur envoie le releve : port et jeton, donnes par l'URL que l'app ouvre avec lui.
-    /// Toute app peut ouvrir cette URL, comme elle pourrait lancer le passeur avec des arguments :
-    /// le passeur n'envoie qu'a 127.0.0.1, et l'app n'accepte que le bon jeton.
+    /// Toute app du Mac, du bac a sable ou non, peut ouvrir cette URL (des arguments de lancement,
+    /// seul un processus hors du bac a sable pouvait en passer) : le passeur lit alors Maison et
+    /// envoie le releve a 127.0.0.1, au port que l'URL nomme. Rien ne sort du Mac, et l'app
+    /// n'accepte que son propre jeton ; mais un processus local qui ecoute sur 127.0.0.1 peut ainsi
+    /// recevoir le releve (noms, pieces, zones, fabricants, batteries) : le passeur ne peut pas
+    /// reconnaitre l'app, faute de secret partage (ni App Group ni equipe commune).
     public struct Cible: Hashable, Sendable {
         public var port: UInt16
         public var jeton: String

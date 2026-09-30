@@ -67,6 +67,69 @@ struct EnvoiPasseurTests {
         #expect(Self.cible(url: "MAILLAGE-PASSEUR://RELEVE?port=54321&jeton=\(Self.jeton)") == c, "majuscules")
     }
 
+    /// `project.yml`, lu dans le depot comme les catalogues de textes et les captures : le paquet de
+    /// test du coeur le peut, ceux de l'app tournent dans l'app sandboxee et non.
+    static let projectYml = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()  // MaillageCoeurTests
+        .deletingLastPathComponent()  // racine du depot
+        .appendingPathComponent("project.yml")
+
+    /// Schemas d'URL que la cible `Passeur` d'un `project.yml` declare : les listes `CFBundleURLSchemes`
+    /// de ses proprietes d'Info.plist. Lecture du texte, sans lecteur YAML : la cible va de `  Passeur:`
+    /// a la premiere ligne moins indentee que ses cles ; une liste, de la ligne qui suit
+    /// `CFBundleURLSchemes:` a la premiere ligne qui n'est pas un article `- x` d'un retrait au moins egal.
+    static func schemasDuPasseur(dans yml: String) -> [String] {
+        func retrait(_ ligne: String) -> Int { ligne.prefix { $0 == " " }.count }
+        let lignes = yml.components(separatedBy: "\n")
+        guard let debut = lignes.firstIndex(of: "  Passeur:") else { return [] }
+        let cible = lignes[(debut + 1)...].prefix { $0.isEmpty || retrait($0) > 2 }
+        var schemas: [String] = []
+        for i in cible.indices where cible[i].trimmingCharacters(in: .whitespaces) == "CFBundleURLSchemes:" {
+            for article in cible[(i + 1)...] {
+                let texte = article.trimmingCharacters(in: .whitespaces)
+                guard texte.hasPrefix("- "), retrait(article) >= retrait(cible[i]) else { break }
+                schemas.append(String(texte.dropFirst(2)).trimmingCharacters(in: CharacterSet(charactersIn: " \"'")))
+            }
+        }
+        return schemas
+    }
+
+    /// Le schema de l'URL est ecrit a deux endroits : `EnvoiPasseur.schema`, et `project.yml`, qui le
+    /// declare dans l'Info.plist du passeur (`CFBundleURLSchemes`). Ce test les relie. La lecture du
+    /// texte ne se contente pas de trouver le mot : un autre schema dans la cible Passeur, ou le bon
+    /// schema declare par une autre cible, ne passent pas.
+    @Test func schemaDeclareParLePasseur() throws {
+        let yml = try String(contentsOf: Self.projectYml, encoding: .utf8)
+        #expect(Self.schemasDuPasseur(dans: yml).contains(EnvoiPasseur.schema),
+                "project.yml : la cible Passeur doit declarer « \(EnvoiPasseur.schema) » dans CFBundleURLSchemes")
+
+        let autreSchema = """
+            targets:
+              Passeur:
+                info:
+                  properties:
+                    CFBundleURLTypes:
+                      - CFBundleURLName: fr.djoko.maillage.passeur
+                        CFBundleURLSchemes:
+                          - autre-schema
+              MaillageCoeurTests:
+                type: bundle.unit-test
+            """
+        #expect(Self.schemasDuPasseur(dans: autreSchema) == ["autre-schema"], "la liste est lue")
+        let autreCible = """
+            targets:
+              MaillageThread:
+                info:
+                  properties:
+                    CFBundleURLTypes:
+                      - CFBundleURLSchemes:
+                          - \(EnvoiPasseur.schema)
+              Passeur:
+                type: application
+            """
+        #expect(Self.schemasDuPasseur(dans: autreCible).isEmpty, "declare par une autre cible que Passeur")
+    }
+
     /// Jeton a usage unique : 32 octets aleatoires, en 64 chiffres hexadecimaux, neuf a chaque tirage.
     @Test func jeton() {
         let a = EnvoiPasseur.nouveauJeton()

@@ -244,8 +244,8 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   l'app l'appelle pendant ses 10 s. Sa fenêtre passe toujours un instant
   derrière les autres. Aucune invite « réseau local » : la boucle locale n'en
   demande pas (essai du passeur-démon, 30/09). Les arguments de lancement
-  d'une app du bac à sable ne passent pas : macOS les retire (vérifié avec
-  Djoko le 30/09) ; d'où l'URL.
+  passés par une app du bac à sable n'arrivent pas : macOS les retire
+  (vérifié avec Djoko le 30/09) ; d'où l'URL.
   Auparavant, il écrivait `noms.json` dans un dossier choisi une fois, et
   l'app y déposait `passeur-demande.json` avant de le lancer.
 
