@@ -107,11 +107,11 @@ catalogue vont ensemble.
 
 ## Code
 
-| Dossier | Rôle |
+| Dossier ou fichier | Rôle |
 |---|---|
 | `MaillageCoeur/` | framework sans interface : décodage des TXT, instantané (réseaux, partitions, préfixes, appareils), suivi et événements du journal, journal en fichiers, noms, disposition du graphe, table de routage ; testé sur le relevé réel et sur la panne rejouée |
 | `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, balayage des routeurs muets), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats) ; testé sur une capture anonymisée |
-| `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, accès par le réseau Thread (`Reseau/` : transport UDP et enveloppe H1 du pont Halo, clé dans le trousseau, rid et renvois), `SondeUSB` (requêtes appariées par id, chacune avec son échéance), modèle de l'app (sonde retenue par son numéro de série USB, liaison USB ou réseau, une tournée toutes les 5 minutes) |
+| `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, accès par le réseau Thread (`Reseau/` : transport UDP et enveloppe H1 du pont Halo, clé dans le trousseau, rid et renvois), `SondeUSB` (requêtes appariées par id et par cible, chacune avec son échéance), modèle de l'app (sonde retenue par son numéro de série USB, liaison USB ou réseau, une tournée toutes les 5 minutes) |
 | `MaillageThread/Noms/` | noms de Maison : dossier choisi une fois (signet à portée de sécurité), lecture de `noms.json`, derniers noms gardés, lancement de Passeur Noms |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | modèle de l'app : relevés → suivi → journal et notifications ; veille du Mac ; ouverture à la connexion |
@@ -172,17 +172,25 @@ diagnostic Thread (`DIAG_GET`) et lui rend les réponses brutes, par l'USB ou,
 une fois l'accès autorisé, par le réseau Thread ; l'app les décode et
 reconstruit le maillage.
 
+Le **pont Halo** est l'autre projet ESP32-C6 de l'auteur, un pont Matter sur
+Thread pour une lampe ScreenBar Halo, dans un autre dépôt. L'accès de la sonde
+par le réseau est celui du pont, tel quel, **enveloppe H1** comprise : une
+poignée de main signée, puis des messages qui portent chacun un compteur et un
+HMAC.
+
 ```sh
 cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
 ```
 
 - Dans Maillage Thread : Réglages › Sonde › Port. L'app n'ouvre que le port
-  choisi (le pont Halo est aussi un ESP32-C6). La sonde est retenue par son
-  numéro de série USB et s'affiche sous son nom, « SONDE-01 » par défaut : le
-  firmware le garde, il suit donc la carte d'un Mac à l'autre (le nom USB du
-  C6 est fixé par la puce). Tout autre port s'affiche avec son numéro de
-  série USB (« usbmodem… · » suivi du numéro), seul moyen de distinguer la
-  sonde du pont Halo avant la première connexion. La ligne du menu prend aussi
+  choisi : un autre ESP32-C6 branché (le pont Halo, par exemple) n'est jamais
+  ouvert. La sonde est retenue par son numéro de série USB et s'affiche sous
+  son nom, « SONDE-01 » par défaut : le firmware le garde, il suit donc la
+  carte d'un Mac à l'autre (le nom USB du C6 est fixé par la puce). Branchée,
+  elle est reprise seule ; si elle démarre trop lentement, l'app réessaie une
+  fois 5 s plus tard. Tout autre port s'affiche avec son numéro de série USB
+  (« usbmodem… · » suivi du numéro), seul moyen de distinguer la sonde du pont
+  Halo avant la première connexion. La ligne du menu prend aussi
   ce nom (« SONDE-01 : connectée · relevé il y a 2 minutes »), comme l'état
   dans Réglages › Sonde (« SONDE-01 · connectée ») ; pas pour un autre port
   en essai.
@@ -202,7 +210,8 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   messages sans les chiffrer : la topologie circule en clair sur le réseau
   local. Le Mac doit avoir une route IPv6 vers le préfixe OMR (voir
   « Route vers le réseau Thread » plus bas). « Oublier la sonde » retire la
-  clé de ce Mac.
+  clé de ce Mac, le relevé de la sonde dans les Réglages et son maillage : le
+  graphe revient aussitôt aux pointillés.
   Limites : pas de fin de session (une place de la carte reste prise 30 s,
   la reprise automatique le répare) ; la file de réception de la carte n'a
   que 4 places (un envoi groupé de 8 `diag` peut en voir attendre le renvoi à
@@ -219,8 +228,10 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   début ni à la fin d'une tournée. Réglages › Sonde et la ligne du menu
   montrent aussi l'étape et le compteur.
 - La liste des routeurs vient du chef ; s'il se tait, d'un routeur qui a déjà
-  répondu ; sinon d'une recherche sur tous les identifiants de routeur. Sans
-  liste, pas de nouveau maillage : le dernier vieillit.
+  répondu ; sinon des autres routeurs de la table de la sonde, puis d'une
+  recherche sur tous les identifiants de routeur (pas de nouveau dans les 30
+  minutes qui suivent une recherche vaine). Sans liste, pas de nouveau
+  maillage : le dernier vieillit.
 - La tournée demande ensuite à chaque routeur qui répond ses liens (avec la
   qualité dans chaque sens) et ses enfants, lit les routeurs de bordure dans
   les Network Data, et demande à chaque enfant listé dans la table d'un
@@ -228,8 +239,9 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   endormis compris (l'ExtMac d'un appareil Matter est son nom d'hôte).
 - **Les routeurs de bordure d'Apple ne répondent jamais au diagnostic.** Le
   balayage des RLOC16 d'enfant possibles vise les routeurs qui n'ont jamais
-  répondu (ceux d'Apple) ou qui se sont tus deux tournées de suite, toutes les
-  30 minutes ou quand cet ensemble change ; la qualité de ces liens reste
+  répondu (ceux d'Apple) ou qui se sont tus deux tournées de suite (un refus
+  de la sonde, ou une réponse illisible, n'est pas un silence), toutes les 30
+  minutes ou quand cet ensemble change ; la qualité de ces liens reste
   inconnue, et un lien entre deux routeurs Apple n'est jamais dessiné.
 - **Identité des routeurs de bordure.** Muet, un routeur d'Apple ne donne pas
   son ExtMac, donc pas le nom de son annonce. La sonde (firmware 1.0.2)
@@ -257,12 +269,21 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   parent et la qualité, ou le nombre de voisins et d'enfants d'un routeur. Si
   la sonde ne répond plus, le dernier maillage est marqué ancien 6 minutes
   après sa réception (jamais pendant une tournée) ; après 15 minutes, le
-  graphe revient aux pointillés.
+  graphe revient aux pointillés. Le graphe se redessine chaque minute : ces
+  deux changements y paraissent avec une minute de retard au plus, sans autre
+  événement.
 - Éteindre « Sonde maillage » dans Maison suspend la sonde : pas de tournée,
-  même après un redémarrage de la sonde.
+  même après un redémarrage de la sonde. Sa LED donne alors un bref éclair
+  orange toutes les 10 s (firmware 1.0.3). Après un `oubli`, la commande USB
+  qui désappaire la sonde (voir `sonde/README.md`), la sonde revient allumée,
+  comme à sa première mise en service.
 - Les captures de la sonde contiennent les adresses du réseau de la maison :
   `outils/anonymiser-sonde.py` les réécrit de façon cohérente avant qu'elles ne
-  deviennent des données de test (`docs/releves/2026-09-29/`).
+  deviennent des données de test (`docs/releves/2026-09-29/`). L'anonymiseur
+  échoue devant tout type de message, champ ou TLV inconnu, sans rien écrire :
+  il ne connaît que les messages `bonjour`, `etat` et `diag` de cette capture,
+  si bien qu'une capture du firmware 1.0.2 ou plus récent (`etat.ext`,
+  `bonjour.hote`, `routeurs`…) est refusée tant qu'il ne les traite pas.
 
 ### Route vers le réseau Thread
 

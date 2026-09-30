@@ -105,11 +105,11 @@ catalog match.
 
 ## Code
 
-| Folder | Role |
+| Folder or file | Role |
 |---|---|
 | `MaillageCoeur/` | framework without UI: TXT decoding, snapshot (networks, partitions, prefixes, devices), tracking and log events, file log, names, graph layout, routing table; tested on the real survey and on the replayed outage |
 | `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, scan of silent routers), kept router identities, matching with the snapshot (elimination, candidates); tested on an anonymized capture |
-| `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, access over the Thread network (`Reseau/`: UDP transport and H1 envelope from the Halo bridge, key in the keychain, rid and resends), `SondeUSB` (requests matched by id, each with its own deadline), app model (probe remembered by its USB serial number, USB or network link, a tour every 5 minutes) |
+| `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, access over the Thread network (`Reseau/`: UDP transport and H1 envelope from the Halo bridge, key in the keychain, rid and resends), `SondeUSB` (requests matched by id and target, each with its own deadline), app model (probe remembered by its USB serial number, USB or network link, a tour every 5 minutes) |
 | `MaillageThread/Noms/` | Home names: folder chosen once (security-scoped bookmark), reading `noms.json`, last names kept, launching Passeur Noms |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | app model: surveys → tracking → log and notifications; sleep of the Mac; login item |
@@ -165,15 +165,22 @@ nobody's parent. It sends Thread network diagnostics (`DIAG_GET`) for the app
 and passes the raw answers back, over USB or, once access is allowed, over
 the Thread network; the app decodes them and rebuilds the mesh.
 
+The **Halo bridge** is the author's other ESP32-C6 project, a Matter over
+Thread bridge for a ScreenBar Halo lamp, in another repository. The probe's
+network access is the bridge's, unchanged, including its **H1 envelope**: a
+signed handshake, then messages that each carry a counter and an HMAC.
+
 ```sh
 cd sonde && pio run        # build; flashing and pairing: sonde/README.md
 ```
 
 - In Maillage Thread: Settings › Probe › Port. Only the chosen port is ever
-  opened (the Halo bridge is also an ESP32-C6). The probe is remembered by its
-  USB serial number and shows under its name, "SONDE-01" by default: the
-  firmware keeps it, so it follows the board from one Mac to another (the
-  C6's USB name is fixed by the chip). Any other port shows with its USB
+  opened: another plugged-in ESP32-C6 (the Halo bridge, for example) never
+  is. The probe is remembered by its USB serial number and shows under its
+  name, "SONDE-01" by default: the firmware keeps it, so it follows the board
+  from one Mac to another (the C6's USB name is fixed by the chip). Once
+  plugged in, the probe is picked up on its own; if it starts too slowly, the
+  app tries once more 5 s later. Any other port shows with its USB
   serial number ("usbmodem… · " then the number), the only way to tell the
   probe from the Halo bridge before the first connection. The menu line uses
   the name too ("SONDE-01: connected · updated 2 minutes ago"), and so does
@@ -194,12 +201,13 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   next connection. Halo's H1 envelope authenticates the messages without
   encrypting them: the topology travels in clear on the local network. The
   Mac needs an IPv6 route to the OMR prefix (see "Route to the Thread
-  network" below). "Forget the probe" removes this Mac's key. Limits: no end of
-  session (a place on the board stays taken 30 s, the automatic retry fixes
-  it); the board's receive queue has only 4 places (a batch of 8 `diag` may
-  see some of them wait for the 2 s resend); a lost `routeurs` line gives a
-  partial table, or none if the last one (`"suite":false`) is lost; details
-  in the spec (section 3 bis).
+  network" below). "Forget the probe" removes this Mac's key, the probe's
+  survey in Settings and its mesh: the graph goes straight back to dotted
+  lines. Limits: no end of session (a place on the board stays taken 30 s,
+  the automatic retry fixes it); the board's receive queue has only 4 places
+  (a batch of 8 `diag` may see some of them wait for the 2 s resend); a lost
+  `routeurs` line gives a partial table, or none if the last one
+  (`"suite":false`) is lost; details in the spec (section 3 bis).
 - A tour every 5 minutes, and on refresh: the refresh button of the graph
   rereads the network, starts a tour (unless one is running) and launches
   Passeur Noms; its help tag says which of these it will actually start. While
@@ -209,8 +217,10 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   while a probe is remembered, so nothing moves when a tour starts or ends.
   Settings › Probe and the menu line show the step and the counter too.
 - The list of routers comes from the leader; if it is silent, from a router
-  that has already answered; otherwise from a search over every router id.
-  With no list there is no new mesh: the last one gets older.
+  that has already answered; otherwise from the other routers in the probe's
+  router table, then from a search over every router id (not again for 30
+  minutes after a search that found nothing). With no list there is no new
+  mesh: the last one gets older.
 - The tour then asks every router that answers for its links (with the
   quality in both directions) and its children, reads the border routers from
   the Network Data, and asks each child listed in a router's child table for
@@ -218,9 +228,10 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   included (a Matter device's ExtMac is its host name).
 - **Apple's border routers never answer diagnostics.** The scan of possible
   child RLOC16s targets the routers that never answered (Apple's) or that
-  stayed silent two tours in a row, every 30 minutes or when that set changes;
-  the quality of those links stays unknown, and a link between two Apple
-  routers is never drawn.
+  stayed silent two tours in a row (a refusal by the probe, or an unreadable
+  answer, is not a silence), every 30 minutes or when that set changes; the
+  quality of those links stays unknown, and a link between two Apple routers
+  is never drawn.
 - **Border router identities.** A silent Apple router does not give its
   ExtMac, so not the name of its announcement either. The probe (firmware
   1.0.2) learns the ExtMac of the routers it hears: each tour reads its router
@@ -246,12 +257,20 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   gives the parent and the quality, or a router's number of neighbors and
   children. If the probe stops answering, the last mesh is marked old 6
   minutes after it was received (never during a tour); after 15 minutes the
-  graph goes back to dotted lines.
+  graph goes back to dotted lines. The graph redraws every minute: both
+  changes show up within a minute, with no other event needed.
 - Switching "Sonde maillage" off in Home suspends the probe: no tour, even
-  after the probe restarts.
+  after the probe restarts. The board's LED then gives a short orange flash
+  every 10 s (firmware 1.0.3). After `oubli`, the USB command that unpairs
+  the probe (see `sonde/README.md`), the probe comes back on, as when first
+  set up.
 - Probe captures hold the home network's addresses:
   `outils/anonymiser-sonde.py` rewrites them consistently before they become
-  test data (`docs/releves/2026-09-29/`).
+  test data (`docs/releves/2026-09-29/`). The anonymizer fails on any unknown
+  message type, field or TLV, without writing anything: it only knows the
+  `bonjour`, `etat` and `diag` messages of that capture, so a capture from
+  firmware 1.0.2 or later (`etat.ext`, `bonjour.hote`, `routeurs`…) is refused
+  until it handles them.
 
 ### Route to the Thread network
 

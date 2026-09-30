@@ -189,6 +189,11 @@ et promenée dans la maison, l'app la joint par le réseau.
 
 Les captures brutes contiennent les adresses du réseau de la maison. À passer
 par `outils/anonymiser-sonde.py` avant de les mettre dans le dépôt.
+L'anonymiseur échoue devant tout type de message, champ ou TLV inconnu, sans
+rien écrire : il ne connaît que `bonjour`, `etat` et `diag` de la capture du
+29/09. Une capture du firmware 1.0.2 ou plus récent (`etat.ext`,
+`bonjour.hote`, `bonjour.nom`, `voisins`, `routeurs`) est donc refusée tant
+qu'il ne les traite pas.
 
 ## Tests sur le Mac
 
@@ -198,3 +203,8 @@ UBSan ; ce ne sont pas des tests `pio test`) : l'enveloppe H1
 de `voyant.h` (`test_distant.cpp` : rid, liste blanche, réponses gardées,
 cadence ; depuis la 1.0.3, lecture des entiers, reprises CoAP d'un `diag` et
 séquence de la LED).
+
+`python3 -m unittest discover -s sonde/test` : les tests Python, sans carte ni
+réseau : le masquage de la clé par `sonde_essai.py` (à l'écran et dans la
+capture, y compris sur une ligne abîmée), le décodage du TLV 7 et la garde de
+l'anonymiseur. `lancer.sh` ne les lance pas.
