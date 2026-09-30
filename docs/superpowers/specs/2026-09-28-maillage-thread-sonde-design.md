@@ -636,6 +636,8 @@ total ne baisse jamais :
   premier, sans moyenne ;
 - les enfants : parent, qualité (inconnue sous un routeur muet), délai,
   endormi ou non, identité ;
+- le signal vu par la sonde (dBm) : celui de chaque routeur qu'elle entend
+  et celui de son parent (ajout du 30/09) ;
 - les nœuds non identifiés.
 
 ## 5. Affichage (plan 3a, validée)
@@ -734,8 +736,9 @@ choisi) : « Sonde : … ».
 **Historique.**
 - Contenu : à chaque tournée, la qualité de chaque lien, entre routeurs et
   d'enfant à parent ; et le signal (dBm) de chaque routeur que la sonde
-  entend (commande `voisins`, firmware 1.0.2) et celui de son parent
-  (`etat.parent.rssi`) (ajout validé par Djoko le 30/09).
+  entend (commande `voisins` ; plusieurs routeurs depuis la 1.0.2, où la
+  sonde est FED) et celui du parent de la sonde (`etat.parent.rssi`). Ajout
+  validé par Djoko le 30/09.
 - Stockage : JSON Lines mensuel (`maillage-AAAA-MM.jsonl`) dans le dossier de
   l'app, gardé 90 jours comme le journal ; environ 5 Mo par mois.
 - Affichage : courbes dans la fiche (Swift Charts) sur 24 h, 7 j et 30 j,
