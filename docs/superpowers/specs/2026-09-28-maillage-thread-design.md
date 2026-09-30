@@ -256,7 +256,8 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   Réglages et le menu (révision du 30/09 ; auparavant, un fichier lu dans un
   dossier choisi une fois, avec un signet à portée de sécurité).
 - Elle garde les derniers noms **indéfiniment**, avec leur date. Au-delà de
-  7 jours, elle affiche : « Noms du <date> : relancer outils/passeur.sh ».
+  7 jours, elle affiche : « Noms du <date> : relance outils/passeur.sh pour
+  les rafraîchir. »
 - Batterie faible : l'alerte de l'accessoire, ou un niveau de 20 % ou moins
   (décision de Djoko, 28/09).
 
@@ -303,8 +304,9 @@ sécurité › Maison) et continue avec les surnoms, le fabricant et le modèle
 - **Erreurs visibles** : réseau local refusé (bandeau + état du menu, le
   refus se lit comme dans Halo Compagnon : `NoSuchRecord` rapide sur `.local`
   / navigateur `PolicyDenied`) ; aucun routeur de bordure vu (« aucun réseau
-  Thread visible sur ce réseau local ») ; passeur absent ou refusé (noms
-  désactivés, dit une fois).
+  Thread visible sur ce réseau local ») ; passeur absent ou refusé (derniers
+  noms gardés, échec dit dans les Réglages et le menu, depuis le plan 4a du
+  30/09 ; auparavant, noms désactivés, dit une fois).
 - **Tests** : `MaillageCoeur` entièrement testé sur des **fichiers
   d'annonces** (relevé du 28/09, section 8 et `docs/releves/2026-09-28/` :
   6 routeurs de bordure avec leurs TXT, 57 instances `_matter._tcp` sur 28

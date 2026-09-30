@@ -150,21 +150,24 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
   connecte, envoie le jeton, la longueur du JSON puis le JSON, et se ferme
   dès que l'app a tout lu. L'app vérifie le jeton, lit au plus 8 Mo et écrit
   `noms.json` dans son conteneur (écriture atomique). La boucle locale ne
-  demande pas l'accès au réseau local. Priorité des noms : surnom > Maison >
-  HomeKit (`_hap._udp`) > hôte.
-- Le dernier relevé valide est gardé. Un échec (Passeur Noms introuvable ou
-  refusé, rien en 2 minutes, jeton faux, longueur ou JSON illisible, accès à
-  Maison refusé) le garde et se lit dans Réglages › Noms de Maison et dans le
-  menu ; au-delà de 7 jours, les Réglages disent de relancer
-  `outils/passeur.sh`.
+  demande pas l'accès au réseau local.
+- Priorité des noms : surnom > Maison > HomeKit (`_hap._udp`) > hôte.
+- Le dernier relevé valide est gardé. Un échec (par exemple Passeur Noms
+  introuvable ou refusé, rien en 2 minutes, jeton faux, longueur ou JSON
+  illisible, accès à Maison refusé) le garde et se lit dans Réglages › Noms
+  de Maison et dans le menu ; au-delà de 7 jours, les Réglages disent de
+  relancer `outils/passeur.sh`. Passeur Noms note au journal pourquoi il
+  s'est fermé :
+  `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
 - Rafraîchissement : la fenêtre du graphe lance Passeur Noms à son ouverture
-  (si le relevé a plus de 15 min), puis toutes les heures ; « Rafraîchir
-  depuis Maison » (menu ou réglages) et le bouton rafraîchir du graphe le
-  font à la demande. Un relevé à la fois : une demande pendant un relevé est
-  ignorée. La fenêtre de Passeur Noms ne fait que passer derrière les autres.
+  (si le relevé et la dernière demande ont plus de 15 min), puis toutes les
+  heures ; « Rafraîchir depuis Maison » (menu ou réglages) et le bouton
+  rafraîchir du graphe le font à la demande. Un relevé à la fois : une
+  demande pendant un relevé est ignorée. La fenêtre de Passeur Noms ne fait
+  que passer derrière les autres.
 - Zones : les zones de Maison (en général les étages) et leurs pièces, dans
-  l'ordre de Maison ; Réglages › Noms de Maison les liste. Un relevé d'avant
-  les zones n'en a pas.
+  l'ordre de Maison ; Réglages › Noms de Maison en liste les noms. Un relevé
+  d'avant les zones n'en a pas.
 - Le `noms.json` écrit dans un dossier choisi par un ancien Passeur Noms (à la
   racine de ce dépôt, par exemple) n'est plus lu : l'effacer (git l'ignore).
 - Batteries : niveau, état de charge et alerte de l'accessoire lui-même, pour

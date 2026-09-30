@@ -660,9 +660,9 @@ total ne baisse jamais :
   fin d'une tournée (seulement quand une sonde est retenue ou oubliée), et la
   ligne ne recouvre pas les titres des zones.
 - Le bouton rafraîchir relit le réseau, lance une tournée (pas pendant une
-  tournée) et le passeur des noms de Maison, en mode direct et seulement si
-  un dossier des noms est choisi (« Rafraîchir depuis Maison », lui, demande
-  le dossier s'il manque). Il n'est jamais désactivé. Son aide dit ce qu'il
+  tournée) et le passeur des noms de Maison, en mode direct ; pendant un
+  relevé des noms, cette demande est ignorée (plus de dossier des noms depuis
+  le plan 4a, 30/09). Il n'est jamais désactivé. Son aide dit ce qu'il
   lancera vraiment : le réseau toujours, une tournée si la sonde est
   connectée et libre, les noms de Maison si le passeur sera lancé.
 

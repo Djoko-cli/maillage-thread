@@ -142,24 +142,27 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   access. Opened by hand like this, Passeur Noms reads Home, shows what it
   read, sends nothing and quits after 10 s.
 - A reading: Maillage Thread listens on `127.0.0.1` (TCP, on a port chosen by
-  the system), draws a one-time token and launches Passeur Noms in the
+  the system), generates a one-time token and launches Passeur Noms in the
   background with `--port` and `--jeton`. Passeur Noms reads Home, connects,
   sends the token, the length of the JSON, then the JSON, and quits once the
   app has read it all. The app checks the token, reads at most 8 MB and
   writes `noms.json` in its own container (atomic write). The loopback needs
-  no local network permission. Priority of names: nickname > Home > HomeKit
-  (`_hap._udp`) > host.
-- The last valid reading is kept. A failure (Passeur Noms not found or
-  refused, nothing within 2 minutes, wrong token, unreadable length or JSON,
-  Home access denied) keeps it and shows in Settings › Home names and in the
-  menu; after 7 days, Settings says to run `outils/passeur.sh` again.
+  no local network permission.
+- Priority of names: nickname > Home > HomeKit (`_hap._udp`) > host.
+- The last valid reading is kept. A failure (for example Passeur Noms not
+  found or refused, nothing within 2 minutes, wrong token, unreadable length
+  or JSON, Home access denied) keeps it and shows in Settings › Home names
+  and in the menu; after 7 days, Settings says to run `outils/passeur.sh`
+  again. Passeur Noms logs why it quit:
+  `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
 - Refreshing: the graph window launches Passeur Noms when it opens (if the
-  last reading is older than 15 min), then every hour; "Refresh from Home"
-  (menu or settings) and the refresh button of the graph do it on demand. One
-  reading at a time: a request during a reading is ignored. The window of
-  Passeur Noms only flashes behind the others.
+  last reading and the last request are older than 15 min), then every hour;
+  "Refresh from Home" (menu or settings) and the refresh button of the graph
+  do it on demand. One reading at a time: a request during a reading is
+  ignored. The window of Passeur Noms only flashes behind the others.
 - Zones: Home's zones (usually floors) and their rooms, in Home's order;
-  Settings › Home names lists them. A reading from before zones has none.
+  Settings › Home names lists the zone names. A reading from before zones has
+  none.
 - The `noms.json` written in a chosen folder by an older Passeur Noms (at the
   root of this repository, for example) is no longer read: delete it (git
   ignores it).
