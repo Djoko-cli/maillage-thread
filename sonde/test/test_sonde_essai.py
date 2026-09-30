@@ -484,7 +484,8 @@ class CleNouvelleUsb(BaseTest):
 
 
 def tlv_7_de_la_capture():
-    """Le TLV 7 de la reponse 206 de la capture anonymisee (routeur 5000, Network Data)."""
+    """Le TLV 7 de la reponse 206 de la capture anonymisee (routeur 5000, Network Data). Cinq tests de DecodageTlv7
+    en dependent, avec ENTREES_CAPTURE : une capture remplacee ou renumerotee demande de les revoir."""
     with open(CAPTURE_ANONYME, encoding="utf-8") as f:
         for ligne in f:
             m = json.loads(ligne)

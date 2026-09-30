@@ -25,13 +25,16 @@ ce qu'il ne connait pas (des noms, jamais une valeur), devant :
 - dans la Network Data (TLV 7), autre chose que des Prefix, des Service et la
   Commissioner Session ID de la capture, ou une donnee de service de plus de
   2 octets : donnees_reseau() ne remplace que le /48 des Prefix et l'adresse
-  des Server d'un Service.
-Une valeur qu'il ne connait pas pourrait etre une ExtMac, une adresse ou un nom
-: le controle final ne porte que sur les valeurs qu'il a reperees. Une capture
-de la sonde 1.0.2 est donc refusee (etat.ext, bonjour.hote, bonjour.nom,
-messages voisins et routeurs...) tant que l'anonymiseur ne les traite pas.
-Pour ajouter un champ : verifier qu'il ne porte rien d'identifiant, sinon le
-traiter dans message() ; puis l'inscrire dans la table.
+  des Server d'un Service ;
+- un champ connu qui porte un objet ou une liste (hors parent).
+Une valeur illisible dans un champ connu (adresse, hexa) le fait sortir avec le
+seul numero de ligne, jamais la valeur (la trace d'une exception la citerait).
+Une valeur qu'il ne connait pas pourrait etre une ExtMac, une adresse ou un
+nom, et le controle final ne porte que sur les valeurs qu'il a reperees. Une
+capture de la sonde 1.0.2 est donc refusee (etat.ext, bonjour.hote,
+bonjour.nom, messages voisins et routeurs...) tant que l'anonymiseur ne les
+traite pas. Pour ajouter un champ : verifier qu'il ne porte rien d'identifiant,
+sinon le traiter dans message() ; puis l'inscrire dans la table.
 """
 import ipaddress
 import json
@@ -185,8 +188,9 @@ class Anonymiseur:
 
 
 def nom_sur(x):
-    """Nom de champ ou de type pour un message d'erreur : jamais une valeur (un nom abime peut porter une ExtMac)."""
-    ok = isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9_]{1,32}", x) and not re.search(r"[0-9A-Fa-f]{16}", x)
+    """Nom de champ ou de type pour un message d'erreur : jamais une valeur. Un nom abime peut porter une ExtMac, une
+    MAC, un /48 ou un code d'appairage : 8 hexa de suite, et il devient "(illisible)"."""
+    ok = isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9_]{1,32}", x) and not re.search(r"[0-9A-Fa-f]{8}", x)
     return x if ok else "(illisible)"
 
 
@@ -241,11 +245,14 @@ def controler_tlv(hexa):
 
 def controler(numerotes):
     """La garde. `numerotes` : [(numero de ligne, message)]. Rend {raison: [numeros de ligne]}, vide si tout est
-    connu. Ne cite jamais une valeur de la capture, seulement des noms de type et de champ (nom_sur)."""
+    connu. Ne cite jamais une valeur de la capture, seulement des noms de type et de champ (nom_sur). Une raison
+    repetee sur une meme ligne ne compte qu'une fois."""
     inconnu = {}
 
     def noter(raison, numero):
-        inconnu.setdefault(raison, []).append(numero)
+        numeros = inconnu.setdefault(raison, [])
+        if numero not in numeros:
+            numeros.append(numero)
 
     for numero, m in numerotes:
         if not isinstance(m, dict):
@@ -255,18 +262,23 @@ def controler(numerotes):
         if not isinstance(t, str) or t not in CHAMPS_CONNUS:
             noter("type de message inconnu : %s" % nom_sur(t), numero)
             continue
-        for champ in m:
+        for champ, valeur in m.items():
             if champ not in CHAMPS_COMMUNS and champ not in CHAMPS_CONNUS[t]:
                 noter("champ inconnu : %s.%s" % (t, nom_sur(champ)), numero)
+            elif isinstance(valeur, (dict, list)) and not (t == "etat" and champ == "parent"):
+                noter("forme inconnue : %s.%s" % (t, champ), numero)  # un scalaire est attendu
         parent = m.get("parent") if t == "etat" else None
         if isinstance(parent, dict):
-            for champ in parent:
+            for champ, valeur in parent.items():
                 if champ not in CHAMPS_PARENT:
                     noter("champ inconnu : etat.parent.%s" % nom_sur(champ), numero)
+                elif isinstance(valeur, (dict, list)):
+                    noter("forme inconnue : etat.parent.%s" % champ, numero)
         elif parent is not None:
             noter("forme inconnue : etat.parent", numero)
-        if t == "diag" and m.get("tlv") is not None:
-            for raison in controler_tlv(m["tlv"]):
+        tlv = m.get("tlv") if t == "diag" else None
+        if tlv is not None and not isinstance(tlv, (dict, list)):  # un objet ou une liste : deja "forme inconnue"
+            for raison in controler_tlv(tlv):
                 noter(raison, numero)
     return inconnu
 
@@ -294,6 +306,12 @@ def lire(chemin):
     return res
 
 
+def valeur_illisible(numero):
+    """Sort avec le seul numero de ligne : la trace d'une exception (AddressValueError...) citerait la valeur."""
+    raise SystemExit("refus : la ligne %d porte une valeur que l'anonymiseur ne sait pas lire ; rien n'a ete ecrit."
+                     % numero) from None
+
+
 def main():
     entree, sortie = sys.argv[1], sys.argv[2]
     a = Anonymiseur()
@@ -301,14 +319,21 @@ def main():
     inconnu = controler(numerotes)
     if inconnu:
         sys.exit(texte_refus(inconnu))
-    messages = [m for _, m in numerotes]
     # Le prefixe du reseau maille (sonde attachee) d'abord : il recoit toujours
     # le premier /48 factice.
-    for m in messages:
+    for numero, m in numerotes:
         if m.get("t") == "etat" and m.get("prefixeMaille") and m.get("role") in ("child", "router", "leader"):
-            a.prefixe48(bytes.fromhex(m["prefixeMaille"])[:6])
+            try:
+                a.prefixe48(bytes.fromhex(m["prefixeMaille"])[:6])
+            except (ValueError, TypeError):
+                valeur_illisible(numero)
             break
-    lignes = [json.dumps(a.message(m), ensure_ascii=False, sort_keys=True) for m in messages]
+    lignes = []
+    for numero, m in numerotes:
+        try:
+            lignes.append(json.dumps(a.message(m), ensure_ascii=False, sort_keys=True))
+        except (ValueError, TypeError):
+            valeur_illisible(numero)
     texte = "\n".join(lignes) + "\n"
     minuscule = texte.lower()
     brut = texte.lower().replace(":", "")

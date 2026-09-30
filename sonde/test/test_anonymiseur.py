@@ -7,7 +7,7 @@
 La garde : l'anonymiseur ne connait que les messages bonjour, etat et diag de la capture du 29/09/2026.
 Tout autre type de message, champ ou TLV le fait echouer avant toute ecriture, avec un message clair
 qui ne cite que des noms, jamais une valeur. Une capture de la sonde 1.0.2 (etat.ext, bonjour.hote,
-voisins...) ne peut donc plus passer sans avoir ete vue.
+voisins...) est donc refusee.
 
 Donnees inventees : les valeurs "reelles" de la capture brute ci-dessous n'ont jamais existe (ExtMac
 DEADBEEF..., prefixes de documentation 2001:db8). La capture anonymisee du depot sert de reference.
@@ -151,6 +151,39 @@ class Garde(unittest.TestCase):
                 self.assertEqual(controle(dict(etat, parent=parent)), {"forme inconnue : etat.parent": [1]})
         self.assertEqual(controle(dict(etat, parent=None)), {})  # sonde sans parent : connu
 
+    def test_valeur_non_scalaire_fait_echouer(self):
+        """Un champ connu qui porte un objet ou une liste cacherait ce que l'anonymiseur ne lit pas."""
+        de_base = {m["t"]: m for m in capture_inventee()}
+        for t, champ in (("etat", "role"), ("etat", "xp"), ("etat", "prefixeMaille"), ("etat", "heure"),
+                         ("bonjour", "mac"), ("bonjour", "qr"), ("bonjour", "v"), ("diag", "cible"),
+                         ("diag", "erreur"), ("diag", "tlv")):
+            for valeur in ({"ext": EXT_INCONNU}, [EXT_INCONNU], {}, []):
+                with self.subTest(champ="%s.%s" % (t, champ), valeur=valeur):
+                    self.assertEqual(controle(dict(de_base[t], **{champ: valeur})),
+                                     {"forme inconnue : %s.%s" % (t, champ): [1]})
+
+    def test_valeur_non_scalaire_dans_le_parent(self):
+        etat = capture_inventee()[1]
+        for valeur in ({"a": 1}, [EXT_PARENT]):
+            with self.subTest(valeur=valeur):
+                parent = dict(etat["parent"], ext=valeur)
+                self.assertEqual(controle(dict(etat, parent=parent)), {"forme inconnue : etat.parent.ext": [1]})
+
+    def test_scalaires_de_tout_type_passent(self):
+        etat = capture_inventee()[1]
+        for valeur in ("x", "", 0, -5, 1.5, True, None):
+            with self.subTest(valeur=valeur):
+                self.assertEqual(controle(dict(etat, role=valeur)), {})
+
+    def test_une_raison_repetee_sur_une_meme_ligne_compte_une_fois(self):
+        double = self.diag_avec(tlv(31, b"\x00") + tlv(1, b"\x00\x00") + tlv(31, b"\x00") + tlv(29, b"\x00")
+                                + tlv(29, b"\x00"))
+        inconnu = anon.controler([(3, double), (7, double)])
+        self.assertEqual(inconnu, {"TLV inconnu : 31 (diag.tlv)": [3, 7], "TLV inconnu : 29 (diag.tlv)": [3, 7]})
+        self.assertIn("  TLV inconnu : 31 (diag.tlv) (2 ligne(s), la premiere : 3)", anon.texte_refus(inconnu))
+        self.assertEqual(controle(self.diag_avec(tlv(7, bytes([0x0D, 0]) + bytes([0x0D, 0])))),
+                         {"sous-TLV inconnu de la Network Data : 6 (diag.tlv)": [1]})
+
     def test_type_de_message_inconnu_fait_echouer(self):
         """voisins et routeurs (1.0.2), cle, erreur, oubli, et tout ce qui n'est pas un nom de type lisible."""
         for t in ("voisins", "routeurs", "cle", "erreur", "oubli", "inconnu", "ETAT", ""):
@@ -184,7 +217,7 @@ class Garde(unittest.TestCase):
         return dict(capture_inventee()[2], tlv=charge.hex().upper() if isinstance(charge, bytes) else charge)
 
     def test_tlv_inconnu_fait_echouer(self):
-        """29 Child, 30 ChildIpv6 et 31 RouterNeighbor portent des ExtMac ou des adresses : jamais sans etre vus."""
+        """29 Child, 30 ChildIpv6 et 31 RouterNeighbor portent des ExtMac ou des adresses : la garde les refuse."""
         for t in (29, 30, 31, 9, 34, 35, 255):
             with self.subTest(tlv=t):
                 self.assertEqual(controle(self.diag_avec(tlv(1, b"\x50\x00") + tlv(t, bytes.fromhex(EXT_INCONNU)))),
@@ -312,9 +345,12 @@ class Garde(unittest.TestCase):
                 self.assertEqual(controle(self.diag_avec(charge)), {"TLV tronque (diag.tlv)": [1]})
 
     def test_tlv_illisible_fait_echouer(self):
-        for charge in ("ZZ", "123", "0 1", 12, ["00"], {"a": 1}, True):
+        for charge in ("ZZ", "123", "0 1", 12, True):
             with self.subTest(tlv=charge):
                 self.assertEqual(controle(self.diag_avec(charge)), {"tlv illisible (diag.tlv)": [1]})
+        for charge in (["00"], {"a": 1}):  # un objet ou une liste : la forme suffit, dite une fois
+            with self.subTest(tlv=charge):
+                self.assertEqual(controle(self.diag_avec(charge)), {"forme inconnue : diag.tlv": [1]})
 
     def test_tlv_vide_ou_absent_passe(self):
         self.assertEqual(controle(self.diag_avec("")), {})
@@ -326,10 +362,25 @@ class Garde(unittest.TestCase):
     # --- Ce que le refus dit ---
 
     def test_nom_sur_ne_rend_que_des_noms_courts(self):
-        for nom in ("ext", "prefixeMaille", "a_b2", "x" * 32):
+        for nom in ("ext", "prefixeMaille", "a_b2", "x" * 32, "deadbee"):  # 7 hexa de suite : lisible
             self.assertEqual(anon.nom_sur(nom), nom)
         for nom in ("", "x" * 33, EXT_INCONNU, "cle" + EXT_INCONNU.lower(), "a b", "\u00e9t\u00e9", None, 5, ["ext"]):
             self.assertEqual(anon.nom_sur(nom), "(illisible)", repr(nom))
+
+    def test_nom_sur_cache_une_mac_un_48_un_code_d_appairage(self):
+        """8 hexa de suite suffisent : une MAC (12), un /48 (12), un code d'appairage (11 chiffres)."""
+        for nom in (MAC, "x" + MAC.lower(), "20010db8a1b2", "x20010db8a1b2", CODE, "a" + CODE, "deadbeef", "DEADBEEF_"):
+            self.assertEqual(anon.nom_sur(nom), "(illisible)", repr(nom))
+
+    def test_aucun_nom_des_tables_n_est_masque_par_nom_sur(self):
+        """Les noms connus, et ceux que la 1.0.2 ajoute, restent lisibles dans le refus."""
+        noms = set(anon.CHAMPS_COMMUNS) | set(anon.CHAMPS_PARENT) | set(anon.CHAMPS_CONNUS)
+        for champs in anon.CHAMPS_CONNUS.values():
+            noms |= champs
+        noms |= {"ext", "eligible", "nom", "hote", "tronquee", "liste", "suite", "voisins", "routeurs", "cle",
+                 "oubli", "erreur", "cle_effacee", "effacement_en_echec"}
+        for nom in sorted(noms):
+            self.assertEqual(anon.nom_sur(nom), nom)
 
     def test_le_texte_de_refus_ne_cite_que_des_noms(self):
         """Ni valeur de champ, ni nom abime qui porterait une ExtMac."""
@@ -373,6 +424,7 @@ class Outil(unittest.TestCase):
         self.assertEqual(r.stdout, "")
         self.assertIn("refus : ", r.stderr)
         self.assertIn("rien n'a ete ecrit", r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
         for morceau in attendu:
             self.assertIn(morceau, r.stderr)
         self.assertFalse(os.path.exists(self.sortie), "la sortie ne doit pas etre creee")
@@ -399,6 +451,28 @@ class Outil(unittest.TestCase):
         messages[2]["tlv"] = (tlv(31, bytes.fromhex(EXT_INCONNU) + b"\x00") + bytes.fromhex(messages[2]["tlv"])).hex()
         self.ecrire(messages)
         self.assertRefus(self.lancer(), "TLV inconnu : 31 (diag.tlv) (1 ligne(s), la premiere : 3)")
+
+    def test_valeur_illisible_sort_avec_le_seul_numero_de_ligne(self):
+        """Une adresse que ipaddress refuse, un champ qui n'est pas du texte, un hexa abime : la trace d'une
+        exception citerait la valeur. L'outil sort avec le seul numero de ligne."""
+        cas = (("diag", "cible", "2001:db8:zz::1", "zz::1"),  # AddressValueError cite l'adresse
+               ("diag", "cible", 5, None),  # TypeError
+               ("etat", "prefixeMaille", "ZZ20010DB8A1B20000", "ZZ2001"),  # le prefixe du reseau maille, lu d'abord
+               ("etat", "prefixeMaille", 5, None),
+               ("etat", "parent.ext", "ZZ" + EXT_PARENT, "ZZDEAD"))
+        for t, champ, valeur, fragment in cas:
+            with self.subTest(champ="%s.%s" % (t, champ), valeur=repr(valeur)):
+                messages = capture_inventee()
+                numero = next(n for n, m in enumerate(messages, 1) if m["t"] == t and (t != "diag" or "cible" in m))
+                if champ == "parent.ext":
+                    messages[numero - 1]["parent"]["ext"] = valeur
+                else:
+                    messages[numero - 1][champ] = valeur
+                self.ecrire(messages)
+                r = self.lancer()
+                self.assertRefus(r, "la ligne %d porte une valeur que l'anonymiseur ne sait pas lire" % numero)
+                if fragment:
+                    self.assertNotIn(fragment.lower(), r.stderr.lower())
 
     def test_une_capture_1_0_2_est_refusee(self):
         """Ce que la sonde 1.0.2 ecrit en plus : hote et nom, etat.ext et eligible, voisins, routeurs."""
@@ -439,6 +513,7 @@ class Outil(unittest.TestCase):
         self.ecrire(messages)
         r = self.lancer()
         self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stderr, "")
         self.assertTrue(r.stdout.startswith("4 lignes ;"), r.stdout)
         with open(self.sortie, encoding="utf-8") as f:
             texte = f.read()
@@ -467,6 +542,7 @@ class Outil(unittest.TestCase):
         ressemblent a des valeurs reelles), mais pas la garde."""
         r = self.lancer(entree=CAPTURE_ANONYME)
         self.assertNotIn("ce que l'anonymiseur ne connait pas", r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
 
 
 if __name__ == "__main__":
