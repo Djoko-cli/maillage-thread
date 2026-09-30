@@ -82,9 +82,9 @@ public struct MemoireTournee: Hashable, Sendable {
     /// Routeurs qui ont repondu a la derniere tournee ou l'un a repondu : Route64 de
     /// secours quand le chef ne la donne pas.
     public var repondants: [Int] = []
-    /// Derniere recherche complete de la Route64 restee vaine, sur un silence au moins (une
-    /// recherche dont la sonde a refuse toutes les requetes ne compte pas) : pas de nouvelle
-    /// recherche complete avant `Tournee.periodeRecherche`.
+    /// Derniere recherche complete de la Route64 restee vaine (une recherche dont la sonde a
+    /// refuse toutes les requetes ne compte pas) : pas de nouvelle recherche complete avant
+    /// `Tournee.periodeRecherche`.
     public var rechercheVaine: Date?
     /// Dernieres Network Data lues : elles servent quand leur requete echoue ou n'est pas faite
     /// (aucun routeur ne repond) ; sinon les routeurs de bordure, le BBR principal et les
@@ -182,12 +182,14 @@ public enum Tournee {
             }
         }
         if route64 == nil {
-            // Les autres identifiants, pas dans les 30 min qui suivent une recherche complete
-            // vaine : sans reponse, elle coute 63 requetes, pres d'une minute.
+            // D'abord les autres routeurs de la table de la sonde ; puis les autres identifiants,
+            // sauf dans les 30 min qui suivent une recherche complete vaine (sans reponse, elle
+            // coute 63 requetes, pres d'une minute).
             let deLaTable = Set(table.map(\.id)).subtracting(essais).filter { (0...62).contains($0) }.sorted()
             let complete = mem.rechercheVaine.map { maintenant.timeIntervalSince($0) >= periodeRecherche } ?? true
             let autres = complete ? (0...62).filter { !essais.contains($0) && !deLaTable.contains($0) } : []
-            let recherche = try await chercherRoute64(sonde, groupes: groupes(deLaTable) + groupes(autres)) { faites, prevues in
+            let parGroupes = groupes(deLaTable) + groupes(autres)
+            let recherche = try await chercherRoute64(sonde, groupes: parGroupes) { faites, prevues in
                 signaler(.listeRouteurs, essais.count + faites, essais.count + prevues)
             }
             route64 = recherche.route64
@@ -335,7 +337,7 @@ public enum Tournee {
         // son RLOC16 n'a pas l'ancien nom, et son identite est demandee tout de suite.
         func garde(_ enfant: UInt16) -> Bool {
             let parent = Int(enfant >> 10)
-            return liste.contains(parent) && tables[parent].map { $0.contains(enfant) } ?? true
+            return liste.contains(parent) && (tables[parent].map { $0.contains(enfant) } ?? true)
         }
         mem.identifies = mem.identifies.filter { garde($0.key) }
         mem.identiteDemandee = mem.identiteDemandee.filter { garde($0.key) }
