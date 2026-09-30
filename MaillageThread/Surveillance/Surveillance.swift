@@ -1,6 +1,7 @@
 import AppKit
 import MaillageCoeur
 import Observation
+import os
 
 /// Chiffres du reseau affiche, pour la barre des menus.
 struct ResumeReseau: Equatable {
@@ -12,8 +13,8 @@ struct ResumeReseau: Equatable {
     var injoignables: Int
 }
 
-/// Modele de l'app : releves -> suivi -> journal et notifications ; noms ;
-/// etat lu par les vues.
+/// Modele de l'app : releves -> suivi -> journal et notifications ; maillages de la
+/// sonde -> journal et historique ; noms ; etat lu par les vues.
 @MainActor
 @Observable
 final class Surveillance {
@@ -52,6 +53,9 @@ final class Surveillance {
     /// Une tournee de la sonde est en cours (`SondeMaillage.surTournee`) : le
     /// maillage affiche attend le suivant, il n'est pas « ancien ».
     var tourneeEnCours = false
+    /// Historique de la sonde (spec de la sonde, section 6) : les releves des 30 derniers jours,
+    /// du plus ancien au plus recent ; toujours vide en demo.
+    private(set) var historique: [ReleveMaillage] = []
 
     /// Age du maillage de la sonde, depuis sa reception : frais jusqu'a 6 min (la
     /// tournee suivante part 5 min apres la fin de la precedente), et tant qu'une
@@ -67,6 +71,9 @@ final class Surveillance {
     @ObservationIgnored private let journal: JournalFichiers?
     @ObservationIgnored private let fichierSurnoms: URL?
     @ObservationIgnored private var alertes = Alertes()
+    @ObservationIgnored private var suiviMaillage = SuiviMaillage()
+    /// Historique sur disque : mode direct avec un dossier ; nil : nulle part (demo, tests).
+    @ObservationIgnored private let fichiersHistorique: HistoriqueFichiers?
     /// Ou garder les scissions deja notifiees (`cleScissionsNotifiees`).
     @ObservationIgnored private let preferences: UserDefaults
     /// Scissions notifiees lues (au demarrage, en mode direct) : ecrites ensuite a
@@ -77,6 +84,10 @@ final class Surveillance {
 
     /// Signatures des scissions deja notifiees (`[String]`), d'un lancement a l'autre.
     static let cleScissionsNotifiees = "scissionsNotifiees"
+    /// Historique garde en memoire : les courbes de la fiche vont jusqu'a 30 jours.
+    static let dureeHistorique: TimeInterval = 30 * 24 * 3600
+    /// Journal du Mac (Console, sous-systeme fr.djoko.maillage) : jamais de donnees du reseau.
+    nonisolated static let journalMac = Logger(subsystem: "fr.djoko.maillage", category: "historique")
 
     /// Lance par les tests (heberges dans l'app) : ne rien ecouter ni ecrire.
     static var sousTests: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
@@ -87,8 +98,8 @@ final class Surveillance {
             .appendingPathComponent("Maillage Thread")
     }
 
-    /// `dossier` : ou garder le journal et les surnoms (nil : nulle part) ;
-    /// `preferences` : les scissions deja notifiees (mode direct, une fois demarree).
+    /// `dossier` : ou garder le journal, les surnoms et l'historique de la sonde (nil : nulle
+    /// part) ; `preferences` : les scissions deja notifiees (mode direct, une fois demarree).
     init(mode: Mode, dossier: URL?, preferences: UserDefaults = .standard) {
         self.mode = mode
         self.preferences = preferences
@@ -99,12 +110,14 @@ final class Surveillance {
             journal = dossier.map { JournalFichiers(dossier: $0.appendingPathComponent("Journal")) }
             fichierSurnoms = dossier?.appendingPathComponent("surnoms.json")
             noms = ResolveurNoms(surnoms: fichierSurnoms.map(Surnoms.lire) ?? [:])
+            fichiersHistorique = dossier.map { HistoriqueFichiers(dossier: $0) }
         case .demo:
             etatEcoute = .demo
             recenseur = nil
             journal = nil
             fichierSurnoms = nil
             noms = ResolveurNoms(maison: NomsDemo.maison)
+            fichiersHistorique = nil
         }
     }
 
@@ -125,6 +138,7 @@ final class Surveillance {
                     erreurJournal = error.localizedDescription
                 }
             }
+            Task { [weak self] in await self?.chargerHistorique() }
             recenseur?.surReleve = { [weak self] a in self?.integrer(a) }
             recenseur?.surEtat = { [weak self] e in self?.noterEtat(e) }
             recenseur?.demarrer()
@@ -164,17 +178,91 @@ final class Surveillance {
         ajouter(nouveaux)
     }
 
-    /// Nouveau maillage de la sonde, recu a `date` (fin de sa tournee).
+    /// Nouveau maillage de la sonde, recu a `date` (fin de sa tournee) : ses evenements vont au
+    /// journal (changements de parent, routeurs Thread) ; en mode direct, son releve va a
+    /// l'historique, en memoire et, avec un dossier, sur disque. Un echec d'ecriture est consigne
+    /// dans le journal du Mac ; le releve reste en memoire.
     func recevoir(_ m: Maillage, a date: Date) {
         maillage = m
         maillageRecu = date
+        ajouter(suiviMaillage.integrer(m, sujets: sujets(m)))
+        guard mode == .direct else { return }
+        let r = ReleveMaillage(m)
+        let limite = date.addingTimeInterval(-Self.dureeHistorique)
+        historique = historique.filter { $0.date >= limite } + [r]
+        guard let f = fichiersHistorique else { return }
+        do {
+            try f.ajouter(r)
+        } catch {
+            Self.journalMac.error("releve de l'historique non ecrit : \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Relit les 30 derniers jours de l'historique, hors de l'acteur principal, apres avoir purge
+    /// les mois finis depuis plus de 90 jours ; les releves recus entre-temps restent. Sans dossier
+    /// (demo, tests) : rien.
+    func chargerHistorique() async {
+        guard let f = fichiersHistorique else { return }
+        let maintenant = Date()
+        let debut = maintenant.addingTimeInterval(-Self.dureeHistorique)
+        do {
+            let lus = try await Task.detached(priority: .utility) {
+                try f.purger(maintenant: maintenant)
+                return try f.lire(depuis: debut)
+            }.value
+            // Les dates relues sont tronquees a la milliseconde (codage) : un releve recu pendant la
+            // lecture, ecrit puis relu, garde 1 ms de moins que sa copie en memoire. Il n'est pas repris.
+            let premier = (historique.first?.date ?? .distantFuture).addingTimeInterval(-0.001)
+            historique = lus.filter { $0.date < premier } + historique
+        } catch {
+            Self.journalMac.error("historique illisible : \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Rapprochement d'un maillage avec le reseau de sa partition (a defaut, le reseau affiche),
+    /// frais ou non ; nil sans instantane.
+    private func rapprochement(_ m: Maillage) -> MaillageAffiche? {
+        guard let i = instantane,
+              let r = i.reseaux.first(where: { r in r.partitions.contains { $0.id == m.partition } }) ?? reseau else {
+            return nil
+        }
+        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values))
+    }
+
+    /// Noeuds d'un maillage pour le journal : leur id dans le graphe et leur nom affiche,
+    /// d'apres le rapprochement avec le reseau de sa partition (a defaut, le reseau affiche). Un
+    /// enfant identifie est d'abord l'appareil de meme ExtMac : vu deux fois (balayage ancien,
+    /// table), il n'a son id d'appareil qu'une fois dans le graphe.
+    func sujets(_ m: Maillage) -> SujetsMaillage {
+        let affiche = rapprochement(m)
+        let appareils = (instantane?.appareils ?? []) + Array(suivi.disparus.values)
+        func sujet(_ n: NoeudSonde?, rloc16: UInt16, genre: NoeudSonde.Genre, bordure: Bool) -> Sujet {
+            let noeud = n ?? NoeudSonde(id: String(format: "rloc:%04X", rloc16), rloc16: rloc16, genre: genre,
+                                        reconnu: false, bordure: bordure)
+            return Sujet(id: noeud.id, nom: nomNoeud(noeud.id, maillage: affiche) ?? GrapheCanvas.libelleInconnu(noeud))
+        }
+        var s = SujetsMaillage()
+        for r in m.routeurs {
+            s.routeurs[r.id] = sujet(affiche?.routeurs[r.id], rloc16: r.rloc16, genre: .routeur, bordure: r.bordure)
+        }
+        for e in m.enfants {
+            if let x = e.extMac, let a = appareils.first(where: { $0.id.uppercased() == x }) {
+                s.enfants[e.rloc16] = Sujet(id: a.id, nom: nom(a))
+            } else {
+                s.enfants[e.rloc16] = sujet(affiche?.enfants[e.rloc16], rloc16: e.rloc16, genre: .enfant, bordure: false)
+            }
+        }
+        return s
     }
 
     /// Sonde oubliee (`SondeMaillage.surOubli`) : son maillage part tout de suite, sans attendre
-    /// qu'il soit perime ; le graphe revient aux pointilles.
+    /// qu'il soit perime ; le graphe revient aux pointilles. Son suivi aussi : le maillage suivant
+    /// (une autre sonde, plus tard) est un point de depart, sans evenement. L'historique reste : il
+    /// parle du reseau, pas de la sonde.
     func oublierMaillage() {
         maillage = nil
         maillageRecu = nil
+        suiviMaillage = SuiviMaillage()
     }
 
     /// Veille du Mac (appele au reveil).
@@ -268,6 +356,17 @@ final class Surveillance {
     /// fiche, candidats d'un routeur de bordure non identifie.
     func nomsRouteurs(pour r: Reseau) -> [String: String] {
         Dictionary(r.routeurs.map { ($0.instance, nom($0)) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Nom affiche d'un noeud du graphe : routeur de bordure, appareil, ou noeud que seule la sonde
+    /// connait (« Routeur · 5000 », candidats d'un routeur de bordure non identifie) ; nil s'il
+    /// n'est nulle part.
+    func nomNoeud(_ id: String, maillage m: MaillageAffiche?) -> String? {
+        if let r = instantane?.routeur(id) { return nom(r) }
+        if let a = appareil(id) { return nom(a) }
+        guard let n = m?.noeud(id) else { return nil }
+        let noms = Dictionary((instantane?.routeurs ?? []).map { ($0.instance, nom($0)) }, uniquingKeysWith: { a, _ in a })
+        return GrapheCanvas.libelleInconnu(n, noms: noms)
     }
     func accessoire(_ a: Appareil) -> AccessoireMaison? { noms.accessoire(de: a, fabriqueApple: fabriqueApple) }
 

@@ -265,10 +265,7 @@ struct FicheNoeud: View {
 
     /// Nom d'un noeud du graphe : routeur de bordure, appareil, ou noeud de la sonde.
     private func nomNoeud(_ id: String) -> String {
-        if let r = surveillance.instantane?.routeur(id) { return surveillance.nom(r) }
-        if let a = surveillance.appareil(id) { return surveillance.nom(a) }
-        if let n = sonde?.noeud(id) { return GrapheCanvas.libelleInconnu(n, noms: nomsRouteurs) }
-        return id
+        surveillance.nomNoeud(id, maillage: sonde) ?? id
     }
 
     /// « RLOC16 5004 · parent HomePod bureau, qualite 3 » ; « RLOC16 5000 · voisins : 4 · enfants : 2 ».
