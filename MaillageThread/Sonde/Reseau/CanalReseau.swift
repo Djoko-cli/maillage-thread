@@ -19,7 +19,7 @@ import Synchronization
 ///   30 s, au-dela desquelles la carte donne sa place a un autre client.
 /// - La cle ne passe jamais par le reseau : les commandes `cle ...` ne partent pas.
 /// - Fermee, il garde la cause (`raisonFermeture`), montree comme dans Halo :
-///   « Connexion réseau perdue : <cause> ».
+///   « Connexion reseau perdue : <cause> ».
 final class CanalReseau: CanalSonde, CauseFermeture {
     struct Reglages: Sendable {
         /// Renvois d'une commande sans reponse, comptes depuis son premier envoi.

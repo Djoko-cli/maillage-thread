@@ -441,7 +441,7 @@ struct CanalReseauTests {
         #expect(await attendreQue { lignes.liste == ["fin"] })
         let annulees = connexions.toutes.allSatisfy { $0.annulee }
         #expect(annulees, "transport ferme")
-        // La cause, montree comme dans Halo : « Connexion réseau perdue : la sonde ne répond plus… ».
+        // La cause, montree comme dans Halo : « Connexion reseau perdue : la sonde ne repond plus… ».
         #expect(c.raisonFermeture == CanalReseau.raisonSilence)
         #expect(CanalReseau.raisonSilence.hasPrefix(ErreurReseau.cheminPerdu("").localizedDescription))
     }
