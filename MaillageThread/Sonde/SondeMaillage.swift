@@ -49,6 +49,9 @@ final class SondeMaillage {
     static let periode: Duration = .seconds(300)
     /// Reprises de la liaison reseau apres un echec : 1, 2, 5, 10 s, puis toutes les 30 s.
     static let delaisReprise: [Duration] = [.seconds(1), .seconds(2), .seconds(5), .seconds(10), .seconds(30)]
+    /// Nouvel essai d'une connexion automatique (USB) en echec : une sonde qui demarre en plus
+    /// de 3 s (bonjour sans reponse) n'attend pas l'evenement USB suivant.
+    static let delaiNouvelEssai: Duration = .seconds(5)
 
     private(set) var etat: Etat = .sansSonde
     /// Ports Espressif branches (la sonde, ou un autre C6 comme le pont Halo).
@@ -99,9 +102,12 @@ final class SondeMaillage {
     /// Session reseau vers `<hote>.local` avec la cle : le canal pret, ou l'erreur.
     @ObservationIgnored private let ouvrirReseau: @MainActor (String, Data) async throws -> any CanalSonde
     @ObservationIgnored private let delaisReprise: [Duration]
+    @ObservationIgnored private let delaiNouvelEssai: Duration
     /// Echecs de la liaison reseau depuis la derniere connexion reussie.
     @ObservationIgnored private var essaisReprise = 0
     @ObservationIgnored private var reprise: Task<Void, Never>?
+    /// Nouvel essai planifie d'une connexion automatique (USB) en echec.
+    @ObservationIgnored private var nouvelEssai: Task<Void, Never>?
     /// Canal de la session reseau en place : sa cause de fermeture est montree a la perte.
     @ObservationIgnored private var canalReseau: (any CanalSonde)?
     /// Activite tenue pendant une session reseau, comme la session serie de Halo : sans elle,
@@ -141,6 +147,7 @@ final class SondeMaillage {
          ouvrirReseau: @escaping @MainActor (String, Data) async throws -> any CanalSonde
              = { try await CanalReseau.connecter(hote: $0, cle: $1) },
          delaisReprise: [Duration] = SondeMaillage.delaisReprise,
+         delaiNouvelEssai: Duration = SondeMaillage.delaiNouvelEssai,
          horloge: @escaping () -> Date = { Date() }, fichierIdentites: URL? = nil) {
         self.preferences = preferences
         self.actif = actif
@@ -148,6 +155,7 @@ final class SondeMaillage {
         self.trousseau = trousseau
         self.ouvrirReseau = ouvrirReseau
         self.delaisReprise = delaisReprise
+        self.delaiNouvelEssai = delaiNouvelEssai
         self.horloge = horloge
         self.fichierIdentites = fichierIdentites
         serie = actif ? preferences.string(forKey: Self.cleSerie) : nil
@@ -322,7 +330,9 @@ final class SondeMaillage {
     /// vraiment, ouvre le port, le garde s'il repond en sonde. Perimee par un
     /// `deconnecter` pendant une attente, elle ferme sa liaison (en l'attendant)
     /// et sort sans toucher a l'etat, a la sonde, ni au numero de serie retenu.
-    func connecter(_ port: PortUSB, choisi: Bool) async {
+    /// Automatique (`choisi` faux) et en echec, elle est refaite une fois apres
+    /// `delaiNouvelEssai` ; `dernierEssai` : c'est ce nouvel essai.
+    func connecter(_ port: PortUSB, choisi: Bool, dernierEssai: Bool = false) async {
         deconnecter(.connexion, port: port)
         let n = essai
         // Tant que l'ancienne liaison tient le port, TIOCEXCL refuse de le rouvrir.
@@ -372,6 +382,7 @@ final class SondeMaillage {
             guard n == essai else { return }
             enConnexion = nil
             etat = choisi ? .refusee(error.localizedDescription) : .erreur(error.localizedDescription)
+            if !choisi && !dernierEssai { planifierNouvelEssai(port) }
         }
     }
 
@@ -384,6 +395,20 @@ final class SondeMaillage {
         Task {
             guard n == essai else { return }
             await connecter(port, choisi: choisi)
+        }
+    }
+
+    /// Nouvel essai d'une connexion automatique en echec, apres `delaiNouvelEssai`, si rien n'a
+    /// change depuis (aucun `deconnecter` : ni evenement USB, ni choix, ni oubli). C'est le seul :
+    /// en echec a son tour, la sonde attend l'evenement USB suivant.
+    private func planifierNouvelEssai(_ port: PortUSB) {
+        let n = essai
+        let delai = delaiNouvelEssai
+        nouvelEssai?.cancel()
+        nouvelEssai = Task { [weak self] in
+            try? await Task.sleep(for: delai)
+            guard !Task.isCancelled, let self, n == self.essai, self.liaison == .usb else { return }
+            await self.connecter(port, choisi: false, dernierEssai: true)
         }
     }
 

@@ -629,6 +629,53 @@ struct SondeMaillageTests {
         await s.oublier()
     }
 
+    /// Connexion automatique en echec (sonde qui demarre en plus de 3 s, port pas encore pret) :
+    /// un nouvel essai quelques secondes apres, sans attendre l'evenement USB suivant.
+    @Test(.timeLimit(.minutes(1))) func nouvelEssaiApresUneConnexionAutomatiqueEnEchec() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
+        var canaux = 0
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ -> any CanalSonde in
+            canaux += 1
+            return canaux == 1 ? CanalEnPanne() : CanalRejoue { CanalRejoue.reseauMinimal($0) }
+        }, delaiNouvelEssai: .milliseconds(50))
+        // Un seul evenement USB : le second canal vient du nouvel essai.
+        s.portsChanges([Self.port])
+        #expect(await SondeReseauTests.sonder { Self.connectee(s) }, "nouvel essai : \(s.etat)")
+        #expect(canaux == 2)
+        await s.oublier()
+    }
+
+    /// Un seul nouvel essai : en echec a son tour, la sonde reste en erreur jusqu'a l'evenement
+    /// USB suivant. Un port choisi dans les Reglages, puis refuse, n'est pas essaye de nouveau.
+    @Test(.timeLimit(.minutes(1))) func unSeulNouvelEssaiEtAucunPourUnChoix() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set("A0:00:00:00:00:01", forKey: SondeMaillage.cleSerie)
+        var canaux = 0
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in
+            canaux += 1
+            return CanalEnPanne()
+        }, delaiNouvelEssai: .milliseconds(20))
+        s.portsChanges([Self.port])
+        #expect(await SondeReseauTests.sonder { canaux == 2 }, "nouvel essai")
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(canaux == 2, "un seul")
+        guard case .erreur = s.etat else {
+            Issue.record("etat \(s.etat)")
+            return
+        }
+        await s.connecter(Self.port, choisi: true)
+        guard case .refusee = s.etat else {
+            Issue.record("etat \(s.etat)")
+            return
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(canaux == 3, "aucun pour un port choisi")
+        await s.oublier()
+    }
+
     /// Reseau minimal dans une partition donnee ; la table des routeurs donne l'ExtMac du chef 0
     /// (muet : il ne rend que sa Route64) s'il est entendu (valeur inventee).
     static func canalIdentites(ext: String?, partition: String) -> CanalRejoue {
