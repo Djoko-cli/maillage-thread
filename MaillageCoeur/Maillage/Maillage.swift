@@ -100,6 +100,9 @@ public struct Maillage: Hashable, Sendable {
     /// Signal des routeurs de la liste que la sonde entend, son parent compris, par identifiant
     /// croissant.
     public let signaux: [SignalSonde]
+    /// Date du balayage dont viennent les enfants balayes de ce maillage
+    /// (`MemoireTournee.dernierBalayage`) ; nil sans balayage.
+    public var balayage: Date?
 
     public func routeur(_ id: Int) -> RouteurMaillage? { routeurs.first { $0.id == id } }
     public func liens(de id: Int) -> [LienRadio] { liens.filter { $0.a == id || $0.b == id } }

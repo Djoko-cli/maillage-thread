@@ -386,7 +386,10 @@ public enum Tournee {
             if let ext = e.extMac, dejaLa.contains(ext) { continue }
             c.enfant(e)
         }
-        return (c.maillage(), mem)
+        var maillage = c.maillage()
+        // Date du balayage reussi dont viennent les enfants balayes (un balayage rate ne la change pas).
+        maillage.balayage = mem.dernierBalayage
+        return (maillage, mem)
     }
 
     static func rloc16(_ routeur: Int) -> UInt16 { UInt16(routeur) << 10 }

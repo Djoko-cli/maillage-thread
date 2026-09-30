@@ -238,6 +238,7 @@ struct TourneeTests {
         #expect(mem.identites[0xAC00] == "E000000000000007")
         #expect(mem.identites[0x5000] == "E000000000000002")
         #expect(mem.dernierBalayage == Self.t0)
+        #expect(m.balayage == Self.t0, "le maillage dit de quel balayage viennent ses enfants balayes")
         #expect(mem.muetsBalayes == [1, 43, 45, 51, 57])
         let requetes = await sonde.registre.requetes
         #expect(requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48, "AC00 : 1 a 17 sauf 9 ; les autres : 1 a 8")
@@ -259,6 +260,7 @@ struct TourneeTests {
         #expect(mem2.estMuet(43))
         #expect(mem2.muetInterroge[43] == Self.t0 + 300)
         #expect(m2.enfants(de: 43).count == 8, "enfants du balayage garde")
+        #expect(m2.balayage == Self.t0, "pas de nouveau balayage : celui de la premiere tournee")
 
         let avant3 = await sonde.registre.requetes.count
         let (m3, _) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 600))
@@ -268,6 +270,7 @@ struct TourneeTests {
                 "en parallele : dans le desordre")
         #expect(m3.routeurs.filter(\.muet).map(\.id) == [1, 43, 45, 51, 57])
         #expect(m3.enfants.count == 14)
+        #expect(m3.balayage == Self.t0)
     }
 
     /// Balayage de nouveau apres 30 min, et les 6 identites des enfants des tables
@@ -276,9 +279,10 @@ struct TourneeTests {
         let sonde = try SondeRejouee.capture()
         let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         let avant = await sonde.registre.requetes.count
-        let (_, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 1799))
+        let (m2, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 1799))
         let pendant = await sonde.registre.requetes.count
-        _ = try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 1800)
+        let (m3, _) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 1800))
+        #expect(m2.balayage == Self.t0 && m3.balayage == Self.t0 + 1800, "un nouveau balayage, une nouvelle date")
         let toutes = await sonde.registre.requetes
         let presque = toutes[avant..<pendant], requetes = toutes[pendant...]
         #expect(presque.filter { $0.hasSuffix("|0,1,2,8") || $0.hasSuffix("|0,8") }.isEmpty, "29 min 59 s : rien de du")
@@ -503,6 +507,7 @@ struct TourneeTests {
         #expect(mem2.balayes == mem1.balayes)
         #expect(mem2.dernierBalayage == Self.t0 && mem2.muetsBalayes == mem1.muetsBalayes, "a refaire")
         #expect(m2.enfants(de: 43).count == 8, "7 enfants balayes et la sonde")
+        #expect(m2.balayage == Self.t0, "balayage refuse : ses enfants restent ceux du precedent")
 
         let avant = await sonde.registre.requetes.count
         let (_, mem3) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 2100))
@@ -513,6 +518,7 @@ struct TourneeTests {
         let (m4, mem4) = try #require(try await Tournee.complete(silences, memoire: mem1, maintenant: Self.t0 + 1800))
         #expect(mem4.balayes.isEmpty && mem4.dernierBalayage == Self.t0 + 1800)
         #expect(m4.enfants(de: 43).map(\.source) == [.sonde])
+        #expect(m4.balayage == Self.t0 + 1800, "un balayage de silences est un balayage")
     }
 
     /// Balayage du sans aucun routeur a balayer : le 20 et le 24 ont deja repondu, et la sonde
@@ -532,6 +538,7 @@ struct TourneeTests {
         #expect(mem2.balayes.isEmpty)
         #expect(mem2.dernierBalayage == Self.t0)
         #expect(m.enfants(de: 20).isEmpty, "aucun enfant balaye sous le 20")
+        #expect(m.balayage == Self.t0)
     }
 
     /// Recherche sans aucun groupe a interroger : rien n'a ete refuse.

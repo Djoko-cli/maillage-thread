@@ -14,9 +14,12 @@ struct SuiviMaillageTests {
     }
 
     /// Maillage de la partition 0000000A a `minutes` de t0 (valeurs inventees) : le chef 0 (routeur
-    /// de bordure), et les routeurs 1 et 2 par defaut ; `muets` ; ExtMac des routeurs `routeursExt`.
+    /// de bordure), et les routeurs 1 et 2 par defaut ; `muets` ; ExtMac des routeurs `routeursExt` ;
+    /// `balayage` : date du balayage dont viennent les enfants balayes, en minutes apres t0 (nil :
+    /// aucun balayage).
     static func maillage(_ minutes: Double, routeurs: [Int] = [0, 1, 2], bordures: Set<Int> = [0], muets: Set<Int> = [],
-                         routeursExt: [Int: String] = [:], enfants: [Enfant], partition: String = "0000000A") -> Maillage {
+                         routeursExt: [Int: String] = [:], enfants: [Enfant], partition: String = "0000000A",
+                         balayage: Double? = nil) -> Maillage {
         var c = ConstructionMaillage(date: t0.addingTimeInterval(minutes * 60), partition: partition)
         c.routeurs(Route64(sequence: 1, routes: routeurs.map { RouteRouteur(idRouteur: $0, qualiteSortante: 0, qualiteEntrante: 0, cout: 1) }),
                    chef: routeurs[0])
@@ -26,7 +29,9 @@ struct SuiviMaillageTests {
         for e in enfants {
             c.enfant(EnfantMaillage(rloc16: e.rloc16, extMac: e.ext, qualite: e.source == .balayage ? nil : 3, source: e.source))
         }
-        return c.maillage()
+        var m = c.maillage()
+        m.balayage = balayage.map { t0.addingTimeInterval($0 * 60) }
+        return m
     }
 
     /// Noms des noeuds : « R<id> » pour un routeur, « N-<ExtMac> » pour un enfant.
@@ -52,16 +57,31 @@ struct SuiviMaillageTests {
     }
 
     /// Un enfant identifie passe du routeur 1 au 2 : « a change de parent », date de la tournee.
-    /// Un enfant sans ExtMac n'est pas suivi.
+    /// Une tournee identique ensuite ne redit rien (l'etat suit le nouveau parent) ; un nouveau
+    /// changement (2 vers 3) est note depuis le dernier parent. Un enfant sans ExtMac n'est pas
+    /// suivi : son RLOC16 change avec son parent, il n'est jamais « sans parent ».
     @Test func changementDeParent() throws {
-        let ev = Self.suivre([Self.maillage(0, enfants: [Enfant(rloc16: 0x0401, ext: Self.b1), Enfant(rloc16: 0x0403, ext: nil)]),
-                              Self.maillage(5, enfants: [Enfant(rloc16: 0x0802, ext: Self.b1), Enfant(rloc16: 0x0804, ext: nil)])])
+        let routeurs = [0, 1, 2, 3]
+        let sansExt = Enfant(rloc16: 0x0403, ext: nil)
+        let ev = Self.suivre([
+            Self.maillage(0, routeurs: routeurs, enfants: [Enfant(rloc16: 0x0401, ext: Self.b1), sansExt]),
+            Self.maillage(5, routeurs: routeurs, enfants: [Enfant(rloc16: 0x0802, ext: Self.b1), Enfant(rloc16: 0x0804, ext: nil)]),
+            Self.maillage(10, routeurs: routeurs, enfants: [Enfant(rloc16: 0x0802, ext: Self.b1), Enfant(rloc16: 0x0804, ext: nil)]),
+            Self.maillage(15, routeurs: routeurs, enfants: [Enfant(rloc16: 0x0C02, ext: Self.b1), Enfant(rloc16: 0x0804, ext: nil)]),
+        ])
+        #expect(ev[0].isEmpty)
         #expect(ev[1].count == 1)
         let e = try #require(ev[1].first)
         #expect(e.type == .parentChange && e.gravite == .info)
         #expect(e.sujet == Sujet(id: Self.b1, nom: "N-" + Self.b1))
         #expect(e.avant == "R1" && e.apres == "R2")
         #expect(e.date == Self.t0.addingTimeInterval(300))
+        #expect(ev[2].isEmpty, "meme parent : l'etat est rafraichi, le changement n'est pas redit")
+        #expect(ev[3].count == 1)
+        let f = try #require(ev[3].first)
+        #expect(f.type == .parentChange)
+        #expect(f.avant == "R2" && f.apres == "R3")
+        #expect(f.date == Self.t0.addingTimeInterval(900))
     }
 
     /// Absent sous un parent qui repond : « n'a plus de parent » a la seconde absence, une seule
@@ -89,17 +109,39 @@ struct SuiviMaillageTests {
 
     /// Enfant lu dans la table d'un routeur qui se tait ensuite : son absence ne dit rien (le
     /// routeur n'a pas ete interroge). Enfant balaye sous un routeur muet : absent, c'est qu'un
-    /// nouveau balayage ne l'a pas trouve.
+    /// nouveau balayage ne l'a pas trouve ; il faut deux balayages distincts (ici aux minutes 5 et 10).
     @Test func absenceSousUnRouteurMuet() {
         let b2 = "E0000000000000B2"
         let ev = Self.suivre([
             Self.maillage(0, muets: [2], enfants: [Enfant(rloc16: 0x0401, ext: Self.b1),
-                                                     Enfant(rloc16: 0x0805, ext: b2, source: .balayage)]),
-            Self.maillage(5, muets: [1, 2], enfants: []),
-            Self.maillage(10, muets: [1, 2], enfants: []),
+                                                     Enfant(rloc16: 0x0805, ext: b2, source: .balayage)], balayage: 0),
+            Self.maillage(5, muets: [1, 2], enfants: [], balayage: 5),
+            Self.maillage(10, muets: [1, 2], enfants: [], balayage: 10),
         ])
+        #expect(ev[1].isEmpty)
         #expect(ev[2].map(\.type) == [.sansParent])
         #expect(ev[2].first?.sujet?.id == b2)
+    }
+
+    /// Un balayage est reutilise par les tournees jusqu'au suivant : une seule observation, meme
+    /// comptee a chaque tournee, n'est pas une absence de plus. Enfant balaye sous un routeur muet
+    /// (2), present au balayage de la minute 0, absent de celui de la minute 5 (reutilise aux
+    /// minutes 10 et 15) : une absence. Absent de celui de la minute 35 : « sans parent », une seule
+    /// fois.
+    @Test func unBalayageNeCompteQuUneFois() {
+        let b2 = "E0000000000000B2"
+        let absent = { (minutes: Double, balayage: Double) in
+            Self.maillage(minutes, muets: [2], enfants: [], balayage: balayage)
+        }
+        let ev = Self.suivre([
+            Self.maillage(0, muets: [2], enfants: [Enfant(rloc16: 0x0805, ext: b2, source: .balayage)], balayage: 0),
+            absent(5, 5), absent(10, 5), absent(15, 5),
+            absent(35, 35), absent(40, 35),
+        ])
+        #expect(ev[1].isEmpty && ev[2].isEmpty && ev[3].isEmpty, "le meme balayage, vu trois fois")
+        #expect(ev[4].map(\.type) == [.sansParent], "un second balayage ne le trouve pas")
+        #expect(ev[4].first?.sujet?.id == b2 && ev[4].first?.avant == "R2")
+        #expect(ev[5].isEmpty, "pas de seconde fois")
     }
 
     /// Parent sorti de la liste des routeurs : son enfant est sans parent a la seconde tournee.
@@ -109,6 +151,13 @@ struct SuiviMaillageTests {
                               Self.maillage(10, routeurs: [0, 2], enfants: [])])
         #expect(ev[1].map(\.type) == [.routeurThreadDisparu])
         #expect(ev[2].map(\.type) == [.sansParent])
+    }
+
+    /// Un routeur de bordure qui entre dans la liste ne dit rien ici (le journal des annonces le dit).
+    @Test func routeurDeBordureApparu() {
+        let ev = Self.suivre([Self.maillage(0, enfants: []),
+                              Self.maillage(5, routeurs: [0, 1, 2, 4], bordures: [0, 4], enfants: [])])
+        #expect(ev == [[], []])
     }
 
     /// Routeurs hors routeurs de bordure : entree (3) et sortie (2) de la liste, nommes par leur
