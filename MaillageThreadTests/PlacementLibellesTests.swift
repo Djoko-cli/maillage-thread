@@ -436,15 +436,18 @@ struct LibellesGrapheTests {
 
     /// Disposition de la demo, a plusieurs zooms et tailles de fenetre : aucun libelle
     /// ne recoupe un autre, ni un point, ni un titre de zone ; de meme avec deux routeurs de
-    /// bordure non identifies, dont les libelles portent leurs candidats (plus longs).
-    @Test(arguments: [Set<String>(), LibellesGrapheTests.sansIdentite])
-    func demoSansChevauchement(_ sansIdentite: Set<String>) throws {
+    /// bordure non identifies, dont les libelles portent leurs candidats (plus longs). La marge du
+    /// haut est celle de la fenetre (`FenetreGraphe.margeHaut`), avec ou sans sonde retenue (la
+    /// ligne de la tournee).
+    @Test(arguments: [Set<String>(), LibellesGrapheTests.sansIdentite], [false, true])
+    func demoSansChevauchement(_ sansIdentite: Set<String>, sondeRetenue: Bool) throws {
         let demo = try Self.demo(sansIdentite: sansIdentite)
         let memoire = MemoirePlacement()
+        let haut = FenetreGraphe.margeHaut(scinde: demo.scinde, sondeRetenue: sondeRetenue)
         for taille in [CGSize(width: 820, height: 560), CGSize(width: 1400, height: 900)] {
             for zoom in [0.4, 0.7, 1, 1.6, 2.5, 5] as [CGFloat] {
                 let projection = Projection(cadre: demo.disposition.cadre, taille: taille,
-                                            marges: (haut: demo.scinde ? 110 : 70, bas: 30, cotes: 60), zoom: zoom)
+                                            marges: (haut: haut, bas: 30, cotes: 60), zoom: zoom)
                 let p = memoire.placement(demo.disposition, libelles: demo.libelles, echelle: projection.echelle)
                     .decale(projection.origine)
                 #expect(CasLibelles.chevauchements(p) == [], "zoom \(zoom), fenetre \(taille)")
@@ -509,8 +512,9 @@ struct LibellesGrapheTests {
         // Une selection ouvre la fiche (marge basse de 30 a 190 pt) : si la hauteur limite,
         // l'echelle change, et le placement avec elle.
         let taille = CGSize(width: 1400, height: 700)
-        let sansFiche = Projection(cadre: demo.disposition.cadre, taille: taille, marges: (haut: 110, bas: 30, cotes: 60))
-        let avecFiche = Projection(cadre: demo.disposition.cadre, taille: taille, marges: (haut: 110, bas: 190, cotes: 60))
+        let haut = FenetreGraphe.margeHaut(scinde: demo.scinde, sondeRetenue: true)
+        let sansFiche = Projection(cadre: demo.disposition.cadre, taille: taille, marges: (haut: haut, bas: 30, cotes: 60))
+        let avecFiche = Projection(cadre: demo.disposition.cadre, taille: taille, marges: (haut: haut, bas: 190, cotes: 60))
         #expect(avecFiche.echelle < sansFiche.echelle)
         _ = memoire.placement(demo.disposition, libelles: renomme, echelle: sansFiche.echelle)
         _ = memoire.placement(demo.disposition, libelles: renomme, echelle: avecFiche.echelle)
@@ -541,10 +545,11 @@ struct LibellesGrapheTests {
         #expect(Projection.zoomBorne(1.3) == 1.3)
         let demo = try Self.demo()
         let memoire = MemoirePlacement()
+        let haut = FenetreGraphe.margeHaut(scinde: demo.scinde, sondeRetenue: true)
         for zooms in [[5, 6, 8, 12], [0.4, 0.3, 0.2, 0.1]] as [[CGFloat]] {
             let projections = zooms.map {
                 Projection(cadre: demo.disposition.cadre, taille: CGSize(width: 1400, height: 900),
-                           marges: (haut: 110, bas: 30, cotes: 60), zoom: $0)
+                           marges: (haut: haut, bas: 30, cotes: 60), zoom: $0)
             }
             #expect(projections.allSatisfy { $0 == projections[0] }, "\(zooms)")
             for p in projections {
