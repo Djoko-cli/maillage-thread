@@ -17,16 +17,21 @@ capture. A la fin, il verifie qu'aucune ne reste dans la sortie.
 
 Garde : l'outil ne connait que les messages bonjour, etat et diag de la
 capture du 29/09/2026 (tables CHAMPS_CONNUS, CHAMPS_PARENT, TLV_CONNUS), et ne
-traite que les TLV 0, 7 et 8. Tout autre type de message, champ ou TLV, et tout
-TLV a longueur etendue ou tronque, le fait echouer AVANT toute ecriture, avec la
-liste de ce qu'il ne connait pas (des noms, jamais une valeur) : une valeur
-qu'il ne connait pas pourrait etre une ExtMac, une adresse ou un nom, et
-passerait sans etre vue, car le controle final ne porte que sur les valeurs
-qu'il a reperees. Une capture de la sonde 1.0.2 est donc refusee (etat.ext,
-bonjour.hote, bonjour.nom, messages voisins et routeurs...) tant que
-l'anonymiseur ne les traite pas. Pour ajouter un champ : verifier qu'il ne
-porte rien d'identifiant, sinon le traiter dans message() ; puis l'inscrire
-dans la table.
+traite que les TLV 0, 7 et 8. Il echoue AVANT toute ecriture, avec la liste de
+ce qu'il ne connait pas (des noms, jamais une valeur), devant :
+- un type de message, un champ ou un TLV inconnu, un TLV a longueur etendue ou
+  tronque, un TLV 0 qui n'a pas 8 octets, un TLV 8 qui n'est pas fait
+  d'adresses entieres ;
+- dans la Network Data (TLV 7), autre chose que des Prefix, des Service et la
+  Commissioner Session ID de la capture, ou une donnee de service de plus de
+  2 octets : donnees_reseau() ne remplace que le /48 des Prefix et l'adresse
+  des Server d'un Service.
+Une valeur qu'il ne connait pas pourrait etre une ExtMac, une adresse ou un nom
+: le controle final ne porte que sur les valeurs qu'il a reperees. Une capture
+de la sonde 1.0.2 est donc refusee (etat.ext, bonjour.hote, bonjour.nom,
+messages voisins et routeurs...) tant que l'anonymiseur ne les traite pas.
+Pour ajouter un champ : verifier qu'il ne porte rien d'identifiant, sinon le
+traiter dans message() ; puis l'inscrire dans la table.
 """
 import ipaddress
 import json
@@ -47,6 +52,11 @@ CHAMPS_CONNUS = {
 CHAMPS_PARENT = frozenset({"rloc16", "ext", "lqIn", "lqOut", "rssi", "rssiDernier", "age"})
 # TLV de diagnostic : 0, 7 et 8 sont traites ; les autres n'ont ni ExtMac ni adresse.
 TLV_CONNUS = frozenset({0, 1, 2, 5, 6, 7, 8, 16, 24, 25, 26, 27, 28})
+# Network Data (TLV 7), premier niveau : les Prefix (1) et les Service (5) sont traites par donnees_reseau() ; la
+# Commissioning Data (4) de la capture ne porte que la Commissioner Session ID (MeshCoP 11, deux octets tires au
+# hasard). Une donnee de service de plus de 2 octets (la capture : 01, 5d, 5cc5) pourrait porter une adresse.
+DONNEES_RESEAU_CONNUES = frozenset({1, 4, 5})
+DONNEE_SERVICE_MAX = 2
 
 
 class Anonymiseur:
@@ -180,6 +190,28 @@ def nom_sur(x):
     return x if ok else "(illisible)"
 
 
+def controler_donnees_reseau(o):
+    """Pourquoi la Network Data (TLV 7) n'est pas connue (liste vide si elle l'est) : donnees_reseau() ne remplace
+    que le /48 des Prefix et l'adresse des Server d'un Service ; le reste passerait en clair."""
+    raisons, i = [], 0
+    while i < len(o):
+        if i + 2 > len(o) or i + 2 + o[i + 1] > len(o):
+            return raisons + ["Network Data tronquee (diag.tlv)"]
+        t, n = o[i] >> 1, o[i + 1]  # le bit de poids faible est le drapeau "stable"
+        v = o[i + 2:i + 2 + n]
+        if t not in DONNEES_RESEAU_CONNUES:
+            raisons.append("sous-TLV inconnu de la Network Data : %d (diag.tlv)" % t)
+        elif t == 4 and not (len(v) == 4 and v[0] == 11 and v[1] == 2):
+            raisons.append("Commissioning Data inconnue dans la Network Data (diag.tlv)")
+        elif t == 5 and len(v) >= 1:
+            j = 1 if v[0] & 0x80 else 5  # un numero d'entreprise (4 octets) suit si le bit T est a 0
+            if j < len(v) and v[j] > DONNEE_SERVICE_MAX:
+                raisons.append("donnee de service de plus de %d octets dans la Network Data (diag.tlv)"
+                               % DONNEE_SERVICE_MAX)
+        i += 2 + n
+    return raisons
+
+
 def controler_tlv(hexa):
     """Pourquoi la charge TLV d'un diag n'est pas connue (liste vide si elle l'est)."""
     try:
@@ -197,6 +229,12 @@ def controler_tlv(hexa):
             return raisons + ["TLV tronque (diag.tlv)"]
         if t not in TLV_CONNUS:
             raisons.append("TLV inconnu : %d (diag.tlv)" % t)
+        elif t == 0 and n != 8:
+            raisons.append("TLV 0 de longueur inattendue (diag.tlv)")
+        elif t == 8 and n % 16 != 0:
+            raisons.append("TLV 8 de longueur inattendue (diag.tlv)")
+        elif t == 7:
+            raisons += controler_donnees_reseau(o[i + 2:i + 2 + n])
         i += 2 + n
     return raisons
 

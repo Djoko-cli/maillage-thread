@@ -53,16 +53,45 @@ def ipv6(texte):
     return ipaddress.IPv6Address(texte).packed
 
 
+def reseau_inventee():
+    """Network Data inventee : un Prefix (avec un routeur de bordure), un Service 5d dont le Server a une adresse."""
+    omr = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
+    return (tlv(0x03, bytes([0, 64]) + ipv6(PREFIXE_OMR + "::")[:8] + tlv(0x05, bytes.fromhex("50000100")))
+            + tlv(0x0B, bytes([0x81, 1, 0x5D]) + tlv(0x0D, bytes.fromhex("5000") + omr + bytes.fromhex("1680"))))
+
+
+def service_tlv(donnee, entreprise=False):
+    """Un Service de la Network Data : bit T a 1 (numero d'entreprise implicite), ou a 0 avec un numero d'entreprise ;
+    puis la donnee de service et un Server (RLOC16 seul)."""
+    entete = b"\x01" + bytes.fromhex("0000ABCD") if entreprise else b"\x81"
+    return tlv(0x0B, entete + bytes([len(donnee)]) + donnee + tlv(0x0D, bytes.fromhex("5000")))
+
+
+def charges_valides():
+    """Une charge valide par TLV connu : 8 octets pour l'ExtMac, des adresses entieres, une Network Data lisible."""
+    return {0: bytes.fromhex(EXT_ROUTEUR), 1: bytes.fromhex("5000"), 2: b"\x0b",
+            5: bytes.fromhex("01" + "8000000000000000" + "22"), 6: bytes.fromhex("1A2B3C4D40010218"),
+            7: reseau_inventee(), 8: ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR)), 16: bytes.fromhex("08010b"),
+            24: bytes.fromhex("0004"), 25: b"Fabricant", 26: b"Modele", 27: b"1.0", 28: b"Pile 1.0"}
+
+
 def charge_diag():
     """Charge TLV d'un diag de routeur : ExtMac, Address16, Network Data, adresses, version."""
     ext = bytes.fromhex(EXT_ROUTEUR)
     lien_local = ipv6("fe80::")[:8] + bytes([ext[0] ^ 0x02]) + ext[1:]
     omr = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
     rloc = ipv6("%s:0:0:ff:fe00:5000" % PREFIXE_MAILLE)
-    reseau = (tlv(0x03, bytes([0, 64]) + ipv6(PREFIXE_OMR + "::")[:8] + tlv(0x05, bytes.fromhex("50000100")))
-              + tlv(0x0B, bytes([0x81, 1, 0x5D]) + tlv(0x0D, bytes.fromhex("5000") + omr + bytes.fromhex("1680"))))
-    return (tlv(0, ext) + tlv(1, bytes.fromhex("5000")) + tlv(7, reseau) + tlv(8, lien_local + omr + rloc)
+    return (tlv(0, ext) + tlv(1, bytes.fromhex("5000")) + tlv(7, reseau_inventee()) + tlv(8, lien_local + omr + rloc)
             + tlv(24, b"\x04")).hex().upper()
+
+
+def tlv_de_premier_niveau(hexa):
+    """Les types des TLV d'une charge (sans les decoder plus bas)."""
+    o, i, types = bytes.fromhex(hexa), 0, []
+    while i + 2 <= len(o):
+        types.append(o[i])
+        i += 2 + o[i + 1]
+    return types
 
 
 def capture_inventee():
@@ -166,7 +195,98 @@ class Garde(unittest.TestCase):
         self.assertEqual(list(inconnu), ["TLV inconnu : 31 (diag.tlv)", "TLV inconnu : 29 (diag.tlv)"])
 
     def test_tlv_connus_passent(self):
-        self.assertEqual(controle(self.diag_avec(b"".join(tlv(t, b"\x00") for t in sorted(anon.TLV_CONNUS)))), {})
+        """Un TLV de chaque type connu, avec une charge valide."""
+        charges = charges_valides()
+        self.assertEqual(set(charges), anon.TLV_CONNUS, "un TLV connu sans charge d'exemple")
+        self.assertEqual(controle(self.diag_avec(b"".join(tlv(t, charges[t]) for t in sorted(charges)))), {})
+
+    def test_tlv_0_qui_n_a_pas_8_octets_fait_echouer(self):
+        """L'ExtMac fait 8 octets : Anonymiseur.tlv() ne remplace que celui-la."""
+        for n in (0, 1, 7, 9, 16):
+            with self.subTest(octets=n):
+                self.assertEqual(controle(self.diag_avec(tlv(0, bytes(n)))),
+                                 {"TLV 0 de longueur inattendue (diag.tlv)": [1]})
+        self.assertEqual(controle(self.diag_avec(tlv(0, bytes(8)))), {})
+
+    def test_tlv_8_qui_n_est_pas_fait_d_adresses_entieres_fait_echouer(self):
+        """Une adresse fait 16 octets : un reste d'octets ne serait pas remplace."""
+        for n in (1, 8, 15, 17, 24, 40):
+            with self.subTest(octets=n):
+                self.assertEqual(controle(self.diag_avec(tlv(8, bytes(n)))),
+                                 {"TLV 8 de longueur inattendue (diag.tlv)": [1]})
+        for n in (0, 16, 32, 48):
+            with self.subTest(octets=n):
+                self.assertEqual(controle(self.diag_avec(tlv(8, bytes(n)))), {})
+
+    # --- Network Data (TLV 7) ---
+
+    def diag_reseau(self, *tlvs):
+        return self.diag_avec(tlv(1, b"\x50\x00") + tlv(7, b"".join(tlvs)))
+
+    def test_network_data_de_la_capture_passe(self):
+        """Commissioning Data (la Commissioner Session ID), trois Service, trois Prefix : la Network Data de la
+        capture. Son TLV 4 est la raison de DONNEES_RESEAU_CONNUES : sans lui, la capture serait refusee."""
+        trouvees = 0
+        for _, m in anon.lire(CAPTURE_ANONYME):
+            if 7 in tlv_de_premier_niveau(m.get("tlv") or ""):
+                trouvees += 1
+                self.assertEqual(controle(m), {})
+                o = bytes.fromhex(m["tlv"])
+                reseau = o[o.index(7) + 2:]
+                self.assertEqual(reseau[0] >> 1, 4, "la Network Data de la capture commence par la Commissioning Data")
+        self.assertGreater(trouvees, 0)
+
+    def test_sous_tlv_inconnu_de_la_network_data_fait_echouer(self):
+        """Hors Prefix (1), Commissioning Data (4) et Service (5), au premier niveau : Has Route, Border Router,
+        6LoWPAN ID, Server, ou un type que personne ne connait."""
+        for t in (0, 2, 3, 6, 7, 64, 127):
+            with self.subTest(sous_tlv=t):
+                inconnu = bytes([t << 1 | 1, 2]) + b"\x50\x00"
+                self.assertEqual(controle(self.diag_reseau(reseau_inventee(), inconnu)),
+                                 {"sous-TLV inconnu de la Network Data : %d (diag.tlv)" % t: [1]})
+
+    def test_commissioning_data_seulement_avec_la_session_id(self):
+        self.assertEqual(controle(self.diag_reseau(tlv(0x08, bytes.fromhex("0B02D2FF")))), {})
+        for nom, contenu in (("Steering Data en plus", "0B02D2FF0802FFFF"), ("Border Agent Locator", "0902B400"),
+                             ("vide", ""), ("Session ID de 3 octets", "0B03D2FF00"),
+                             ("autre type MeshCoP", "0C02D2FF")):
+            with self.subTest(contenu=nom):
+                self.assertEqual(controle(self.diag_reseau(tlv(0x08, bytes.fromhex(contenu)))),
+                                 {"Commissioning Data inconnue dans la Network Data (diag.tlv)": [1]})
+
+    def test_donnee_de_service_de_plus_de_2_octets_fait_echouer(self):
+        """Une donnee de service de plus de 2 octets pourrait porter une adresse, que donnees_reseau() ne remplace
+        pas."""
+        adresse = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
+        for nom, donnee in (("3 octets", b"\x5d\x00\x01"), ("une adresse", adresse), ("40 octets", bytes(40))):
+            for entreprise in (False, True):
+                with self.subTest(donnee=nom, entreprise=entreprise):
+                    self.assertEqual(controle(self.diag_reseau(service_tlv(donnee, entreprise))),
+                                     {"donnee de service de plus de 2 octets dans la Network Data (diag.tlv)": [1]})
+
+    def test_donnee_de_service_de_0_a_2_octets_passe(self):
+        for donnee in (b"", b"\x5d", b"\x5c\xc5"):  # la capture : 01, 5d, 5cc5
+            for entreprise in (False, True):
+                with self.subTest(donnee=donnee.hex(), entreprise=entreprise):
+                    self.assertEqual(controle(self.diag_reseau(service_tlv(donnee, entreprise))), {})
+
+    def test_network_data_tronquee_fait_echouer(self):
+        for nom, reseau in (("longueur trop grande", bytes([0x03, 20, 0, 64])),
+                            ("octet seul", reseau_inventee() + b"\x03")):
+            with self.subTest(reseau=nom):
+                self.assertEqual(controle(self.diag_avec(tlv(7, reseau))), {"Network Data tronquee (diag.tlv)": [1]})
+
+    def test_les_raisons_de_la_network_data_s_ajoutent_a_celles_du_diag(self):
+        inconnu = controle(self.diag_avec(tlv(31, b"\x00") + tlv(7, bytes([0x0D, 0]))))
+        self.assertEqual(list(inconnu),
+                         ["TLV inconnu : 31 (diag.tlv)", "sous-TLV inconnu de la Network Data : 6 (diag.tlv)"])
+
+    def test_l_anonymiseur_laisserait_ces_donnees_en_clair(self):
+        """Ce que la garde retient : donnees_reseau() ne remplace ni la donnee de service, ni un TLV qu'il ne connait
+        pas. Si l'anonymiseur apprend a le faire, la garde correspondante peut etre levee."""
+        adresse = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
+        self.assertIn(adresse, anon.Anonymiseur().donnees_reseau(service_tlv(adresse)))
+        self.assertIn(adresse, anon.Anonymiseur().donnees_reseau(tlv(0x0D, adresse)))
 
     def test_les_tlv_connus_sont_ceux_de_la_capture_actuelle(self):
         vus = set()
