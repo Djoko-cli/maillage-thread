@@ -485,6 +485,31 @@ struct TourneeTests {
         #expect(m4.enfants(de: 43).map(\.source) == [.sonde])
     }
 
+    /// Balayage du sans aucun routeur a balayer : le 20 et le 24 ont deja repondu, et la sonde
+    /// refuse la requete au 20 a cette tournee. Ce n'est pas un balayage refuse : il remplace le
+    /// precedent par rien et prend la date de la tournee ; l'enfant balaye d'avant ne s'affiche
+    /// plus sous le 20 (Route64 et enfant inventes).
+    @Test func balayageDuSansRouteurABalayer() async throws {
+        let sonde = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([20, 24])])
+            .refusant { $0 == "5000|0,1,5,16,8,24" }
+        var mem = MemoireTournee()
+        mem.partition = "46CBEBCD"
+        mem.balayes[0x5003] = EnfantMaillage(rloc16: 0x5003, extMac: "E0000000000000B3", source: .balayage)
+        mem.dernierBalayage = Self.t0 - 1800
+        mem.dejaRepondu = [20]
+        let (m, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0))
+        #expect(m.routeur(20)?.muet == true, "sans reponse a cette tournee")
+        #expect(mem2.balayes.isEmpty)
+        #expect(mem2.dernierBalayage == Self.t0)
+        #expect(m.enfants(de: 20).isEmpty, "aucun enfant balaye sous le 20")
+    }
+
+    /// Recherche sans aucun groupe a interroger : rien n'a ete refuse.
+    @Test func rechercheVideNonRefusee() async throws {
+        let r = try await Tournee.chercherRoute64(try SondeRejouee.capture(), groupes: [])
+        #expect(r.route64 == nil && !r.refusee)
+    }
+
     /// Routeur muet (43 : silences a 0 et 5 min) : interroge au plus une fois par heure. Pas a
     /// 5 min + 59 min 59 s, de nouveau a 5 min + 1 h.
     @Test func muetReinterrogeApresUneHeure() async throws {

@@ -306,7 +306,8 @@ public enum Tournee {
             var faitesAvant = 0
             signaler(.balayage, 0, prevues.reduce(0, +))
             var trouves: [UInt16: EnfantMaillage] = [:]
-            var refuse = true
+            // Sans routeur a balayer, rien n'est refuse : le balayage du remplace le precedent par rien.
+            var refuse = !routeurs.isEmpty
             for (i, m) in routeurs.enumerated() {
                 var faites = 0
                 let b = try await balayer(sonde, routeur: m, sauf: moi) { f, p in
@@ -381,16 +382,16 @@ public enum Tournee {
 
     /// Route64 quand ni le chef ni les secours ne l'ont donnee (chef muet des le lancement) :
     /// les `groupes` d'identifiants dans l'ordre, chacun en parallele ; au premier groupe ou l'un
-    /// la donne, celle du premier du groupe (le plus petit). `refusee` : la sonde a refuse toutes
-    /// les requetes. `suivi` : requetes revenues et prevues (tous ces identifiants), au debut
-    /// puis a chaque requete revenue.
+    /// la donne, celle du premier du groupe (le plus petit). `refusee` : il y a eu des requetes,
+    /// et la sonde les a toutes refusees. `suivi` : requetes revenues et prevues (tous ces
+    /// identifiants), au debut puis a chaque requete revenue.
     static func chercherRoute64(_ sonde: some InterlocuteurSonde, groupes: [[Int]],
                                 suivi: (_ faites: Int, _ prevues: Int) -> Void = { _, _ in }) async throws
         -> (route64: Route64?, refusee: Bool) {
         let prevues = groupes.reduce(0) { $0 + $1.count }
         suivi(0, prevues)
         var faites = 0
-        var refusee = true
+        var refusee = !groupes.isEmpty
         for groupe in groupes {
             let avant = faites
             let resultats = try await parallele(groupe, {
