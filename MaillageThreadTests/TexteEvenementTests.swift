@@ -53,6 +53,15 @@ struct TexteEvenementTests {
                 == String(localized: "Routeur Thread disparu : \("Prise bureau")"))
     }
 
+    /// Changements de parent regroupes : le noeud, et leur nombre dans l'heure.
+    @Test func parentsRegroupes() {
+        let change = Evenement(date: ScenarioPanne.date(4, 14), type: .parentChange,
+                               sujet: Sujet(id: "56B1E064401F74EF", nom: "Prise bureau"), avant: "A", apres: "B")
+        let n = 4
+        #expect(TexteEvenement.titre(LigneJournal.parents(Array(repeating: change, count: n)))
+                == String(localized: "\("Prise bureau") a changé \(n) fois de parent en 1 h"))
+    }
+
     /// Point de depart d'un reseau vu apres le lancement : le reseau est nomme.
     @Test func departDUnReseau() {
         let t = ScenarioPanne.date(4, 14)

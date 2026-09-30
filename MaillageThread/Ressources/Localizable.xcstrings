@@ -193,6 +193,22 @@
         }
       }
     },
+    "%@ a changé %lld fois de parent en 1 h" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ changed parent %2$lld times within 1 h"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ a changé %2$lld fois de parent en 1 h"
+          }
+        }
+      }
+    },
     "%@ a changé de parent : %@ → %@" : {
       "localizations" : {
         "en" : {

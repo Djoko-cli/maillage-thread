@@ -11,6 +11,7 @@
   "%@ : nouvelle adresse de lien (redémarrage probable)": "%@: new link-local address (probable restart)",
   "%@ : port occupé (pio device monitor ou une autre app le tient)": "%@: port busy (pio device monitor or another app holds it)",
   "%@ : rôle %@ → %@": "%1$@: role %2$@ → %3$@",
+  "%@ a changé %lld fois de parent en 1 h": "%1$@ changed parent %2$lld times within 1 h",
   "%@ a changé de parent : %@ → %@": "%1$@ changed parent: %2$@ → %3$@",
   "%@ a disparu": "%@ disappeared",
   "%@ a rejoint la partition %@": "%1$@ joined partition %2$@",

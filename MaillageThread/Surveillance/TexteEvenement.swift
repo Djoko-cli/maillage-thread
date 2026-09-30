@@ -90,6 +90,9 @@ enum TexteEvenement {
             let debut = heure(p.first?.date ?? .distantPast)
             let fin = heure(p.last?.date ?? .distantPast)
             return String(localized: "\(p.count) appareils perdus entre \(debut) et \(fin)")
+        case .parents(let p):
+            let nom = p.first?.sujet?.nom ?? ""
+            return String(localized: "\(nom) a changé \(p.count) fois de parent en 1 h")
         }
     }
 

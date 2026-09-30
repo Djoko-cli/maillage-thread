@@ -88,7 +88,8 @@ struct FenetreJournal: View {
     }
 }
 
-/// Une ligne : pastille de gravite, titre, quand ; le detail des pertes regroupees.
+/// Une ligne : pastille de gravite, titre, quand ; le detail des pertes et des changements de
+/// parent regroupes.
 struct LigneJournalVue: View {
     let ligne: LigneJournal
 
@@ -96,15 +97,15 @@ struct LigneJournalVue: View {
         switch ligne {
         case .evenement(let e):
             contenu(TexteEvenement.titre(e), quand: TexteEvenement.quand(e), gravite: e.gravite)
-        case .pertes(let pertes):
+        case .pertes(let groupe), .parents(let groupe):
             DisclosureGroup {
-                ForEach(pertes) { e in
+                ForEach(groupe) { e in
                     Text("\(TexteEvenement.heure(e.date)) · \(TexteEvenement.titre(e))")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             } label: {
-                contenu(TexteEvenement.titre(ligne), quand: pertes.first.map(TexteEvenement.quand) ?? "",
+                contenu(TexteEvenement.titre(ligne), quand: groupe.first.map(TexteEvenement.quand) ?? "",
                         gravite: ligne.gravite)
             }
         }
