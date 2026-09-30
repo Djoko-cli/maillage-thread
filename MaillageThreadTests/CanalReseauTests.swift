@@ -196,8 +196,39 @@ struct CanalReseauTests {
         #expect(rids.count == 30 && rids == rids.sorted() && Set(rids).count == 30, "dans l'ordre, sans renvoi")
         let t = a.map(\.quand)
         #expect(t.count == 30 && t[18] - t[0] >= .milliseconds(950), "la 19e attend la fenetre d'une seconde")
-        #expect(t.count == 30 && t[29] - t[0] > .seconds(1), "etalees sur plus d'une seconde")
+        #expect(t.count == 30 && t[29] - t[0] >= .milliseconds(950), "etalees sur une seconde au moins")
         c.fermer()
+    }
+
+    /// La cadence tient au-dela de la premiere fenetre, et la fenetre est glissante : 9 commandes,
+    /// puis 27 autres une demi-fenetre plus tard. La carte n'en voit jamais plus de 18 en une
+    /// seconde : la 19e attend la sortie de la 1re, la 28e celle de la 10e. Une fenetre remise a
+    /// zero par tranches laisserait partir les 18 dernieres d'un coup (0,5 s entre la 10e et la
+    /// 28e). Sans renvoi (la carte repond, renvois a 30 s) : chaque arrivee est un premier envoi.
+    @Test(.timeLimit(.minutes(1))) func cadenceGlissanteAuDelaDeLaPremiereFenetre() async throws {
+        let defauts = CanalReseau.Reglages()
+        #expect(defauts.cadence == 18 && defauts.fenetreCadence == .seconds(1))
+        let arrivees = Arrivees()
+        let carte = Self.carteNotee(arrivees, repondre: Self.sonde)
+        var reglages = Self.rapides()
+        reglages.renvois = [.seconds(30), .seconds(60)]
+        let c = try await Self.canal(carte, reglages: reglages)
+        defer { c.fermer() }
+        let lignes = RecueilLignes(try c.ouvrir())
+        for _ in 0..<9 { c.envoyer("etat\n") }
+        #expect(await attendreQue { arrivees.toutes.count == 9 })
+        try await Task.sleep(for: .milliseconds(500))
+        for _ in 0..<27 { c.envoyer("etat\n") }
+        #expect(await attendreQue(.seconds(20)) { lignes.liste.count == 36 })
+        let a = arrivees.toutes
+        let rids = a.compactMap { Self.decouper($0.charge)?.rid }
+        #expect(rids.count == 36 && rids == rids.sorted() && Set(rids).count == 36, "dans l'ordre, sans renvoi")
+        let t = a.map(\.quand)
+        try #require(t.count == 36)
+        #expect(t[9] - t[0] >= .milliseconds(450), "les deux groupes sont separes d'une demi-fenetre")
+        let ecarts = (0..<(t.count - 18)).map { t[$0 + 18] - t[$0] }
+        let plusCourt = ecarts.min() ?? .zero
+        #expect(plusCourt >= defauts.fenetreCadence - .milliseconds(100), "jamais plus de 18 en une fenetre glissante")
     }
 
     /// Les renvois ne comptent pas dans la cadence et partent a l'heure, meme quand des
@@ -460,6 +491,44 @@ struct CanalReseauTests {
         connexions.toutes.last?.echouer(.pasDeRoute)
         #expect(await attendreQue { lignesD.liste == ["fin"] })
         #expect(d.raisonFermeture == TransportUDP.raisonPerte(.pasDeRoute), "cause de la perte gardee")
+    }
+
+    /// Canal sature : 30 commandes d'un coup, les 18 de la premiere fenetre partent et 12 attendent
+    /// la cadence. La carte repond, sans renvoi pendant l'essai (renvois a 30 s).
+    static func canalSature() async throws -> (canal: CanalReseau, arrivees: Arrivees, lignes: RecueilLignes,
+                                                connexions: ConnexionsSimulees) {
+        let arrivees = Arrivees(), connexions = ConnexionsSimulees()
+        var reglages = rapides()
+        reglages.renvois = [.seconds(30), .seconds(60)]
+        let c = try await canal(carteNotee(arrivees, repondre: sonde), reglages: reglages, connexions: connexions)
+        let lignes = RecueilLignes(try c.ouvrir())
+        for _ in 0..<30 { c.envoyer("etat\n") }
+        #expect(await attendreQue { arrivees.toutes.count == 18 }, "la premiere fenetre est partie, 12 commandes attendent")
+        return (c, arrivees, lignes, connexions)
+    }
+
+    /// Fermee pendant que des commandes attendent la cadence : elles ne partent pas, meme une fois
+    /// la fenetre ecoulee (les 12 en file seraient parties 1 s apres les 18) ; le flux des lignes
+    /// finit ; une commande donnee apres la fermeture ne part pas non plus.
+    @Test(.timeLimit(.minutes(1))) func fermeeAvecUneFileNonVide() async throws {
+        let (c, arrivees, lignes, _) = try await Self.canalSature()
+        c.fermer()
+        c.envoyer("etat\n")
+        #expect(await attendreQue { lignes.liste.last == "fin" }, "fin du flux des lignes")
+        try await Task.sleep(for: .milliseconds(1300))
+        #expect(arrivees.toutes.count == 18, "ni les 12 en file, ni celle d'apres la fermeture, ne partent")
+    }
+
+    /// Session perdue pendant que des commandes attendent la cadence : comme a la fermeture par
+    /// l'app, la file est abandonnee, et la cause de la perte est gardee.
+    @Test(.timeLimit(.minutes(1))) func sessionPerdueAvecUneFileNonVide() async throws {
+        let (c, arrivees, lignes, connexions) = try await Self.canalSature()
+        connexions.toutes.last?.echouer(.pasDeRoute)
+        #expect(await attendreQue { lignes.liste.last == "fin" }, "fin du flux des lignes")
+        #expect(c.raisonFermeture == TransportUDP.raisonPerte(.pasDeRoute), "cause de la perte gardee")
+        c.envoyer("etat\n")
+        try await Task.sleep(for: .milliseconds(1300))
+        #expect(arrivees.toutes.count == 18, "ni les 12 en file, ni celle d'apres la perte, ne partent")
     }
 
     /// Fermee avant d'etre ouverte (connexion abandonnee) : flux fini aussitot.
