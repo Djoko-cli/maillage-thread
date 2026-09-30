@@ -460,6 +460,20 @@ struct TourneeTests {
         #expect(mem3.repondants == [20, 24])
     }
 
+    /// Reponse `ok` illisible du 20 (TLV tronquee), deux tournees de suite : ce n'est pas un
+    /// silence. Ses echecs ne bougent pas, il n'est ni muet ni balaye ; le maillage le marque
+    /// sans reponse a la tournee.
+    @Test func reponseIllisibleNEstPasUnSilence() async throws {
+        let (_, mem1) = try #require(try await Tournee.complete(try SondeRejouee.capture(), memoire: MemoireTournee(),
+                                                               maintenant: Self.t0))
+        let illisible = try SondeRejouee.capture(reponsesEnPlus: ["5000|0,1,5,16,8,24": "0008E0"])
+        let (m2, mem2) = try #require(try await Tournee.complete(illisible, memoire: mem1, maintenant: Self.t0 + 300))
+        let (m3, mem3) = try #require(try await Tournee.complete(illisible, memoire: mem2, maintenant: Self.t0 + 600))
+        #expect(mem3.echecs[20] == 0 && !mem3.estMuet(20))
+        #expect(m2.routeur(20)?.muet == true && m3.routeur(20)?.muet == true, "sans reponse")
+        #expect(!mem3.muetsBalayes.contains(20))
+    }
+
     /// Balayage du (30 min) dont la sonde refuse toutes les requetes : il ne remplace pas le
     /// precedent. Les enfants trouves restent affiches, et il est refait a la tournee suivante. Un
     /// balayage de silences (`delai` : plus aucun enfant) remplace le precedent, lui.

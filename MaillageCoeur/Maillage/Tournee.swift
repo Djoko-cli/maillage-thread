@@ -53,7 +53,7 @@ public struct AvancementTournee: Hashable, Sendable {
 /// Ce que la tournee retient d'une fois sur l'autre (spec de la sonde, section 4).
 public struct MemoireTournee: Hashable, Sendable {
     /// Silences de suite (`delai`), par routeur : muet a partir de 2. Un refus de la sonde
-    /// (`occupee`, `suspendue`...) n'en est pas un.
+    /// (`occupee`, `suspendue`...) ou une reponse illisible n'en est pas un.
     public var echecs: [Int: Int] = [:]
     /// Derniere interrogation d'un routeur muet : une fois par heure.
     public var muetInterroge: [Int: Date] = [:]
@@ -66,7 +66,7 @@ public struct MemoireTournee: Hashable, Sendable {
     /// routeurs que la sonde entend (sa table des routeurs). Une ExtMac n'a qu'un RLOC16 (`retenir`).
     public var identites: [UInt16: String] = [:]
     /// Enfants des routeurs balayes, trouves au dernier balayage (un balayage dont la sonde a
-    /// refuse toutes les requetes ne compte pas).
+    /// refuse toutes les requetes ne compte pas) ; oublies quand leur parent sort de la liste.
     public var balayes: [UInt16: EnfantMaillage] = [:]
     /// Enfants des tables identifies (ExtMac, adresses), par RLOC16 : gardes jusqu'a une nouvelle
     /// reponse ; oublies quand leur parent sort de la liste des routeurs, ou qu'ils manquent a la
@@ -77,8 +77,8 @@ public struct MemoireTournee: Hashable, Sendable {
     /// oubliee avec son identite.
     public var identiteDemandee: [UInt16: Date] = [:]
     public var dernierBalayage: Date?
-    /// Routeurs balayes la derniere fois (muets, ou qui n'ont jamais repondu) : un autre
-    /// ensemble relance le balayage.
+    /// Routeurs balayes la derniere fois (muets, ou qui n'ont jamais repondu), sans ceux sortis
+    /// de la liste : un autre ensemble relance le balayage.
     public var muetsBalayes: Set<Int> = []
     /// Routeurs qui ont repondu a la derniere tournee ou l'un a repondu : Route64 de
     /// secours quand le chef ne la donne pas.
@@ -255,7 +255,8 @@ public enum Tournee {
                 if let enfants = rep.enfants { tables[id] = Set(enfants.map { $0.rloc16(parent: rloc16(id)) }) }
                 repondants.append(id)
             } else if r.silence {
-                // Seul un silence compte : un refus de la sonde ne dit rien du routeur.
+                // Seul un silence compte : un refus de la sonde, ou une reponse illisible, ne dit
+                // pas que le routeur se tait.
                 mem.echecs[id, default: 0] += 1
                 if mem.estMuet(id) { mem.muetInterroge[id] = maintenant }
             }
@@ -486,10 +487,12 @@ public enum Tournee {
 }
 
 fileprivate extension ResultatDiag {
-    /// Silence de la cible : la requete est partie, et rien n'est revenu a temps (`delai`).
+    /// Silence de la cible : la requete est partie, et rien n'est revenu a temps (`delai`). Une
+    /// reponse illisible (`ok`, TLV tronquee) n'en est pas un.
     var silence: Bool { !ok && erreur == "delai" }
 
-    /// Refus de la sonde (`occupee`, `suspendue`, `envoi...`) : la requete n'est pas partie. Ni
-    /// reponse ni silence, il ne dit rien de la cible.
+    /// Refus : ni reponse (lisible ou non), ni `trop_long`, ni silence. La sonde n'a pas envoye
+    /// la requete (`occupee`, `suspendue`, `envoi...`), ou elle rend une autre erreur d'OpenThread
+    /// apres l'envoi (`Abort`...) : dans les deux cas, rien n'est dit de la cible.
     var refus: Bool { !ok && !tropLong && !silence }
 }
