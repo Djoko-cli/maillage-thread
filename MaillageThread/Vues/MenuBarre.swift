@@ -57,13 +57,15 @@ struct MenuBarre: View {
                 }
             }
             Divider()
-            Group {
+            // Actions : comme les articles d'un menu natif (texte en couleur primaire, taille standard,
+            // surlignees au survol) ; la marge negative aligne leur texte sur le reste du menu.
+            VStack(alignment: .leading, spacing: 0) {
                 Button("Ouvrir le graphe") { ouvrir("graphe") }
                 Button("Journal…") { ouvrir("journal") }
                 if surveillance.mode == .direct {
                     Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
                     if let p = nomsMaison.probleme {
-                        Text(p).font(.caption).foregroundStyle(.red)
+                        Text(p).font(.caption).foregroundStyle(.red).padding(.horizontal, 8)
                     }
                 }
                 Button("Réglages…") {
@@ -72,7 +74,8 @@ struct MenuBarre: View {
                 }
                 Button("Quitter Maillage Thread") { NSApp.terminate(nil) }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(ActionMenu())
+            .padding(.horizontal, -8)
         }
         .padding(14)
         .frame(width: 320, alignment: .leading)
@@ -138,5 +141,33 @@ struct MenuBarre: View {
     private func ouvrir(_ id: String) {
         openWindow(id: id)
         NSApp.activate()
+    }
+}
+
+/// Action du menu de la barre, a la maniere d'un article de menu natif : texte en couleur
+/// primaire et en taille standard, sur toute la largeur, surligne a la couleur d'accent au survol.
+private struct ActionMenu: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        LigneAction(configuration: configuration)
+    }
+
+    private struct LigneAction: View {
+        let configuration: ButtonStyleConfiguration
+        @Environment(\.isEnabled) private var active
+        @State private var survol = false
+
+        var body: some View {
+            let surligne = survol && active
+            configuration.label
+                .font(.body)
+                .foregroundStyle(surligne ? AnyShapeStyle(Color.white) : AnyShapeStyle(active ? .primary : .secondary))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 5).fill(surligne ? Color.accentColor : .clear))
+                .contentShape(Rectangle())
+                .onHover { survol = $0 }
+                .opacity(configuration.isPressed ? 0.85 : 1)
+        }
     }
 }
