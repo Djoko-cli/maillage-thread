@@ -10,6 +10,12 @@
 >
 > **Plan 3a :** `docs/superpowers/plans/2026-09-29-maillage-thread-plan3a-sonde.md`.
 >
+> **Plan 3b :** `docs/superpowers/plans/2026-09-30-maillage-thread-plan3b-journal.md`.
+>
+> **Ajout du 30/09 (demande de Djoko, validée) :** l'historique garde aussi le
+> signal vu par la sonde, et la fiche d'un routeur le montre en courbe
+> (section 6) ; la tournée demande donc `voisins` (section 4).
+>
 > **Révision du 29/09 pendant l'exécution du plan 3a :** des relectures ont
 > corrigé plusieurs comportements par rapport au texte du plan. La section 3
 > en tient compte pour la trame ; la section 4, pour le BBR principal, la
@@ -396,7 +402,9 @@ jusqu'à la connexion suivante réussie.
    requête locale, sans délai réseau). Elle donne le RLOC16 de chaque routeur
    de la partition, et l'ExtMac de ceux que la sonde entend (voir
    « Rapprochement »). Sans table (firmware 1.0.1, sonde occupée), la tournée
-   continue sans elle.
+   continue sans elle. Enfin `voisins` (requête locale, ajout du 30/09) : le
+   signal de chaque routeur que la sonde entend, pour l'historique
+   (section 6) ; sans réponse, la tournée continue sans.
 2. **Liste des routeurs :** Route64 (5) et Leader Data (6), demandés jusqu'à
    ce que l'un réponde avec une Route64 :
    - au chef, sauf s'il est muet : il passe alors après les autres ;
@@ -607,8 +615,8 @@ atteint (état de la sonde, liste des routeurs, routeurs, pile et Network
 Data, balayage, identité des enfants), puis chaque requête revenue : les
 requêtes faites sur le total prévu de l'étape, 0 si elle n'a rien à faire. Ce
 total ne baisse jamais :
-- état de la sonde : `etat` puis `routeurs`, soit 2 ; l'étape s'arrête à 1
-  si la sonde n'est pas attachée, ou suspendue ;
+- état de la sonde : `etat`, `routeurs` puis `voisins`, soit 3 ; l'étape
+  s'arrête à 1 si la sonde n'est pas attachée, ou suspendue ;
 - liste des routeurs : le chef et les secours, puis, s'il faut chercher, les
   autres routeurs de la table de la sonde et les autres identifiants (ceux-ci
   pas dans les 30 minutes qui suivent une recherche vaine) ; l'étape s'arrête
@@ -725,11 +733,16 @@ choisi) : « Sonde : … ».
 
 **Historique.**
 - Contenu : à chaque tournée, la qualité de chaque lien, entre routeurs et
-  d'enfant à parent.
+  d'enfant à parent ; et le signal (dBm) de chaque routeur que la sonde
+  entend (commande `voisins`, firmware 1.0.2) et celui de son parent
+  (`etat.parent.rssi`) (ajout validé par Djoko le 30/09).
 - Stockage : JSON Lines mensuel (`maillage-AAAA-MM.jsonl`) dans le dossier de
   l'app, gardé 90 jours comme le journal ; environ 5 Mo par mois.
 - Affichage : courbes dans la fiche (Swift Charts) sur 24 h, 7 j et 30 j,
-  avec les changements de parent marqués.
+  avec les changements de parent marqués. Dans la fiche d'un routeur, une
+  courbe « Signal vu par la sonde » (24 h, 7 j, 30 j), où les changements de
+  parent de la sonde sont marqués, car le signal dépend d'abord de l'endroit
+  où la sonde est posée (ajout du 30/09).
 
 ## 7. Tests, permissions, essai préalable (validée)
 
