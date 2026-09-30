@@ -73,7 +73,8 @@ public struct MemoireTournee: Hashable, Sendable {
     /// table de leur parent qui l'a donnee.
     public var identifies: [UInt16: EnfantMaillage] = [:]
     /// Derniere demande d'identite a un enfant des tables, par RLOC16 : une par demi-heure
-    /// au plus, qu'il ait repondu ou non ; oubliee avec son identite.
+    /// au plus, qu'il ait repondu ou non (une demande refusee par la sonde ne compte pas) ;
+    /// oubliee avec son identite.
     public var identiteDemandee: [UInt16: Date] = [:]
     public var dernierBalayage: Date?
     /// Routeurs balayes la derniere fois (muets, ou qui n'ont jamais repondu) : un autre
@@ -349,12 +350,13 @@ public enum Tournee {
         let aIdentifier = c.enfantsSansIdentite.filter { cible in
             mem.identiteDemandee[cible].map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
         }
-        for cible in aIdentifier { mem.identiteDemandee[cible] = maintenant }
         signaler(.identites, 0, aIdentifier.count)
         let identites = try await parallele(aIdentifier, {
             try await sonde.diag($0, tlvIdentite, delaiMs: delaiEnfant)
         }, apresChacune: { n, _, _ in signaler(.identites, n, aIdentifier.count) })
         for (cible, r) in identites {
+            // Une demande refusee par la sonde n'est pas faite : elle le sera a la tournee suivante.
+            if !r.refus { mem.identiteDemandee[cible] = maintenant }
             guard let rep = r.reponse else { continue }
             mem.identifies[cible] = EnfantMaillage(rloc16: cible, extMac: rep.extMac, adresses: rep.adresses, source: .tableEnfants)
         }

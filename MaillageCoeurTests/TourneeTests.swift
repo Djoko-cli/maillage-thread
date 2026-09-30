@@ -664,6 +664,21 @@ struct TourneeTests {
         #expect(mem2.identifies.count == 3)
     }
 
+    /// Demandes d'identite refusees par la sonde (`occupee`) : elles ne comptent pas comme
+    /// faites, et la tournee suivante (5 min) les refait ; les enfants qui repondent sont
+    /// identifies.
+    @Test func identitesRefuseesRedemandees() async throws {
+        let sonde = try SondeRejouee.capture()
+        let refusees = sonde.refusant { $0.hasSuffix("|0,8") }
+        let (_, mem1) = try #require(try await Tournee.complete(refusees, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(await refusees.registre.requetes.filter { $0.hasSuffix("|0,8") }.count == 6)
+        #expect(mem1.identiteDemandee.isEmpty && mem1.identifies.isEmpty)
+        let (m2, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 300))
+        #expect(await sonde.registre.requetes.filter { $0.hasSuffix("|0,8") }.count == 6, "redemandees")
+        #expect(mem2.identifies.count == 3 && mem2.identiteDemandee.count == 6)
+        #expect(m2.enfants(de: 20).map(\.extMac) == ["E000000000000005", "E000000000000004"])
+    }
+
     /// Table des routeurs de la sonde (FED) : les paires RLOC16 ↔ ExtMac des routeurs qu'elle
     /// entend sont retenues comme celle de son parent, et donnent leur ExtMac aux routeurs
     /// muets ; une demande par tournee. La sonde les entend ensuite moins (elle a bouge) : les
