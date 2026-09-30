@@ -49,8 +49,11 @@ connait pas (des noms, jamais une valeur), devant :
   (Child Table), 2 pour le 24 (Version), et au plus 32, 32, 16 et 64 pour les
   textes des TLV 25 a 28 ;
 - un texte des TLV 25 a 28 (fabricant, modele, version logicielle, pile) qui
-  n'est pas de l'ASCII lisible, ou qui porte 12 hexa de suite, une MAC ou une
-  adresse IPv6 ;
+  n'est pas de l'ASCII lisible, ou qui porte 12 hexa de suite, une MAC, une
+  adresse IPv6 (cherchee dans tout le texte, meme collee a `=`, `:` ou un
+  point), un « :: », un « : » hors d'un horaire (07:09:25), 3 groupes de 2 a
+  4 hexa avec un meme separateur (`: . _ -` ou espace), ou 6 paires d'hexa et
+  plus avec un meme separateur : texte_tlv_sur() ;
 - dans la Network Data (TLV 7), autre chose que des Prefix de 16 bits au plus
   ou de 41 a 96 bits, des Service et une Commissioning Data qui ne porte qu'une
   Commissioner Session ID (16 bits, quelle que soit sa valeur), ou une donnee
@@ -130,6 +133,17 @@ TLV_TEXTE_MAX = {25: 32, 26: 32, 27: 16, 28: 64}
 # porte une date, une heure, parfois un condensat de commit (9 hexa dans la capture) : la limite est a 12.
 HEXA_12 = re.compile(r"[0-9A-Fa-f]{12}")
 MAC_TEXTE = re.compile(r"[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}")
+# Un horaire (07:09:25, 19:39) : le seul « : » admis. Il ne touche ni une lettre ni un chiffre de part et d'autre, sinon
+# « fd00:12 » ou « 07:09:251 » en passeraient pour un.
+HORAIRE = re.compile(r"(?<![0-9A-Za-z])\d{1,2}:\d{2}(?::\d{2})?(?![0-9A-Za-z])")
+# Au moins 3 groupes de 2 a 4 hexa avec un meme separateur (une adresse IPv6 ou une MAC ecrite autrement, un prefixe) ;
+# de 6 a 8 paires (ou plus) avec un meme separateur quelconque (une MAC, une ExtMac). Sans garde de bord : un groupe de
+# 5 hexa ou un hexa colle a la suite n'y echappe pas.
+GROUPES_HEXA = re.compile(r"[0-9A-Fa-f]{2,4}([:._ -]+)[0-9A-Fa-f]{2,4}(?:\1[0-9A-Fa-f]{2,4})+")
+PAIRES_HEXA = re.compile(r"[0-9A-Fa-f]{2}([^0-9A-Za-z]+)(?:[0-9A-Fa-f]{2}\1){4,}[0-9A-Fa-f]{2}")
+# Un candidat d'adresse IPv6 : toute suite de chiffres hexa, de « : », de points et de « % » qui porte un « : ». Elle est
+# cherchee dans tout le texte, collee ou non a un « = », un « : » ou un point.
+CANDIDAT_IPV6 = re.compile(r"[0-9A-Fa-f:.%]*:[0-9A-Fa-f:.%]*")
 # Network Data (TLV 7), premier niveau : les Prefix (1) et les Service (5) sont traites par donnees_reseau() ; la
 # Commissioning Data (4) n'est acceptee que si elle ne porte qu'un sous-TLV Commissioner Session ID (MeshCoP 11,
 # longueur 2), quelle que soit sa valeur : un identifiant de session sur 16 bits n'est pas une donnee personnelle.
@@ -456,21 +470,35 @@ def longueur_tlv_attendue(t, v):
     return True
 
 
+def adresse_ipv6_dans(texte):
+    """Une adresse IPv6 valide dans le texte, y compris collee a d'autres caracteres (`addr=fd00::1`, `ip:fd00::1`,
+    `fd00::1.`) : on essaie chaque candidat, puis ses bouts (sans point ni « : » de tete ou de queue, sans zone)."""
+    for candidat in CANDIDAT_IPV6.findall(texte):
+        for c in {candidat, candidat.strip(".:"), candidat.split("%")[0], candidat.split("%")[0].strip(".:")}:
+            try:
+                ipaddress.IPv6Address(c)
+                return True
+            except ValueError:
+                pass
+    return False
+
+
 def texte_tlv_sur(v):
-    """Le texte d'un TLV 25 a 28 : de l'ASCII lisible, sans 12 hexa de suite, ni MAC, ni adresse IPv6."""
+    """Le texte d'un TLV 25 a 28 : de l'ASCII lisible qui ne peut porter ni adresse, ni MAC, ni ExtMac, ni prefixe.
+    Refuse :
+    - 12 hexa de suite, une MAC (`aa:bb:cc:dd:ee:ff`), une adresse IPv6 valide n'importe ou dans le texte ;
+    - tout « :: » et tout « : » qui n'appartient pas a un horaire (HORAIRE : 07:09:25, 19:39) ;
+    - 3 groupes de 2 a 4 hexa avec un meme separateur, apres retrait des horaires (« May 15 2026 07:09:25 » porte
+      « 15 2026 » puis un horaire : deux groupes seulement), ou 6 paires et plus avec un meme separateur quelconque.
+    Les versions (1.0.3), les dates et les condensats de commit de 9 hexa passent ; une date ISO (2026-09-30) ou un
+    numero de version a 3 nombres de 2 a 4 chiffres (10.20.30) sont refuses : au moindre doute, on refuse."""
     if any(c < 0x20 or c > 0x7E for c in v):
         return False
     texte = v.decode("ascii")
-    if HEXA_12.search(texte) or MAC_TEXTE.search(texte):
+    if HEXA_12.search(texte) or MAC_TEXTE.search(texte) or PAIRES_HEXA.search(texte) or adresse_ipv6_dans(texte):
         return False
-    for mot in re.split(r"[\s;,()\[\]]+", texte):
-        if ":" in mot:
-            try:
-                ipaddress.IPv6Address(mot.split("%")[0])
-                return False
-            except ValueError:
-                pass
-    return True
+    sans_horaires = HORAIRE.sub("T", texte)
+    return ":" not in sans_horaires and GROUPES_HEXA.search(sans_horaires) is None
 
 
 def controler_tlv(hexa):

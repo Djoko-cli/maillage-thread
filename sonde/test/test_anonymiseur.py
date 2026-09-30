@@ -444,6 +444,64 @@ class Garde(unittest.TestCase):
                 self.assertEqual(controle(self.diag_avec(tlv(t, b"x" * (n + 1)))),
                                  {"TLV %d de longueur inattendue (diag.tlv)" % t: [1]})
 
+    TEXTES_FORGES = ("addr=fd11:2233:4455::1", "ip:fd00::1", "fd00::1.", "fd11:2233:4455::/48", "fd11:2233:4455",
+                     "0011:2233:4455:6677", "aabb.ccdd.eeff", "00 11 22 33 44 55 66 77", "00_11_22_33_44_55")
+
+    def test_texte_des_tlv_25_a_28_refuse_les_adresses_et_les_suites_d_hexa_forgees(self):
+        """Une adresse collee a `=`, `:` ou un point, un prefixe, une MAC ecrite avec un autre separateur : le controle
+        porte sur tout le texte, plus seulement sur les mots que l'espace, `;`, `,`, les parentheses et les crochets
+        separent. Le refus ne cite que le champ, jamais la valeur."""
+        for t in (25, 26, 27, 28):
+            for texte in self.TEXTES_FORGES:
+                if len(texte) > anon.TLV_TEXTE_MAX[t]:
+                    continue  # refuse pour sa longueur, une autre raison
+                with self.subTest(tlv=t, texte=texte):
+                    inconnu = controle(self.diag_avec(tlv(t, texte.encode())))
+                    self.assertEqual(inconnu, {"texte inconnu dans le TLV %d (diag.tlv)" % t: [1]})
+                    self.assertNotIn(texte, "".join(inconnu))
+        for texte in self.TEXTES_FORGES:  # le 28 (64 caracteres) les prend tous, seuls ou noyes dans un texte normal
+            for ecrit in (texte, "OPENTHREAD/1.0.0; " + texte + "; EFR32", "x" + texte + "x"):
+                with self.subTest(texte=ecrit):
+                    self.assertEqual(controle(self.diag_avec(tlv(28, ecrit.encode()))),
+                                     {"texte inconnu dans le TLV 28 (diag.tlv)": [1]})
+
+    def test_texte_des_tlv_25_a_28_refuse_tout_deux_points_hors_horaire_et_tout_double_deux_points(self):
+        for texte in (b"::", b"a::b", b"pile :: x", b"x:y", b"x: y", b"a:1", b"1:2:3", b"07:09:25:1", b"07:09:2",
+                      b"07:09:251", b"107:09", b"a07:09", b"07:09a", b"12:34:56:78", b"ip:07:09", b":07:09", b"07:09:"):
+            with self.subTest(texte=texte):
+                self.assertEqual(controle(self.diag_avec(tlv(28, texte))),
+                                 {"texte inconnu dans le TLV 28 (diag.tlv)": [1]})
+
+    def test_texte_des_tlv_25_a_28_refuse_les_groupes_et_les_paires_d_hexa_separes(self):
+        """Au moins 3 groupes de 2 a 4 hexa avec un meme separateur (: . _ - espace), ou de 6 a 8 paires avec un meme
+        separateur quelconque."""
+        for texte in (b"aabb.ccdd.eeff", b"aabb-ccdd-eeff", b"aabb_ccdd_eeff", b"aabb ccdd eeff", b"aabb  ccdd  eeff",
+                      b"00 11 22", b"0011 2233 4455 6677", b"a1.b2.c3", b"x 0011 2233 4455 y",
+                      b"00/11/22/33/44/55", b"00;11;22;33;44;55", b"00,11,22,33,44,55,66", b"00|11|22|33|44|55|66|77",
+                      b"00 11 22 33 44 55", b"00-11-22-33-44-55-66-77", b"00_11_22_33_44_55", b"00.11.22.33.44.55",
+                      b"x00 11 22 33 44 55 66 77 88 99"):
+            with self.subTest(texte=texte):
+                self.assertEqual(controle(self.diag_avec(tlv(28, texte))),
+                                 {"texte inconnu dans le TLV 28 (diag.tlv)": [1]})
+
+    def test_texte_des_tlv_25_a_28_garde_les_formes_de_la_capture(self):
+        """Ces formes sont celles des champs des TLV 25 a 28 de la capture du depot : une version, une pile OpenThread
+        avec une date et un horaire, un condensat de commit de 9 hexa."""
+        lus = set()
+        for _, m in anon.lire(CAPTURE_ANONYME):
+            o, i = bytes.fromhex(m.get("tlv") or ""), 0
+            while i + 2 <= len(o):
+                if o[i] in anon.TLV_TEXTE_MAX:
+                    lus.add((o[i], o[i + 2:i + 2 + o[i + 1]]))
+                i += 2 + o[i + 1]
+        self.assertIn((28, b"OPENTHREAD/1.0.0; EFR32; May 15 2026 07:09:25"), lus)
+        for t, texte in sorted(lus) + [(27, b"1.0.3"), (28, b"OPENTHREAD/1.3.0; 07:09:25"), (28, b"07:09"),
+                                       (28, b"7:09:25"), (28, b"commit 1fceb225b"), (28, b"a 07:09:25 b 19:39"),
+                                       (28, b"OPENTHREAD/1.0.3 Sep 18 2024 19:39"), (25, b"Fabricant 2"),
+                                       (26, b"Modele-2_b"), (28, b"SL-OPENTHREAD/2.5.1.0_GitHub-1fceb225b")]:
+            with self.subTest(tlv=t, texte=texte):
+                self.assertEqual(controle(self.diag_avec(tlv(t, texte))), {})
+
     # --- Network Data (TLV 7) ---
 
     def diag_reseau(self, *tlvs):
@@ -587,6 +645,19 @@ class Garde(unittest.TestCase):
                             ("donnee de service", tlv(0x0B, b"\x81\x02\x5d")), ("Service vide", tlv(0x0B, b""))):
             with self.subTest(reseau=nom):
                 self.assertEqual(controle(self.diag_reseau(reseau)), {"Network Data tronquee (diag.tlv)": [1]})
+
+    CAS_DE_BORD_TRONQUES = (
+        ("Prefix d'un seul octet", tlv(0x03, b"\x00")),
+        ("Service d'un seul octet avec le bit T a 1", tlv(0x0B, b"\x81")),
+        ("octet seul en queue de sous-TLV d'un Prefix", tlv(0x03, bytes([0, 64]) + bytes(8) + b"\x01")),
+        ("octet seul en queue de sous-TLV d'un Service", tlv(0x0B, b"\x81\x01\x5d" + b"\x0d")),
+        ("Prefix coupe d'exactement un octet", tlv(0x03, bytes([0, 64]) + bytes(7))),
+        ("octet seul en queue de la Network Data", prefixe_tlv(64) + b"\x03"))
+
+    def test_cas_de_bord_de_la_network_data_refuses_proprement(self):
+        for nom, reseau in self.CAS_DE_BORD_TRONQUES:
+            with self.subTest(reseau=nom):
+                self.assertEqual(controle(self.diag_avec(tlv(7, reseau))), {"Network Data tronquee (diag.tlv)": [1]})
 
     def test_les_raisons_de_la_network_data_s_ajoutent_a_celles_du_diag(self):
         inconnu = controle(self.diag_avec(tlv(31, b"\x00") + tlv(7, bytes([0x0D, 0]))))
@@ -774,6 +845,25 @@ class Outil(unittest.TestCase):
         messages[2]["tlv"] = (tlv(31, bytes.fromhex(EXT_INCONNU) + b"\x00") + bytes.fromhex(messages[2]["tlv"])).hex()
         self.ecrire(messages)
         self.assertRefus(self.lancer(), "TLV inconnu : 31 (diag.tlv) (1 ligne(s), la premiere : 3)")
+
+    def test_cas_de_bord_de_la_network_data_echouent_sans_trace(self):
+        """Un Prefix ou un Service coupe, un octet seul en queue : un message de refus, jamais une trace d'exception."""
+        for nom, reseau in Garde.CAS_DE_BORD_TRONQUES:
+            with self.subTest(reseau=nom):
+                messages = capture_inventee()
+                messages[2]["tlv"] = tlv(7, reseau).hex().upper()
+                self.ecrire(messages)
+                self.assertRefus(self.lancer(), "Network Data tronquee (diag.tlv) (1 ligne(s), la premiere : 3)")
+
+    def test_texte_forge_d_un_tlv_echoue_sans_citer_la_valeur(self):
+        for texte in Garde.TEXTES_FORGES:
+            with self.subTest(texte=texte):
+                messages = capture_inventee()
+                messages[2]["tlv"] = tlv(28, texte.encode()).hex().upper()
+                self.ecrire(messages)
+                r = self.lancer()
+                self.assertRefus(r, "texte inconnu dans le TLV 28 (diag.tlv) (1 ligne(s), la premiere : 3)")
+                self.assertNotIn(texte, r.stderr)
 
     def test_valeur_illisible_sort_avec_le_seul_numero_de_ligne(self):
         """Une adresse que ipaddress refuse, un hexa abime : la trace d'une exception citerait la valeur. L'outil sort
