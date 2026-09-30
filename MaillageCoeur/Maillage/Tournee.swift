@@ -198,15 +198,19 @@ public enum Tournee {
         guard let route64 else { return (nil, mem) }
         c.routeurs(route64, chef: chef)
         // Routeurs sortis de la liste (routeur disparu, identifiant libere) : leur paire, leurs
-        // echecs, leur pile et leur place de secours sont oublies ; un identifiant reattribue
-        // repart de zero.
+        // echecs, leur pile, leur place de secours et leurs enfants balayes sont oublies ; un
+        // identifiant reattribue repart de zero. Un routeur balaye qui sort change tout de meme
+        // l'ensemble a balayer (`balayeSorti`) : ses enfants ont pu passer sous un autre muet.
         let liste = Set(route64.routeurs)
+        let balayeSorti = !mem.muetsBalayes.isSubset(of: liste)
         mem.identites = mem.identites.filter { liste.contains(Int($0.key >> 10)) }
         mem.echecs = mem.echecs.filter { liste.contains($0.key) }
         mem.muetInterroge = mem.muetInterroge.filter { liste.contains($0.key) }
         mem.dejaRepondu.formIntersection(liste)
         mem.piles = mem.piles.filter { liste.contains($0.key) }
         mem.repondants = mem.repondants.filter { liste.contains($0) }
+        mem.balayes = mem.balayes.filter { liste.contains(Int($0.key >> 10)) }
+        mem.muetsBalayes.formIntersection(liste)
 
         // 2. Chaque routeur, en parallele, sauf un muet deja interroge dans l'heure.
         let aInterroger = route64.routeurs.filter { id in
@@ -299,7 +303,7 @@ public enum Tournee {
         // affiches sous leur parent tant qu'il ne repond pas (ajoutes a la fin, etape 5).
         let aBalayer = muets.filter { mem.estMuet($0) || !mem.dejaRepondu.contains($0) }
         let du = mem.dernierBalayage.map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
-        if du || (!aBalayer.isEmpty && aBalayer != mem.muetsBalayes) {
+        if du || (!aBalayer.isEmpty && (aBalayer != mem.muetsBalayes || balayeSorti)) {
             let routeurs = aBalayer.sorted()
             // Total courant : les numeros prevus de chaque routeur a ce moment (voir `AvancementTournee`).
             var prevues = routeurs.map { numerosPrevus(routeur: $0, dernier: dernierConnu(routeur: $0, sauf: moi), sauf: moi) }

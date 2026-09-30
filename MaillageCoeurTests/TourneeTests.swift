@@ -787,9 +787,10 @@ struct TourneeTests {
     }
 
     /// Routeur sorti de la liste des routeurs (identifiant libere) : ses echecs, sa derniere
-    /// interrogation de muet, son passe de repondant, sa pile et sa place de secours sont oublies
-    /// des que la tournee a la Route64. L'identifiant reattribue repart de zero : interroge tout de
-    /// suite, et non tenu pour un muet deja interroge dans l'heure (Route64 inventee).
+    /// interrogation de muet, son passe de repondant, sa pile, sa place de secours et ses enfants
+    /// balayes sont oublies des que la tournee a la Route64. L'identifiant reattribue repart de
+    /// zero : interroge tout de suite, et non tenu pour un muet deja interroge dans l'heure
+    /// (Route64 et enfant inventes).
     @Test func memoireOublieeHorsDeLaListe() async throws {
         let sonde = try SondeRejouee.capture()
         var mem = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0)).memoire
@@ -798,17 +799,56 @@ struct TourneeTests {
         mem.dejaRepondu.insert(2)
         mem.piles[2] = "SL-OPENTHREAD"
         mem.repondants = [2, 20]
+        mem.balayes[0x0801] = EnfantMaillage(rloc16: 0x0801, extMac: "E0000000000000E2", source: .balayage)
         let seulChef = sonde.filtree { $0 == "6000|5,6" }
         let (_, mem2) = try #require(try await Tournee.complete(seulChef, memoire: mem, maintenant: Self.t0 + 300))
         #expect(mem2.echecs[2] == nil && mem2.muetInterroge[2] == nil && mem2.piles[2] == nil)
         #expect(!mem2.dejaRepondu.contains(2))
         #expect(mem2.repondants == [20], "aucun routeur n'a repondu : les secours d'avant, sans le 2")
+        #expect(mem2.dernierBalayage == Self.t0, "pas de nouveau balayage")
+        #expect(mem2.balayes[0x0801] == nil && mem2.balayes.count == 7, "ses enfants balayes, eux seuls")
 
         let avec2 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([1, 2, 20, 24, 43, 45, 51, 57])])
         let (m3, mem3) = try #require(try await Tournee.complete(avec2, memoire: mem2, maintenant: Self.t0 + 600))
         #expect(await avec2.registre.requetes.contains("0800|0,1,5,16,8,24"), "interroge")
         #expect(mem3.echecs[2] == 1, "premier silence")
         #expect(m3.routeur(2)?.muet == true)
+    }
+
+    /// Le 2, seul routeur balaye, sort de la liste : ses enfants balayes et sa place parmi les
+    /// balayes sont oublies. Son identifiant, reattribue a un routeur muet, n'affiche pas les
+    /// enfants de l'ancien : le nouveau est balaye tout de suite (Route64 et enfant inventes ;
+    /// le 20 et le 24 repondent).
+    @Test func balayesOubliesHorsDeLaListe() async throws {
+        var mem = MemoireTournee()
+        mem.partition = "46CBEBCD"
+        mem.dejaRepondu = [20, 24]
+        mem.balayes[0x0801] = EnfantMaillage(rloc16: 0x0801, extMac: "E0000000000000E2", source: .balayage)
+        mem.muetsBalayes = [2]
+        mem.dernierBalayage = Self.t0 - 60
+        let sans2 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([20, 24])])
+        let (_, mem1) = try #require(try await Tournee.complete(sans2, memoire: mem, maintenant: Self.t0))
+        #expect(mem1.dernierBalayage == Self.t0 - 60, "rien a balayer, pas du")
+        #expect(mem1.balayes.isEmpty && mem1.muetsBalayes.isEmpty)
+
+        let nouveau2 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([2, 20, 24])])
+        let (m2, mem2) = try #require(try await Tournee.complete(nouveau2, memoire: mem1, maintenant: Self.t0 + 300))
+        #expect(m2.enfants(de: 2).isEmpty, "pas les enfants de l'ancien 2")
+        #expect(await nouveau2.registre.requetes.contains("0801|0,1,2,8"), "le nouveau 2 est balaye")
+        #expect(mem2.muetsBalayes == [2] && mem2.dernierBalayage == Self.t0 + 300)
+    }
+
+    /// Un routeur balaye qui sort de la liste change l'ensemble a balayer (spec, section 4) : le
+    /// balayage des autres est refait tout de suite, ses enfants ayant pu passer sous l'un d'eux
+    /// (Route64 inventee, sans le 57).
+    @Test func balayageRefaitQuandUnBalayeSort() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(mem1.muetsBalayes == [1, 43, 45, 51, 57])
+        let sans57 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([1, 20, 24, 43, 45, 51])])
+        let (_, mem2) = try #require(try await Tournee.complete(sans57, memoire: mem1, maintenant: Self.t0 + 300))
+        #expect(await sans57.registre.requetes.contains { $0.hasSuffix("|0,1,2,8") }, "balayage refait")
+        #expect(mem2.dernierBalayage == Self.t0 + 300 && mem2.muetsBalayes == [1, 43, 45, 51])
     }
 
     /// Enfant absent de la table de son parent, qui a repondu : son identite (ExtMac, adresses) et
