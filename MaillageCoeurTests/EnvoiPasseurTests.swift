@@ -67,6 +67,17 @@ struct EnvoiPasseurTests {
         #expect(Self.lire(Data(), par: 1) == .jetonFaux, "fermee sans rien envoyer")
     }
 
+    /// Un jeton attendu vide ne laisse rien passer : une trame dont la premiere ligne est vide est
+    /// un jeton faux, quel que soit son decoupage en paquets.
+    @Test func jetonAttenduVide() {
+        let vide = EnvoiPasseur.trame(jeton: "", json: Self.json)
+        for taille in [1, 1000] {
+            #expect(Self.lire(vide, par: taille, jeton: "") == .jetonFaux, "paquets de \(taille)")
+        }
+        #expect(Self.lire(Data("\n5\nabcde".utf8), par: 1000, jeton: "") == .jetonFaux, "premiere ligne vide, puis 5 octets de JSON")
+        #expect(Self.lire(Data(), par: 1, jeton: "") == .jetonFaux, "fermee sans rien envoyer")
+    }
+
     /// Longueur fausse : illisible, signee, nulle, au-dela de 8 Mo, sans fin de ligne, ou trame
     /// plus courte qu'annoncee. Au-dela de 8 Mo, elle est refusee avant l'arrivee du JSON.
     @Test func longueurFausse() {

@@ -84,7 +84,8 @@ public enum EnvoiPasseur {
             case ligne([UInt8])
         }
 
-        /// Chiffres d'une longueur, au plus (`tailleMax` en a 7).
+        /// Chiffres d'une longueur, au plus (`tailleMax` en a 7). Seize chiffres valent moins de
+        /// 10^16, sous `Int.max` (19 chiffres en 64 bits) : le calcul de `entier` ne deborde pas.
         static let chiffresMax = 16
 
         private let attendu: [UInt8]
@@ -161,7 +162,9 @@ public enum EnvoiPasseur {
         }
 
         /// Comparaison a temps constant : sa duree ne depend pas de la place du premier ecart.
+        /// Jamais vraie face a un jeton attendu vide : il ne laisse rien passer.
         static func egaux(_ a: [UInt8], _ b: [UInt8]) -> Bool {
+            guard !b.isEmpty else { return false }
             guard a.count == b.count else { return false }
             var ecart: UInt8 = 0
             for (x, y) in zip(a, b) { ecart |= x ^ y }
