@@ -196,6 +196,16 @@ struct ProtocoleSondeTests {
         #expect(diags.first { $0.id == 402 }?.erreur == "occupee")
     }
 
+    /// `etat` et `voisins` que la sonde n'a pas pu servir (verrou d'OpenThread refuse) : la commande
+    /// et l'erreur, pour que l'app le dise tout de suite, sans attendre l'echeance.
+    @Test func refusees() {
+        #expect(MessageSonde.lire(Data(#"{"v":1,"t":"etat","erreur":"occupee"}"#.utf8))
+                == .refusee(commande: "etat", erreur: "occupee"))
+        #expect(MessageSonde.lire(Data(#"{"v":1,"t":"voisins","erreur":"occupee"}"#.utf8))
+                == .refusee(commande: "voisins", erreur: "occupee"))
+        #expect(MessageSonde.lire(Data(#"{"v":1,"t":"etat","role":"child"}"#.utf8)) == nil, "ni etat lisible, ni erreur")
+    }
+
     @Test func autres() {
         #expect(MessageSonde.lire(Data(#"{"v":1,"t":"voisins","liste":[{"rloc16":"AC00","ext":"E000000000000007","rssi":-89,"lqi":3,"routeur":true}]}"#.utf8))
                 == .voisins([VoisinSonde(rloc16: "AC00", ext: "E000000000000007", rssi: -89, lqi: 3, routeur: true)]))

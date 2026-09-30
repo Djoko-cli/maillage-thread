@@ -3489,6 +3489,22 @@
         }
       }
     },
+    "la sonde est occupée et n'a pas répondu à « %@ »" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "the probe is busy and did not answer \"%@\""
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "la sonde est occupée et n'a pas répondu à « %@ »"
+          }
+        }
+      }
+    },
     "la sonde ne répond pas à « %@ »" : {
       "localizations" : {
         "en" : {

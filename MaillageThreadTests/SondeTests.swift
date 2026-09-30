@@ -321,15 +321,25 @@ struct SondeUSBTests {
         #expect(try await s.routeurs().count == 3, "une nouvelle table, sans reste de la precedente")
     }
 
-    /// La sonde n'a pas le verrou d'OpenThread (`occupee`) : pas de table, sans attendre le delai.
-    @Test(.timeLimit(.minutes(1))) func routeursOccupee() async throws {
+    /// La sonde n'a pas le verrou d'OpenThread (`occupee`) : `etat`, `voisins` et `routeurs`
+    /// echouent tout de suite en `occupee`, sans attendre le delai, et le message le dit.
+    @Test(.timeLimit(.minutes(1)), arguments: ["etat", "voisins", "routeurs"])
+    func commandeOccupee(_ commande: String) async throws {
         let s = SondeUSB(canal: CanalRejoue { l in
-            l == "routeurs\n" ? [#"{"v":1,"t":"routeurs","erreur":"occupee"}"#] : []
+            l == commande + "\n" ? [#"{"v":1,"t":"\#(commande)","erreur":"occupee"}"#] : []
         })
         try await s.demarrer {}
         let debut = ContinuousClock.now
-        await #expect(throws: SondeUSB.Erreur.sansReponse("routeurs")) { _ = try await s.routeurs() }
+        await #expect(throws: SondeUSB.Erreur.occupee(commande)) {
+            switch commande {
+            case "etat": _ = try await s.etat()
+            case "voisins": _ = try await s.voisins()
+            default: _ = try await s.routeurs()
+            }
+        }
         #expect(ContinuousClock.now - debut < SondeUSB.delaiCommandeUSB)
+        #expect(SondeUSB.Erreur.occupee(commande).localizedDescription
+                == String(localized: "la sonde est occupée et n'a pas répondu à « \(commande) »"))
     }
 
     /// Pas de fin de table dans le delai (la sonde s'arrete apres une ligne `suite`) : `routeurs`
@@ -1176,6 +1186,23 @@ struct SondeMaillageTests {
         #expect(maillages == 0)
         #expect(s.derniereTournee == nil)
         #expect(s.etatSonde == nil)
+    }
+
+    /// `etat` refuse au debut d'une tournee (sonde occupee) : l'erreur de la tournee le dit tout de
+    /// suite, au lieu de « la sonde ne repond pas » au bout de l'echeance.
+    @Test(.timeLimit(.minutes(1))) func etatOccupee() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let canal = CanalRejoue { l in
+            l == "etat\n" ? [#"{"v":1,"t":"etat","erreur":"occupee"}"#] : CanalRejoue.reseauMinimal(l)
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        let debut = ContinuousClock.now
+        await s.connecter(Self.port, choisi: true)
+        await Self.attendre { s.erreurTournee != nil }
+        #expect(s.erreurTournee == SondeUSB.Erreur.occupee("etat").localizedDescription)
+        #expect(ContinuousClock.now - debut < SondeUSB.delaiCommandeUSB)
+        await s.oublier()
     }
 
     /// Age compte depuis la reception : frais jusqu'a 6 min, ancien jusqu'a 15, perime

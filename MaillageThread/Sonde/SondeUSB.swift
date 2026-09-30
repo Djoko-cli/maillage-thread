@@ -77,12 +77,16 @@ actor SondeUSB: InterlocuteurSonde {
         case sansReponse(String)
         /// Ligne `erreur` de la sonde pendant une demande de cle (firmware sans acces reseau...).
         case refusee(String)
+        /// La sonde n'a pas servi `etat`, `voisins` ou `routeurs` (`occupee` : verrou d'OpenThread
+        /// refuse) : elle le dit tout de suite, sans attendre l'echeance.
+        case occupee(String)
 
         var errorDescription: String? {
             switch self {
             case .fermee: String(localized: "liaison avec la sonde fermée")
             case .sansReponse(let commande): String(localized: "la sonde ne répond pas à « \(commande) »")
             case .refusee(let raison): String(localized: "la sonde refuse : \(raison)")
+            case .occupee(let commande): String(localized: "la sonde est occupée et n'a pas répondu à « \(commande) »")
             }
         }
     }
@@ -104,10 +108,11 @@ actor SondeUSB: InterlocuteurSonde {
     /// Jetons des attentes de `bonjour`, `etat`, `routeurs` et `voisins` (jamais envoyes a la sonde).
     private var prochainJeton = 1
     private var attenteDiag: [Int: (cible: UInt16, suite: CheckedContinuation<ResultatDiag, Never>)] = [:]
-    private var attenteEtat = FileAttentes<EtatSonde>()
+    /// `etat`, `routeurs` et `voisins` : la reponse, ou le refus de la sonde (`occupee`).
+    private var attenteEtat = FileAttentes<Result<EtatSonde, Erreur>>()
     private var attenteBonjour = FileAttentes<Bonjour>()
-    private var attenteRouteurs = FileAttentes<[RouteurSonde]>()
-    private var attenteVoisins = FileAttentes<[VoisinSonde]>()
+    private var attenteRouteurs = FileAttentes<Result<[RouteurSonde], Erreur>>()
+    private var attenteVoisins = FileAttentes<Result<[VoisinSonde], Erreur>>()
     /// Parties de la table des routeurs deja recues (lignes `suite`), en attendant la derniere.
     private var routeursRecus: [RouteurSonde] = []
     private var attenteCle: [(id: Int, suite: CheckedContinuation<Result<ReponseCle, Erreur>?, Never>)] = []
@@ -175,11 +180,12 @@ actor SondeUSB: InterlocuteurSonde {
             }
         }
         guard let e else { throw fermee ? Erreur.fermee : Erreur.sansReponse("etat") }
-        return e
+        return try e.get()
     }
 
     /// Table des routeurs, ses lignes `suite` reunies. `sansReponse` si la sonde ne la rend
-    /// pas : delai depasse (firmware sans `routeurs`), ou `occupee` (verrou d'OpenThread).
+    /// pas dans le delai (firmware sans `routeurs`) ; `occupee` tout de suite si elle la refuse
+    /// (verrou d'OpenThread).
     func routeurs() async throws -> [RouteurSonde] {
         guard !fermee else { throw Erreur.fermee }
         let jeton = nouveauJeton()
@@ -192,12 +198,12 @@ actor SondeUSB: InterlocuteurSonde {
             }
         }
         guard let t else { throw fermee ? Erreur.fermee : Erreur.sansReponse("routeurs") }
-        return t
+        return try t.get()
     }
 
-    /// Routeurs voisins que la sonde entend, avec leur signal. `sansReponse` si la sonde ne rend
-    /// pas de liste dans le delai : une ligne `voisins` en erreur (`occupee`, verrou d'OpenThread)
-    /// ou `erreur` (liste trop longue par le reseau) n'est pas une liste.
+    /// Routeurs voisins que la sonde entend, avec leur signal. `occupee` tout de suite si la sonde
+    /// refuse (verrou d'OpenThread) ; `sansReponse` sans liste dans le delai (une ligne `erreur`,
+    /// liste trop longue par le reseau, n'en est pas une).
     func voisins() async throws -> [VoisinSonde] {
         guard !fermee else { throw Erreur.fermee }
         let jeton = nouveauJeton()
@@ -210,7 +216,7 @@ actor SondeUSB: InterlocuteurSonde {
             }
         }
         guard let v else { throw fermee ? Erreur.fermee : Erreur.sansReponse("voisins") }
-        return v
+        return try v.get()
     }
 
     private func nouveauJeton() -> Int {
@@ -269,16 +275,22 @@ actor SondeUSB: InterlocuteurSonde {
     }
 
     /// Partie de la table : gardee jusqu'a la derniere (`suite` faux), qui rend la table entiere
-    /// a la premiere attente ; l'erreur (`occupee`) la libere sans table. Sans attente (reponse
-    /// apres le delai), la table est oubliee.
+    /// a la premiere attente ; l'erreur (`occupee`) la termine tout de suite, sans table. Sans
+    /// attente (reponse apres le delai), la table est oubliee.
     private func recevoirRouteurs(_ p: PartieRouteurs) {
         if p.erreur == nil {
             routeursRecus += p.liste
             guard !p.suite else { return }
         }
-        let table = p.erreur == nil ? routeursRecus : nil
+        let table = routeursRecus
         routeursRecus = []
-        attenteRouteurs.servir(table)
+        attenteRouteurs.servir(p.erreur.map { .failure(Self.refus("routeurs", $0)) } ?? .success(table))
+    }
+
+    /// Erreur d'une commande sans id que la sonde n'a pas servie : `occupee` (verrou d'OpenThread
+    /// refuse), ou une autre raison.
+    private static func refus(_ commande: String, _ erreur: String) -> Erreur {
+        erreur == "occupee" ? .occupee(commande) : .refusee(erreur)
     }
 
     private func expirerDiag(_ id: Int) {
@@ -296,11 +308,15 @@ actor SondeUSB: InterlocuteurSonde {
                 a.suite.resume(returning: r)
             }
         case .etat(let e)?:
-            attenteEtat.servir(e)
+            attenteEtat.servir(.success(e))
         case .routeurs(let p)?:
             recevoirRouteurs(p)
         case .voisins(let v)?:
-            attenteVoisins.servir(v)
+            attenteVoisins.servir(.success(v))
+        case .refusee(commande: "etat", let erreur)?:
+            attenteEtat.servir(.failure(Self.refus("etat", erreur)))
+        case .refusee(commande: "voisins", let erreur)?:
+            attenteVoisins.servir(.failure(Self.refus("voisins", erreur)))
         case .bonjour(let b)?:
             if attenteBonjour.estVide {
                 bonjourSpontane = b

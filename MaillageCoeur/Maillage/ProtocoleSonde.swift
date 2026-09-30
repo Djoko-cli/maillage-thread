@@ -171,6 +171,9 @@ public enum MessageSonde: Hashable, Sendable {
     case routeurs(PartieRouteurs)
     case diag(ResultatDiag)
     case cle(ReponseCle)
+    /// Commande sans id (`etat`, `voisins`) que la sonde n'a pas servie : son nom et l'erreur de la
+    /// ligne (`occupee` : verrou d'OpenThread refuse). `routeurs` porte la sienne dans `PartieRouteurs`.
+    case refusee(commande: String, erreur: String)
     case erreur(String)
     /// Type inconnu (version plus recente de la sonde) : ignore.
     case inconnu(String)
@@ -206,8 +209,12 @@ public enum MessageSonde: Hashable, Sendable {
         guard let e = try? d.decode(Entete.self, from: json), e.v == 1 else { return nil }
         switch e.t {
         case "bonjour": return (try? d.decode(Bonjour.self, from: json)).map { .bonjour($0) }
-        case "etat": return (try? d.decode(EtatSonde.self, from: json)).map { .etat($0) }
-        case "voisins": return (try? d.decode(Voisins.self, from: json)).map { .voisins($0.liste) }
+        case "etat":
+            if let etat = try? d.decode(EtatSonde.self, from: json) { return .etat(etat) }
+            return (try? d.decode(Erreur.self, from: json)).map { .refusee(commande: "etat", erreur: $0.erreur) }
+        case "voisins":
+            if let v = try? d.decode(Voisins.self, from: json) { return .voisins(v.liste) }
+            return (try? d.decode(Erreur.self, from: json)).map { .refusee(commande: "voisins", erreur: $0.erreur) }
         case "routeurs": return (try? d.decode(Routeurs.self, from: json))?.partie.map { .routeurs($0) }
         case "diag": return (try? d.decode(ResultatDiag.self, from: json)).map { .diag($0) }
         case "cle": return (try? d.decode(ReponseCle.self, from: json)).map { .cle($0) }

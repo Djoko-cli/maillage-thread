@@ -216,6 +216,7 @@
   "inconnu": "unknown",
   "isolé (partition coupée)": "isolated (split partition)",
   "joignable": "reachable",
+  "la sonde est occupée et n'a pas répondu à « %@ »": "the probe is busy and did not answer \"%@\"",
   "la sonde ne répond pas à « %@ »": "the probe does not answer “%@”",
   "la sonde ne répond plus (débranchée, redémarrée ou hors de portée ?)": "the probe no longer answers (unplugged, restarted, or out of range?)",
   "la sonde refuse : %@": "the probe refuses: %@",
