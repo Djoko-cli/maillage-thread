@@ -133,6 +133,50 @@ struct SondeRejouee: InterlocuteurSonde {
     }
 }
 
+/// Sonde dont la liaison se ferme a une requete "<cible>|<tlv,...>" : `diag` y echoue par une
+/// erreur, comme `SondeUSB` une fois la liaison fermee.
+struct SondeFermee: InterlocuteurSonde {
+    struct Fermee: Error {}
+
+    let base: SondeRejouee
+    let sur: String
+
+    func etat() async throws -> EtatSonde { try await base.etat() }
+    func routeurs() async throws -> [RouteurSonde] { try await base.routeurs() }
+
+    func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
+        if SondeRejouee.cle(cible, tlv) == sur { throw Fermee() }
+        return try await base.diag(cible, tlv, delaiMs: delaiMs)
+    }
+}
+
+/// Requetes en vol pendant un essai de `parallele` : le maximum atteint, et les requetes parties
+/// que la requete retenue a vues a sa sortie.
+actor EnVol {
+    private(set) var enVol = 0
+    private(set) var maximum = 0
+    private(set) var parties = 0
+    private(set) var vues: Int?
+
+    func partir() {
+        enVol += 1
+        parties += 1
+        maximum = max(maximum, enVol)
+    }
+
+    func revenir() { enVol -= 1 }
+
+    /// Retient la requete jusqu'a ce que `n` soient parties (2 s au plus) ; note celles qu'elle a vues.
+    func retenir(jusqua n: Int) async {
+        var essais = 0
+        while parties < n && essais < 400 {
+            try? await Task.sleep(for: .milliseconds(5))
+            essais += 1
+        }
+        vues = parties
+    }
+}
+
 extension Tournee {
     /// Tournee qui doit rendre un maillage (tests) : le maillage et la memoire ; nil sans maillage.
     static func complete(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,
@@ -326,6 +370,58 @@ struct TourneeTests {
         #expect(await sansTable.registre.requetes == ["6000|5,6"], "le chef seul")
     }
 
+    /// Chef muet et secours sans Route64 : la recherche ne leur redemande pas la liste. Le secours,
+    /// puis le chef muet, puis les autres, chacun une fois : sans table, les 61 autres
+    /// identifiants ; avec la table, d'abord ses autres routeurs.
+    @Test func rechercheSansLesEssais() async throws {
+        var mem = MemoireTournee()
+        mem.partition = "46CBEBCD"
+        mem.echecs[45] = 2
+        mem.repondants = [20]
+        let sansTable = try SondeRejouee.capture(chef: 45, table: nil).filtree { _ in false }
+        let r = try await Tournee.executer(sansTable, memoire: mem, maintenant: Self.t0)
+        #expect(r.maillage == nil)
+        let ids = await sansTable.registre.requetes.compactMap(Self.routeur)
+        #expect(Array(ids.prefix(2)) == [20, 45], "le secours, puis le chef muet")
+        #expect(ids.count == 63 && Set(ids) == Set(0...62), "puis les 61 autres, une fois chacun")
+
+        let avecTable = try SondeRejouee.capture(chef: 45).filtree { _ in false }
+        _ = try await Tournee.executer(avecTable, memoire: mem, maintenant: Self.t0)
+        let ids2 = await avecTable.registre.requetes.compactMap(Self.routeur)
+        #expect(Array(ids2.prefix(2)) == [20, 45])
+        #expect(Set(ids2.dropFirst(2).prefix(5)) == [1, 24, 43, 51, 57], "la table, sans eux")
+        #expect(ids2.count == 63 && Set(ids2) == Set(0...62))
+    }
+
+    /// Sonde dont le chef (45) ne donne pas la Route64, sans table ni autre reponse que les
+    /// Route64 de `listes` (identifiant -> routeurs de sa Route64) ; `lents` : 100 ms plus tard.
+    static func rechercheSeule(_ listes: [Int: [Int]], lents: Set<Int> = []) throws -> SondeRejouee {
+        let cle = { (id: Int) in SondeRejouee.cle(UInt16(id) << 10, Tournee.tlvChef) }
+        let base = try SondeRejouee.capture(chef: 45, table: nil)
+        return SondeRejouee(etatSonde: base.etatSonde,
+                            reponses: Dictionary(uniqueKeysWithValues: listes.map { (cle($0.key), Self.route64($0.value)) }),
+                            table: nil,
+                            retards: Dictionary(uniqueKeysWithValues: lents.map { (cle($0), Duration.milliseconds(100)) }))
+    }
+
+    /// Recherche par groupes de 8 dans l'ordre croissant (sans table) : un routeur qui donne la
+    /// Route64 en 7 l'arrete apres le premier groupe (0 a 7), en 9 apres le second (0 a 15). Dans
+    /// un groupe, celle du plus petit identifiant qui la donne, meme revenue apres une autre (le
+    /// 9, lent, et le 12 ; Route64 inventees).
+    @Test func rechercheParGroupesDe8() async throws {
+        let cas: [(listes: [Int: [Int]], lents: Set<Int>, requetes: Int, routeurs: [Int])] = [
+            ([7: [7, 45]], [], 9, [7, 45]),
+            ([9: [9, 45]], [], 17, [9, 45]),
+            ([9: [9, 45], 12: [12, 45]], [9], 17, [9, 45]),
+        ]
+        for c in cas {
+            let sonde = try Self.rechercheSeule(c.listes, lents: c.lents)
+            let (m, _) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+            #expect(m.routeurs.map(\.id) == c.routeurs, "\(c.listes)")
+            #expect(await sonde.registre.requetes.filter { $0.hasSuffix("|5,6") }.count == c.requetes, "\(c.listes)")
+        }
+    }
+
     /// Echec passager : le 20, qui repond d'habitude, rate une tournee. Muet dans ce
     /// maillage, mais pas balaye ; il l'est au second echec de suite.
     @Test func echecPassager() async throws {
@@ -387,6 +483,24 @@ struct TourneeTests {
         let (m4, mem4) = try #require(try await Tournee.complete(silences, memoire: mem1, maintenant: Self.t0 + 1800))
         #expect(mem4.balayes.isEmpty && mem4.dernierBalayage == Self.t0 + 1800)
         #expect(m4.enfants(de: 43).map(\.source) == [.sonde])
+    }
+
+    /// Routeur muet (43 : silences a 0 et 5 min) : interroge au plus une fois par heure. Pas a
+    /// 5 min + 59 min 59 s, de nouveau a 5 min + 1 h.
+    @Test func muetReinterrogeApresUneHeure() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let (_, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 300))
+        #expect(mem2.estMuet(43) && mem2.muetInterroge[43] == Self.t0 + 300)
+        let avant = await sonde.registre.requetes.count
+        let (_, mem3) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 300 + 3599))
+        let pendant = await sonde.registre.requetes.count
+        let (_, mem4) = try #require(try await Tournee.complete(sonde, memoire: mem3, maintenant: Self.t0 + 300 + 3600))
+        let requetes = await sonde.registre.requetes
+        #expect(!requetes[avant..<pendant].contains("AC00|0,1,5,16,8,24"), "dans l'heure")
+        #expect(mem3.muetInterroge[43] == Self.t0 + 300)
+        #expect(requetes[pendant...].contains("AC00|0,1,5,16,8,24"), "une heure apres")
+        #expect(mem4.muetInterroge[43] == Self.t0 + 3900 && mem4.echecs[43] == 3)
     }
 
     /// TLV (hexa) d'une reponse dont le type est dans `types`, dans leur ordre : une moitie de
@@ -741,7 +855,9 @@ struct TourneeTests {
     }
 
     /// Autre partition (panne, fusion) : les identifiants de routeur y sont
-    /// redistribues ; ce qui etait retenu de l'ancienne ne sert plus.
+    /// redistribues ; ce qui etait retenu de l'ancienne ne sert plus : routeurs qui avaient
+    /// repondu (1 et 43, balayes de nouveau), identites d'enfants et dates de leurs demandes,
+    /// recherche vaine (ExtMac inventees).
     @Test func autrePartition() async throws {
         let sonde = try SondeRejouee.capture()
         var mem = MemoireTournee()
@@ -751,11 +867,22 @@ struct TourneeTests {
         mem.muetInterroge[20] = Self.t0
         mem.dernierBalayage = Self.t0
         mem.muetsBalayes = [1, 43, 45, 51, 57]
+        mem.dejaRepondu = [1, 43]
+        mem.identiteDemandee[0x5001] = Self.t0 + 30
+        mem.identifies[0x6002] = EnfantMaillage(rloc16: 0x6002, extMac: "E0000000000000EF", source: .tableEnfants)
+        mem.rechercheVaine = Self.t0
         let (m, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0 + 60))
         #expect(mem2.partition == "46CBEBCD")
         #expect(m.routeur(45)?.extMac == nil, "B400 : pas l'ExtMac retenu dans l'autre partition")
         #expect(m.routeur(20)?.muet == false, "5000 interroge de nouveau")
         #expect(mem2.dernierBalayage == Self.t0 + 60, "balayage refait")
+        #expect(mem2.dejaRepondu == [20, 24])
+        #expect(mem2.muetsBalayes == [1, 43, 45, 51, 57], "1 et 43 n'ont jamais repondu dans cette partition")
+        #expect(await sonde.registre.requetes.contains("5001|0,8"), "identite redemandee")
+        #expect(mem2.identiteDemandee[0x5001] == Self.t0 + 60)
+        let e = try #require(m.enfants.first { $0.rloc16 == 0x6002 })
+        #expect(e.extMac == nil, "pas l'identite de l'autre partition")
+        #expect(mem2.rechercheVaine == nil)
     }
 
     /// Sonde suspendue (interrupteur eteint dans Maison) : pas de tournee, aucune requete.
@@ -848,6 +975,39 @@ struct TourneeTests {
         #expect(balayage.last == AvancementTournee(etape: .balayage, fait: 56, total: 56))
         #expect(ReleveAvancement.croissants(balayage))
         #expect(await sonde.registre.requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 56)
+    }
+
+    /// `parallele` sur 20 elements, en fenetre glissante : jamais plus de 8 requetes en vol, et
+    /// l'element 0, retenu, n'empeche pas les 19 autres de partir (chaque requete revenue en lance
+    /// une). Resultats dans l'ordre des elements ; `apresChacune` a chaque requete revenue.
+    @Test(.timeLimit(.minutes(1))) func paralleleFenetreGlissante() async throws {
+        let vol = EnVol()
+        var faites: [Int] = []
+        let r = try await Tournee.parallele(Array(0..<20), { e in
+            await vol.partir()
+            if e == 0 { await vol.retenir(jusqua: 20) } else { try await Task.sleep(for: .milliseconds(10)) }
+            await vol.revenir()
+            return ResultatDiag(id: e, cible: "", ok: false, erreur: "delai")
+        }, apresChacune: { n, _, _ in faites.append(n) })
+        #expect(await vol.vues == 20, "tous partis pendant que le 0 etait retenu")
+        #expect(await vol.maximum <= Tournee.enVol)
+        #expect(r.map(\.0) == Array(0..<20) && r.map(\.1.id) == Array(0..<20))
+        #expect(faites == Array(1...20))
+    }
+
+    /// Liaison fermee au milieu d'un groupe (`diag` echoue par une erreur) : `parallele` rend
+    /// l'erreur, et la tournee aussi ; l'appelant garde sa memoire.
+    @Test func erreurAuMilieuDUnGroupe() async throws {
+        await #expect(throws: SondeFermee.Fermee.self) {
+            _ = try await Tournee.parallele(Array(0..<10), { e in
+                if e == 4 { throw SondeFermee.Fermee() }
+                return ResultatDiag(id: e, cible: "", ok: false, erreur: "delai")
+            })
+        }
+        let sonde = SondeFermee(base: try SondeRejouee.capture(), sur: "5000|0,1,5,16,8,24")
+        await #expect(throws: SondeFermee.Fermee.self) {
+            _ = try await Tournee.executer(sonde, memoire: MemoireTournee(), maintenant: Self.t0)
+        }
     }
 
     /// Sonde pas encore dans le reseau.
