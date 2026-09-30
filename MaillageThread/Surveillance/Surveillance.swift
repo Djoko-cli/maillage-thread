@@ -500,8 +500,16 @@ final class Surveillance {
         evenements.last { $0.type == .reseauScinde && $0.reseau == r.id }
     }
 
-    /// 5 derniers evenements d'un noeud, du plus recent au plus ancien.
+    /// 5 derniers evenements d'un noeud, du plus recent au plus ancien. Un evenement qui porte
+    /// l'ExtMac d'un enfant (`details["extMac"]`) est le sien si c'est celle du noeud : l'id du
+    /// sujet d'un enfant sans appareil (« rloc:XXXX ») change avec son parent. Sinon (evenement
+    /// plus ancien, noeud sans ExtMac), l'id du sujet.
     func evenements(de id: String) -> [Evenement] {
-        Array(evenements.reversed().filter { $0.sujet?.id == id }.prefix(5))
+        let ext = cleHistorique(noeud: id)
+        func concerne(_ e: Evenement) -> Bool {
+            if let x = e.details["extMac"], let ext { return x == ext }
+            return e.sujet?.id == id
+        }
+        return Array(evenements.reversed().filter(concerne).prefix(5))
     }
 }

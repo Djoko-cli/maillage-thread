@@ -63,7 +63,8 @@ public enum Regroupement {
             .map(\.element)
         var lignes: [LigneJournal] = []
         var groupe: [Evenement] = []
-        // Changements de parent en cours de regroupement, par noeud.
+        // Changements de parent en cours de regroupement, par noeud : son ExtMac si l'evenement la
+        // donne (l'id du sujet d'un enfant sans appareil change avec son parent), sinon l'id du sujet.
         var parents: [String: [Evenement]] = [:]
         func fermer() {
             if groupe.count >= 2 {
@@ -85,7 +86,7 @@ public enum Regroupement {
             if estPerte(e) {
                 if let premiere = groupe.first, e.date.timeIntervalSince(premiere.date) >= fenetre { fermer() }
                 groupe.append(e)
-            } else if e.type == .parentChange, let noeud = e.sujet?.id {
+            } else if e.type == .parentChange, let noeud = e.details["extMac"] ?? e.sujet?.id {
                 if let premier = parents[noeud]?.first, e.date.timeIntervalSince(premier.date) >= fenetreParents {
                     fermerParents(noeud)
                 }

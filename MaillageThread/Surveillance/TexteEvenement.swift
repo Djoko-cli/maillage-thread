@@ -15,6 +15,17 @@ enum TexteEvenement {
         return e.date.formatted(date: .abbreviated, time: .shortened)
     }
 
+    /// Quand d'une ligne du journal : celui de l'evenement, du premier d'un groupe de pertes (leur
+    /// titre donne « entre … et … ») ou du dernier changement d'une ligne de changements de parent
+    /// (la ligne est classee a sa date, et son titre ne donne aucune heure).
+    static func quand(_ l: LigneJournal) -> String {
+        switch l {
+        case .evenement(let e): quand(e)
+        case .pertes(let g): g.first.map(quand) ?? ""
+        case .parents(let g): g.last.map(quand) ?? ""
+        }
+    }
+
     static func role(_ brut: String?) -> String {
         switch brut.flatMap(RoleThread.init(rawValue:)) {
         case .chef?: String(localized: "chef")
@@ -91,7 +102,8 @@ enum TexteEvenement {
             let fin = heure(p.last?.date ?? .distantPast)
             return String(localized: "\(p.count) appareils perdus entre \(debut) et \(fin)")
         case .parents(let p):
-            let nom = p.first?.sujet?.nom ?? ""
+            // Le dernier nom connu : le nom d'un noeud peut changer d'un changement a l'autre.
+            let nom = p.last?.sujet?.nom ?? ""
             return String(localized: "\(nom) a changé \(p.count) fois de parent en 1 h")
         }
     }

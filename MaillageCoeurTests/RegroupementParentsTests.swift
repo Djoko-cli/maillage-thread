@@ -28,6 +28,30 @@ struct RegroupementParentsTests {
         #expect(lignes[2].evenements.first?.sujet?.id == "y")
     }
 
+    /// Evenement d'un enfant identifie : `details["extMac"]` le designe, meme quand son id de sujet
+    /// (« rloc:XXXX ») change avec son parent.
+    static func parent(_ minutes: Double, sujet: String, extMac: String?) -> Evenement {
+        Evenement(date: t0.addingTimeInterval(minutes * 60), type: .parentChange, sujet: Sujet(id: sujet, nom: sujet),
+                  avant: "A", apres: "B", details: extMac.map { ["extMac": $0] } ?? [:])
+    }
+
+    /// Avec une ExtMac, elle fait la cle : le meme enfant sous deux ids de sujet est une ligne, deux
+    /// enfants sous un meme id de sujet sont deux lignes. Sans ExtMac (evenements deja ecrits), l'id
+    /// du sujet reste la cle.
+    @Test func cleParExtMac() {
+        let b1 = "E0000000000000B1", b2 = "E0000000000000B2"
+        let memeEnfant = Regroupement.lignes([Self.parent(0, sujet: "rloc:0401", extMac: b1),
+                                              Self.parent(5, sujet: "rloc:0801", extMac: b1)])
+        #expect(memeEnfant.map(\.evenements.count) == [2])
+        let deuxEnfants = Regroupement.lignes([Self.parent(0, sujet: "rloc:0401", extMac: b1),
+                                               Self.parent(5, sujet: "rloc:0401", extMac: b2)])
+        #expect(deuxEnfants.map(\.evenements.count) == [1, 1])
+        let anciens = Regroupement.lignes([Self.parent(0, sujet: "rloc:0401", extMac: nil),
+                                           Self.parent(5, sujet: "rloc:0401", extMac: nil),
+                                           Self.parent(6, sujet: "rloc:0801", extMac: nil)])
+        #expect(anciens.map(\.evenements.count) == [1, 2], "l'ancien regroupement, par id de sujet")
+    }
+
     /// Les pertes restent regroupees a part, et les autres evenements passent tels quels.
     @Test func pertesInchangees() {
         let perte = { (minutes: Double, id: String) in

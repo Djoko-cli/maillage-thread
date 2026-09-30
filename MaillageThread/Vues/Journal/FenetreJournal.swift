@@ -37,7 +37,8 @@ enum FamilleEvenement: String, CaseIterable, Identifiable {
     }
 }
 
-/// Filtre du journal : famille, gravite minimale, recherche dans le titre et le sujet.
+/// Filtre du journal : famille, gravite minimale, recherche dans le titre, le sujet et les noms
+/// « avant » et « apres » (les parents d'un changement de parent regroupe ne sont pas dans son titre).
 struct FiltreJournal: Equatable {
     var famille: FamilleEvenement = .toutes
     var graviteMinimale: Gravite = .info
@@ -51,7 +52,9 @@ struct FiltreJournal: Equatable {
             guard !r.isEmpty else { return true }
             return TexteEvenement.titre(l).localizedCaseInsensitiveContains(r)
                 || ev.contains { ($0.sujet?.id ?? "").localizedCaseInsensitiveContains(r)
-                    || ($0.sujet?.nom ?? "").localizedCaseInsensitiveContains(r) }
+                    || ($0.sujet?.nom ?? "").localizedCaseInsensitiveContains(r)
+                    || ($0.avant ?? "").localizedCaseInsensitiveContains(r)
+                    || ($0.apres ?? "").localizedCaseInsensitiveContains(r) }
         }
     }
 }
@@ -105,7 +108,7 @@ struct LigneJournalVue: View {
                         .foregroundStyle(.secondary)
                 }
             } label: {
-                contenu(TexteEvenement.titre(ligne), quand: groupe.first.map(TexteEvenement.quand) ?? "",
+                contenu(TexteEvenement.titre(ligne), quand: TexteEvenement.quand(ligne),
                         gravite: ligne.gravite)
             }
         }

@@ -97,6 +97,34 @@ struct JournalMaillageTests {
         #expect(e.apres == String(localized: "Routeur · \("1400")"))
     }
 
+    /// Enfant que le graphe ne rapproche d'aucun appareil : son id de sujet est « rloc:XXXX », qui
+    /// change avec son parent. Sa fiche montre tous ses changements de parent, pas seulement ceux
+    /// de son RLOC16 du moment : l'ExtMac, dans les details, les relie.
+    @Test func ficheDUnEnfantSansAppareil() throws {
+        let s = Self.surveillance(dossier: nil)
+        let t = Date()
+        let inconnu = "E0000000000000B1"
+        let maillage = { (date: Date, parent: Int) throws -> Maillage in
+            var c = ConstructionMaillage(date: date, partition: try #require(s.reseau?.principale?.id))
+            c.routeurs(Route64(sequence: 1, routes: [1, 5].map { RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1) }),
+                       chef: 1)
+            c.enfant(EnfantMaillage(rloc16: UInt16(parent) << 10 | 2, extMac: inconnu, qualite: 3, source: .tableEnfants))
+            return c.maillage()
+        }
+        // Sous 1, puis sous 5, puis sous 1 : deux changements, sous deux ids de sujet.
+        for (minutes, parent) in [(0.0, 1), (5, 5), (10, 1)] {
+            s.recevoir(try maillage(t.addingTimeInterval(minutes * 60), parent), a: t.addingTimeInterval(minutes * 60))
+        }
+        let changements = s.evenements.filter { $0.type == .parentChange }
+        #expect(changements.count == 2)
+        #expect(changements.allSatisfy { $0.sujet?.id.hasPrefix("rloc:") == true && $0.details["extMac"] == inconnu },
+                "aucun appareil : id « rloc: », ExtMac dans les details")
+        #expect(Set(changements.compactMap(\.sujet?.id)).count == 2, "l'id du sujet change avec le parent")
+        let noeud = String(format: "rloc:%04X", UInt16(1 << 10 | 2))
+        #expect(s.evenements(de: noeud) == changements.reversed(), "tous ses changements, le plus recent d'abord")
+        #expect(s.evenements(de: "rloc:ABCD").isEmpty)
+    }
+
     /// Demo : ni releve en memoire, ni fichier, meme avec un dossier ; le journal du maillage reste
     /// en memoire. Direct sans dossier : l'historique en memoire seulement.
     @Test func rienSurDisqueEnDemo() throws {

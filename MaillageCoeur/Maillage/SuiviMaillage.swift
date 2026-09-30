@@ -17,7 +17,9 @@ public struct SujetsMaillage: Sendable {
 /// de la sonde, section 6), tous de la categorie « Autres changements » (pas de notification par
 /// defaut) :
 /// - un enfant identifie (ExtMac) vu sous un autre parent : « X a change de parent : A → B ». Un
-///   enfant sans ExtMac n'est pas suivi : son RLOC16 change avec son parent ;
+///   enfant sans ExtMac n'est pas suivi : son RLOC16 change avec son parent. L'ExtMac de l'enfant
+///   est dans `details["extMac"]` de ses evenements : son id de sujet, lui, peut changer avec son
+///   parent (« rloc:XXXX » pour un enfant que le graphe ne rapproche d'aucun appareil) ;
 /// - un enfant identifie absent de deux observations ou son absence est sure : « X n'a plus de
 ///   parent ». Elle l'est si son dernier parent a repondu (sa table des enfants est fraiche) ou
 ///   s'il a quitte la liste des routeurs : une absence par tournee. Elle l'est aussi si l'enfant
@@ -83,7 +85,8 @@ public struct SuiviMaillage: Sendable {
             let parent = sujet(routeur: e.parent)
             let s = sujets.enfants[e.rloc16] ?? Sujet(id: String(format: "rloc:%04X", e.rloc16), nom: ext)
             if let avant = enfants[ext], avant.parent != e.parent {
-                ev.append(Evenement(date: m.date, type: .parentChange, sujet: s, avant: avant.nomParent, apres: parent.nom))
+                ev.append(Evenement(date: m.date, type: .parentChange, sujet: s, avant: avant.nomParent, apres: parent.nom,
+                                    details: ["extMac": ext]))
             }
             enfants[ext] = EtatEnfant(parent: e.parent, nomParent: parent.nom, sujet: s, source: e.source)
         }
@@ -106,7 +109,8 @@ public struct SuiviMaillage: Sendable {
             e.absences += 1
             if e.absences >= Self.absencesAvantPerte {
                 e.perdu = true
-                ev.append(Evenement(date: m.date, type: .sansParent, sujet: e.sujet, avant: e.nomParent))
+                ev.append(Evenement(date: m.date, type: .sansParent, sujet: e.sujet, avant: e.nomParent,
+                                    details: ["extMac": ext]))
             }
             enfants[ext] = e
         }

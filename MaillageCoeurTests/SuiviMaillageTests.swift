@@ -50,6 +50,69 @@ struct SuiviMaillageTests {
 
     static let b1 = "E0000000000000B1"
 
+    /// Comme l'app pour un enfant que le graphe ne rapproche d'aucun appareil : son id de sujet est
+    /// « rloc:XXXX », donc il change avec son parent.
+    static func sujetsRloc(_ m: Maillage) -> SujetsMaillage {
+        var s = sujets(m)
+        for e in m.enfants {
+            s.enfants[e.rloc16] = Sujet(id: String(format: "rloc:%04X", e.rloc16), nom: "N-" + (e.extMac ?? "?"))
+        }
+        return s
+    }
+
+    /// Evenements regroupes pour l'affichage, d'un suivi dont les enfants ont un sujet « rloc: ».
+    static func lignes(_ maillages: [Maillage]) -> [LigneJournal] {
+        var suivi = SuiviMaillage()
+        return Regroupement.lignes(maillages.flatMap { suivi.integrer($0, sujets: sujetsRloc($0)) })
+    }
+
+    /// L'ExtMac de l'enfant est dans les details des evenements qui parlent de lui : c'est elle
+    /// qui le designe quand son id de sujet (« rloc:XXXX ») change avec son parent.
+    @Test func extMacDansLesDetails() throws {
+        let b2 = "E0000000000000B2"
+        let ev = Self.suivre([
+            Self.maillage(0, enfants: [Enfant(rloc16: 0x0401, ext: Self.b1), Enfant(rloc16: 0x0402, ext: b2)]),
+            Self.maillage(5, enfants: [Enfant(rloc16: 0x0801, ext: Self.b1)]),
+            Self.maillage(10, enfants: [Enfant(rloc16: 0x0801, ext: Self.b1)]),
+        ])
+        #expect(ev[1].map(\.type) == [.parentChange])
+        #expect(ev[1].first?.details["extMac"] == Self.b1)
+        #expect(ev[2].map(\.type) == [.sansParent])
+        #expect(ev[2].first?.details["extMac"] == b2)
+    }
+
+    /// Un enfant sans appareil (id de sujet « rloc: ») qui fait A → B → A → B dans l'heure : une
+    /// seule ligne regroupee, malgre les deux ids de sujet.
+    @Test func unEnfantQuiOscilleFaitUneLigne() {
+        let sous = { (minutes: Double, rloc: UInt16) in
+            Self.maillage(minutes, routeurs: [0, 1, 2], enfants: [Enfant(rloc16: rloc, ext: Self.b1)])
+        }
+        let lignes = Self.lignes([sous(0, 0x0401), sous(5, 0x0802), sous(10, 0x0401), sous(15, 0x0802)])
+        #expect(lignes.count == 1)
+        guard case .parents(let groupe)? = lignes.first else {
+            Issue.record("les trois changements regroupes en une ligne")
+            return
+        }
+        #expect(groupe.count == 3)
+    }
+
+    /// Deux enfants d'ExtMac differentes qui passent tour a tour par le meme RLOC16 (donc le meme
+    /// id de sujet « rloc: ») ne sont pas regroupes : B1 change deux fois de parent (une ligne de
+    /// deux), B2 une fois (sa ligne, a part, plus recente).
+    @Test func deuxEnfantsSurLeMemeRloc() {
+        let b2 = "E0000000000000B2"
+        let routeurs = [0, 1, 2, 3]
+        let lignes = Self.lignes([
+            Self.maillage(0, routeurs: routeurs, enfants: [Enfant(rloc16: 0x0401, ext: Self.b1), Enfant(rloc16: 0x0C01, ext: b2)]),
+            Self.maillage(5, routeurs: routeurs, enfants: [Enfant(rloc16: 0x0801, ext: Self.b1), Enfant(rloc16: 0x0C01, ext: b2)]),
+            Self.maillage(10, routeurs: routeurs, enfants: [Enfant(rloc16: 0x0C02, ext: Self.b1), Enfant(rloc16: 0x0C01, ext: b2)]),
+            Self.maillage(15, routeurs: routeurs, enfants: [Enfant(rloc16: 0x0C02, ext: Self.b1), Enfant(rloc16: 0x0801, ext: b2)]),
+        ])
+        #expect(lignes.map(\.evenements.count) == [1, 2])
+        #expect(lignes[0].evenements.map { $0.details["extMac"] } == [b2])
+        #expect(lignes[1].evenements.map { $0.details["extMac"] } == [Self.b1, Self.b1])
+    }
+
     /// Le premier maillage est un point de depart ; le meme ensuite ne dit rien.
     @Test func pointDeDepart() {
         let m = Self.maillage(0, enfants: [Enfant(rloc16: 0x0401, ext: Self.b1)])

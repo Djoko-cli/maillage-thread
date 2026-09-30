@@ -62,6 +62,22 @@ struct TexteEvenementTests {
                 == String(localized: "\("Prise bureau") a changé \(n) fois de parent en 1 h"))
     }
 
+    /// Une ligne de changements de parent regroupes porte l'heure et le nom du dernier changement
+    /// (celui qui la classe dans le journal), pas ceux du premier.
+    @Test func parentsRegroupesDuDernierChangement() {
+        let avant = Evenement(date: ScenarioPanne.date(4, 14), type: .parentChange,
+                              sujet: Sujet(id: "rloc:0401", nom: "Ancien nom"), avant: "A", apres: "B")
+        let apres = Evenement(date: ScenarioPanne.date(4, 14).addingTimeInterval(52 * 60), type: .parentChange,
+                              sujet: Sujet(id: "rloc:0801", nom: "Nouveau nom"), avant: "B", apres: "A")
+        let ligne = LigneJournal.parents([avant, apres])
+        #expect(TexteEvenement.quand(ligne) == TexteEvenement.quand(apres))
+        #expect(TexteEvenement.quand(ligne) != TexteEvenement.quand(avant))
+        let n = 2
+        #expect(TexteEvenement.titre(ligne) == String(localized: "\("Nouveau nom") a changé \(n) fois de parent en 1 h"))
+        let seul = Evenement(date: ScenarioPanne.date(4, 14), type: .appareilNouveau, sujet: Sujet(id: "x", nom: "X"))
+        #expect(TexteEvenement.quand(LigneJournal.evenement(seul)) == TexteEvenement.quand(seul))
+    }
+
     /// Point de depart d'un reseau vu apres le lancement : le reseau est nomme.
     @Test func departDUnReseau() {
         let t = ScenarioPanne.date(4, 14)
