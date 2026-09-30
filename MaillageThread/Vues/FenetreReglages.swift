@@ -119,24 +119,7 @@ struct FenetreReglages: View {
                             Text(note).font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    if let e = sonde.etatSonde {
-                        LabeledContent("Partition", value: e.partition ?? "—")
-                        if e.suspendue {
-                            Text("Sonde suspendue dans Maison (interrupteur « Sonde maillage » éteint) : pas de relevé.")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                    if let a = sonde.avancement, let debut = sonde.debutTournee {
-                        TimelineView(.periodic(from: debut, by: 1)) { contexte in
-                            LabeledContent("Tournée", value: TexteTournee.reglages(a, debut: debut, maintenant: contexte.date))
-                        }
-                    } else if let d = sonde.derniereTournee {
-                        LabeledContent("Dernier relevé", value: d.formatted(date: .omitted, time: .standard))
-                    }
-                    if let e = sonde.erreurTournee {
-                        Text(e).font(.caption).foregroundStyle(.red)
-                    }
+                    ReleveSonde()
                     // Le nom d'hote reste apres un oubli dont la cle n'a pas pu etre effacee.
                     if sonde.serie != nil || sonde.hote != nil {
                         AccesReseauSonde()
@@ -211,6 +194,12 @@ struct FenetreReglages: View {
     /// Nom d'hote vise par la liaison reseau : « 0123456789ABCDEF.local ».
     static func texteHote(_ hote: String?) -> String {
         hote.map { "\($0).local" } ?? "—"
+    }
+
+    /// « Dernier relevé » de la sonde : la date et l'heure (la sonde peut rester des jours sans
+    /// relever), comme le dernier releve du reseau local (section Diagnostic).
+    static func texteDernierReleve(_ d: Date) -> String {
+        d.formatted(date: .abbreviated, time: .standard)
     }
 
     /// Etat de la sonde, precede du nom de la sonde retenue quand il la concerne
@@ -307,6 +296,36 @@ struct DernierePerteSonde: View {
                 LabeledContent("Dernière perte", value: FicheNoeud.relatif(perte.date, contexte.date))
             }
             Text(perte.cause).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Releve de la sonde (Reglages › Sonde) : partition et suspension (`etat` de la sonde), tournee
+/// en cours ou dernier releve, erreur de la derniere tournee. Seulement la sonde connectee :
+/// debranchee, en reprise ou pendant une connexion, ces lignes seraient perimees.
+struct ReleveSonde: View {
+    @Environment(SondeMaillage.self) private var sonde
+
+    var body: some View {
+        if case .connectee = sonde.etat {
+            if let e = sonde.etatSonde {
+                LabeledContent("Partition", value: e.partition ?? "—")
+                if e.suspendue {
+                    Text("Sonde suspendue dans Maison (interrupteur « Sonde maillage » éteint) : pas de relevé.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+            if let a = sonde.avancement, let debut = sonde.debutTournee {
+                TimelineView(.periodic(from: debut, by: 1)) { contexte in
+                    LabeledContent("Tournée", value: TexteTournee.reglages(a, debut: debut, maintenant: contexte.date))
+                }
+            } else if let d = sonde.derniereTournee {
+                LabeledContent("Dernier relevé", value: FenetreReglages.texteDernierReleve(d))
+            }
+            if let e = sonde.erreurTournee {
+                Text(e).font(.caption).foregroundStyle(.red)
+            }
         }
     }
 }

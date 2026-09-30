@@ -93,6 +93,8 @@ final class SondeMaillage {
     /// Appele au debut (vrai) et a la fin (faux) de chaque tournee : pendant une
     /// tournee, le maillage affiche n'est pas « ancien ».
     @ObservationIgnored var surTournee: ((Bool) -> Void)?
+    /// Appele quand la sonde est oubliee : son maillage part du graphe.
+    @ObservationIgnored var surOubli: (() -> Void)?
 
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let actif: Bool
@@ -248,10 +250,11 @@ final class SondeMaillage {
     }
 
     /// Oublie la sonde retenue (numero de serie, nom, nom d'hote, cle de ce Mac pour elle :
-    /// la sonde garde la sienne) et ferme la liaison ; retour a l'USB. L'etat change tout de
-    /// suite, avant toute attente ; la cle s'efface ensuite hors de l'acteur principal, et le nom
-    /// d'hote part avec elle. Si le trousseau refuse d'effacer la cle, l'echec est montre et le
-    /// nom d'hote reste (comme la cle) : « Oublier » peut etre relance.
+    /// la sonde garde la sienne), son releve (etat, dernier releve, erreur de tournee) et son
+    /// maillage dans le graphe (`surOubli`), et ferme la liaison ; retour a l'USB. L'etat change
+    /// tout de suite, avant toute attente ; la cle s'efface ensuite hors de l'acteur principal, et
+    /// le nom d'hote part avec elle. Si le trousseau refuse d'effacer la cle, l'echec est montre
+    /// et le nom d'hote reste (comme la cle) : « Oublier » peut etre relance.
     func oublier() async {
         preferences.removeObject(forKey: Self.cleSerie)
         serie = nil
@@ -261,6 +264,10 @@ final class SondeMaillage {
         preferences.removeObject(forKey: Self.cleLiaison)
         reprise?.cancel()
         dernierePerte = nil
+        etatSonde = nil
+        derniereTournee = nil
+        erreurTournee = nil
+        surOubli?()
         deconnecter(.sansSonde)
         guard let h = hote else { return }
         let t = trousseau
@@ -638,10 +645,15 @@ final class SondeMaillage {
     }
 
     /// Corps de `uneTournee` : ses erreurs sont retenues ici, sauf la liaison fermee (`liaisonFermee`).
+    /// Rien n'est retenu d'une tournee dont la liaison n'est plus celle de la sonde (oubliee,
+    /// debranchee, reconnectee) : une reponse arrivee apres l'oubli ne remet ni releve ni maillage.
     private func executerTournee(_ sonde: SondeUSB, suivi: @escaping @Sendable (AvancementTournee) -> Void) async {
         do {
-            etatSonde = try await sonde.etat()
+            let e = try await sonde.etat()
+            guard sonde === self.sonde else { return }
+            etatSonde = e
             let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge(), avancement: suivi)
+            guard sonde === self.sonde else { return }
             // Meme sans maillage (pas de liste des routeurs), les identites apprises sont gardees.
             memoire = r.memoire
             garderIdentites()
@@ -654,6 +666,7 @@ final class SondeMaillage {
         } catch SondeUSB.Erreur.fermee {
             // La liaison est fermee : `liaisonFermee` s'en occupe.
         } catch {
+            guard sonde === self.sonde else { return }
             erreurTournee = error.localizedDescription
         }
     }

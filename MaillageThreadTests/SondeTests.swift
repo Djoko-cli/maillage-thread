@@ -14,8 +14,12 @@ final class CanalRejoue: CanalSonde {
 
     private let etat = Mutex(Etat())
     let repondre: @Sendable (String) -> [String]
+    /// Fin du flux differee apres `fermer`, comme la liaison serie qui ferme le port sur sa file :
+    /// d'ici la, les commandes ont encore leurs reponses.
+    let fermetureDifferee: Duration?
 
-    init(repondre: @escaping @Sendable (String) -> [String]) {
+    init(fermetureDifferee: Duration? = nil, repondre: @escaping @Sendable (String) -> [String]) {
+        self.fermetureDifferee = fermetureDifferee
         self.repondre = repondre
     }
 
@@ -41,7 +45,14 @@ final class CanalRejoue: CanalSonde {
     }
 
     func fermer() {
-        etat.withLock { $0.suite?.finish() }
+        guard let d = fermetureDifferee else {
+            etat.withLock { $0.suite?.finish() }
+            return
+        }
+        Task { [self] in
+            try? await Task.sleep(for: d)
+            etat.withLock { $0.suite?.finish() }
+        }
     }
 
     var envoyes: [String] { etat.withLock { $0.envoyes } }
@@ -993,6 +1004,89 @@ struct SondeMaillageTests {
         #expect(s.avancement == nil)
         #expect(s.debutTournee == nil)
         #expect(s.erreurTournee == nil)
+    }
+
+    /// « Oublier la sonde » efface son releve : etat de la sonde (partition, suspension), dernier
+    /// releve et erreur de tournee ne restent pas apres elle.
+    @Test(.timeLimit(.minutes(1))) func oublierEffaceLeReleve() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        // Une premiere tournee complete ; ensuite `etat` reste sans reponse (erreur de tournee a 3 s).
+        let muette = Mutex(false)
+        let canal = CanalRejoue { l in
+            l == "etat\n" && muette.withLock({ $0 }) ? [] : CanalRejoue.reseauMinimal(l)
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        await s.connecter(Self.port, choisi: true)
+        await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        muette.withLock { $0 = true }
+        s.rafraichir()
+        await Self.attendre { s.erreurTournee != nil }
+        #expect(s.etatSonde != nil && s.derniereTournee != nil)
+        await s.oublier()
+        #expect(s.etatSonde == nil)
+        #expect(s.derniereTournee == nil)
+        #expect(s.erreurTournee == nil)
+    }
+
+    /// « Oublier la sonde » retire aussi son maillage du graphe, branche comme dans l'app
+    /// (`surOubli`) : retour aux pointilles tout de suite, sans attendre qu'il soit perime.
+    @Test(.timeLimit(.minutes(1))) func oublierRetireLeMaillage() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let surveillance = Surveillance(mode: .direct, dossier: nil)
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in CanalRejoue { CanalRejoue.reseauMinimal($0) } })
+        s.surMaillage = { m, recu in surveillance.recevoir(m, a: recu) }
+        s.surOubli = { surveillance.oublierMaillage() }
+        await s.connecter(Self.port, choisi: true)
+        await Self.attendre { surveillance.maillage != nil }
+        #expect(surveillance.fraicheurMaillage(a: Date()) == .frais)
+        await s.oublier()
+        #expect(surveillance.maillage == nil)
+        #expect(surveillance.fraicheurMaillage(a: Date()) == nil)
+    }
+
+    /// « Oublier » pendant que la reponse a `etat` de la tournee est en route : arrivee apres
+    /// l'oubli (avant la fin du flux), elle ne remet pas l'etat de la sonde.
+    @Test(.timeLimit(.minutes(1))) func etatRecuApresLOubli() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        // `etat` ne repond que quand le test le rend.
+        let canal = CanalRejoue { l in
+            journal.noter(l.trimmingCharacters(in: .newlines))
+            return l == "etat\n" ? [] : CanalRejoue.reseauMinimal(l)
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        await s.connecter(Self.port, choisi: true)
+        await journal.attendre("etat")
+        await s.oublier()
+        canal.emettre([CanalRejoue.etatAttache])
+        await Self.attendre { !s.tourneeEnCours }
+        #expect(s.etatSonde == nil)
+    }
+
+    /// « Oublier » pendant une tournee : la liaison met un instant a se fermer et la tournee
+    /// aboutit entre-temps ; ni dernier releve ni maillage ne reviennent apres l'oubli.
+    @Test(.timeLimit(.minutes(1))) func tourneeFinieApresLOubli() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        let canal = CanalRejoue(fermetureDifferee: .seconds(2)) { l in
+            journal.noter(l.trimmingCharacters(in: .newlines))
+            return l.hasPrefix("diag 0000 5,6 ") ? [] : CanalRejoue.reseauMinimal(l)
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        var maillages = 0
+        s.surMaillage = { _, _ in maillages += 1 }
+        await s.connecter(Self.port, choisi: true)
+        await journal.attendre(Self.listeRetenue)
+        await s.oublier()
+        canal.emettre(CanalRejoue.reseauMinimal(Self.listeRetenue + "\n"))
+        await Self.attendre { !s.tourneeEnCours }
+        #expect(maillages == 0)
+        #expect(s.derniereTournee == nil)
+        #expect(s.etatSonde == nil)
     }
 
     /// Age compte depuis la reception : frais jusqu'a 6 min, ancien jusqu'a 15, perime

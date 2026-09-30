@@ -666,6 +666,32 @@ struct SondeReseauTests {
         #expect(FenetreReglages.texteHote(nil) == "—")
     }
 
+    /// Reglages › Sonde : « Dernier relevé » donne la date avec l'heure (la sonde peut rester des
+    /// jours sans relever).
+    @Test func texteDernierReleve() {
+        let d = Date(timeIntervalSince1970: 1_790_000_000)
+        let texte = FenetreReglages.texteDernierReleve(d)
+        #expect(texte.contains(d.formatted(.dateTime.year())), "la date : \(texte)")
+        #expect(texte.contains(d.formatted(date: .omitted, time: .standard)), "l'heure : \(texte)")
+    }
+
+    /// Reglages › Sonde : partition, suspension, dernier releve et erreur de la tournee seulement
+    /// pour la sonde connectee ; debranchee, ces lignes perimees ne restent pas.
+    @Test(.timeLimit(.minutes(1))) func releveSeulementConnectee() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let s = Self.sondeMaillage(p, usb: { _ in CanalRejoue { CanalRejoue.reseauMinimal($0) } }, trousseau: TrousseauMemoire())
+        func hauteur() -> CGFloat { NSHostingView(rootView: ReleveSonde().environment(s)).fittingSize.height }
+        await s.connecter(Self.port, choisi: true)
+        await SondeMaillageTests.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        #expect(s.etatSonde != nil)
+        #expect(hauteur() > 0, "connectee : partition et dernier releve")
+        s.portsChanges([])
+        #expect(s.etat == .absente)
+        #expect(hauteur() == 0, "debranchee")
+        await s.oublier()
+    }
+
     /// Reglages › Sonde : le bouton de l'acces reseau dit ce qu'il fera : autoriser sans cle,
     /// regenerer une cle ensuite (demande de Djoko : le bouton reste actif apres l'autorisation).
     @Test func titreBoutonAcces() {

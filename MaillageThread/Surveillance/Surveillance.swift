@@ -170,6 +170,13 @@ final class Surveillance {
         maillageRecu = date
     }
 
+    /// Sonde oubliee (`SondeMaillage.surOubli`) : son maillage part tout de suite, sans attendre
+    /// qu'il soit perime ; le graphe revient aux pointilles.
+    func oublierMaillage() {
+        maillage = nil
+        maillageRecu = nil
+    }
+
     /// Veille du Mac (appele au reveil).
     func noterVeille(debut: Date, fin: Date) {
         ajouter(suivi.noterVeille(DateInterval(start: debut, end: max(fin, debut))))
