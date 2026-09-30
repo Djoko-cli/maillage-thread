@@ -342,6 +342,25 @@ struct SondeUSBTests {
                 == String(localized: "la sonde est occupée et n'a pas répondu à « \(commande) »"))
     }
 
+    /// La sonde refuse `etat`, `voisins` ou `routeurs` pour une autre raison que `occupee` : l'erreur
+    /// est `refusee`, avec la raison, tout de suite (et non `occupee`, ni `sansReponse`).
+    @Test(.timeLimit(.minutes(1)), arguments: ["etat", "voisins", "routeurs"])
+    func commandeRefusee(_ commande: String) async throws {
+        let s = SondeUSB(canal: CanalRejoue { l in
+            l == commande + "\n" ? [#"{"v":1,"t":"\#(commande)","erreur":"pas de pile"}"#] : []
+        })
+        try await s.demarrer {}
+        let debut = ContinuousClock.now
+        await #expect(throws: SondeUSB.Erreur.refusee("pas de pile")) {
+            switch commande {
+            case "etat": _ = try await s.etat()
+            case "voisins": _ = try await s.voisins()
+            default: _ = try await s.routeurs()
+            }
+        }
+        #expect(ContinuousClock.now - debut < SondeUSB.delaiCommandeUSB)
+    }
+
     /// Pas de fin de table dans le delai (la sonde s'arrete apres une ligne `suite`) : `routeurs`
     /// echoue en `sansReponse`, et la partie recue est abandonnee : la table suivante ne la
     /// reprend pas.

@@ -1172,6 +1172,21 @@ struct TourneeTests {
         #expect(await sonde.registre.voisins == 1)
     }
 
+    /// Bords du garde du signal : -1 dBm est valide ; 0 et les RSSI positifs (127 : invalide
+    /// d'OpenThread) sont ignores ; le dernier signal valide d'un routeur l'emporte, et un invalide
+    /// ne l'efface pas.
+    @Test func bordsDuSignal() {
+        var c = ConstructionMaillage(date: Self.t0, partition: "0000000A")
+        c.routeurs(Route64(sequence: 1, routes: (1...4).map { RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1) }),
+                   chef: 1)
+        c.signal(SignalSonde(routeur: 1, rssi: -1))
+        c.signal(SignalSonde(routeur: 2, rssi: 0))
+        c.signal(SignalSonde(routeur: 3, rssi: 127))
+        c.signal(SignalSonde(routeur: 4, rssi: -60))
+        c.signal(SignalSonde(routeur: 4, rssi: 0))
+        #expect(c.maillage().signaux == [SignalSonde(routeur: 1, rssi: -1), SignalSonde(routeur: 4, rssi: -60)])
+    }
+
     /// Pas de liste des voisins (verrou d'OpenThread refuse...) : la tournee continue, avec le seul
     /// signal du parent.
     @Test func sansVoisins() async throws {

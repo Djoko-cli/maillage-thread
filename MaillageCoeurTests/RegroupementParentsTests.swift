@@ -52,6 +52,15 @@ struct RegroupementParentsTests {
         #expect(anciens.map(\.evenements.count) == [1, 2], "l'ancien regroupement, par id de sujet")
     }
 
+    /// La fenetre est de 1 h pleine : un changement a 59 min 59 s du premier est dans sa ligne, a
+    /// 60 min pile il ouvre la suivante (comme les pertes a 10 min).
+    @Test func borneExacteDeLHeure() {
+        let dedans = Regroupement.lignes([Self.parent(0, "x"), Self.parent(59.98, "x")])
+        #expect(dedans.map(\.evenements.count) == [2], "59 min 59 s : meme ligne")
+        let pile = Regroupement.lignes([Self.parent(0, "x"), Self.parent(60, "x")])
+        #expect(pile.map(\.evenements.count) == [1, 1], "60 min : une autre fenetre")
+    }
+
     /// Les pertes restent regroupees a part, et les autres evenements passent tels quels.
     @Test func pertesInchangees() {
         let perte = { (minutes: Double, id: String) in

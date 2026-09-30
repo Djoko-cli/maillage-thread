@@ -207,6 +207,38 @@ struct SuiviMaillageTests {
         #expect(ev[5].isEmpty, "pas de seconde fois")
     }
 
+    /// Sans balayage (nil) sous un parent muet : l'enfant balaye n'est pas retrouve, mais rien n'a
+    /// ete observe : aucune absence. Seuls deux balayages distincts (minutes 25 et 30) comptent.
+    @Test func sansBalayageSousUnParentMuet() {
+        let b2 = "E0000000000000B2"
+        let sans = { (minutes: Double) in Self.maillage(minutes, muets: [2], enfants: [], balayage: nil) }
+        let ev = Self.suivre([
+            Self.maillage(0, muets: [2], enfants: [Enfant(rloc16: 0x0805, ext: b2, source: .balayage)], balayage: 0),
+            sans(5), sans(10), sans(15), sans(20),
+            Self.maillage(25, muets: [2], enfants: [], balayage: 25),
+            Self.maillage(30, muets: [2], enfants: [], balayage: 30),
+        ])
+        #expect(ev[1...4].allSatisfy { $0.isEmpty }, "quatre tournees sans balayage : pas une absence")
+        #expect(ev[5].isEmpty, "premier balayage qui ne le trouve pas")
+        #expect(ev[6].map(\.type) == [.sansParent], "second balayage : le compte n'avait pas avance avant")
+    }
+
+    /// « N'a plus de parent » nomme l'enfant et son dernier parent connu (R2, pas R1 d'avant son
+    /// changement de parent), a la date de la seconde absence.
+    @Test func sansParentNommeLeDernierParent() throws {
+        let ev = Self.suivre([
+            Self.maillage(0, enfants: [Enfant(rloc16: 0x0401, ext: Self.b1)]),
+            Self.maillage(5, enfants: [Enfant(rloc16: 0x0802, ext: Self.b1)]),
+            Self.maillage(10, enfants: []),
+            Self.maillage(15, enfants: []),
+        ])
+        let e = try #require(ev[3].first)
+        #expect(e.type == .sansParent)
+        #expect(e.avant == "R2", "le dernier parent connu")
+        #expect(e.sujet == Sujet(id: Self.b1, nom: "N-" + Self.b1))
+        #expect(e.date == Self.t0.addingTimeInterval(900), "seconde absence")
+    }
+
     /// Parent sorti de la liste des routeurs : son enfant est sans parent a la seconde tournee.
     @Test func parentDisparu() {
         let ev = Self.suivre([Self.maillage(0, enfants: [Enfant(rloc16: 0x0401, ext: Self.b1)]),
