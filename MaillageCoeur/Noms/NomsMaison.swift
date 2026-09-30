@@ -117,10 +117,23 @@ public struct AccessoireMaison: Codable, Hashable, Sendable {
     }
 }
 
+/// Zone de Maison (`HMZone`), en general un etage, et ses pieces, dans l'ordre de Maison.
+/// Une piece peut appartenir a plusieurs zones.
+public struct ZoneMaison: Codable, Hashable, Sendable {
+    public var nom: String
+    public var pieces: [String]
+
+    public init(nom: String, pieces: [String] = []) {
+        self.nom = nom
+        self.pieces = pieces
+    }
+}
+
 /// Contrat du fichier `noms.json`, ecrit d'un coup par le passeur (app iOS
 /// lancee sur le Mac) dans un dossier choisi une fois, sans App Group, et lu
 /// par l'app.
 public struct NomsMaison: Codable, Hashable, Sendable {
+    /// Les zones, champ facultatif ajoute ensuite, ne la changent pas.
     public static let versionActuelle = 1
 
     public var version: Int
@@ -129,15 +142,20 @@ public struct NomsMaison: Codable, Hashable, Sendable {
     public var message: String?
     public var domicile: String?
     public var accessoires: [AccessoireMaison]
+    /// Zones de Maison, dans son ordre : absent d'un fichier d'avant les zones, vide pour
+    /// une maison qui n'en a pas.
+    public var zones: [ZoneMaison]?
 
     public init(version: Int = NomsMaison.versionActuelle, date: Date, statut: StatutPasseur = .ok,
-                message: String? = nil, domicile: String? = nil, accessoires: [AccessoireMaison] = []) {
+                message: String? = nil, domicile: String? = nil, accessoires: [AccessoireMaison] = [],
+                zones: [ZoneMaison]? = nil) {
         self.version = version
         self.date = date
         self.statut = statut
         self.message = message
         self.domicile = domicile
         self.accessoires = accessoires
+        self.zones = zones
     }
 
     public enum Erreur: Error, Equatable {

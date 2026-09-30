@@ -105,6 +105,26 @@ struct NomsTests {
         #expect(try NomsMaison.lire(Data(json.utf8)).accessoires.first?.batterie == BatterieMaison(niveau: 40))
     }
 
+    /// `zones` est facultatif : un fichier d'avant les zones se lit, sans zones ; un fichier qui
+    /// les a les garde dans l'ordre de Maison, pieces comprises. Une maison sans zones donne une
+    /// liste vide. Le champ est additif : la version ne change pas, et sans zones il n'est pas ecrit.
+    @Test func contratZones() throws {
+        let ancien = #"{"accessoires":[{"nom":"Halo","piece":"Bureau"}],"date":"2026-09-28T12:00:00.000Z","statut":"ok","version":1}"#
+        #expect(try NomsMaison.lire(Data(ancien.utf8)).zones == nil)
+        let avec = #"{"accessoires":[],"date":"2026-09-30T12:00:00.000Z","statut":"ok","version":1,"zones":[{"nom":"Étage","pieces":["Chambre","Bureau"]},{"nom":"Rez-de-chaussée","pieces":["Salon","Cuisine","Entrée"]}]}"#
+        #expect(try NomsMaison.lire(Data(avec.utf8)).zones == [
+            ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau"]),
+            ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Entrée"]),
+        ])
+        let date = Date(timeIntervalSince1970: 1_790_000_000)
+        #expect(try NomsMaison.lire(try NomsMaison(date: date, zones: []).donnees()).zones == [])
+        let n = NomsMaison(date: date, accessoires: [AccessoireMaison(nom: "Halo", piece: "Bureau")],
+                           zones: [ZoneMaison(nom: "Étage", pieces: ["Bureau"])])
+        #expect(try NomsMaison.lire(try n.donnees()) == n)
+        #expect(NomsMaison.versionActuelle == 1)
+        #expect(!String(decoding: try NomsMaison(date: date).donnees(), as: UTF8.self).contains("zones"))
+    }
+
     /// Faible : l'accessoire le signale, ou son niveau est a 20 % ou moins.
     @Test func batterieFaible() {
         #expect(BatterieMaison(niveau: 20).faible)
