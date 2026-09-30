@@ -40,6 +40,8 @@ struct MenuBarre: View {
     @Environment(SondeMaillage.self) private var sonde
     @Environment(\.openWindow) private var openWindow
     @Environment(ControleurReglages.self) private var reglages
+    /// Fenetre du menu, pour le fermer apres « Reglages… ».
+    @State private var fenetreMenu = RefFenetre()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -70,7 +72,7 @@ struct MenuBarre: View {
                         Text(p).font(.caption).foregroundStyle(.red).padding(.horizontal, 8)
                     }
                 }
-                Button("Réglages…") { reglages.montrer() }
+                Button("Réglages…") { ouvrirReglages() }
                 Button("Quitter Maillage Thread") { NSApp.terminate(nil) }
             }
             .buttonStyle(ActionMenu())
@@ -78,6 +80,7 @@ struct MenuBarre: View {
         }
         .padding(14)
         .frame(width: 320, alignment: .leading)
+        .background(FenetreHote { fenetreMenu.fenetre = $0 })
     }
 
     @ViewBuilder
@@ -140,6 +143,44 @@ struct MenuBarre: View {
     private func ouvrir(_ id: String) {
         openWindow(id: id)
         NSApp.activate()
+    }
+
+    /// Le menu se ferme quand une autre fenetre de l'app prend la main. La fenetre des reglages ne
+    /// la prend pas toujours : l'app inactive, le menu la garde (vu par Djoko le 30/09, le menu
+    /// restait ouvert). On ferme donc le menu nous-memes, apres avoir montre les reglages.
+    private func ouvrirReglages() {
+        reglages.montrer()
+        fenetreMenu.fenetre?.close()
+    }
+}
+
+/// Fenetre du menu de la barre, retenue sans la garder en vie.
+@MainActor
+final class RefFenetre {
+    weak var fenetre: NSWindow?
+}
+
+/// Donne la fenetre qui porte la vue, des qu'elle y est posee.
+private struct FenetreHote: NSViewRepresentable {
+    let surFenetre: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> Vue { Vue(surFenetre: surFenetre) }
+    func updateNSView(_ nsView: Vue, context: Context) {}
+
+    final class Vue: NSView {
+        let surFenetre: (NSWindow?) -> Void
+
+        init(surFenetre: @escaping (NSWindow?) -> Void) {
+            self.surFenetre = surFenetre
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            surFenetre(window)
+        }
     }
 }
 
