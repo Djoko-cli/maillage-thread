@@ -103,6 +103,9 @@ le C6, il faut mettre DTR et RTS à 0 dans un seul appel (voir benq).
 | `cle nouvelle <64 HEXA> <id>` | nouvelle clé (réservé à l'app) : `{"v":1,"t":"cle","id":<id>,"cle":"<64 HEXA>","empreinte":"<8 hexa>","hote":…}`, **une seule fois** ; sans `id` : erreur `syntaxe` ; clé écrite mais pas chargée : un `msg` en plus |
 | `oubli` | efface la clé, désappaire et redémarre : `{"v":1,"t":"oubli","cle_effacee":true\|false}` |
 
+`etat`, `voisins` et `routeurs` répondent `{"v":1,"t":"<commande>","erreur":"occupee"}`
+si le verrou d'OpenThread n'a pas pu être pris (200 ms).
+
 `<cible>` est un RLOC16 en 4 hexa, ou une adresse IPv6 du réseau maillé :
 chiffres hexa, `:` et `.` seulement, sinon `syntaxe`. `<id>` et
 `<délai ms>` sont des entiers décimaux de 10 chiffres au plus (4294967295
@@ -188,12 +191,12 @@ et promenée dans la maison, l'app la joint par le réseau.
   l'USB (chef, routeurs, quelques enfants).
 
 Les captures brutes contiennent les adresses du réseau de la maison. À passer
-par `outils/anonymiser-sonde.py` avant de les mettre dans le dépôt.
-L'anonymiseur échoue devant tout type de message, champ ou TLV inconnu, sans
-rien écrire : il ne connaît que `bonjour`, `etat` et `diag` de la capture du
-29/09. Une capture du firmware 1.0.2 ou plus récent (`etat.ext`,
-`bonjour.hote`, `bonjour.nom`, `voisins`, `routeurs`) est donc refusée tant
-qu'il ne les traite pas.
+par `outils/anonymiser-sonde.py` avant de les mettre dans le dépôt. Il
+connaît les messages de la 1.0.3 (tous ceux du tableau, réponses « occupée »
+comprises) et ceux de la capture du 29/09, la forme de chaque champ et les
+TLV de diagnostic que la tournée demande, jusque dans la Network Data ; il
+échoue devant tout le reste, sans rien écrire, et ne cite que des noms.
+Une capture déjà anonymisée ressort telle quelle.
 
 ## Tests sur le Mac
 
@@ -206,5 +209,6 @@ séquence de la LED).
 
 `python3 -m unittest discover -s sonde/test` : les tests Python, sans carte ni
 réseau : le masquage de la clé par `sonde_essai.py` (à l'écran et dans la
-capture, y compris sur une ligne abîmée), le décodage du TLV 7 et la garde de
-l'anonymiseur. `lancer.sh` ne les lance pas.
+capture, y compris sur une ligne abîmée), le décodage du TLV 7 et
+l'anonymiseur (sa garde, ses remplacements, la capture du dépôt qui ressort
+telle quelle). `lancer.sh` ne les lance pas.

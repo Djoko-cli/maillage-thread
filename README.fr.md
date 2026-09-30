@@ -110,7 +110,7 @@ catalogue vont ensemble.
 | Dossier ou fichier | Rôle |
 |---|---|
 | `MaillageCoeur/` | framework sans interface : décodage des TXT, instantané (réseaux, partitions, préfixes, appareils), suivi et événements du journal, journal en fichiers, noms, disposition du graphe, table de routage ; testé sur le relevé réel et sur la panne rejouée |
-| `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, balayage des routeurs muets), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats) ; testé sur une capture anonymisée |
+| `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, balayage des routeurs muets), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats), journal des parents et des routeurs Thread, historique des tournées et courbes ; testé sur une capture anonymisée |
 | `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, accès par le réseau Thread (`Reseau/` : transport UDP et enveloppe H1 du pont Halo, clé dans le trousseau, rid et renvois), `SondeUSB` (requêtes appariées par id et par cible, chacune avec son échéance), modèle de l'app (sonde retenue par son numéro de série USB, liaison USB ou réseau, une tournée toutes les 5 minutes) |
 | `MaillageThread/Noms/` | noms de Maison : lancement de Passeur Noms, réception de son relevé par la boucle locale (écoute TCP sur 127.0.0.1, jeton à usage unique), derniers noms valides gardés dans le conteneur de l'app |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
@@ -290,19 +290,43 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   après sa réception (jamais pendant une tournée) ; après 15 minutes, le
   graphe revient aux pointillés. Le graphe se redessine chaque minute : ces
   deux changements y paraissent avec une minute de retard au plus, sans autre
-  événement.
+  événement, comme le « vu il y a … » et les courbes de la fiche ouverte.
 - Éteindre « Sonde maillage » dans Maison suspend la sonde : pas de tournée,
   même après un redémarrage de la sonde. Sa LED donne alors un bref éclair
   orange toutes les 5 s (firmware 1.0.3). Après un `oubli`, la commande USB
   qui désappaire la sonde (voir `sonde/README.md`), la sonde revient allumée,
   comme à sa première mise en service.
+- **Journal et historique** (plan 3b). Chaque tournée compare son maillage à
+  celui de la précédente et note au journal (famille « Maillage ») : « X a
+  changé de parent : A → B », « X n'a plus de parent » (absent de deux
+  tournées où son absence est sûre ; pour un enfant connu seulement par le
+  balayage d'un routeur muet, comme un routeur de bordure d'Apple, absent de
+  deux balayages distincts, en général à 30 à 60 min d'écart) et
+  l'apparition ou la disparition d'un
+  routeur Thread hors routeurs de bordure ; les changements de parent d'un
+  même nœud dans l'heure tiennent sur une ligne (« X a changé 4 fois de parent
+  en 1 h »). Seuls les enfants identifiés (ExtMac) sont suivis. Pas de
+  notification par défaut (« Autres changements »). Chaque tournée ajoute
+  aussi une ligne à `maillage-AAAA-MM.jsonl`, dans le dossier de l'app (gardé
+  90 jours, environ 8 Mo par mois pour 7 routeurs et 20 enfants) : la qualité
+  de chaque lien, et le signal de chaque routeur que la sonde entend
+  (`voisins`) et de son parent (`etat`). La fiche d'un nœud en tire ses
+  courbes sur 24 h, 7 j ou 30 j : la qualité de ses liens, changements de
+  parent marqués, et pour un routeur le « Signal vu par la sonde », où les
+  changements de parent de la sonde sont marqués (le signal dépend d'abord de
+  l'endroit où elle est posée). Rien de tout cela en démo.
 - Les captures de la sonde contiennent les adresses du réseau de la maison :
   `outils/anonymiser-sonde.py` les réécrit de façon cohérente avant qu'elles ne
-  deviennent des données de test (`docs/releves/2026-09-29/`). L'anonymiseur
-  échoue devant tout type de message, champ ou TLV inconnu, sans rien écrire :
-  il ne connaît que les messages `bonjour`, `etat` et `diag` de cette capture,
-  si bien qu'une capture du firmware 1.0.2 ou plus récent (`etat.ext`,
-  `bonjour.hote`, `routeurs`…) est refusée tant qu'il ne les traite pas.
+  deviennent des données de test (`docs/releves/2026-09-29/`) : ExtMac et nom
+  d'hôte SRP, préfixes, adresses, MAC, nom et empreinte de la clé de la sonde
+  (plan 3b). Il connaît les messages du firmware 1.0.3 et ceux de cette
+  capture, la forme de chaque champ et les TLV de diagnostic que la tournée
+  demande, jusque dans la Network Data ; il échoue devant tout le reste, sans
+  rien écrire. Une capture déjà anonymisée ressort telle quelle. Les textes
+  libres (fabricant, modèle, versions, messages de la sonde) sont refusés au
+  moindre motif d'identifiant, adresse ou chiffres hexa même coupés par des
+  séparateurs : une date ISO peut l'être aussi. Un identifiant déguisé exprès
+  dans une chaîne d'un firmware (hexa coupé par d'autres lettres) passerait.
 
 ### Route vers le réseau Thread
 

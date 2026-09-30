@@ -108,7 +108,7 @@ catalog match.
 | Folder or file | Role |
 |---|---|
 | `MaillageCoeur/` | framework without UI: TXT decoding, snapshot (networks, partitions, prefixes, devices), tracking and log events, file log, names, graph layout, routing table; tested on the real survey and on the replayed outage |
-| `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, scan of silent routers), kept router identities, matching with the snapshot (elimination, candidates); tested on an anonymized capture |
+| `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, scan of silent routers), kept router identities, matching with the snapshot (elimination, candidates), log of parents and Thread routers, tour history and curves; tested on an anonymized capture |
 | `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, access over the Thread network (`Reseau/`: UDP transport and H1 envelope from the Halo bridge, key in the keychain, rid and resends), `SondeUSB` (requests matched by id and target, each with its own deadline), app model (probe remembered by its USB serial number, USB or network link, a tour every 5 minutes) |
 | `MaillageThread/Noms/` | Home names: launching Passeur Noms, receiving its reading over the loopback (TCP listener on 127.0.0.1, one-time token), last valid names kept in the app's container |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
@@ -276,19 +276,41 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   children. If the probe stops answering, the last mesh is marked old 6
   minutes after it was received (never during a tour); after 15 minutes the
   graph goes back to dotted lines. The graph redraws every minute: both
-  changes show up within a minute, with no other event needed.
+  changes show up within a minute, with no other event needed, and so do the
+  open card's "seen … ago" and curves.
 - Switching "Sonde maillage" off in Home suspends the probe: no tour, even
   after the probe restarts. The board's LED then gives a short orange flash
   every 5 s (firmware 1.0.3). After `oubli`, the USB command that unpairs
   the probe (see `sonde/README.md`), the probe comes back on, as when first
   set up.
+- **Log and history** (plan 3b). Each tour compares its mesh with the
+  previous one and writes to the log ("Mesh" family): "X changed parent:
+  A → B", "X has no parent anymore" (missing from two tours where its absence
+  is certain; for a child known only by the scan of a silent router, such as
+  an Apple border router, missing from two distinct scans, usually 30 to 60
+  min apart) and a Thread router other than a border router appearing or
+  disappearing; parent changes of one node within the hour fit on one line
+  ("X changed parent 4 times within 1 h"). Only identified children (ExtMac)
+  are followed. No notification by default ("Other changes"). Each tour also
+  adds a line to `maillage-AAAA-MM.jsonl` in the app folder (kept 90 days,
+  about 8 MB a month for 7 routers and 20 children): the quality of every
+  link, and the signal of every router the probe hears (`voisins`) and of its
+  parent (`etat`). A node's card draws its curves over 24 h, 7 d or 30 d: the
+  quality of its links, parent changes marked, and for a router the "Signal
+  seen by the probe", with the probe's own parent changes marked (the signal
+  depends first on where the probe sits). None of this in demo mode.
 - Probe captures hold the home network's addresses:
   `outils/anonymiser-sonde.py` rewrites them consistently before they become
-  test data (`docs/releves/2026-09-29/`). The anonymizer fails on any unknown
-  message type, field or TLV, without writing anything: it only knows the
-  `bonjour`, `etat` and `diag` messages of that capture, so a capture from
-  firmware 1.0.2 or later (`etat.ext`, `bonjour.hote`, `routeurs`…) is refused
-  until it handles them.
+  test data (`docs/releves/2026-09-29/`): ExtMacs and the SRP host name,
+  prefixes, addresses, the probe's MAC, name and key fingerprint (plan 3b).
+  It knows the messages of firmware 1.0.3 and of that capture, the form of
+  every field, and the diagnostic TLVs the tour asks for, down to the Network
+  Data; it fails on anything else, without writing anything. An already
+  anonymized capture comes out unchanged. Free texts (vendor, model, versions,
+  the probe's messages) are refused at the slightest identifier pattern, an
+  address or hex digits even when split by separators: an ISO date may be
+  refused too. An identifier deliberately disguised in a firmware string (hex
+  split by other letters) would still pass.
 
 ### Route to the Thread network
 

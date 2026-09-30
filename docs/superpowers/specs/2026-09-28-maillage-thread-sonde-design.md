@@ -230,6 +230,11 @@ piège décrit dans benq.
   `parent` (`rloc16`, `ext`, `lqIn`, `lqOut`, `rssi`), `partition`, `chef`
   (identifiant du routeur chef), `canal`, `prefixeMaille`, `xp`, `suspendue`.
 - `voisins` : `liste` d'objets `rloc16`, `ext`, `rssi`, `lqi`, `routeur`.
+- `etat`, `voisins` et `routeurs`, quand la sonde n'a pas pu prendre le
+  verrou d'OpenThread (200 ms) : `{"v":1,"t":"etat","erreur":"occupee"}`.
+  L'app lit ce refus sans attendre l'échéance de la commande (plan 3b) :
+  sans `etat`, la tournée s'arrête sur « la sonde est occupée et n'a pas
+  répondu à « etat » » ; sans `routeurs` ni `voisins`, elle continue sans.
 - `diag`, en cas de succès :
   `{"v":1,"t":"diag","id":7,"cible":"4800","ok":true,"ms":123,"tlv":"<hexa>"}`
 - `diag`, en cas d'échec : `"ok":false` et `"erreur"` valant `delai`,
@@ -608,7 +613,9 @@ tournée. Pendant une tournée, il n'est pas marqué « ancien » : le suivant
 arrive. En marche normale, il ne l'est donc jamais. La fenêtre du graphe se
 redessine au début de chaque minute (l'heure n'est observée par personne) :
 « ancien » et le retour aux pointillés y paraissent avec une minute de retard
-au plus.
+au plus. La fiche ouverte reçoit l'heure de ce redessin : son « vu il y a … »
+et ses courbes suivent (plan 3b). Une date plus récente que ce redessin (un
+relevé fait depuis) se lit « maintenant », jamais dans le futur.
 
 **Avancement :** la tournée signale le début de chaque étape qu'elle
 atteint (état de la sonde, liste des routeurs, routeurs, pile et Network
@@ -740,12 +747,35 @@ choisi) : « Sonde : … ».
   sonde est FED) et celui du parent de la sonde (`etat.parent.rssi`). Ajout
   validé par Djoko le 30/09.
 - Stockage : JSON Lines mensuel (`maillage-AAAA-MM.jsonl`) dans le dossier de
-  l'app, gardé 90 jours comme le journal ; environ 5 Mo par mois.
+  l'app, gardé 90 jours comme le journal ; environ 0,9 Ko par tournée pour
+  7 routeurs et 20 enfants, soit 8 Mo par mois (5 Mo estimés à la
+  conception ; mesuré au plan 3b).
 - Affichage : courbes dans la fiche (Swift Charts) sur 24 h, 7 j et 30 j,
   avec les changements de parent marqués. Dans la fiche d'un routeur, une
   courbe « Signal vu par la sonde » (24 h, 7 j, 30 j), où les changements de
   parent de la sonde sont marqués, car le signal dépend d'abord de l'endroit
   où la sonde est posée (ajout du 30/09).
+
+**Précisions du plan 3b (30/09)** (détail : plan 3b, « Écarts à la spec ») :
+- seuls les enfants identifiés (ExtMac connue) sont suivis au journal et
+  gardés dans l'historique : le RLOC16 d'un enfant change avec son parent ;
+- « X n'a plus de parent » : absent de deux tournées où son absence est sûre
+  (son dernier parent a répondu, a quitté la liste des routeurs, ou l'enfant
+  venait d'un balayage) ; jamais pour la sonde, ni pour un enfant devenu
+  routeur. Pour un enfant venu d'un balayage sous un routeur toujours muet,
+  l'absence doit être vue par deux balayages distincts (décision de Djoko,
+  30/09) : un balayage est réutilisé à chaque tournée jusqu'au suivant, et
+  un seul balayage raté ne doit pas donner d'alerte. En général 30 à 60 min ;
+  moins si l'ensemble des routeurs à balayer change (balayage refait) ;
+- le premier maillage d'un lancement, le premier d'une autre partition, et
+  le premier après l'oubli de la sonde, sont un point de départ : aucun
+  événement ;
+- les courbes font la moyenne par 30 min sur 7 j et par 2 h sur 30 j ; un
+  trou de plus de 20 min (ou de trois pas) les coupe ; la qualité d'un enfant
+  sous un routeur muet reste inconnue (seuls ses changements de parent se
+  voient) ;
+- l'app garde en mémoire les 30 derniers jours de l'historique ; rien n'est
+  gardé ni montré en démo.
 
 ## 7. Tests, permissions, essai préalable (validée)
 
@@ -753,10 +783,17 @@ choisi) : « Sonde : … ».
 deviennent les données de test (décision de Djoko, 29/09). Les ExtMac, les
 préfixes (réseau maillé, OMR), les adresses et le `xp` sont remplacés par des
 valeurs inventées, de façon cohérente d'une réponse à l'autre. Le code
-d'appairage et le QR code sont retirés. L'anonymiseur ne connaît que les
-messages `bonjour`, `etat` et `diag` de cette capture et échoue devant tout
-autre type de message, champ ou TLV inconnu : les captures de la 1.0.2
-(`etat.ext`, `voisins`, `routeurs`…) attendent l'anonymiseur complet de 3b.
+d'appairage et le QR code sont retirés. L'anonymiseur (complet au plan 3b)
+remplace aussi le nom d'hôte SRP, le nom de la sonde et l'empreinte de sa
+clé ; il connaît les messages de la 1.0.3 et ceux de cette capture, la forme
+de chaque champ et les TLV de diagnostic que la tournée demande, jusque dans
+la Network Data, et échoue devant tout le reste. Une capture déjà anonymisée
+ressort telle quelle. Les textes libres (TLV 25 à 28, messages de la sonde)
+sont refusés au moindre motif d'identifiant : adresse, ou chiffres hexa même
+coupés par des séparateurs (`:`, `.`, `_`, `-`, espace) ; une date ISO ou une
+version à trois nombres le sont aussi. Limite connue : un identifiant déguisé
+exprès (hexa coupé par d'autres lettres) passerait ; ces textes viennent des
+firmwares, pas d'une saisie.
 Ces données servent à : décodage des TLV, reconstruction du maillage, tournée
 (qui interroger, appareils endormis), rapprochement, et pour 3b les écarts du
 journal et l'historique. Le firmware est vérifié par sa compilation, puis sur
