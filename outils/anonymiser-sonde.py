@@ -5,26 +5,49 @@
 
 Remplace, de facon coherente d'une ligne a l'autre et jusque dans les TLV de
 diagnostic :
-- les ExtMac (TLV 0, parent de `etat`), et les adresses lien-local qui en
-  derivent ;
+- les ExtMac (TLV 0, `ext` de `etat`, de son parent, des voisins et des
+  routeurs), les adresses lien-local qui en derivent, et le nom d'hote SRP de
+  la sonde (`hote`, 16 hexa : Matter le tire de son ExtMac) ;
 - les prefixes IPv6 (/48 : reseau maille, OMR, NAT64...) et les identifiants
   d'interface, sauf ceux des RLOC et ALOC (0000:00ff:fe00:xxxx), gardes ;
-- le `xp`, la MAC de la sonde, le code d'appairage ;
+- le `xp`, la MAC de la sonde, son nom (SONDE-01, SONDE-02...) et
+  l'empreinte de sa cle ;
 - les adresses des Network Data (prefixes, donnees de serveur).
-Garde les RLOC16, partitions, qualites, delais et versions de pile.
-Aucune valeur reelle n'est ecrite dans ce script : il les repere dans la
-capture. A la fin, il verifie qu'aucune ne reste dans la sortie.
+Retire le code d'appairage et le QR code (null), et la cle (deja masquee par
+sonde_essai.py). Garde les RLOC16, partitions, qualites, signaux, delais,
+compteurs et versions de pile. Aucune valeur reelle n'est ecrite dans ce
+script : il les repere dans la capture. A la fin, il verifie qu'aucune ne
+reste dans la sortie.
 
-Garde : l'outil ne connait que les messages bonjour, etat et diag de la
-capture du 29/09/2026 (tables CHAMPS_CONNUS, CHAMPS_PARENT, TLV_CONNUS), et ne
-traite que les TLV 0, 7 et 8. Il echoue AVANT toute ecriture, avec la liste de
-ce qu'il ne connait pas (des noms, jamais une valeur), devant :
-- un type de message, un champ ou un TLV inconnu, un TLV a longueur etendue ou
-  tronque, ou de longueur inattendue : 8 octets pour le TLV 0 (ExtMac), 2 pour
-  le 1 (Address16), 1 pour le 2 (Mode), 9 plus un par routeur pour le 5
-  (Route64), 8 pour le 6 (Leader Data), des adresses entieres pour le 8, des
-  entrees de 3 octets pour le 16 (Child Table), 2 pour le 24 (Version), et au
-  plus 32, 32, 16 et 64 pour les textes des TLV 25 a 28 ;
+Une capture deja anonymisee ressort telle quelle : une valeur deja factice
+(ExtMac E000..., identifiant 0A00..., /48 fd00:1111:2222..., MAC A0000000...,
+xp A0A1A2A3A4A5A6A7, nom SONDE-NN, empreinte C1E0...) reste elle-meme, et une
+valeur reelle recoit une factice qui n'a pas encore servi. Une valeur reelle
+de cette forme passerait telle quelle : tiree au hasard, elle n'a presque
+aucune chance d'exister. (Une capture qui melerait valeurs reelles et
+factices pourrait confondre deux noeuds, jamais laisser passer une valeur
+reelle.)
+
+Garde : l'outil ne connait que les messages de la sonde 1.0.3 (bonjour, etat,
+voisins, routeurs, diag, cle, oubli, erreur) et ceux de la capture du 29/09
+(firmware d'essai), leurs champs et la forme de chacun (CHAMPS_COMMUNS,
+CHAMPS_CONNUS, OBJETS), et les TLV de diagnostic que la tournee demande
+(TLV_CONNUS). Il echoue AVANT toute ecriture, avec la liste de ce qu'il ne
+connait pas (des noms, jamais une valeur), devant :
+- une ligne qui n'est pas un objet, un type de message ou un champ inconnu ;
+- une valeur qui n'a pas la forme de son champ : un objet ou une liste la ou
+  l'outil n'en descend pas ; un texte libre qui n'est pas sur (texte_sur() :
+  64 caracteres au plus, lettres, chiffres, espace, point, tiret, souligne,
+  « : » seul entre deux espaces, jamais 8 hexa de suite) ; un nombre qui
+  n'est pas un entier de 32 bits (une ExtMac en demande 64) ; un RLOC16, une
+  partition ou une heure mal formes ; autre chose que du texte dans un champ
+  que l'outil remplace ;
+- un TLV inconnu, a longueur etendue ou tronque, ou de longueur inattendue :
+  8 octets pour le TLV 0 (ExtMac), 2 pour le 1 (Address16), 1 pour le 2
+  (Mode), 9 plus un par routeur pour le 5 (Route64), 8 pour le 6 (Leader
+  Data), des adresses entieres pour le 8, des entrees de 3 octets pour le 16
+  (Child Table), 2 pour le 24 (Version), et au plus 32, 32, 16 et 64 pour les
+  textes des TLV 25 a 28 ;
 - un texte des TLV 25 a 28 (fabricant, modele, version logicielle, pile) qui
   n'est pas de l'ASCII lisible, ou qui porte 12 hexa de suite, une MAC ou une
   adresse IPv6 ;
@@ -39,18 +62,12 @@ ce qu'il ne connait pas (des noms, jamais une valeur), devant :
   Service, autre chose que des Server, ou un Server qui n'est ni un RLOC16 seul
   (2 octets), ni un RLOC16 suivi d'une adresse et d'un port (20 octets,
   l'adresse remplacee), ni, pour le routeur de dorsale (donnee 01), un RLOC16
-  et ses 7 octets de reglages ;
-- un champ connu qui porte un objet ou une liste (hors parent), ou qui n'est
-  pas du texte alors que l'anonymiseur le lit comme un hexa ou une adresse
-  (mac, xp, prefixeMaille, cible, parent.ext).
-Une valeur illisible dans un champ connu (adresse, hexa) le fait sortir avec le
-seul numero de ligne, jamais la valeur (la trace d'une exception la citerait).
-Une valeur qu'il ne connait pas pourrait etre une ExtMac, une adresse ou un
-nom, et le controle final ne porte que sur les valeurs qu'il a reperees. Une
-capture de la sonde 1.0.2 est donc refusee (etat.ext, bonjour.hote,
-bonjour.nom, messages voisins et routeurs...) tant que l'anonymiseur ne les
-traite pas. Pour ajouter un champ : verifier qu'il ne porte rien d'identifiant,
-sinon le traiter dans message() ; puis l'inscrire dans la table.
+  et ses 7 octets de reglages.
+Une valeur illisible dans un champ remplace (un hexa abime, une adresse, une
+cible qui n'est ni un RLOC16 ni une adresse) le fait sortir avec le seul
+numero de ligne, jamais la valeur (la trace d'une exception la citerait). Pour
+ajouter un champ : verifier qu'il ne porte rien d'identifiant, sinon le
+traiter dans message() ; puis l'inscrire dans la table, avec sa forme.
 """
 import ipaddress
 import json
@@ -58,20 +75,47 @@ import re
 import sys
 
 MAILLE_RLOC = bytes.fromhex("000000fffe00")
+XP_FACTICE = "A0A1A2A3A4A5A6A7"  # le meme pour tout xp, comme dans la capture du 29/09
+MASQUEE = "(masquee)"  # la cle, comme sonde_essai.py la capture
 
-# Ce que l'outil connait (voir la garde dans la docstring). Les champs sont ceux de
-# la capture du 29/09 : les traiter ou verifier qu'ils ne portent rien d'identifiant.
-CHAMPS_COMMUNS = frozenset({"t", "v", "heure"})  # type, version du protocole, heure ajoutee par sonde_essai.py
+# Ce que l'outil connait (voir la garde dans la docstring) : chaque champ avec sa forme. "?" en fin : null permis.
+#   texte    : un texte sur (texte_sur()), garde tel quel ;
+#   remplace : du texte, remplace par une valeur factice (hexa, adresse, nom) dans message() ;
+#   efface   : un scalaire, jamais recopie (code d'appairage, QR code, cle) ;
+#   nombre   : un entier de 32 bits, signe ou non ; booleen ;
+#   rloc16   : 4 hexa ; partition : 8 hexa ; heure : AAAA-MM-JJTHH:MM:SS, ajoutee par sonde_essai.py ;
+#   tlv      : la charge d'un diag, en hexa (controler_tlv()) ;
+#   objet X, liste X : un objet des champs OBJETS[X], une liste de tels objets.
+CHAMPS_COMMUNS = {"t": "texte", "v": "nombre", "heure": "heure"}
 CHAMPS_CONNUS = {
-    "bonjour": frozenset({"produit", "version", "mac", "appairee", "code", "qr"}),
-    "etat": frozenset({"role", "rloc16", "mode", "parent", "partition", "chef", "canal", "prefixeMaille", "xp",
-                       "suspendue"}),
-    "diag": frozenset({"id", "cible", "ms", "ok", "code", "erreur", "tlv"}),
+    "bonjour": {"produit": "texte", "version": "texte", "nom": "remplace", "mac": "remplace", "appairee": "booleen",
+                "code": "efface?", "qr": "efface?", "hote": "remplace?"},
+    "etat": {"erreur": "texte", "role": "texte", "rloc16": "rloc16", "ext": "remplace", "mode": "texte",
+             "eligible": "booleen", "parent": "objet parent?", "partition": "partition?", "chef": "nombre?",
+             "canal": "nombre", "prefixeMaille": "remplace", "xp": "remplace", "suspendue": "booleen"},
+    "voisins": {"erreur": "texte", "liste": "liste voisin"},
+    "routeurs": {"erreur": "texte", "liste": "liste routeur", "suite": "booleen"},
+    "diag": {"id": "nombre", "cible": "remplace", "ms": "nombre", "ok": "booleen", "code": "texte",
+             "erreur": "texte", "tlv": "tlv?", "tronquee": "booleen"},
+    "cle": {"id": "nombre", "cle": "efface", "empreinte": "remplace?", "effacement_en_echec": "booleen",
+            "hote": "remplace?", "udp": "objet udp", "tas": "objet tas", "msg": "texte"},
+    "oubli": {"cle_effacee": "booleen"},
+    "erreur": {"erreur": "texte"},
 }
-CHAMPS_PARENT = frozenset({"rloc16", "ext", "lqIn", "lqOut", "rssi", "rssiDernier", "age"})
-# Les champs que l'anonymiseur lit comme un hexa ou une adresse : du texte, sinon il leve, ou secrets() plante.
-CHAMPS_TEXTE = {"bonjour": frozenset({"mac"}), "etat": frozenset({"prefixeMaille", "xp"}), "diag": frozenset({"cible"})}
-CHAMPS_PARENT_TEXTE = frozenset({"ext"})
+OBJETS = {
+    "parent": {"rloc16": "rloc16", "ext": "remplace", "lqIn": "nombre", "lqOut": "nombre", "rssi": "nombre",
+               "rssiDernier": "nombre", "age": "nombre"},
+    "voisin": {"rloc16": "rloc16", "ext": "remplace", "rssi": "nombre", "lqi": "nombre", "routeur": "booleen"},
+    "routeur": {"id": "nombre", "rloc16": "rloc16", "ext": "remplace?", "lqIn": "nombre", "lqOut": "nombre",
+                "age": "nombre", "lien": "booleen"},
+    # Compteurs du transport (ceux du pont Halo), plus les lignes perdues et les commandes refusees par la cadence.
+    "udp": {"port": "nombre", "ouvert": "booleen", "sessions": "nombre", "provisoire": "booleen", "rx": "nombre",
+            "rejets": "nombre", "rx_perdus": "nombre", "defis": "nombre", "tx": "nombre", "tx_perdus": "nombre",
+            "tx_erreurs": "nombre", "tampons_min": "nombre?", "lignes_perdues": "nombre", "refus_cadence": "nombre"},
+    "tas": {"libre": "nombre", "min": "nombre"},
+}
+TEXTE_SUR = re.compile(r"[A-Za-z0-9_. :-]{0,64}")
+HEXA_8 = re.compile(r"[0-9A-Fa-f]{8}")
 # TLV de diagnostic : 0, 7 et 8 sont traites ; les autres n'ont ni ExtMac ni adresse.
 TLV_CONNUS = frozenset({0, 1, 2, 5, 6, 7, 8, 16, 24, 25, 26, 27, 28})
 # Longueur exacte : ExtMac (0), Address16 (1), Mode (2), Leader Data (6), Version (24). Un octet de plus porterait un
@@ -101,31 +145,95 @@ PREFIXE_COURT_MAX_BITS = 16
 PREFIXE_REMPLACE_MIN_BITS = 41
 
 
+def texte_sur(x):
+    """Un texte libre qui ne porte rien d'identifiant : 64 caracteres au plus, lettres, chiffres, espace, point,
+    tiret, souligne, et « : » seul entre deux espaces (« cle non chargee : active au redemarrage ») ; jamais 8 hexa
+    de suite (une MAC, un /48, une ExtMac, un code d'appairage en ont 8 ou plus)."""
+    return (isinstance(x, str) and TEXTE_SUR.fullmatch(x) is not None and HEXA_8.search(x) is None
+            and all(":" not in mot or mot == ":" for mot in x.split(" ")))
+
+
+FORMES = {
+    "texte": texte_sur,
+    "remplace": lambda x: isinstance(x, str),
+    "efface": lambda x: not isinstance(x, (dict, list)),
+    "nombre": lambda x: isinstance(x, int) and not isinstance(x, bool) and -(1 << 31) <= x < 1 << 32,
+    "booleen": lambda x: isinstance(x, bool),
+    "rloc16": lambda x: isinstance(x, str) and re.fullmatch(r"[0-9A-Fa-f]{4}", x) is not None,
+    "partition": lambda x: isinstance(x, str) and re.fullmatch(r"[0-9A-Fa-f]{8}", x) is not None,
+    "heure": lambda x: isinstance(x, str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d", x) is not None,
+}
+
+
+def p48_factice(n):
+    """Le n-ieme /48 factice, a partir de 1 : fd00:1111:2222, fd00:3333:4444, fd00:5555:6666..."""
+    return bytes.fromhex("FD00%04X%04X" % (0x1111 * (2 * n - 1) & 0xFFFF, 0x1111 * 2 * n & 0xFFFF))
+
+
+P48_FACTICES = frozenset(p48_factice(n) for n in range(1, 4097))
+
+
+def remplaces(table):
+    """Les valeurs reelles d'une table (pas celles, deja factices, qui restent elles-memes)."""
+    return [reel for reel, factice in table.items() if reel != factice]
+
+
 class Anonymiseur:
     def __init__(self):
-        self.exts = {}      # ExtMac reelle (8 octets) -> factice
-        self.iids = {}      # identifiant d'interface reel -> factice
-        self.p48 = {}       # /48 reel (6 octets) -> factice
+        self.exts = {}        # ExtMac reelle (8 octets) -> factice ; aussi le nom d'hote SRP
+        self.iids = {}        # identifiant d'interface reel -> factice
+        self.p48 = {}         # /48 reel (6 octets) -> factice
         self.xp = {}
         self.macs = {}
+        self.noms = {}        # nom de la sonde
+        self.empreintes = {}  # empreinte de sa cle
+        self.cles = set()     # cle en clair (sonde_essai.py la masque deja) : a ne plus trouver
 
     # --- Tables de correspondance ------------------------------------------
 
+    @staticmethod
+    def factice(table, reel, nieme, deja_factice):
+        """La valeur factice de `reel`, la meme d'une ligne a l'autre. Deja factice (capture deja anonymisee), elle
+        reste elle-meme ; sinon, la premiere factice libre (`nieme(n)`, n a partir du nombre de valeurs vues + 1) :
+        jamais une factice deja donnee."""
+        if reel not in table:
+            if deja_factice(reel):
+                table[reel] = reel
+            else:
+                prises, n = set(table.values()), len(table) + 1
+                while nieme(n) in prises:
+                    n += 1
+                table[reel] = nieme(n)
+        return table[reel]
+
     def ext(self, e):
-        if e not in self.exts:
-            self.exts[e] = bytes.fromhex("E0%014X" % (len(self.exts) + 1))
-        return self.exts[e]
+        return self.factice(self.exts, e, lambda n: bytes.fromhex("E0%014X" % n),
+                            lambda x: len(x) == 8 and x[0] == 0xE0 and int.from_bytes(x[1:], "big") < 1 << 16)
 
     def iid(self, i):
-        if i not in self.iids:
-            self.iids[i] = bytes.fromhex("0A00%012X" % (len(self.iids) + 1))
-        return self.iids[i]
+        return self.factice(self.iids, i, lambda n: bytes.fromhex("0A00%012X" % n),
+                            lambda x: len(x) == 8 and x[:2] == b"\x0a\x00" and int.from_bytes(x[2:], "big") < 1 << 16)
 
     def prefixe48(self, p):
-        if p not in self.p48:
-            n = len(self.p48)
-            self.p48[p] = bytes.fromhex("FD00%04X%04X" % (0x1111 * (2 * n + 1) & 0xFFFF, 0x1111 * (2 * n + 2) & 0xFFFF))
-        return self.p48[p]
+        if len(p) != 6:
+            raise ValueError("prefixe")  # un prefixe du reseau maille trop court : illisible
+        return self.factice(self.p48, p, p48_factice, lambda x: x in P48_FACTICES)
+
+    def hexa_ext(self, texte):
+        """Une ExtMac en hexa (ou le nom d'hote SRP, qui en est tire) -> sa factice, en hexa."""
+        return self.ext(bytes.fromhex(texte)).hex().upper()
+
+    def mac(self, m):
+        return self.factice(self.macs, m, lambda n: "A0000000%04X" % n,
+                            lambda x: re.fullmatch(r"A0000000[0-9A-F]{4}", x) is not None)
+
+    def nom(self, x):
+        return self.factice(self.noms, x, lambda n: "SONDE-%02d" % n,
+                            lambda v: re.fullmatch(r"SONDE-\d{2,}", v) is not None)
+
+    def empreinte(self, x):
+        return self.factice(self.empreintes, x, lambda n: "C1E0%04X" % n,
+                            lambda v: re.fullmatch(r"C1E0[0-9A-F]{4}", v) is not None)
 
     def adresse(self, a):
         """Adresse IPv6 de 16 octets."""
@@ -186,43 +294,61 @@ class Anonymiseur:
         t = m.get("t")
         if t == "bonjour":
             if m.get("mac"):
-                mac = m["mac"]
-                self.macs.setdefault(mac, "A0000000%04X" % (len(self.macs) + 1))
-                m["mac"] = self.macs[mac]
+                m["mac"] = self.mac(m["mac"])
+            if m.get("nom"):
+                m["nom"] = self.nom(m["nom"])
+            if m.get("hote"):
+                m["hote"] = self.hexa_ext(m["hote"])
             m["code"] = None
             m["qr"] = None
         elif t == "etat":
+            if m.get("ext"):
+                m["ext"] = self.hexa_ext(m["ext"])
             if m.get("xp"):
-                self.xp.setdefault(m["xp"], "A0A1A2A3A4A5A6A7")
-                m["xp"] = self.xp[m["xp"]]
+                m["xp"] = self.xp.setdefault(m["xp"], XP_FACTICE)
             if m.get("prefixeMaille"):
                 p = bytes.fromhex(m["prefixeMaille"])
                 m["prefixeMaille"] = (self.prefixe48(p[:6]) + p[6:8]).hex().upper()
             if m.get("parent") and m["parent"].get("ext"):
-                par = dict(m["parent"])
-                par["ext"] = self.ext(bytes.fromhex(par["ext"])).hex().upper()
-                m["parent"] = par
+                m["parent"] = dict(m["parent"], ext=self.hexa_ext(m["parent"]["ext"]))
+        elif t in ("voisins", "routeurs"):
+            if m.get("liste"):
+                m["liste"] = [dict(e, ext=self.hexa_ext(e["ext"])) if e.get("ext") else dict(e) for e in m["liste"]]
         elif t == "diag":
             cible = m.get("cible", "")
             if ":" in cible:
                 m["cible"] = str(ipaddress.IPv6Address(self.adresse(ipaddress.IPv6Address(cible).packed)))
+            elif cible and not re.fullmatch(r"[0-9A-Fa-f]{4}", cible):
+                raise ValueError("cible")  # ni un RLOC16, ni une adresse : illisible
             if m.get("tlv"):
                 m["tlv"] = self.tlv(m["tlv"])
+        elif t == "cle":
+            if "cle" in m:
+                if m["cle"] != MASQUEE:
+                    self.cles.add(str(m["cle"]))
+                m["cle"] = MASQUEE
+            if m.get("empreinte"):
+                m["empreinte"] = self.empreinte(m["empreinte"])
+            if m.get("hote"):
+                m["hote"] = self.hexa_ext(m["hote"])
         return m
 
     def secrets(self):
-        """Valeurs reelles, en texte, a ne plus trouver dans la sortie."""
+        """Valeurs reelles, en texte, a ne plus trouver dans la sortie (pas celles qui etaient deja factices)."""
         s = set()
-        for e in self.exts:
+        for e in remplaces(self.exts):
             s.add(e.hex())
-            s.add((bytes([e[0] ^ 0x02]) + e[1:]).hex())
-        for i in self.iids:
+            if e:
+                s.add((bytes([e[0] ^ 0x02]) + e[1:]).hex())  # l'identifiant lien-local qui en derive
+        for i in remplaces(self.iids):
             s.add(i.hex())
-        for p in self.p48:
+        for p in remplaces(self.p48):
             s.add(p.hex())
             s.add(str(ipaddress.IPv6Address(p + bytes(10))).split("::")[0])
-        s.update(x.lower() for x in self.xp)
-        s.update(x.lower() for x in self.macs)
+        for table in (self.macs, self.noms, self.empreintes):
+            s.update(remplaces(table))
+        s.update(x for x in self.xp if x != XP_FACTICE)
+        s.update(self.cles)
         return {x.lower() for x in s if len(x) >= 8}
 
 
@@ -386,6 +512,30 @@ def controler(numerotes):
         if numero not in numeros:
             numeros.append(numero)
 
+    def objet(chemin, champs, o, numero):
+        for champ, valeur in o.items():
+            if champ not in champs:
+                noter("champ inconnu : %s.%s" % (chemin, nom_sur(champ)), numero)
+            else:
+                forme_de(chemin + "." + champ, champs[champ], valeur, numero)
+
+    def forme_de(chemin, forme, valeur, numero):
+        if valeur is None:
+            if not forme.endswith("?"):
+                noter("forme inconnue : %s" % chemin, numero)
+            return
+        genre, _, nom = forme.rstrip("?").partition(" ")
+        if genre == "objet" and isinstance(valeur, dict):
+            objet(chemin, OBJETS[nom], valeur, numero)
+        elif genre == "liste" and isinstance(valeur, list) and all(isinstance(e, dict) for e in valeur):
+            for e in valeur:
+                objet(chemin, OBJETS[nom], e, numero)
+        elif genre == "tlv" and not isinstance(valeur, (dict, list)):
+            for raison in controler_tlv(valeur):
+                noter(raison, numero)
+        elif genre not in FORMES or not FORMES[genre](valeur):
+            noter("forme inconnue : %s" % chemin, numero)
+
     for numero, m in numerotes:
         if not isinstance(m, dict):
             noter("ligne qui n'est pas un objet JSON", numero)
@@ -394,27 +544,7 @@ def controler(numerotes):
         if not isinstance(t, str) or t not in CHAMPS_CONNUS:
             noter("type de message inconnu : %s" % nom_sur(t), numero)
             continue
-        for champ, valeur in m.items():
-            if champ not in CHAMPS_COMMUNS and champ not in CHAMPS_CONNUS[t]:
-                noter("champ inconnu : %s.%s" % (t, nom_sur(champ)), numero)
-            elif champ in CHAMPS_TEXTE.get(t, ()):
-                if not isinstance(valeur, str):
-                    noter("forme inconnue : %s.%s" % (t, champ), numero)  # du texte est attendu
-            elif isinstance(valeur, (dict, list)) and not (t == "etat" and champ == "parent"):
-                noter("forme inconnue : %s.%s" % (t, champ), numero)  # un scalaire est attendu
-        parent = m.get("parent") if t == "etat" else None
-        if isinstance(parent, dict):
-            for champ, valeur in parent.items():
-                if champ not in CHAMPS_PARENT:
-                    noter("champ inconnu : etat.parent.%s" % nom_sur(champ), numero)
-                elif isinstance(valeur, (dict, list)) or (champ in CHAMPS_PARENT_TEXTE and not isinstance(valeur, str)):
-                    noter("forme inconnue : etat.parent.%s" % champ, numero)
-        elif parent is not None:
-            noter("forme inconnue : etat.parent", numero)
-        tlv = m.get("tlv") if t == "diag" else None
-        if tlv is not None and not isinstance(tlv, (dict, list)):  # un objet ou une liste : deja "forme inconnue"
-            for raison in controler_tlv(tlv):
-                noter(raison, numero)
+        objet(t, dict(CHAMPS_COMMUNS, **CHAMPS_CONNUS[t]), m, numero)
     return inconnu
 
 
@@ -423,8 +553,8 @@ def texte_refus(inconnu):
     for raison, numeros in inconnu.items():
         lignes.append("  %s (%d ligne(s), la premiere : %d)" % (raison, len(numeros), numeros[0]))
     lignes.append("Un champ ou un message inconnu peut porter une ExtMac, une adresse ou un nom : le traiter dans "
-                  "l'anonymiseur (message(), puis les tables CHAMPS_CONNUS et TLV_CONNUS) avant de lui confier "
-                  "cette capture.")
+                  "l'anonymiseur (message(), puis les tables CHAMPS_CONNUS, OBJETS et TLV_CONNUS) avant de lui "
+                  "confier cette capture.")
     return "\n".join(lignes)
 
 
@@ -477,7 +607,7 @@ def main():
         sys.exit("fuite : %d valeur(s) reelle(s) encore presente(s)" % len(fuites))
     open(sortie, "w", encoding="utf-8").write(texte)
     print("%d lignes ; %d ExtMac, %d identifiants, %d prefixes /48 remplaces" %
-          (len(lignes), len(a.exts), len(a.iids), len(a.p48)))
+          (len(lignes), len(remplaces(a.exts)), len(remplaces(a.iids)), len(remplaces(a.p48))))
 
 
 if __name__ == "__main__":
