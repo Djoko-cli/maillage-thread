@@ -229,7 +229,7 @@ struct GrapheCanvas: View {
     }
 
     /// Nom d'un noeud que seule la sonde connait : « Routeur de bordure · B400 »,
-    /// « Routeur · 5000 », « Non identifié · AC05 ». Un routeur de bordure non identifie
+    /// « Routeur · 5000 », « Non identifie · AC05 ». Un routeur de bordure non identifie
     /// montre ses candidats, sous leur nom (`noms`, par instance ; l'instance a defaut) :
     /// « HomePod Avant ou HomePod Palier · 0400 » ; un seul, sans elimination possible :
     /// « HomePod salon ? · 0400 », car ce n'est peut-etre pas lui.

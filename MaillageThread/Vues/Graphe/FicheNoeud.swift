@@ -265,7 +265,7 @@ struct FicheNoeud: View {
         return id
     }
 
-    /// « RLOC16 5004 · parent HomePod bureau, qualité 3 » ; « RLOC16 5000 · voisins : 4 · enfants : 2 ».
+    /// « RLOC16 5004 · parent HomePod bureau, qualite 3 » ; « RLOC16 5000 · voisins : 4 · enfants : 2 ».
     static func ligneSonde(_ n: NoeudSonde, maillage m: MaillageAffiche, nom: (String) -> String) -> String {
         let rloc = String(format: "%04X", n.rloc16)
         switch n.genre {
@@ -280,7 +280,7 @@ struct FicheNoeud: View {
         }
     }
 
-    /// « qualité 3 » ; « qualité inconnue » sous un routeur muet.
+    /// « qualite 3 » ; « qualite inconnue » sous un routeur muet.
     static func texteQualite(_ q: Int?) -> String {
         q.map { String(localized: "qualité \($0)") } ?? String(localized: "qualité inconnue")
     }
