@@ -1,0 +1,531 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Maquette de reference de la vue par pieces (v13, validee par Djoko le 30/09/2026).
+     Maison et noms inventes. Ouvrir dans un navigateur : three.js vient de unpkg. -->
+<h2>v13 — pièces placées pour que les liens les évitent, navigation entre pièces, vue par pièces au dézoom</h2>
+<p class="subtitle">Base v12. Les pièces se placent de façon à limiter les liens qui passent sur une autre pièce ou qui se croisent. En pièce isolée, clic sur une autre pièce : on y va ; clic à côté : on revient. Au dézoom extrême, vue par pièces sans noms d'appareils.</p>
+
+<style>
+#vue3d{position:fixed;inset:0;z-index:50;overflow:hidden;background:radial-gradient(circle 900px at 30% 35%,#1f3b8a 0%,#0f1729 50%,#030517 100%);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+#vue3d canvas{display:block}
+#traits{position:absolute;inset:0;pointer-events:none}
+#etiquettes{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.etq{position:absolute;left:0;top:0;white-space:nowrap;visibility:hidden;will-change:transform}
+.etq-noeud{font-size:11px;line-height:15px;color:rgba(230,230,230,.95);background:rgba(6,10,26,.72);padding:0 5px;border-radius:4px}
+.etq-noeud.routeur{font-size:12px;line-height:16px}
+.etq-noeud.fort{color:#fff;font-weight:600}
+.etq-piece{font-size:12px;line-height:16px;color:#eef3ff;background:rgba(14,22,48,.78);padding:1px 7px;border-radius:6px;border:1px solid rgba(255,255,255,.15)}
+.etq-piece i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.etq-piece small{font-size:11px;color:#9fb0d0;margin-left:6px}
+.etq-etage{font-size:12px;color:rgba(59,130,245,.95)}
+.etq-maison{font-size:13px;color:rgba(230,230,230,.9);text-shadow:0 1px 3px #000}
+.etq-ailleurs{font-size:11px;line-height:15px;color:#b8c4dc;background:rgba(6,10,26,.78);padding:0 5px;border-radius:4px;border:1px dashed rgba(184,196,220,.5)}
+.barre{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:3}
+.barre button{font:13px -apple-system,system-ui,sans-serif;padding:4px 12px;border-radius:7px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(230,230,230,.9);cursor:pointer}
+.barre button.actif{background:rgba(59,130,245,.35);border-color:rgba(97,166,250,.6)}
+#fil{position:absolute;left:16px;top:16px;font-size:13px;color:rgba(230,230,230,.9);z-index:3}
+#fil a{color:#61a6fa;cursor:pointer}
+#niveau{position:absolute;left:16px;bottom:14px;font-size:11px;color:rgba(180,190,210,.85);pointer-events:none;z-index:3}
+#aide{position:absolute;right:16px;top:16px;max-width:34%;text-align:right;font-size:11px;line-height:15px;color:rgba(180,190,210,.6);pointer-events:none;z-index:3}
+</style>
+
+<div id="vue3d">
+  <svg id="traits" width="100%" height="100%"><path fill="none" stroke="rgba(230,236,250,.45)" stroke-width="1"/></svg>
+  <div id="etiquettes"></div>
+  <div class="barre"><button id="b-2d">2D</button><button id="b-3d">3D</button><button id="e-rotation">Rotation lente</button></div>
+  <div id="fil"></div><div id="niveau"></div>
+  <div id="aide">v13 · molette : zoom · glisser le fond : déplacer la vue · clic sur une pièce : l'isoler, puis clic sur une autre : y aller, clic à côté : revenir · glisser une pièce : la déplacer · Échap : revenir</div>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+
+const hote = document.getElementById('vue3d');
+let W = hote.clientWidth, H = hote.clientHeight, ASPECT = W / H;
+const rendu = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+rendu.setPixelRatio(window.devicePixelRatio); rendu.setSize(W, H); rendu.setClearColor(0x000000, 0);
+hote.insertBefore(rendu.domElement, hote.firstChild);
+const scene = new THREE.Scene();
+scene.add(new THREE.AmbientLight(0xffffff, 2.2));
+const lum = new THREE.DirectionalLight(0xffffff, 1.6); lum.position.set(-10, 30, 14); scene.add(lum);
+const camera = new THREE.PerspectiveCamera(2, ASPECT, 0.5, 60000);
+const controles = new OrbitControls(camera, rendu.domElement);
+controles.enableDamping = true; controles.autoRotateSpeed = 0.5; controles.screenSpacePanning = false; controles.zoomToCursor = true;
+const couche = document.getElementById('etiquettes'), traits = document.querySelector('#traits path');
+const filEl = document.getElementById('fil'), niveauEl = document.getElementById('niveau');
+const interface_ = [...hote.querySelectorAll('.barre, #fil, #niveau, #aide')];
+
+// ---------- Données de démonstration ----------
+const E = { rotation: true };
+const PX = 24;                                            // pixels par unité à l'échelle naturelle
+const GAP = 80 / PX, LAB = 28 / PX, MARGE = 56 / PX, ESP = 140 / PX, H3 = 2.4;
+const pieces = [
+  { nom: 'Salon', e: 0, c: 0x3b82f5 }, { nom: 'Cuisine', e: 0, c: 0x22c55e }, { nom: 'Entrée', e: 0, c: 0xf59e0b }, { nom: 'Buanderie', e: 0, c: 0x94a3b8 },
+  { nom: 'Chambre', e: 1, c: 0xa855f7 }, { nom: 'Bureau', e: 1, c: 0x06b6d4 }, { nom: 'Salle de bain', e: 1, c: 0xec4899 }, { nom: 'Chambre d\'amis', e: 1, c: 0x818cf8 }
+];
+const noeuds = [
+  { id: 'chef', nom: 'Prise cafetière 👑', p: 'Salon', rt: 1 }, { id: 'hpg', nom: 'HomePod Palier', p: 'Salon', rt: 1, apple: 1 },
+  { id: 'atv', nom: 'Apple TV 4K', p: 'Salon', rt: 1, apple: 1, grand: 1 }, { id: 'hpd', nom: 'HomePod Avant', p: 'Salon', rt: 1, apple: 1 },
+  { id: 'surv', nom: 'Prise du salon', p: 'Salon', rt: 1 }, { id: 'pres', nom: 'Détecteur de passage nord ☾', p: 'Salon', par: 'hpg' },
+  { id: 'amp', nom: 'Ampoule entrée', p: 'Entrée', par: 'surv' }, { id: 'porte', nom: 'Porte d\'entrée ☾', p: 'Entrée', par: 'surv' },
+  { id: 'cui', nom: 'Store banne serre ☾', p: 'Cuisine', par: 'surv' }, { id: 'fri', nom: 'Prise frigo', p: 'Cuisine', par: 'surv' },
+  { id: 'lav', nom: 'Prise lave-linge', p: 'Buanderie', par: 'surv' },
+  { id: 'hmc', nom: 'HomePod mini chambre', p: 'Chambre', rt: 1, apple: 1 }, { id: 'lit1', nom: 'Détecteur de passage lingerie sud ☾', p: 'Chambre', par: 'hpg' },
+  { id: 'lit2', nom: 'Détecteur de passage galerie est ☾', p: 'Chambre', par: 'hpg' }, { id: 'lampe', nom: 'Lampe de chevet', p: 'Chambre', par: 'hmc' },
+  { id: 'hmb', nom: 'HomePod mini bureau', p: 'Bureau', rt: 1, apple: 1 }, { id: 'prb', nom: 'Prise bureau', p: 'Bureau', par: 'hmb' },
+  { id: 'sdb', nom: 'Détecteur de passage nord ☾', p: 'Salle de bain', par: 'hmb' }, { id: 'ami', nom: 'Lampe chambre d\'amis', p: 'Chambre d\'amis', par: 'hmc' },
+  { id: 'ami2', nom: 'Capteur fenêtre ☾', p: 'Chambre d\'amis', par: 'hmc' }
+];
+const QUALITE = { 3: 0x4ade80, 2: 0xfacc15, 1: 0xf97316 };
+const liensRouteurs = [['chef', 'hpg', 2], ['chef', 'atv', 2], ['chef', 'surv', 3], ['surv', 'hpd', 2], ['hmc', 'hmb', 1], ['atv', 'hmc', 1]];
+const liensEnfants = noeuds.filter(n => n.par).map(n => [n.id, n.par]);
+const parId = Object.fromEntries(noeuds.map(n => [n.id, n]));
+const pieceDe = nom => pieces.find(p => p.nom === nom);
+
+// ---------- Étiquettes : chacune cherche une place libre autour de son ancre ----------
+const etiquettes = [];
+const DIRS = [[0, -1], [1, 0], [-1, 0], [0, 1], [1, -1], [-1, -1], [1, 1], [-1, 1]], ANNEAUX = [3, 14, 28, 44, 62];
+const ordre = (...ds) => ANNEAUX.flatMap((a, i) => ds.map(k => ({ dx: DIRS[k][0], dy: DIRS[k][1], a, i })));
+const C_APPAREIL = ordre(1, 2, 0, 3, 4, 6, 5, 7), C_PIECE = ordre(0, 3, 1, 2, 4, 5, 6, 7), C_FIXE = ordre(0, 3, 1, 2);
+function etiquette(classe, html, prio, cands, fixe = false) {
+  const el = document.createElement('div'); el.className = 'etq ' + classe; el.innerHTML = html; couche.appendChild(el);
+  const L = { el, prio, cands, fixe, ancre: () => null, voulu: true, vu: false, k: -1, w: el.offsetWidth, h: el.offsetHeight };
+  etiquettes.push(L); return L;
+}
+function oublierEtiquette(L) { L.el.remove(); etiquettes.splice(etiquettes.indexOf(L), 1); }
+const tmpE = new THREE.Vector3(), tmpP = new THREE.Vector3();
+function ecran(v) { tmpE.copy(v).project(camera); return tmpE.z > -1 && tmpE.z < 1 ? { x: (tmpE.x + 1) / 2 * W, y: (1 - tmpE.y) / 2 * H } : null; }
+function rectCand(L, A, c) {
+  const cx = (A.x0 + A.x1) / 2, cy = (A.y0 + A.y1) / 2, m = c.dx && c.dy ? c.a * 0.7 : c.a;
+  const x = c.dx > 0 ? A.x1 + m : c.dx < 0 ? A.x0 - m - L.w : cx - L.w / 2;
+  const y = c.dy > 0 ? A.y1 + m : c.dy < 0 ? A.y0 - m - L.h : cy - L.h / 2;
+  return { x0: x, y0: y, x1: x + L.w, y1: y + L.h };
+}
+const chevauche = (r, q) => r.x0 - 2 < q.x1 && q.x0 - 2 < r.x1 && r.y0 - 2 < q.y1 && q.y0 - 2 < r.y1;
+const dansCadre = r => r.x0 >= 4 && r.y0 >= 4 && r.x1 <= W - 4 && r.y1 <= H - 4;
+function cacher(L) { if (L.vu) { L.el.style.visibility = 'hidden'; L.vu = false; } L.k = -1; }
+function placer(pris) {
+  let d = '';
+  for (const L of etiquettes.slice().sort((a, b) => a.prio - b.prio)) {
+    const A = L.voulu ? L.ancre() : null;
+    if (!A) { cacher(L); continue; }
+    const libre = k => { const r = rectCand(L, A, L.cands[k]); return dansCadre(r) && (L.fixe || !pris.some(q => chevauche(r, q))) ? r : null; };
+    let k = -1, R = null;
+    for (let j = 0; j < L.cands.length; j++) { R = libre(j); if (R) { k = j; break; } }
+    if (k < 0) { cacher(L); continue; }
+    // Stabilité : l'étiquette garde sa place tant qu'elle est libre, et ne rejoint la place préférée
+    // qu'après l'avoir trouvée libre une demi-seconde (pas de clignotement pendant la rotation).
+    if (L.k >= 0 && L.k !== k) {
+      const R2 = libre(L.k);
+      if (R2 && (L.envie = (L.envie || 0) + 1) < 30) { k = L.k; R = R2; } else L.envie = 0;
+    } else L.envie = 0;
+    L.k = k; pris.push(R);
+    L.el.style.transform = 'translate(' + R.x0.toFixed(1) + 'px,' + R.y0.toFixed(1) + 'px)';
+    if (!L.vu) { L.el.style.visibility = 'visible'; L.vu = true; }
+    const op = L.pale ? '0.45' : ''; if (L.el.style.opacity !== op) L.el.style.opacity = op;
+    if (L.cands[k].i > 0) {
+      const cx = (R.x0 + R.x1) / 2, cy = (R.y0 + R.y1) / 2, px = Math.min(Math.max(cx, A.x0), A.x1), py = Math.min(Math.max(cy, A.y0), A.y1);
+      d += 'M' + px.toFixed(1) + ' ' + py.toFixed(1) + 'L' + Math.min(Math.max(px, R.x0), R.x1).toFixed(1) + ' ' + Math.min(Math.max(py, R.y0), R.y1).toFixed(1);
+    }
+  }
+  traits.setAttribute('d', d);
+}
+function hautEcran() { return new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion); }
+function hautHorizontal() { const v = hautEcran(); v.y = 0; return v.lengthSq() < 1e-8 ? new THREE.Vector3(0, 0, -1) : v.normalize(); }
+
+// ---------- Cartes de pièce : une ligne par appareil, pastille puis nom ----------
+for (const n of noeuds) {
+  n.rpx = n.grand ? 15 : n.apple ? 13 : n.rt ? 8 : 7;
+  n.L = etiquette('etq-noeud' + (n.rt ? ' routeur' : ''), n.nom, n.id === 'chef' ? 5 : n.rt ? 6 : 7, C_APPAREIL);
+}
+const rang = n => n.id === 'chef' ? 0 : n.apple ? 1 : n.rt ? 2 : 3;
+function carte(membres) {
+  const lignes = membres.slice().sort((a, b) => rang(a) - rang(b) || a.nom.localeCompare(b.nom)).map(n => ({ n, h: Math.max(30, 2 * n.rpx + 12) }));
+  let meilleur = null;
+  for (let cols = 1; cols <= Math.min(3, lignes.length); cols++) {
+    const parCol = Math.ceil(lignes.length / cols);
+    if ((cols - 1) * parCol >= lignes.length) continue;
+    const colonnes = Array.from({ length: cols }, (_, c) => lignes.slice(c * parCol, (c + 1) * parCol));
+    const larg = colonnes.map(col => 14 + 2 * Math.max(...col.map(l => l.n.rpx)) + 9 + Math.max(...col.map(l => l.n.L.w)) + 14);
+    const haut = Math.max(...colonnes.map(col => col.reduce((s, l) => s + l.h, 0))) + 16, w = larg.reduce((a, b) => a + b, 0);
+    const score = Math.abs(Math.log(w / haut / 1.3));
+    if (!meilleur || score < meilleur.score) meilleur = { score, colonnes, larg, w, haut };
+  }
+  let x0 = 0;
+  meilleur.colonnes.forEach((col, c) => {
+    const rmax = Math.max(...col.map(l => l.n.rpx)); let y = 8;
+    for (const l of col) { l.n.local = new THREE.Vector3((x0 + 14 + rmax - meilleur.w / 2) / PX, 0, (y + l.h / 2 - meilleur.haut / 2) / PX); y += l.h; }
+    x0 += meilleur.larg[c];
+  });
+  return { w: meilleur.w / PX, d: meilleur.haut / PX };
+}
+
+// ---------- Disposition des pièces : organique, puis réglée pour que les liens évitent les autres pièces ----------
+const tousLiens = [...liensRouteurs.map(([a, b]) => [a, b]), ...liensEnfants];
+const etageDe = Object.fromEntries(pieces.map(p => [p.nom, p.e]));
+const voisinage = new Set();
+for (const [a, b] of tousLiens) { const pa = parId[a].p, pb = parId[b].p; if (pa !== pb) { voisinage.add(pa + '|' + pb); voisinage.add(pb + '|' + pa); } }
+const lie = (a, b) => voisinage.has(a + '|' + b);
+const etages = [0, 1].map(e => ({ e, liste: pieces.filter(p => p.e === e).map(pc => { const membres = noeuds.filter(n => n.p === pc.nom); return { pc, membres, ...carte(membres), pos: new THREE.Vector2() }; }).sort((a, b) => b.w * b.d - a.w * a.d) }));
+const parPiece = Object.fromEntries(etages.flatMap(E => E.liste.map(it => [it.pc.nom, it])));
+function separer(liste, attirer) {
+  for (let i = 0; i < liste.length; i++) for (let j = i + 1; j < liste.length; j++) {
+    const A = liste[i], B = liste[j], dx = B.pos.x - A.pos.x, dz = B.pos.y - A.pos.y;
+    const px = (A.w + B.w) / 2 + GAP - Math.abs(dx), pz = (A.d + B.d) / 2 + GAP + LAB - Math.abs(dz);
+    if (px > 0 && pz > 0) {
+      if (px < pz) { const m = (Math.sign(dx) || 1) * px / 2; A.pos.x -= m; B.pos.x += m; }
+      else { const m = (Math.sign(dz) || 1) * pz / 2; A.pos.y -= m; B.pos.y += m; }
+    } else if (attirer && lie(A.pc.nom, B.pc.nom)) { A.pos.x += dx * 0.003; A.pos.y += dz * 0.003; B.pos.x -= dx * 0.003; B.pos.y -= dz * 0.003; }
+  }
+}
+function recentrer(liste) {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const A of liste) { x0 = Math.min(x0, A.pos.x - A.w / 2); x1 = Math.max(x1, A.pos.x + A.w / 2); z0 = Math.min(z0, A.pos.y - A.d / 2 - LAB); z1 = Math.max(z1, A.pos.y + A.d / 2); }
+  for (const A of liste) { A.pos.x -= (x0 + x1) / 2; A.pos.y -= (z0 + z1) / 2; }
+}
+function rayonDe(liste) {
+  let r = 0;
+  for (const A of liste) for (const sx of [-1, 1]) for (const sz of [-1, 1]) r = Math.max(r, Math.hypot(A.pos.x + sx * A.w / 2, A.pos.y + (sz < 0 ? -A.d / 2 - LAB : A.d / 2)));
+  return r + MARGE;
+}
+function tasser(liste, tours, f) { for (let k = 0; k < tours; k++) { separer(liste, true); for (const A of liste) A.pos.multiplyScalar(f); } for (let k = 0; k < 60; k++) separer(liste, false); recentrer(liste); }
+// Longueur d'un segment à l'intérieur d'un rectangle (découpage de Liang-Barsky).
+function dedans(p, q, r) {
+  let t0 = 0, t1 = 1; const dx = q[0] - p[0], dz = q[1] - p[1];
+  for (const [pp, qq] of [[-dx, p[0] - r.x0], [dx, r.x1 - p[0]], [-dz, p[1] - r.z0], [dz, r.z1 - p[1]]]) {
+    if (pp === 0) { if (qq < 0) return 0; continue; }
+    const u = qq / pp;
+    if (pp < 0) { if (u > t1) return 0; if (u > t0) t0 = u; } else { if (u < t0) return 0; if (u < t1) t1 = u; }
+  }
+  return t1 > t0 ? (t1 - t0) * Math.hypot(dx, dz) : 0;
+}
+const sens = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+const croise = (p, q, r, w) => sens(p, q, r) * sens(p, q, w) < 0 && sens(r, w, p) * sens(r, w, q) < 0;
+// Coût d'une disposition, vue en 2D : un lien qui passe sur une autre pièce (ou sur son nom) coûte cher,
+// un croisement de liens un peu moins ; s'y ajoutent la longueur des liens, la taille des étages et, pour la 3D,
+// l'écart à l'horizontale des liens entre étages.
+function cout() {
+  const R = etages.map(E => rayonDe(E.liste)), cx = e => e ? R[1] + ESP / 2 : -(R[0] + ESP / 2);
+  const p2 = n => { const it = parPiece[n.p]; return [cx(etageDe[n.p]) + it.pos.x + n.local.x, it.pos.y + n.local.z]; };
+  const rects = pieces.map(pc => { const it = parPiece[pc.nom], x = cx(pc.e) + it.pos.x, z = it.pos.y; return { nom: pc.nom, x0: x - it.w / 2, x1: x + it.w / 2, z0: z - it.d / 2 - LAB, z1: z + it.d / 2 }; });
+  const segs = tousLiens.map(([a, b]) => ({ A: parId[a], B: parId[b], p: p2(parId[a]), q: p2(parId[b]) }));
+  let c = R[0] + R[1];
+  for (const g of segs) {
+    c += 0.3 * Math.hypot(g.q[0] - g.p[0], g.q[1] - g.p[1]);
+    for (const r of rects) if (r.nom !== g.A.p && r.nom !== g.B.p) { const l = dedans(g.p, g.q, r); if (l > 0) c += 6 + 4 * l; }
+    if (etageDe[g.A.p] !== etageDe[g.B.p]) { const a = parPiece[g.A.p], b = parPiece[g.B.p]; c += 0.1 * Math.hypot(a.pos.x + g.A.local.x - b.pos.x - g.B.local.x, a.pos.y + g.A.local.z - b.pos.y - g.B.local.z); }
+  }
+  for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+    const S = segs[i], T = segs[j];
+    if (S.A === T.A || S.A === T.B || S.B === T.A || S.B === T.B) continue;
+    if (croise(S.p, S.q, T.p, T.q)) c += 5;
+  }
+  return c;
+}
+// Descente : à chaque tour, on essaie d'échanger deux pièces d'un même étage, ou de tourner ou retourner un étage,
+// et on garde le meilleur coup ; six départs différents, on retient la meilleure disposition.
+const ORIENT = [p => p, p => p.set(-p.y, p.x), p => p.set(-p.x, -p.y), p => p.set(p.y, -p.x), p => p.set(-p.x, p.y), p => p.set(p.y, p.x), p => p.set(p.x, -p.y), p => p.set(-p.y, -p.x)];
+const etat = () => etages.map(E => E.liste.map(A => A.pos.clone()));
+const remettre = st => etages.forEach((E, i) => E.liste.forEach((A, j) => A.pos.copy(st[i][j])));
+let retenu = null, coutRetenu = Infinity, coutDepart = Infinity;
+for (let essai = 0; essai < 6; essai++) {
+  for (const E of etages) { E.liste.forEach((A, i) => { const a = essai * 1.047 + i * 2.39996, r = Math.sqrt(i + 0.5) * 6; A.pos.set(Math.cos(a) * r, Math.sin(a) * r); }); tasser(E.liste, 900, 0.996); }
+  let courant = etat(), c = cout();
+  if (essai === 0) coutDepart = c;
+  for (let tour = 0; tour < 25; tour++) {
+    let mieux = null, cm = c;
+    for (const E of etages) {
+      const n = E.liste.length, coups = [];
+      for (let o = 1; o < 8; o++) coups.push(() => { for (const A of E.liste) ORIENT[o](A.pos); });
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) coups.push(() => { const x = E.liste[i].pos.clone(); E.liste[i].pos.copy(E.liste[j].pos); E.liste[j].pos.copy(x); });
+      for (const coup of coups) { remettre(courant); coup(); tasser(E.liste, 200, 0.998); const cc = cout(); if (cc < cm - 1e-6) { cm = cc; mieux = etat(); } }
+    }
+    if (!mieux) break;
+    courant = mieux; c = cm;
+  }
+  if (c < coutRetenu) { coutRetenu = c; retenu = courant; }
+}
+remettre(retenu);
+window.coutsDisposition = { depart: coutDepart, retenu: coutRetenu };
+const plateaux = etages.map(E => ({ e: E.e, rayon: rayonDe(E.liste), liste: E.liste }));
+const [P0, P1] = plateaux, RMAX = Math.max(P0.rayon, P1.rayon);
+const ETAGE = 1.5 * RMAX, hauteur = u => 0.04 + H3 * u;
+const centre2D = e => new THREE.Vector3(e ? P1.rayon + ESP / 2 : -(P0.rayon + ESP / 2), 0, 0), centre3D = e => new THREE.Vector3(0, e * ETAGE, 0);
+const centre = (e, u) => centre2D(e).lerp(centre3D(e), u);
+const CENTRE3 = new THREE.Vector3(0, (ETAGE + H3) / 2, 0), R3 = Math.hypot(RMAX + 0.8, (ETAGE + H3) / 2 + 1.4) + 0.4;
+const BOITE = { x0: -(2 * P0.rayon + ESP / 2), x1: 2 * P1.rayon + ESP / 2, z0: -RMAX - 34 / PX, z1: RMAX };
+const CIBLE2D = new THREE.Vector3((BOITE.x0 + BOITE.x1) / 2, 0, (BOITE.z0 + BOITE.z1) / 2);
+const vue2D = () => Math.max((BOITE.z1 - BOITE.z0) * 1.1, (BOITE.x1 - BOITE.x0) * 1.05 / ASPECT);
+const vue3D = () => 2.4 * R3 * Math.max(1, 1 / ASPECT);
+const vue = u => vue2D() + (vue3D() - vue2D()) * u;
+
+// ---------- Étages : plateaux ronds, comme la zone de partition de l'app ----------
+const texZone = (() => {
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); gr.addColorStop(0, 'rgba(59,130,245,0.26)'); gr.addColorStop(1, 'rgba(59,130,245,0.08)');
+  g.fillStyle = gr; g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.fill();
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx;
+})();
+const disques = plateaux.map(({ e, rayon }) => {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.CircleGeometry(rayon, 160), new THREE.MeshBasicMaterial({ map: texZone, transparent: true, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.renderOrder = 0;
+  const bord = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 200 }, (_, i) => new THREE.Vector3(rayon * Math.cos(i / 200 * Math.PI * 2), 0.01, rayon * Math.sin(i / 200 * Math.PI * 2)))),
+    new THREE.LineBasicMaterial({ color: 0x3b82f5, transparent: true, opacity: 0.45, depthWrite: false })); bord.renderOrder = 0;
+  const L = etiquette('etq-etage', e ? 'Étage' : 'Rez-de-chaussée', 1, C_FIXE, true);
+  L.ancre = () => { const p = ecran(g.position.clone().addScaledVector(hautHorizontal(), rayon)); return p ? { x0: p.x, y0: p.y, x1: p.x, y1: p.y } : null; };
+  g.add(m, bord); g.userData = { e, m, bord, L, rayon }; scene.add(g); return g;
+});
+
+// ---------- Pièces : cartes en 2D, blocs de verre en 3D ----------
+const blocs = {};
+function rectBloc(b) {
+  const { w, d, f } = b.userData, h = hauteur(t); let r = null;
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const p = ecran(b.localToWorld(tmpP.set(sx * w * f / 2, sy * h / 2, sz * d * f / 2)));
+    if (!p) return null;
+    r = r ? { x0: Math.min(r.x0, p.x), y0: Math.min(r.y0, p.y), x1: Math.max(r.x1, p.x), y1: Math.max(r.y1, p.y) } : { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+  }
+  return r;
+}
+for (const P of plateaux) for (const it of P.liste) {
+  const { pc, membres, w, d } = it, g = new THREE.Group(), hex = pc.c.toString(16).padStart(6, '0');
+  const verre = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: pc.c, transparent: true, opacity: 0.13, depthWrite: false })); verre.renderOrder = 1;
+  const aretes = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: pc.c, transparent: true, opacity: 0.75, depthWrite: false })); aretes.renderOrder = 1;
+  g.add(verre, aretes);
+  const L = etiquette('etq-piece', '<i style="background:#' + hex + '"></i>' + pc.nom + '<small>' + membres.length + (membres.length > 1 ? ' appareils' : ' appareil') + '</small>', 4, C_PIECE);
+  L.el.style.borderColor = '#' + hex + '99'; L.ancre = () => rectBloc(g);
+  g.userData = { pc, w, d, verre, aretes, L, local: new THREE.Vector3(it.pos.x, 0, it.pos.y), membres, f: 1, fk: 0, voile: 1 };
+  verre.userData.bloc = g; blocs[pc.nom] = g; scene.add(g);
+}
+
+// ---------- La maison : sphère à liseré, sans reflets, visible en 3D ----------
+const maison = new THREE.Group(); maison.position.copy(CENTRE3); scene.add(maison);
+const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.ShaderMaterial({
+  uniforms: { force: { value: 0 } },
+  vertexShader: 'varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+  fragmentShader: 'uniform float force; varying vec3 vN; varying vec3 vV; void main() { float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.5); gl_FragColor = vec4(0.55, 0.72, 1.0, force * (0.02 + 0.45 * f)); }',
+  transparent: true, depthWrite: false
+})); sphere.renderOrder = 5;
+const equateur = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 193 }, (_, i) => new THREE.Vector3(Math.cos(i / 192 * Math.PI * 2), 0, Math.sin(i / 192 * Math.PI * 2)))),
+  new THREE.LineBasicMaterial({ color: 0xdfe6f3, transparent: true, opacity: 0, depthWrite: false }));
+maison.add(sphere, equateur);
+const Lm = etiquette('etq-maison', '⌂ Maison', 0, ordre(3, 1, 2, 0));
+Lm.ancre = () => { const p = ecran(CENTRE3.clone().addScaledVector(hautEcran(), sphere.scale.x)); return p ? { x0: p.x, y0: p.y, x1: p.x, y1: p.y } : null; };
+
+// ---------- Appareils : sphères brillantes (routeurs Apple) et pastilles vertes, comme l'app ----------
+const textures = {};
+function textureNoeud(hex, brillant) {
+  const cle = hex + (brillant ? 'b' : ''); if (textures[cle]) return textures[cle];
+  const S = 128, G = brillant ? 2.1 : 1.8, rd = S / 2 / G, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), rgb = [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255].join(',');
+  const halo = g.createRadialGradient(S / 2, S / 2, rd * 0.7, S / 2, S / 2, S / 2);
+  halo.addColorStop(0, 'rgba(' + rgb + ',0.6)'); halo.addColorStop(1, 'rgba(' + rgb + ',0)');
+  g.fillStyle = halo; g.fillRect(0, 0, S, S);
+  g.beginPath(); g.arc(S / 2, S / 2, rd, 0, Math.PI * 2);
+  if (brillant) { const o = S / 2 - rd / 3, gr = g.createRadialGradient(o, o, 0, o, o, rd * 1.3); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgb(' + rgb + ')'); g.fillStyle = gr; }
+  else g.fillStyle = 'rgb(' + rgb + ')';
+  g.fill();
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return (textures[cle] = { tx, G });
+}
+for (const n of noeuds) {
+  const { tx, G } = textureNoeud(n.apple ? 0x61a6fa : 0x4ade80, !!n.apple);
+  const o = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthWrite: false })); o.renderOrder = 4;
+  o.userData = { n, G, rpx: n.rpx }; n.o = o; scene.add(o);
+  n.L.ancre = () => { const p = ecran(o.position), r = o.userData.rpx; return p ? { x0: p.x - r, y0: p.y - r, x1: p.x + r, y1: p.y + r } : null; };
+}
+function pxParUnite(p) { tmpP.copy(p).applyMatrix4(camera.matrixWorldInverse); return H / (2 * Math.max(0.01, -tmpP.z) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))); }
+function tailles() {
+  // Comme l'app : les pastilles suivent le zoom sans enfler au-delà de 1,1 fois leur taille naturelle.
+  for (const n of noeuds) {
+    const o = n.o, ppu = pxParUnite(o.position), r = Math.min(n.rpx * 1.1, Math.max(3, n.rpx * ppu / PX));
+    o.userData.rpx = r; o.scale.setScalar(2 * r / ppu * o.userData.G);
+  }
+}
+
+// ---------- Liens radio ----------
+const liensR = liensRouteurs.map(([a, b, q]) => {
+  const mat = new LineMaterial({ color: QUALITE[q], linewidth: 2, transparent: true, opacity: 0.95, depthWrite: false }); mat.resolution.set(W, H);
+  const geo = new LineGeometry(); geo.setPositions([0, 0, 0, 0, 0, 1]);
+  const obj = new Line2(geo, mat); obj.renderOrder = 3; obj.frustumCulled = false; scene.add(obj); return { a, b, obj };
+});
+const liensE = liensEnfants.map(([a, b]) => {
+  const obj = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28, depthWrite: false }));
+  obj.renderOrder = 2; obj.frustumCulled = false; scene.add(obj); return { a, b, obj };
+});
+
+// ---------- État, placement de la scène ----------
+let t = 0, depart = 0, cible = 0, debut = 0, focus = null, s = 0, sDepart = 0, sCible = 0, sDebut = 0, survol = null, vol = null, niveauZoom = 2;
+const ailleurs = [];
+function ease(x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; }
+const isolee = () => focus && sCible === 1;
+// s : isolement général (voile les étages et les autres pièces) ; fk : part propre à chaque pièce, qui passe
+// en douceur d'une pièce à l'autre quand on clique directement sur une autre pièce.
+function poser() {
+  const h = hauteur(t), es = ease(s), fo = 1 - es;
+  const rs = R3 * (0.8 + 0.2 * t); sphere.scale.setScalar(rs); equateur.scale.setScalar(rs);
+  sphere.material.uniforms.force.value = t * t * fo; equateur.material.opacity = 0.18 * t * fo;
+  for (const dq of disques) { dq.position.copy(centre(dq.userData.e, t)); dq.userData.m.material.opacity = fo; dq.userData.bord.material.opacity = 0.45 * fo; }
+  for (const nom in blocs) {
+    const b = blocs[nom], u = b.userData, fk = ease(u.fk);
+    u.voile = 1 - es * (1 - fk); u.f = 1 + 0.3 * fk;
+    b.position.copy(centre(u.pc.e, t)).add(u.local); b.position.y += h / 2 + 0.02; b.updateMatrixWorld(true);
+    u.verre.scale.set(u.w * u.f, h, u.d * u.f); u.aretes.scale.set(u.w * u.f, h, u.d * u.f);
+    const vis = 1 - 0.85 * (1 - u.voile);
+    u.verre.material.opacity = vis * (0.13 + 0.05 * t); u.aretes.material.opacity = vis * 0.75;
+  }
+  for (const n of noeuds) {
+    const b = blocs[n.p], loc = n.local.clone().multiplyScalar(b.userData.f); loc.y = -h / 2 + 0.08 + 0.5 * h * t;
+    n.o.position.copy(b.localToWorld(loc)); n.o.material.opacity = 1 - 0.8 * (1 - b.userData.voile);
+  }
+  const poids = l => 1 - 0.85 * (1 - Math.max(blocs[parId[l.a].p].userData.voile, blocs[parId[l.b].p].userData.voile));
+  for (const l of liensR) {
+    const A = parId[l.a].o.position, B = parId[l.b].o.position, buf = l.obj.geometry.attributes.instanceStart.data;
+    buf.array.set([A.x, A.y, A.z, B.x, B.y, B.z]); buf.needsUpdate = true;
+    l.obj.material.opacity = 0.95 * poids(l);
+  }
+  for (const l of liensE) {
+    const A = parId[l.a].o.position, B = parId[l.b].o.position, p = l.obj.geometry.attributes.position;
+    p.setXYZ(0, A.x, A.y, A.z); p.setXYZ(1, B.x, B.y, B.z); p.needsUpdate = true;
+    l.obj.material.opacity = survol === l.a || survol === l.b ? 0.85 : 0.28 * poids(l);
+  }
+  for (const a of ailleurs) {
+    const e = a.userData.enfant.o.position, dir = a.userData.parent.o.position.clone().sub(focus.position).setY(0);
+    if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
+    a.position.copy(focus.position).addScaledVector(dir.normalize(), Math.max(focus.userData.w, focus.userData.d) * focus.userData.f / 2 + 2.6); a.position.y = e.y;
+    const p = a.userData.fil.geometry.attributes.position; p.setXYZ(0, e.x, e.y, e.z); p.setXYZ(1, a.position.x, a.position.y, a.position.z); p.needsUpdate = true;
+    const fk = ease(focus.userData.fk); a.userData.fil.computeLineDistances(); a.userData.fil.material.opacity = 0.8 * fk; a.userData.L.voulu = fk > 0.6;
+  }
+}
+// Zoom sémantique : très loin, les pièces seules ; à mi-distance, les routeurs en plus ; de près, tous les noms
+// (ceux qui ne trouvent pas de place attendent un zoom plus proche).
+function details() {
+  const k = pxParUnite(controles.target) / PX; niveauZoom = k < 0.42 ? 0 : k < 0.6 ? 1 : 2;
+  const fo = 1 - ease(s);
+  for (const n of noeuds) {
+    const u = blocs[n.p].userData;
+    n.L.voulu = survol === n.id || (isolee() ? u.fk > 0.6 : !focus && (niveauZoom === 2 || (niveauZoom === 1 && !!n.rt)));
+    n.L.prio = survol === n.id ? 2 : n.id === 'chef' ? 5 : n.rt ? 6 : 7;
+    n.L.el.classList.toggle('fort', survol === n.id);
+  }
+  for (const nom in blocs) { const u = blocs[nom].userData, pale = !!focus && u.fk < 0.5 && s > 0.3; u.L.voulu = true; u.L.pale = pale; u.L.prio = pale ? 8 : 4; }
+  for (const dq of disques) dq.userData.L.voulu = fo > 0.5;
+  Lm.voulu = fo > 0.5 && t > 0.4;
+}
+function niveau() {
+  const caches = noeuds.filter(n => n.L.voulu && !n.L.vu).length;
+  const txt = isolee() ? 'Pièce isolée : ' + focus.userData.pc.nom + ' · clic sur une autre pièce pour y aller, clic à côté ou Échap pour revenir'
+    : niveauZoom === 0 ? 'Vue d\'ensemble : les pièces · molette pour voir les noms'
+    : niveauZoom === 1 ? 'Mi-distance : les pièces et les routeurs'
+    : caches ? caches + (caches > 1 ? ' noms masqués' : ' nom masqué') + ' faute de place : rapprochez-vous (molette)' : 'Tous les noms sont lisibles';
+  if (niveauEl.textContent !== txt) niveauEl.textContent = txt;
+}
+function obstacles() {
+  const r = [], h0 = hote.getBoundingClientRect();
+  for (const n of noeuds) if (n.o.material.opacity > 0.5) { const p = ecran(n.o.position), q = n.o.userData.rpx; if (p) r.push({ x0: p.x - q, y0: p.y - q, x1: p.x + q, y1: p.y + q }); }
+  for (const el of interface_) { const b = el.getBoundingClientRect(); if (b.width) r.push({ x0: b.left - h0.left - 4, y0: b.top - h0.top - 4, x1: b.right - h0.left + 4, y1: b.bottom - h0.top + 4 }); }
+  return r;
+}
+
+// ---------- Caméra, isolement, bascule ----------
+function distancePour(v) { return v / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))); }
+function fil() { filEl.innerHTML = isolee() ? '<a id="retour">Maison</a> › ' + focus.userData.pc.nom : 'Maison'; const r = document.getElementById('retour'); if (r) r.onclick = sortir; }
+function volerVers(pos, cib, duree) { vol = { p0: camera.position.clone(), c0: controles.target.clone(), p1: pos, c1: cib, debut: performance.now(), duree }; }
+function viderAilleurs() { for (const a of ailleurs) { scene.remove(a, a.userData.fil); oublierEtiquette(a.userData.L); } ailleurs.length = 0; }
+function directionVue() { return t === 1 ? camera.position.clone().sub(controles.target).normalize() : new THREE.Vector3(0, 1, 0.0001); }
+function isoler(b) {
+  if (focus === b && sCible === 1) return;
+  viderAilleurs(); focus = b;
+  if (sCible !== 1) { sDepart = s; sCible = 1; sDebut = performance.now(); }
+  for (const n of b.userData.membres) if (n.par && parId[n.par].p !== n.p) {
+    const par = parId[n.par], g = new THREE.Object3D(), ep = etageDe[par.p], eb = b.userData.pc.e;
+    const fleche = ep === eb ? '↗ ' : ep < eb ? '↓ ' : '↑ ';
+    const L = etiquette('etq-ailleurs', fleche + par.nom.replace(' 👑', '') + ' · ' + par.p + (ep === eb ? '' : ep < eb ? ', rez-de-chaussée' : ', étage'), 3, C_APPAREIL);
+    L.voulu = false; L.ancre = () => { const p = ecran(g.position); return p ? { x0: p.x - 3, y0: p.y - 3, x1: p.x + 3, y1: p.y + 3 } : null; };
+    const filL = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineDashedMaterial({ color: 0x4ade80, dashSize: 0.25, gapSize: 0.2, transparent: true, opacity: 0, depthWrite: false }));
+    filL.frustumCulled = false; g.userData = { enfant: n, parent: par, fil: filL, L }; scene.add(g, filL); ailleurs.push(g);
+  }
+  const c = b.position.clone();
+  volerVers(c.clone().add(directionVue().multiplyScalar(distancePour(Math.max(b.userData.w / ASPECT, b.userData.d) * 1.3 * 1.8 + 6))), c, 1300);
+  controles.autoRotate = false; fil();
+}
+function sortir() {
+  if (!focus || sCible === 0) return; sDepart = s; sCible = 0; sDebut = performance.now(); fil();
+  const c = CIBLE2D.clone().lerp(CENTRE3, t); volerVers(c.clone().add(directionVue().multiplyScalar(distancePour(vue(t)))), c, 1300);
+}
+window.addEventListener('keydown', ev => { if (ev.key === 'Escape') sortir(); });
+const ray = new THREE.Raycaster(), souris = new THREE.Vector2();
+let glisse = null, planGlisse = new THREE.Plane(), prise = new THREE.Vector3(), bouge = false, appui = null, clicPiece = null;
+function pointer(ev) { const r = rendu.domElement.getBoundingClientRect(); souris.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(souris, camera); }
+const verres = () => Object.values(blocs).map(b => b.userData.verre);
+rendu.domElement.addEventListener('pointerdown', ev => {
+  if (t !== cible) return; pointer(ev); bouge = false; appui = { x: ev.clientX, y: ev.clientY };
+  const hit = ray.intersectObjects(verres())[0]; clicPiece = hit ? hit.object.userData.bloc : null;
+  if (!focus && clicPiece) { glisse = clicPiece; controles.enabled = false; planGlisse.set(new THREE.Vector3(0, 1, 0), -glisse.position.y); ray.ray.intersectPlane(planGlisse, prise); }
+});
+rendu.domElement.addEventListener('pointermove', ev => {
+  pointer(ev);
+  if (glisse) {
+    const p = new THREE.Vector3();
+    if (ray.ray.intersectPlane(planGlisse, p)) {
+      if (p.distanceTo(prise) > 0.05) bouge = true;
+      const d = p.clone().sub(prise); d.y = 0; const loc = glisse.userData.local.clone().add(d);
+      const R = plateaux[glisse.userData.pc.e].rayon - 0.5 * Math.hypot(glisse.userData.w, glisse.userData.d);
+      if (loc.length() > R) loc.setLength(R); glisse.userData.local.copy(loc); prise.copy(p);
+    }
+    return;
+  }
+  const h = ray.intersectObjects(noeuds.map(n => n.o))[0]; survol = h ? h.object.userData.n.id : null;
+});
+// En pièce isolée, un clic (sans glisser) sur une autre pièce y mène directement ; un clic à côté des pièces ramène à la maison.
+rendu.domElement.addEventListener('pointerup', ev => {
+  const immobile = appui && Math.hypot(ev.clientX - appui.x, ev.clientY - appui.y) < 5; appui = null;
+  if (glisse) { const b = glisse; glisse = null; controles.enabled = true; if (!bouge) isoler(b); return; }
+  if (focus && immobile) { if (!clicPiece) sortir(); else if (clicPiece !== focus || sCible === 0) isoler(clicPiece); }
+});
+function boutons() { document.getElementById('e-rotation').classList.toggle('actif', E.rotation); document.getElementById('b-2d').classList.toggle('actif', cible === 0); document.getElementById('b-3d').classList.toggle('actif', cible === 1); }
+function regler2D() { controles.enableRotate = false; controles.minPolarAngle = controles.maxPolarAngle = 0; controles.mouseButtons.LEFT = THREE.MOUSE.PAN; controles.autoRotate = false; controles.minDistance = distancePour(3); controles.maxDistance = distancePour(vue2D() * 3); }
+function regler3D() { controles.enableRotate = true; controles.minPolarAngle = 0.15; controles.maxPolarAngle = 1.45; controles.mouseButtons.LEFT = THREE.MOUSE.ROTATE; controles.autoRotate = E.rotation && !focus; controles.minDistance = 5; controles.maxDistance = distancePour(vue3D() * 2.5); }
+function cameraBascule(u) {
+  camera.fov = 2 + 38 * Math.pow(u, 1.6); camera.updateProjectionMatrix();
+  const c = CIBLE2D.clone().lerp(CENTRE3, u), ang = -0.75 * u, incl = 0.0001 + 0.95 * u;
+  const dir = new THREE.Vector3(Math.sin(incl) * Math.sin(ang), Math.cos(incl), Math.sin(incl) * Math.cos(ang)).normalize();
+  camera.position.copy(c).add(dir.multiplyScalar(distancePour(vue(u)))); camera.lookAt(c); controles.target.copy(c);
+}
+function basculer(v) {
+  if (focus) { viderAilleurs(); focus = null; s = 0; sCible = 0; fil(); }
+  vol = null; controles.enabled = false; controles.autoRotate = false; controles.minDistance = 0; controles.maxDistance = Infinity;
+  depart = t; cible = v; debut = performance.now(); boutons();
+}
+document.getElementById('b-2d').addEventListener('click', () => basculer(0));
+document.getElementById('b-3d').addEventListener('click', () => basculer(1));
+document.getElementById('e-rotation').addEventListener('click', () => { E.rotation = !E.rotation; if (t === 1) controles.autoRotate = E.rotation && !focus; boutons(); });
+window.addEventListener('resize', () => {
+  W = hote.clientWidth; H = hote.clientHeight; ASPECT = W / H;
+  rendu.setSize(W, H); camera.aspect = ASPECT; camera.updateProjectionMatrix();
+  for (const l of liensR) l.obj.material.resolution.set(W, H);
+  if (!focus && t === cible && !vol) { cameraBascule(t); if (t === 1) regler3D(); else regler2D(); }
+});
+let dernier = 0;
+function boucle(ts) {
+  const dt = dernier ? Math.min(0.1, (ts - dernier) / 1000) : 0; dernier = ts;
+  const q = Math.min(1, (ts - debut) / 2600);
+  if (t !== cible) { t = depart + (cible - depart) * ease(q); cameraBascule(t); if (q >= 1) { t = cible; controles.enabled = true; if (t === 1) regler3D(); else regler2D(); } }
+  if (s !== sCible) { const r = Math.min(1, (ts - sDebut) / 1300); s = sDepart + (sCible - sDepart) * r; if (r >= 1) { s = sCible; if (s === 0 && focus) { viderAilleurs(); focus = null; fil(); if (t === 1) controles.autoRotate = E.rotation; } } }
+  for (const nom in blocs) { const u = blocs[nom].userData, c = focus === blocs[nom] && sCible === 1 ? 1 : 0; u.fk += (c - u.fk) * Math.min(1, dt * 3.5); if (Math.abs(c - u.fk) < 1e-3) u.fk = c; }
+  if (vol) { const r = Math.min(1, (ts - vol.debut) / vol.duree), e = ease(r); camera.position.lerpVectors(vol.p0, vol.p1, e); controles.target.lerpVectors(vol.c0, vol.c1, e); if (r >= 1) vol = null; }
+  poser();
+  if (controles.enabled) controles.update();
+  camera.updateMatrixWorld();
+  tailles(); details();
+  rendu.render(scene, camera);
+  placer(obstacles()); niveau();
+  requestAnimationFrame(boucle);
+}
+cameraBascule(0); regler2D(); boutons(); fil();
+requestAnimationFrame(boucle);
+</script>
