@@ -339,8 +339,8 @@ struct RapprochementTests {
     /// 0C00 a -18, 1000 a 54, 1400 a 126, 1800 a 198 (dernier quart : `atan2` y rend -162). Routeur 7 (1C00)
     /// reconnu comme l'appareil E...0F, que la disposition n'affiche pas : sans place sur les anneaux.
     /// Un enfant par RLOC16 donne, sous le routeur `rloc16 >> 10` (0001 : le routeur 0, absent du maillage).
-    /// Rend l'anneau exterieur, dans l'ordre de ses noeuds.
-    static func exterieur(enfants: [UInt16]) throws -> [String] {
+    /// Rend la disposition.
+    static func dispositionDeLaSonde(enfants: [UInt16]) throws -> Disposition {
         var b = Banc()
         b.routeur("Centre", partition: "46CBEBCD", role: .chef, lien: "fe80::1", xa: "E0000000000000C1")
         b.appareil("E00000000000000F", noeud: 1, adresses: ["fd00:5555:6666:0:b00::f"])
@@ -358,7 +358,31 @@ struct RapprochementTests {
         #expect(m.routeurs[1]?.id == "Centre" && m.routeurs[7]?.id == "E00000000000000F")
         #expect(d.noeud("Centre")?.genre == .centre)
         #expect(d.noeuds.filter { $0.genre == .routeur }.map(\.id) == ["rloc:0800", "rloc:0C00", "rloc:1000", "rloc:1400", "rloc:1800"])
-        return d.noeuds.filter { $0.genre == .appareil }.map(\.id)
+        return d
+    }
+
+    /// Rend l'anneau exterieur de cette disposition, dans l'ordre de ses noeuds.
+    static func exterieur(enfants: [UInt16]) throws -> [String] {
+        try dispositionDeLaSonde(enfants: enfants).noeuds.filter { $0.genre == .appareil }.map(\.id)
+    }
+
+    /// Zone dont le centre est la seule annonce et sans appareil sur l'anneau exterieur, mais avec des routeurs de
+    /// la sonde (les cinq inconnus) sur l'anneau interieur : son rayon compte cet anneau (90, plus la marge), et non
+    /// le nombre d'annonces (une seule, ce qui donnait 60, moins que l'anneau). Tout noeud tient dans sa zone, son
+    /// propre rayon compris. Avec des enfants sur l'anneau exterieur, c'est lui qui donne le rayon.
+    @Test func rayonDeZoneAvecLAnneauInterieurDeLaSonde() throws {
+        func toutDansSaZone(_ d: Disposition) throws {
+            let zone = try #require(d.zones.first)
+            for n in d.noeuds {
+                #expect(n.position.distance(zone.centre) + n.rayon <= zone.rayon, "\(n.id) dans sa zone")
+            }
+        }
+        let sansEnfants = try Self.dispositionDeLaSonde(enfants: [])
+        #expect(try #require(sansEnfants.zones.first).rayon == Disposition.rayonInterieur + Disposition.marge)
+        try toutDansSaZone(sansEnfants)
+        let avecEnfants = try Self.dispositionDeLaSonde(enfants: [0x0801, 0x0C01])
+        #expect(try #require(avecEnfants.zones.first).rayon == Disposition.rayonExterieurMin + Disposition.marge)
+        try toutDansSaZone(avecEnfants)
     }
 
     /// Les enfants du centre (angle 3 pi / 2) passent apres ceux de tous les routeurs de l'anneau, dernier quart
@@ -375,10 +399,26 @@ struct RapprochementTests {
         #expect(ordre == ["rloc:0C01", "rloc:1401", "rloc:1801"])
     }
 
-    /// Enfant sans parent dans le maillage (0001 : le routeur 0 n'y est pas) : rejete en fin d'anneau.
+    /// Le premier noeud de l'anneau est en haut, a -pi/2 ; `atan2` peut le rendre un ulp (ou moins) en dessous, et le
+    /// repli ne doit pas l'envoyer en fin d'anneau avec le dernier quart. Celui-ci, des qu'il s'ecarte de la
+    /// tolerance, est replie de 2 pi ; le reste n'est pas touche.
+    @Test func repliDeLAngleALaFrontiereDuHaut() {
+        let haut = -Double.pi / 2
+        for t in [haut, haut.nextUp, haut.nextDown, haut - 1e-12, haut + 1e-12] {
+            #expect(abs(Disposition.angleAnneau(t) - haut) < 1e-9, "\(t) reste en haut")
+        }
+        let dernierQuart = haut - 0.01
+        #expect(Disposition.angleAnneau(dernierQuart) == dernierQuart + 2 * .pi)
+        #expect(Disposition.angleAnneau(-Double.pi + 0.1) == -Double.pi + 0.1 + 2 * .pi)
+        for t in [0.0, 1.0, Double.pi / 2, Double.pi] { #expect(Disposition.angleAnneau(t) == t) }
+    }
+
+    /// Enfant sans parent dans le maillage (0001 : le routeur 0 n'y est pas) : rejete en fin d'anneau, apres tous les
+    /// autres, y compris ceux du dernier quart (1801, angle 3,46) et ceux du centre (0401 : 3 pi / 2, soit 4,71, la
+    /// plus grande cle d'un parent connu). La sentinelle doit depasser toutes les cles.
     @Test func enfantSansParentEnFinDAnneau() throws {
-        let ordre = try Self.exterieur(enfants: [0x0001, 0x0C01, 0x1401])
-        #expect(ordre == ["rloc:0C01", "rloc:1401", "rloc:0001"])
+        let ordre = try Self.exterieur(enfants: [0x0001, 0x0C01, 0x1401, 0x0401, 0x1801])
+        #expect(ordre == ["rloc:0C01", "rloc:1401", "rloc:1801", "rloc:0401", "rloc:0001"])
     }
 
     /// Enfant dont le parent est connu mais sans place sur les anneaux (1C01 : le routeur 7, l'appareil E...0F

@@ -126,9 +126,11 @@ public struct Disposition: Hashable, Sendable {
         func rayonAppareils(_ n: Int) -> Double {
             max(Self.rayonExterieurMin, Double(n) * Self.arcAppareil / (2 * .pi))
         }
-        func rayonZone(_ routeurs: Int, _ apps: Int) -> Double {
-            if apps == 0 { return routeurs <= 1 ? Self.rayonZoneSeule : Self.rayonInterieur + Self.marge }
-            return rayonAppareils(apps) + Self.marge
+        /// Rayon d'une zone d'apres ses anneaux : `interieur` noeuds sur l'anneau interieur (routeurs, appareils
+        /// qui routent, inconnus de la sonde), `exterieur` sur l'anneau exterieur. Le centre seul : `rayonZoneSeule`.
+        func rayonZone(interieur: Int, exterieur: Int) -> Double {
+            if exterieur > 0 { return rayonAppareils(exterieur) + Self.marge }
+            return interieur > 0 ? Self.rayonInterieur + Self.marge : Self.rayonZoneSeule
         }
 
         // Anneaux de chaque zone : routeurs (hors centre) a l'interieur, appareils a l'exterieur.
@@ -156,7 +158,7 @@ public struct Disposition: Hashable, Sendable {
         }
 
         // Rayons, puis centres : la principale en (0, 0), les autres en colonne a droite.
-        let rayons = zip(reseau.partitions, anneaux).map { rayonZone($0.routeurs.count, $1.exterieur.count) }
+        let rayons = anneaux.map { rayonZone(interieur: $0.interieur.count, exterieur: $0.exterieur.count) }
         let r0 = rayons.first ?? Self.rayonZoneSeule
         let secondaires = Array(rayons.dropFirst())
         var y = -(secondaires.reduce(0) { $0 + 2 * $1 } + Self.ecart * Double(max(secondaires.count - 1, 0))) / 2
@@ -186,8 +188,7 @@ public struct Disposition: Hashable, Sendable {
                 func angle(_ id: String) -> Double {
                     guard let pere = m.parent(de: id), let pos = positions[pere] else { return 10 }
                     if pere == premier.instance { return 3 * .pi / 2 }
-                    let t = atan2(pos.y - centre.y, pos.x - centre.x)
-                    return t < -.pi / 2 ? t + 2 * .pi : t
+                    return Self.angleAnneau(atan2(pos.y - centre.y, pos.x - centre.x))
                 }
                 let rang = Dictionary(exterieur.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
                 exterieur.sort { (angle($0), rang[$0] ?? 0) < (angle($1), rang[$1] ?? 0) }
@@ -221,6 +222,17 @@ public struct Disposition: Hashable, Sendable {
                                     position: Self.surAnneau(centre, rAnneau, j, orphelins.count), rayon: 7))
             }
         }
+    }
+
+    /// Tolerance du repli d'angle : `atan2` rend le premier noeud de l'anneau, en haut, a un ulp pres de
+    /// -pi/2. Bien inferieure a l'ecart entre deux noeuds voisins (2 pi / n, n < 10^6).
+    static let toleranceAngle = 1e-9
+
+    /// Angle d'un noeud de l'anneau vu du centre, dans [-pi/2, 3 pi / 2[ : l'anneau part du haut (-pi/2) et
+    /// tourne dans le sens horaire (y vers le bas), alors que `atan2` rend ]-pi, pi]. Le dernier quart est
+    /// replie de 2 pi, mais pas le premier noeud, meme si `atan2` le rend un peu en dessous de -pi/2.
+    static func angleAnneau(_ t: Double) -> Double {
+        t < -.pi / 2 - toleranceAngle ? t + 2 * .pi : t
     }
 
     /// i-eme de n positions sur un cercle, en partant du haut, dans le sens horaire.

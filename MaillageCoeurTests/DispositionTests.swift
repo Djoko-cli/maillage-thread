@@ -71,6 +71,27 @@ struct DispositionTests {
         #expect(d.zones.first?.rayon == 210)
     }
 
+    /// Rayon d'une zone sans sonde : le centre seul, 60 ; avec d'autres routeurs sur l'anneau interieur et aucun
+    /// appareil, l'anneau interieur (90) plus la marge, quel qu'en soit le nombre ; avec des appareils, l'anneau
+    /// exterieur plus la marge, qui s'elargit quand il n'y a plus de place.
+    @Test func rayonDUneZoneSelonSesAnneaux() throws {
+        func rayon(routeurs: Int, appareils: Int) throws -> Double {
+            var b = Banc()
+            b.routeur("Chef", role: .chef, lien: "fe80::1")
+            for k in 1..<max(routeurs, 1) { b.routeur("HomePod \(k)", lien: "fe80::\(k + 1)") }
+            let r = try #require(Instantane(annonces: b.annonces).reseaux.first)
+            let apps = (0..<appareils).map {
+                AppareilAffiche(id: "A\($0)", nom: "A\($0)", partition: "73586B68", etat: .joignable)
+            }
+            return try #require(Disposition(reseau: r, appareils: apps).zones.first).rayon
+        }
+        #expect(try rayon(routeurs: 1, appareils: 0) == Disposition.rayonZoneSeule)
+        #expect(try rayon(routeurs: 2, appareils: 0) == Disposition.rayonInterieur + Disposition.marge)
+        #expect(try rayon(routeurs: 5, appareils: 0) == Disposition.rayonInterieur + Disposition.marge)
+        #expect(try rayon(routeurs: 1, appareils: 1) == Disposition.rayonExterieurMin + Disposition.marge)
+        #expect(try rayon(routeurs: 2, appareils: 40) == 40 * Disposition.arcAppareil / (2 * .pi) + Disposition.marge)
+    }
+
     /// Titre d'une zone : les prefixes de la partition, plus un prefixe partage
     /// qu'elle revendique sans l'avoir eu (capture de 12:28).
     @Test func prefixesPartagesDansLesTitres() throws {

@@ -16,8 +16,10 @@ public struct NoeudSonde: Hashable, Sendable, Identifiable {
     /// Routeur de bordure (Network Data).
     public let bordure: Bool
     /// Routeur de bordure non identifie : instances des annonces de sa partition qu'aucun
-    /// routeur n'a reprises et qui peuvent etre la sienne (sauf si son ExtMac et leur `xa` sont
-    /// connus tous deux et differents), dans l'ordre de la partition ; vide sinon.
+    /// routeur n'a reprises et qui peuvent etre la sienne, dans l'ordre de la partition ; vide
+    /// sinon. Est ecartee l'annonce dont le `xa` et l'ExtMac du routeur sont connus tous deux et
+    /// differents, ou dont le `xa` est l'ExtMac connue d'un autre routeur (une annonce en double
+    /// de celui-ci).
     public let candidats: [String]
     /// Reconnu par elimination : seul routeur de bordure non identifie de la partition pour
     /// une seule annonce non reprise.
