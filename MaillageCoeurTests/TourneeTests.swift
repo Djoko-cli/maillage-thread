@@ -338,6 +338,23 @@ struct TourneeTests {
         return Data(gardees).hexa
     }
 
+    /// TLV Route64 (hexa) des routeurs `ids`, croissants : sequence 1, aucun lien.
+    static func route64(_ ids: [Int]) -> String {
+        let masque = ids.reduce(UInt64(0)) { $0 | UInt64(1) << (63 - $1) }
+        let octets: [UInt8] = [TypeTLV.route64, UInt8(9 + ids.count), 1]
+            + (0..<8).map { UInt8(truncatingIfNeeded: masque >> (56 - 8 * $0)) } + ids.map { _ in 0 }
+        return Data(octets).hexa
+    }
+
+    /// TLV Child Table (hexa) des enfants `numeros` : qualite 3, delai 2^8 s, endormis (mode 04).
+    static func tableEnfants(_ numeros: [Int]) -> String {
+        let octets = numeros.flatMap { n -> [UInt8] in
+            let x = 12 << 11 | 3 << 9 | n
+            return [UInt8(x >> 8), UInt8(x & 0xFF), 0x04]
+        }
+        return Data([TypeTLV.tableEnfants, UInt8(octets.count)] + octets).hexa
+    }
+
     /// Reponse du routeur 20 trop longue pour le reseau (`trop_long` : plus de 1100 octets) : il a
     /// repondu. Sa requete est refaite une fois en deux moities de TLV, reunies : le maillage et
     /// la memoire sont ceux d'une reponse entiere ; ni echec, ni balayage de ses enfants.
@@ -561,6 +578,73 @@ struct TourneeTests {
         #expect(mem2.identites[0x0800] == nil, "oubliee")
         #expect(mem2.identites[0xE400] == "E0000000000000E4", "le routeur 57 est dans la liste : gardee")
         #expect(m.routeur(57)?.extMac == "E0000000000000E4")
+    }
+
+    /// Routeur sorti de la liste des routeurs (identifiant libere) : ses echecs, sa derniere
+    /// interrogation de muet, son passe de repondant, sa pile et sa place de secours sont oublies
+    /// des que la tournee a la Route64. L'identifiant reattribue repart de zero : interroge tout de
+    /// suite, et non tenu pour un muet deja interroge dans l'heure (Route64 inventee).
+    @Test func memoireOublieeHorsDeLaListe() async throws {
+        let sonde = try SondeRejouee.capture()
+        var mem = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0)).memoire
+        mem.echecs[2] = 2
+        mem.muetInterroge[2] = Self.t0
+        mem.dejaRepondu.insert(2)
+        mem.piles[2] = "SL-OPENTHREAD"
+        mem.repondants = [2, 20]
+        let seulChef = sonde.filtree { $0 == "6000|5,6" }
+        let (_, mem2) = try #require(try await Tournee.complete(seulChef, memoire: mem, maintenant: Self.t0 + 300))
+        #expect(mem2.echecs[2] == nil && mem2.muetInterroge[2] == nil && mem2.piles[2] == nil)
+        #expect(!mem2.dejaRepondu.contains(2))
+        #expect(mem2.repondants == [20], "aucun routeur n'a repondu : les secours d'avant, sans le 2")
+
+        let avec2 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([1, 2, 20, 24, 43, 45, 51, 57])])
+        let (m3, mem3) = try #require(try await Tournee.complete(avec2, memoire: mem2, maintenant: Self.t0 + 600))
+        #expect(await avec2.registre.requetes.contains("0800|0,1,5,16,8,24"), "interroge")
+        #expect(mem3.echecs[2] == 1, "premier silence")
+        #expect(m3.routeur(2)?.muet == true)
+    }
+
+    /// Enfant absent de la table de son parent, qui a repondu : son identite (ExtMac, adresses) et
+    /// la date de sa derniere demande sont oubliees. Un appareil qui reprend son RLOC16 sans
+    /// repondre n'a pas l'ancien nom, et son identite est demandee tout de suite.
+    @Test func identiteOublieeHorsDeLaTable() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(mem1.identifies[0x5001]?.extMac == "E000000000000005")
+        let sans5001 = try Self.garder(try CaptureSonde.tlv(104), [0, 1, 5, 8, 24]) + Self.tableEnfants([4])
+        let parti = try SondeRejouee.capture(reponsesEnPlus: ["5000|0,1,5,16,8,24": sans5001])
+        let (_, mem2) = try #require(try await Tournee.complete(parti, memoire: mem1, maintenant: Self.t0 + 300))
+        #expect(mem2.identifies[0x5001] == nil && mem2.identiteDemandee[0x5001] == nil, "absent de la table du 20")
+        #expect(mem2.identifies[0x5004]?.extMac == "E000000000000004", "encore dans sa table")
+        #expect(mem2.identifies[0x6003]?.extMac == "E000000000000006")
+
+        let repris = sonde.filtree { $0 != "5001|0,8" }
+        let (m3, mem3) = try #require(try await Tournee.complete(repris, memoire: mem2, maintenant: Self.t0 + 600))
+        #expect(await repris.registre.requetes.contains("5001|0,8"), "demandee tout de suite")
+        let e = try #require(m3.enfants.first { $0.rloc16 == 0x5001 })
+        #expect(e.extMac == nil, "pas l'ancien nom")
+        #expect(mem3.identiteDemandee[0x5001] == Self.t0 + 600)
+    }
+
+    /// Identites d'enfants dont le parent est sorti de la liste des routeurs : oubliees. Celles des
+    /// enfants d'un routeur muet, ou d'un routeur dont la table n'est pas venue (moitie de reponse
+    /// trop longue), restent : leur table n'est pas lue (ExtMac inventees).
+    @Test func identitesOublieesAvecLeParent() async throws {
+        var mem = MemoireTournee()
+        mem.partition = "46CBEBCD"
+        let demande = Self.t0 - 60
+        for x in [0x0801, 0xAC01, 0x5001] as [UInt16] {
+            mem.identifies[x] = EnfantMaillage(rloc16: x, extMac: String(format: "E00000000000%04X", x), source: .tableEnfants)
+            mem.identiteDemandee[x] = demande
+        }
+        let entiere = try CaptureSonde.tlv(104)
+        let sonde = try SondeRejouee.capture(reponsesEnPlus: ["5000|0,1,5": try Self.garder(entiere, [0, 1, 5])],
+                                             tropLongs: ["5000|0,1,5,16,8,24", "5000|16,8,24"])
+        let (_, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0))
+        #expect(mem2.identifies[0x0801] == nil && mem2.identiteDemandee[0x0801] == nil, "le 2 n'est plus dans la liste")
+        #expect(mem2.identifies[0xAC01] != nil && mem2.identiteDemandee[0xAC01] == demande, "parent muet")
+        #expect(mem2.identifies[0x5001] != nil && mem2.identiteDemandee[0x5001] == demande, "table du 20 pas venue")
     }
 
     /// Autre partition (panne, fusion) : les identifiants de routeur y sont

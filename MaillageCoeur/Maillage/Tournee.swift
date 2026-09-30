@@ -66,10 +66,12 @@ public struct MemoireTournee: Hashable, Sendable {
     /// Enfants des routeurs balayes, trouves au dernier balayage (un balayage dont la sonde a
     /// refuse toutes les requetes ne compte pas).
     public var balayes: [UInt16: EnfantMaillage] = [:]
-    /// Enfants des tables identifies (ExtMac, adresses), par RLOC16 : gardes jusqu'a une nouvelle reponse.
+    /// Enfants des tables identifies (ExtMac, adresses), par RLOC16 : gardes jusqu'a une nouvelle
+    /// reponse ; oublies quand leur parent sort de la liste des routeurs, ou qu'ils manquent a la
+    /// table de leur parent qui l'a donnee.
     public var identifies: [UInt16: EnfantMaillage] = [:]
     /// Derniere demande d'identite a un enfant des tables, par RLOC16 : une par demi-heure
-    /// au plus, qu'il ait repondu ou non.
+    /// au plus, qu'il ait repondu ou non ; oubliee avec son identite.
     public var identiteDemandee: [UInt16: Date] = [:]
     public var dernierBalayage: Date?
     /// Routeurs balayes la derniere fois (muets, ou qui n'ont jamais repondu) : un autre
@@ -176,9 +178,16 @@ public enum Tournee {
         }
         guard let route64 else { return (nil, mem) }
         c.routeurs(route64, chef: chef)
-        // Paires des routeurs sortis de la liste (routeur disparu, identifiant libere) : oubliees.
+        // Routeurs sortis de la liste (routeur disparu, identifiant libere) : leur paire, leurs
+        // echecs, leur pile et leur place de secours sont oublies ; un identifiant reattribue
+        // repart de zero.
         let liste = Set(route64.routeurs)
         mem.identites = mem.identites.filter { liste.contains(Int($0.key >> 10)) }
+        mem.echecs = mem.echecs.filter { liste.contains($0.key) }
+        mem.muetInterroge = mem.muetInterroge.filter { liste.contains($0.key) }
+        mem.dejaRepondu.formIntersection(liste)
+        mem.piles = mem.piles.filter { liste.contains($0.key) }
+        mem.repondants = mem.repondants.filter { liste.contains($0) }
 
         // 2. Chaque routeur, en parallele, sauf un muet deja interroge dans l'heure.
         let aInterroger = route64.routeurs.filter { id in
@@ -206,6 +215,8 @@ public enum Tournee {
             }
         }
         var sansExtMac: [Int] = []
+        // Enfants de la table de chaque routeur qui l'a donnee.
+        var tables: [Int: Set<UInt16>] = [:]
         for (id, r) in reponsesRouteurs {
             if let rep = r.tropLong ? ReponseDiagnostic(hexa: reunies[id] ?? "") : r.reponse {
                 c.reponse(rep, routeur: id)
@@ -217,6 +228,7 @@ public enum Tournee {
                 } else {
                     sansExtMac.append(id)
                 }
+                if let enfants = rep.enfants { tables[id] = Set(enfants.map { $0.rloc16(parent: rloc16(id)) }) }
                 repondants.append(id)
             } else if r.silence {
                 // Seul un silence compte : un refus de la sonde ne dit rien du routeur.
@@ -304,6 +316,15 @@ public enum Tournee {
         // 5. Enfants des tables : ExtMac et adresses, gardees jusqu'a une nouvelle reponse ;
         // demandees de nouveau apres 30 min, que l'enfant ait repondu ou non.
         // Endormis sous un routeur qui repond : interroges au plus une fois par demi-heure, la Child Table ne donnant pas leur ExtMac.
+        // L'identite d'un enfant (et la date de sa demande) est oubliee quand son parent sort de la
+        // liste, ou qu'il manque a la table de son parent qui l'a donnee : un appareil qui reprend
+        // son RLOC16 n'a pas l'ancien nom, et son identite est demandee tout de suite.
+        func garde(_ enfant: UInt16) -> Bool {
+            let parent = Int(enfant >> 10)
+            return liste.contains(parent) && tables[parent].map { $0.contains(enfant) } ?? true
+        }
+        mem.identifies = mem.identifies.filter { garde($0.key) }
+        mem.identiteDemandee = mem.identiteDemandee.filter { garde($0.key) }
         let aIdentifier = c.enfantsSansIdentite.filter { cible in
             mem.identiteDemandee[cible].map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
         }
