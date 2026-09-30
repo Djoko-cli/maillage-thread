@@ -26,8 +26,9 @@ struct FenetreGraphe: View {
 
     var body: some View {
         let palette = Palette(sombre: apparence == .dark)
-        // Redessin chaque minute (`horloge`) : le contenu lit l'heure, que rien n'observe.
-        TimelineView(Self.horloge) { _ in
+        // Redessin chaque minute (`horloge`) : le contenu lit l'heure, que rien n'observe. La fiche la
+        // recoit (`instant`) : sinon SwiftUI la sauterait, ses entrees n'ayant pas change.
+        TimelineView(Self.horloge) { contexte in
             ZStack {
                 RadialGradient(gradient: palette.fond, center: UnitPoint(x: 0.3, y: 0.35), startRadius: 0, endRadius: 900)
                     .ignoresSafeArea()
@@ -44,7 +45,8 @@ struct FenetreGraphe: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if let selection {
-                        FicheNoeud(id: selection, aRenommer: $aRenommer, choisir: { self.selection = $0 }) {
+                        FicheNoeud(id: selection, instant: surveillance.maintenant(a: contexte.date), aRenommer: $aRenommer,
+                                   choisir: { self.selection = $0 }) {
                             self.selection = nil
                         }
                     }

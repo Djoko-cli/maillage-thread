@@ -244,7 +244,11 @@ final class Surveillance {
     var instantane: Instantane? { suivi.instantane }
 
     /// Reference des durees affichees ("vu il y a...") : la fin de la panne rejouee en demo.
-    var maintenant: Date { mode == .demo ? (dernierReleve?.date ?? Date()) : Date() }
+    var maintenant: Date { maintenant(a: Date()) }
+
+    /// Reference des durees a l'heure `horloge` (celle de la fenetre du graphe, que sa `TimelineView`
+    /// avance chaque minute) : cette heure, ou la fin de la panne rejouee en demo.
+    func maintenant(a horloge: Date) -> Date { mode == .demo ? (dernierReleve?.date ?? horloge) : horloge }
 
     var reseau: Reseau? {
         guard let i = instantane else { return nil }

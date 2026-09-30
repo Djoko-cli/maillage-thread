@@ -6,6 +6,9 @@ struct FicheNoeud: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(\.colorScheme) private var apparence
     let id: String
+    /// Heure de la fenetre du graphe (sa `TimelineView`, chaque minute ; la fin de la panne en demo) :
+    /// les durees de la fiche (« vu il y a... ») suivent l'heure sans autre evenement.
+    let instant: Date
     @Binding var aRenommer: NoeudChoisi?
     /// Choisit un autre noeud (la fiche d'un candidat).
     var choisir: (String) -> Void = { _ in }
@@ -65,7 +68,7 @@ struct FicheNoeud: View {
                 PointEtat(couleur: couleur(a, disparu: disparu), pulse: !disparu && a.etat == .joignable)
                 Text(etat(a, disparu: disparu))
                 if let vu = vuLe(a, disparu: disparu) {
-                    Text("· vu \(Self.relatif(vu, surveillance.maintenant))").foregroundStyle(.secondary)
+                    Text("· vu \(Self.relatif(vu, instant))").foregroundStyle(.secondary)
                 }
             }
             if let b = maison?.batterie {
@@ -74,7 +77,7 @@ struct FicheNoeud: View {
                         .foregroundStyle(b.faible ? orange : b.charge == .enCharge ? Color.green : Color.primary)
                     Text(Self.ligneBatterie(b)).foregroundStyle(b.faible ? orange : Color.primary)
                     if let releve = surveillance.noms.maison?.date {
-                        Text("· relevé \(Self.relatif(releve, surveillance.maintenant))").foregroundStyle(.secondary)
+                        Text("· relevé \(Self.relatif(releve, instant))").foregroundStyle(.secondary)
                     }
                 }
             }
