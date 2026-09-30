@@ -71,6 +71,14 @@ enum TexteEvenement {
         case .appareilChangePartition:
             if e.details["coupee"] == "oui" { return String(localized: "\(nom) est isolé dans la partition \(apres)") }
             return String(localized: "\(nom) a rejoint la partition \(apres)")
+        case .parentChange:
+            return String(localized: "\(nom) a changé de parent : \(avant) → \(apres)")
+        case .sansParent:
+            return String(localized: "\(nom) n'a plus de parent")
+        case .routeurThreadApparu:
+            return String(localized: "Routeur Thread apparu : \(nom)")
+        case .routeurThreadDisparu:
+            return String(localized: "Routeur Thread disparu : \(nom)")
         }
     }
 

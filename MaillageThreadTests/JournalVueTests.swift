@@ -21,4 +21,11 @@ struct JournalVueTests {
         #expect(FamilleEvenement.reseau.contient(.veille))
         #expect(!FamilleEvenement.routeurs.contient(.appareilDisparu))
     }
+
+    /// Les evenements du maillage de la sonde ont leur famille, « Maillage », et elle seule.
+    @Test func familleMaillage() {
+        for t in [TypeEvenement.parentChange, .sansParent, .routeurThreadApparu, .routeurThreadDisparu] {
+            #expect(FamilleEvenement.allCases.filter { $0 != .toutes && $0.contient(t) } == [.maillage], "\(t)")
+        }
+    }
 }

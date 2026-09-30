@@ -193,6 +193,22 @@
         }
       }
     },
+    "%@ a changé de parent : %@ → %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ changed parent: %2$@ → %3$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ a changé de parent : %2$@ → %3$@"
+          }
+        }
+      }
+    },
     "%@ a disparu" : {
       "localizations" : {
         "en" : {
@@ -285,6 +301,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ n'a plus d'adresse"
+          }
+        }
+      }
+    },
+    "%@ n'a plus de parent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ has no parent anymore"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ n'a plus de parent"
           }
         }
       }
@@ -1569,6 +1601,22 @@
         }
       }
     },
+    "Maillage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mesh"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maillage"
+          }
+        }
+      }
+    },
     "Maillage Thread" : {
       "localizations" : {
         "en" : {
@@ -2349,6 +2397,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rien de visible sur le réseau local depuis %@"
+          }
+        }
+      }
+    },
+    "Routeur Thread apparu : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thread router appeared: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routeur Thread apparu : %@"
+          }
+        }
+      }
+    },
+    "Routeur Thread disparu : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thread router disappeared: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routeur Thread disparu : %@"
           }
         }
       }

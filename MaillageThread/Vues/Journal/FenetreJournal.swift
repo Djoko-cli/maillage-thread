@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Familles d'evenements, pour le filtre du journal.
 enum FamilleEvenement: String, CaseIterable, Identifiable {
-    case toutes, reseau, routeurs, prefixes, appareils
+    case toutes, reseau, routeurs, prefixes, appareils, maillage
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum FamilleEvenement: String, CaseIterable, Identifiable {
         case .routeurs: String(localized: "Routeurs")
         case .prefixes: String(localized: "Préfixes")
         case .appareils: String(localized: "Appareils")
+        case .maillage: String(localized: "Maillage")
         }
     }
 
@@ -30,6 +31,8 @@ enum FamilleEvenement: String, CaseIterable, Identifiable {
             [.prefixeNouveau, .prefixeRetire].contains(t)
         case .appareils:
             [.appareilNouveau, .appareilDisparu, .appareilRevenu, .appareilSansAdresse, .appareilChangePartition].contains(t)
+        case .maillage:
+            [.parentChange, .sansParent, .routeurThreadApparu, .routeurThreadDisparu].contains(t)
         }
     }
 }

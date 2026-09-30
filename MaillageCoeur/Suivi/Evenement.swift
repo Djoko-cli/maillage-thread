@@ -12,6 +12,9 @@ public enum TypeEvenement: String, Codable, Hashable, Sendable, CaseIterable {
     case prefixeNouveau, prefixeRetire
     // Appareils
     case appareilNouveau, appareilDisparu, appareilRevenu, appareilSansAdresse, appareilChangePartition
+    // Maillage de la sonde : un enfant change de parent ou n'en a plus ; un routeur Thread (hors
+    // routeurs de bordure) entre dans la liste des routeurs ou en sort
+    case parentChange, sansParent, routeurThreadApparu, routeurThreadDisparu
 
     /// Gravite par defaut.
     public var gravite: Gravite {
@@ -19,7 +22,7 @@ public enum TypeEvenement: String, Codable, Hashable, Sendable, CaseIterable {
         case .reseauScinde, .routeurDisparu:
             .alerte
         case .chefChange, .jeuActifChange, .routeurNouvelleAdresseLien, .prefixeRetire,
-             .appareilDisparu, .appareilSansAdresse, .appareilChangePartition:
+             .appareilDisparu, .appareilSansAdresse, .appareilChangePartition, .sansParent, .routeurThreadDisparu:
             .attention
         default:
             .info

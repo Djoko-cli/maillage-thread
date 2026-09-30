@@ -37,6 +37,22 @@ struct TexteEvenementTests {
         #expect(!Notifications.active(.informations, preferences: videsAussi))
     }
 
+    /// Evenements du maillage de la sonde : les attentes reprennent les cles du code
+    /// (independantes de la langue de l'hote).
+    @Test func maillage() {
+        let t = ScenarioPanne.date(4, 14)
+        let s = Sujet(id: "56B1E064401F74EF", nom: "Prise bureau")
+        let change = Evenement(date: t, type: .parentChange, sujet: s, avant: "HomePod salon", apres: "Routeur · 5000")
+        #expect(TexteEvenement.titre(change)
+                == String(localized: "\("Prise bureau") a changé de parent : \("HomePod salon") → \("Routeur · 5000")"))
+        #expect(TexteEvenement.titre(Evenement(date: t, type: .sansParent, sujet: s, avant: "HomePod salon"))
+                == String(localized: "\("Prise bureau") n'a plus de parent"))
+        #expect(TexteEvenement.titre(Evenement(date: t, type: .routeurThreadApparu, sujet: s))
+                == String(localized: "Routeur Thread apparu : \("Prise bureau")"))
+        #expect(TexteEvenement.titre(Evenement(date: t, type: .routeurThreadDisparu, sujet: s))
+                == String(localized: "Routeur Thread disparu : \("Prise bureau")"))
+    }
+
     /// Point de depart d'un reseau vu apres le lancement : le reseau est nomme.
     @Test func departDUnReseau() {
         let t = ScenarioPanne.date(4, 14)
