@@ -1,0 +1,155 @@
+import Foundation
+
+/// Periode des courbes de la fiche (spec de la sonde, section 6) : 24 h, 7 j ou 30 j.
+public enum PeriodeCourbes: String, CaseIterable, Hashable, Sendable, Identifiable {
+    case jour, semaine, mois
+
+    public var id: String { rawValue }
+
+    public var duree: TimeInterval {
+        switch self {
+        case .jour: 24 * 3600
+        case .semaine: 7 * 24 * 3600
+        case .mois: 30 * 24 * 3600
+        }
+    }
+
+    /// Pas des points, moyenne des releves du pas : chaque releve sur 24 h (288 points), 30 min
+    /// sur 7 j (336), 2 h sur 30 j (360) ; sans pas, 30 j de releves feraient 8 640 points.
+    public var pas: TimeInterval? {
+        switch self {
+        case .jour: nil
+        case .semaine: 1800
+        case .mois: 7200
+        }
+    }
+}
+
+/// Point d'une courbe. `troncon` : numero du morceau de courbe ; un trou (plus de 20 min entre
+/// deux releves, ou de trois pas) en commence un autre, pour ne pas relier par-dessus le trou.
+public struct PointCourbe: Hashable, Sendable {
+    public let date: Date
+    public let valeur: Double
+    public let troncon: Int
+
+    public init(date: Date, valeur: Double, troncon: Int) {
+        self.date = date
+        self.valeur = valeur
+        self.troncon = troncon
+    }
+}
+
+/// Qualite d'un lien au fil du temps (0 a 3) : l'autre bout, par sa cle (ExtMac, "rloc:XXXX"),
+/// ou `CourbesNoeud.cleParent` pour le lien d'un enfant vers son parent, quel qu'il soit.
+public struct CourbeLien: Hashable, Sendable, Identifiable {
+    public let id: String
+    public let points: [PointCourbe]
+
+    public init(id: String, points: [PointCourbe]) {
+        self.id = id
+        self.points = points
+    }
+}
+
+/// Changement de parent : sa date (le premier releve sous le nouveau parent) et la cle du nouveau
+/// parent.
+public struct ChangementParent: Hashable, Sendable {
+    public let date: Date
+    public let parent: String
+
+    public init(date: Date, parent: String) {
+        self.date = date
+        self.parent = parent
+    }
+}
+
+/// Courbes d'un noeud tirees de l'historique (spec de la sonde, section 6), sur une periode :
+/// - routeur : la qualite de chaque lien avec un routeur voisin, et le signal que la sonde en
+///   recoit (dBm), avec les changements de parent de la sonde, car ce signal depend d'abord de
+///   l'endroit ou elle est posee ;
+/// - enfant : la qualite du lien vers son parent (inconnue sous un routeur muet), avec ses
+///   changements de parent.
+/// Un noeud se reconnait d'un releve a l'autre par sa cle : son ExtMac, ou "rloc:XXXX" pour un
+/// routeur sans ExtMac (`ReleveMaillage.cle(routeur:)`).
+public struct CourbesNoeud: Hashable, Sendable {
+    /// Cle de la courbe d'un enfant vers son parent.
+    public static let cleParent = "parent"
+    /// Trou le plus long entre deux releves d'une meme courbe (sans pas) : la tournee part 5 min
+    /// apres la fin de la precedente ; au-dela de 20 min, il en manque.
+    public static let ecartMax: TimeInterval = 20 * 60
+
+    public let debut: Date
+    public let fin: Date
+    /// Par cle de l'autre bout.
+    public let liens: [CourbeLien]
+    public let parents: [ChangementParent]
+    public let signal: [PointCourbe]
+    public let parentsSonde: [ChangementParent]
+
+    public var estVide: Bool { liens.allSatisfy { $0.points.isEmpty } && parents.isEmpty && signal.isEmpty }
+
+    /// Courbes du noeud de cle `cle` dans `releves` (du plus ancien au plus recent), sur la
+    /// periode qui finit a `fin`.
+    public init(cle: String, releves: [ReleveMaillage], periode: PeriodeCourbes, fin: Date) {
+        let debut = fin.addingTimeInterval(-periode.duree)
+        var liens: [String: [(Date, Double)]] = [:]
+        var signal: [(Date, Double)] = []
+        var parents: [ChangementParent] = []
+        var parentsSonde: [ChangementParent] = []
+        var dernierParent: String?
+        var dernierParentSonde: String?
+        for r in releves where r.date >= debut && r.date <= fin {
+            if let id = r.routeurs.first(where: { r.cle(routeur: $0.id) == cle })?.id {
+                for l in r.liens where l.a == id || l.b == id {
+                    guard let q = l.qualite else { continue }
+                    liens[r.cle(routeur: l.a == id ? l.b : l.a), default: []].append((r.date, Double(q)))
+                }
+                if let s = r.signaux.first(where: { $0.routeur == id }) { signal.append((r.date, Double(s.rssi))) }
+            }
+            if let e = r.enfants.first(where: { $0.extMac == cle }) {
+                let p = r.cle(routeur: e.parent)
+                if let d = dernierParent, d != p { parents.append(ChangementParent(date: r.date, parent: p)) }
+                dernierParent = p
+                if let q = e.qualite { liens[Self.cleParent, default: []].append((r.date, Double(q))) }
+            }
+            if let ps = r.parentSonde {
+                let p = r.cle(routeur: ps)
+                if let d = dernierParentSonde, d != p { parentsSonde.append(ChangementParent(date: r.date, parent: p)) }
+                dernierParentSonde = p
+            }
+        }
+        self.debut = debut
+        self.fin = fin
+        self.liens = liens.keys.sorted().map { CourbeLien(id: $0, points: Self.reduire(liens[$0] ?? [], pas: periode.pas)) }
+        self.parents = parents
+        self.signal = Self.reduire(signal, pas: periode.pas)
+        self.parentsSonde = parentsSonde
+    }
+
+    /// Points d'une courbe : la moyenne de chaque pas (datee du debut du pas), ou chaque releve
+    /// sans pas ; un ecart de plus de trois pas (20 min sans pas) entre deux points ouvre un
+    /// nouveau troncon.
+    static func reduire(_ bruts: [(Date, Double)], pas: TimeInterval?) -> [PointCourbe] {
+        var points = bruts
+        if let pas {
+            var groupes: [(debut: Date, valeurs: [Double])] = []
+            for (d, v) in bruts {
+                let debut = Date(timeIntervalSince1970: (d.timeIntervalSince1970 / pas).rounded(.down) * pas)
+                if groupes.last?.debut == debut {
+                    groupes[groupes.count - 1].valeurs.append(v)
+                } else {
+                    groupes.append((debut, [v]))
+                }
+            }
+            points = groupes.map { ($0.debut, $0.valeurs.reduce(0, +) / Double($0.valeurs.count)) }
+        }
+        let ecart = pas.map { 3 * $0 } ?? ecartMax
+        var troncon = 0
+        var resultat: [PointCourbe] = []
+        for (i, (d, v)) in points.enumerated() {
+            if i > 0, d.timeIntervalSince(points[i - 1].0) > ecart { troncon += 1 }
+            resultat.append(PointCourbe(date: d, valeur: v, troncon: troncon))
+        }
+        return resultat
+    }
+}
