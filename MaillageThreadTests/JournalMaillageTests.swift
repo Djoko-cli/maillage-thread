@@ -58,6 +58,26 @@ struct JournalMaillageTests {
         #expect(relu.historique == s.historique)
     }
 
+    /// Relecture de l'historique avec des releves deja en memoire : le releve d'un lancement
+    /// precedent est relu ; celui recu depuis (sa date est tronquee a la milliseconde sur le disque)
+    /// n'est pas repris en double ; le fichier d'un mois fini depuis plus de 90 jours est supprime.
+    @Test func chargementFusionneSansDoublon() async throws {
+        let dossier = Self.dossier()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let t = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down) - 600)
+        let a = Self.surveillance(dossier: dossier)
+        a.recevoir(try Self.maillage(a, t, parent: 1), a: t.addingTimeInterval(1))
+        // Sous la milliseconde : la copie du disque est a t + 300.000, celle de la memoire a t + 300.0004.
+        let tard = t.addingTimeInterval(300.0004)
+        let b = Self.surveillance(dossier: dossier)
+        b.recevoir(try Self.maillage(b, tard, parent: 1), a: t.addingTimeInterval(301))
+        let ancien = dossier.appendingPathComponent("maillage-2020-01.jsonl")
+        FileManager.default.createFile(atPath: ancien.path, contents: Data())
+        await b.chargerHistorique()
+        #expect(b.historique.map(\.date) == [t, tard], "relu sans doublon, sans sa copie du disque")
+        #expect(!FileManager.default.fileExists(atPath: ancien.path), "mois fini depuis plus de 90 jours")
+    }
+
     /// Appareil vu deux fois (le balayage ancien d'un routeur muet, et la table de son nouveau
     /// parent) : le journal le nomme comme l'appareil, sous son nouveau parent, meme si le graphe
     /// donne son id a l'entree du balayage (le premier RLOC16).

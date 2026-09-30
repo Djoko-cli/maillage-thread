@@ -79,4 +79,45 @@ struct CourbesNoeudTests {
         let tard = CourbesNoeud(cle: Self.a0, releves: jour, periode: .jour, fin: Self.minutes(20 + 24 * 60))
         #expect(tard.signal.map(\.date) == [Self.minutes(30), Self.minutes(35)], "24 h avant la fin")
     }
+
+    /// Bornes de la periode (les deux comprises : un releve plus recent que la fiche, qui est a la
+    /// minute, n'en fait pas partie), seuils des troncons (20 min pile ne coupent pas, 20 min et 1 s
+    /// coupent ; trois pas ne coupent pas, quatre oui ; chaque trou ouvre un troncon de plus), 30 j.
+    @Test func bornesSeuilsEtMois() {
+        let r = [Self.releve(0), Self.releve(10), Self.releve(11)]
+        #expect(CourbesNoeud(cle: Self.a0, releves: r, periode: .jour, fin: Self.minutes(10)).signal.map(\.date)
+                == [Self.minutes(0), Self.minutes(10)], "fin comprise, plus recent exclu")
+        #expect(CourbesNoeud(cle: Self.a0, releves: r, periode: .jour, fin: Self.minutes(24 * 60)).signal.map(\.date)
+                == [Self.minutes(0), Self.minutes(10), Self.minutes(11)], "debut compris")
+        let trous = [Self.releve(0), Self.releve(20), Self.releve(40 + 1.0 / 60), Self.releve(70)]
+        #expect(CourbesNoeud(cle: Self.a0, releves: trous, periode: .jour, fin: Self.minutes(80)).signal.map(\.troncon)
+                == [0, 0, 1, 2], "seuil de 20 min")
+        let pas = [Self.releve(0), Self.releve(90), Self.releve(210)]
+        #expect(CourbesNoeud(cle: Self.a0, releves: pas, periode: .semaine, fin: Self.minutes(240)).signal.map(\.troncon)
+                == [0, 0, 1], "seuil de trois pas")
+        let mois = [Self.releve(0, rssi: -60), Self.releve(119, rssi: -70), Self.releve(120, rssi: -80)]
+        let m = CourbesNoeud(cle: Self.a0, releves: mois, periode: .mois, fin: Self.minutes(240))
+        #expect(m.signal == [PointCourbe(date: Self.minutes(0), valeur: -65, troncon: 0),
+                             PointCourbe(date: Self.minutes(120), valeur: -80, troncon: 0)], "pas de 2 h")
+        #expect(m.debut == Self.minutes(240).addingTimeInterval(-30 * 24 * 3600), "30 j")
+        #expect(CourbesNoeud(cle: Self.a0, releves: mois, periode: .semaine, fin: Self.minutes(240)).debut
+                == Self.minutes(240).addingTimeInterval(-7 * 24 * 3600), "7 j")
+    }
+
+    /// Un lien sans qualite des deux cotes n'a pas de point (le signal suffit a une fiche) ; un enfant
+    /// sous un routeur muet n'a pas de courbe, et ses changements de parent suffisent a sa fiche.
+    @Test func sansQualite() {
+        let muet = ReleveMaillage(date: Self.t0, partition: "0000000A",
+                                  routeurs: [.init(id: 0, extMac: Self.a0), .init(id: 1, extMac: Self.a1)],
+                                  liens: [LienRadio(a: 0, b: 1, qualiteAB: nil, qualiteBA: nil)],
+                                  enfants: [], signaux: [SignalSonde(routeur: 0, rssi: -60)], parentSonde: nil)
+        let c = CourbesNoeud(cle: Self.a0, releves: [muet], periode: .jour, fin: Self.minutes(5))
+        #expect(c.liens.isEmpty, "pas de point sans qualite")
+        #expect(!c.estVide, "le signal suffit")
+        let e = CourbesNoeud(cle: Self.b1, releves: [Self.releve(0, parent: 0, qualiteEnfant: nil),
+                                                     Self.releve(5, parent: 1, qualiteEnfant: nil)],
+                             periode: .jour, fin: Self.minutes(10))
+        #expect(e.liens.isEmpty, "qualite inconnue : pas de courbe")
+        #expect(!e.estVide, "le changement de parent suffit")
+    }
 }

@@ -211,7 +211,7 @@ final class Surveillance {
                 return try f.lire(depuis: debut)
             }.value
             // Les dates relues sont tronquees a la milliseconde (codage) : un releve recu pendant la
-            // lecture, ecrit puis relu, garde 1 ms de moins que sa copie en memoire. Il n'est pas repris.
+            // lecture, ecrit puis relu, garde jusqu'a 1 ms de moins que sa copie en memoire. Il n'est pas repris.
             let premier = (historique.first?.date ?? .distantFuture).addingTimeInterval(-0.001)
             historique = lus.filter { $0.date < premier } + historique
         } catch {
