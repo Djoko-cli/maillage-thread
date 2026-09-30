@@ -22,12 +22,15 @@ ce qu'il ne connait pas (des noms, jamais une valeur), devant :
 - un type de message, un champ ou un TLV inconnu, un TLV a longueur etendue ou
   tronque, un TLV 0 qui n'a pas 8 octets, un TLV 8 qui n'est pas fait
   d'adresses entieres ;
-- dans la Network Data (TLV 7), autre chose que des Prefix de 96 bits au plus,
-  des Service et une Commissioning Data qui ne porte qu'une Commissioner
-  Session ID (16 bits, quelle que soit sa valeur), ou une donnee de service de
-  plus de 2 octets : donnees_reseau() ne remplace que les 6 premiers octets des
-  Prefix et l'adresse des Server d'un Service ;
-- un champ connu qui porte un objet ou une liste (hors parent).
+- dans la Network Data (TLV 7), autre chose que des Prefix de 16 bits au plus
+  ou de 41 a 96 bits, des Service et une Commissioning Data qui ne porte qu'une
+  Commissioner Session ID (16 bits, quelle que soit sa valeur), ou une donnee
+  de service de plus de 2 octets : donnees_reseau() ne remplace que les 6
+  premiers octets des Prefix, a partir de 41 bits, et l'adresse des Server d'un
+  Service ;
+- un champ connu qui porte un objet ou une liste (hors parent), ou qui n'est
+  pas du texte alors que l'anonymiseur le lit comme un hexa ou une adresse
+  (mac, xp, prefixeMaille, cible, parent.ext).
 Une valeur illisible dans un champ connu (adresse, hexa) le fait sortir avec le
 seul numero de ligne, jamais la valeur (la trace d'une exception la citerait).
 Une valeur qu'il ne connait pas pourrait etre une ExtMac, une adresse ou un
@@ -54,6 +57,9 @@ CHAMPS_CONNUS = {
     "diag": frozenset({"id", "cible", "ms", "ok", "code", "erreur", "tlv"}),
 }
 CHAMPS_PARENT = frozenset({"rloc16", "ext", "lqIn", "lqOut", "rssi", "rssiDernier", "age"})
+# Les champs que l'anonymiseur lit comme un hexa ou une adresse : du texte, sinon il leve, ou secrets() plante.
+CHAMPS_TEXTE = {"bonjour": frozenset({"mac"}), "etat": frozenset({"prefixeMaille", "xp"}), "diag": frozenset({"cible"})}
+CHAMPS_PARENT_TEXTE = frozenset({"ext"})
 # TLV de diagnostic : 0, 7 et 8 sont traites ; les autres n'ont ni ExtMac ni adresse.
 TLV_CONNUS = frozenset({0, 1, 2, 5, 6, 7, 8, 16, 24, 25, 26, 27, 28})
 # Network Data (TLV 7), premier niveau : les Prefix (1) et les Service (5) sont traites par donnees_reseau() ; la
@@ -65,6 +71,10 @@ DONNEE_SERVICE_MAX = 2
 # donnees_reseau() ne remplace que les 6 premiers octets d'un Prefix : au-dela de 96 bits (le /96 NAT64 de la capture
 # passe), l'identifiant d'interface resterait en clair.
 PREFIXE_MAX_BITS = 96
+# donnees_reseau() ne remplace un Prefix qu'a partir de 6 octets, soit 41 bits : de 17 a 40 bits il passerait en clair.
+# Jusqu'a 16 bits (le /7 de la capture), un prefixe n'identifie personne.
+PREFIXE_COURT_MAX_BITS = 16
+PREFIXE_REMPLACE_MIN_BITS = 41
 
 
 class Anonymiseur:
@@ -212,6 +222,9 @@ def controler_donnees_reseau(o):
             raisons.append("sous-TLV inconnu de la Network Data : %d (diag.tlv)" % t)
         elif t == 1 and len(v) >= 2 and v[1] > PREFIXE_MAX_BITS:  # v[1] : longueur du prefixe, en bits
             raisons.append("prefixe de plus de %d bits dans la Network Data (diag.tlv)" % PREFIXE_MAX_BITS)
+        elif t == 1 and len(v) >= 2 and PREFIXE_COURT_MAX_BITS < v[1] < PREFIXE_REMPLACE_MIN_BITS:
+            raisons.append("prefixe de %d a %d bits dans la Network Data (diag.tlv)"
+                           % (PREFIXE_COURT_MAX_BITS + 1, PREFIXE_REMPLACE_MIN_BITS - 1))
         elif t == 4 and not (len(v) == 4 and v[0] == 11 and v[1] == 2):  # un seul sous-TLV, la valeur est libre
             raisons.append("Commissioning Data inconnue dans la Network Data (diag.tlv)")
         elif t == 5 and len(v) >= 1:
@@ -272,6 +285,9 @@ def controler(numerotes):
         for champ, valeur in m.items():
             if champ not in CHAMPS_COMMUNS and champ not in CHAMPS_CONNUS[t]:
                 noter("champ inconnu : %s.%s" % (t, nom_sur(champ)), numero)
+            elif champ in CHAMPS_TEXTE.get(t, ()):
+                if not isinstance(valeur, str):
+                    noter("forme inconnue : %s.%s" % (t, champ), numero)  # du texte est attendu
             elif isinstance(valeur, (dict, list)) and not (t == "etat" and champ == "parent"):
                 noter("forme inconnue : %s.%s" % (t, champ), numero)  # un scalaire est attendu
         parent = m.get("parent") if t == "etat" else None
@@ -279,7 +295,7 @@ def controler(numerotes):
             for champ, valeur in parent.items():
                 if champ not in CHAMPS_PARENT:
                     noter("champ inconnu : etat.parent.%s" % nom_sur(champ), numero)
-                elif isinstance(valeur, (dict, list)):
+                elif isinstance(valeur, (dict, list)) or (champ in CHAMPS_PARENT_TEXTE and not isinstance(valeur, str)):
                     noter("forme inconnue : etat.parent.%s" % champ, numero)
         elif parent is not None:
             noter("forme inconnue : etat.parent", numero)

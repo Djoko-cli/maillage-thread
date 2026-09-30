@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 DEPOT = os.path.normpath(os.path.join(ICI, "..", ".."))
@@ -169,6 +170,27 @@ class Garde(unittest.TestCase):
                     self.assertEqual(controle(dict(de_base[t], **{champ: valeur})),
                                      {"forme inconnue : %s.%s" % (t, champ): [1]})
 
+    def test_texte_exige_pour_les_champs_lus_comme_hexa_ou_adresse(self):
+        """mac, xp, prefixeMaille et cible sont lus comme un hexa ou une adresse : un nombre, un booleen ou null passait
+        la forme, puis secrets() levait AttributeError."""
+        de_base = {m["t"]: m for m in capture_inventee()}
+        for t, champ in (("bonjour", "mac"), ("etat", "xp"), ("etat", "prefixeMaille"), ("diag", "cible")):
+            for valeur in (12345, -1, 1.5, True, False, None, {"a": 1}, [EXT_INCONNU]):
+                with self.subTest(champ="%s.%s" % (t, champ), valeur=valeur):
+                    self.assertEqual(controle(dict(de_base[t], **{champ: valeur})),
+                                     {"forme inconnue : %s.%s" % (t, champ): [1]})
+            for valeur in ("", "x", "pas de l'hexa"):  # n'importe quel texte : la garde ne lit que la forme
+                with self.subTest(champ="%s.%s" % (t, champ), texte=valeur):
+                    self.assertEqual(controle(dict(de_base[t], **{champ: valeur})), {})
+
+    def test_texte_exige_pour_le_ext_du_parent(self):
+        etat = capture_inventee()[1]
+        for valeur in (12345, True, None, {}, [EXT_PARENT]):
+            with self.subTest(valeur=valeur):
+                self.assertEqual(controle(dict(etat, parent=dict(etat["parent"], ext=valeur))),
+                                 {"forme inconnue : etat.parent.ext": [1]})
+        self.assertEqual(controle(dict(etat, parent=dict(etat["parent"], ext="x"))), {})
+
     def test_valeur_non_scalaire_dans_le_parent(self):
         etat = capture_inventee()[1]
         for valeur in ({"a": 1}, [EXT_PARENT]):
@@ -312,9 +334,17 @@ class Garde(unittest.TestCase):
                 self.assertEqual(controle(self.diag_reseau(prefixe_tlv(bits))),
                                  {"prefixe de plus de 96 bits dans la Network Data (diag.tlv)": [1]})
 
-    def test_prefixe_de_96_bits_ou_moins_passe(self):
-        """La capture a un /7, un /64 et le /96 NAT64 : celui-ci passe."""
-        for bits in (0, 7, 48, 64, 95, 96):
+    def test_prefixe_de_17_a_40_bits_fait_echouer(self):
+        """donnees_reseau() ne remplace un Prefix qu'a partir de 41 bits (6 octets) : de 17 a 40 bits, le prefixe (un
+        /40 de documentation invente) passerait en clair, et le controle final resterait muet."""
+        for bits in (17, 24, 32, 40):
+            with self.subTest(bits=bits):
+                self.assertEqual(controle(self.diag_reseau(prefixe_tlv(bits))),
+                                 {"prefixe de 17 a 40 bits dans la Network Data (diag.tlv)": [1]})
+
+    def test_les_prefixes_de_16_bits_ou_moins_et_de_41_a_96_bits_passent(self):
+        """Pas tous les prefixes courts : la capture a un /7. Elle a aussi un /64 et le /96 NAT64."""
+        for bits in (0, 1, 7, 8, 16, 41, 48, 64, 95, 96):
             with self.subTest(bits=bits):
                 self.assertEqual(controle(self.diag_reseau(prefixe_tlv(bits))), {})
 
@@ -347,12 +377,13 @@ class Garde(unittest.TestCase):
 
     def test_l_anonymiseur_laisserait_ces_donnees_en_clair(self):
         """Ce que la garde retient : donnees_reseau() ne remplace ni la donnee de service, ni un TLV qu'il ne connait
-        pas, ni la fin d'un Prefix de plus de 96 bits. Si l'anonymiseur apprend a le faire, la garde correspondante
-        peut etre levee."""
+        pas, ni la fin d'un Prefix de plus de 96 bits, ni un Prefix de 17 a 40 bits. Si l'anonymiseur apprend a le
+        faire, la garde correspondante peut etre levee."""
         adresse = ipv6("%s:0:%s" % (PREFIXE_OMR, IID_OMR))
         self.assertIn(adresse, anon.Anonymiseur().donnees_reseau(service_tlv(adresse)))
         self.assertIn(adresse, anon.Anonymiseur().donnees_reseau(tlv(0x0D, adresse)))
         self.assertIn(adresse[8:], anon.Anonymiseur().donnees_reseau(prefixe_tlv(128)))  # l'identifiant d'un /128
+        self.assertIn(adresse[:5], anon.Anonymiseur().donnees_reseau(prefixe_tlv(40)))  # les 5 octets d'un /40
 
     def test_les_tlv_connus_sont_ceux_de_la_capture_actuelle(self):
         vus = set()
@@ -486,12 +517,10 @@ class Outil(unittest.TestCase):
         self.assertRefus(self.lancer(), "TLV inconnu : 31 (diag.tlv) (1 ligne(s), la premiere : 3)")
 
     def test_valeur_illisible_sort_avec_le_seul_numero_de_ligne(self):
-        """Une adresse que ipaddress refuse, un champ qui n'est pas du texte, un hexa abime : la trace d'une
-        exception citerait la valeur. L'outil sort avec le seul numero de ligne."""
+        """Une adresse que ipaddress refuse, un hexa abime : la trace d'une exception citerait la valeur. L'outil sort
+        avec le seul numero de ligne. (Un champ qui n'est pas du texte est refuse plus tot, par la garde.)"""
         cas = (("diag", "cible", "2001:db8:zz::1", "zz::1"),  # AddressValueError cite l'adresse
-               ("diag", "cible", 5, None),  # TypeError
                ("etat", "prefixeMaille", "ZZ20010DB8A1B20000", "ZZ2001"),  # le prefixe du reseau maille, lu d'abord
-               ("etat", "prefixeMaille", 5, None),
                ("etat", "parent.ext", "ZZ" + EXT_PARENT, "ZZDEAD"))
         for t, champ, valeur, fragment in cas:
             with self.subTest(champ="%s.%s" % (t, champ), valeur=repr(valeur)):
@@ -506,6 +535,42 @@ class Outil(unittest.TestCase):
                 self.assertRefus(r, "la ligne %d porte une valeur que l'anonymiseur ne sait pas lire" % numero)
                 if fragment:
                     self.assertNotIn(fragment.lower(), r.stderr.lower())
+
+    def test_une_exception_de_l_anonymisation_sort_avec_le_seul_numero_de_ligne(self):
+        """La garde exige du texte pour les champs lus comme un hexa ou une adresse : TypeError ne vient plus d'eux.
+        La sortie couvre quand meme ValueError et TypeError, et ne cite jamais le texte de l'exception."""
+        self.ecrire(capture_inventee())
+        for erreur in (ValueError, TypeError):
+            # message() ; puis le prefixe du reseau maille, lu d'abord
+            for methode, numero in (("message", 1), ("prefixe48", 2)):
+                with self.subTest(erreur=erreur.__name__, methode=methode):
+                    faux = mock.Mock(side_effect=erreur("valeur secrete 2001:db8:zz::1"))
+                    with mock.patch.object(anon.Anonymiseur, methode, faux), \
+                            mock.patch.object(sys, "argv", ["anonymiser-sonde.py", self.entree, self.sortie]):
+                        with self.assertRaises(SystemExit) as e:
+                            anon.main()
+                    self.assertEqual(str(e.exception), "refus : la ligne %d porte une valeur que l'anonymiseur ne "
+                                                       "sait pas lire ; rien n'a ete ecrit." % numero)
+                    self.assertFalse(os.path.exists(self.sortie))
+
+    def test_xp_ou_mac_non_textuel_echoue_sans_trace(self):
+        """Sans la garde, secrets() levait AttributeError hors de tout try : une trace et un code 1, pas un refus."""
+        for champ, indice, nom_du_champ, valeur in (("xp", 1, "etat.xp", 12345), ("xp", 1, "etat.xp", True),
+                                                    ("mac", 0, "bonjour.mac", 12345), ("mac", 0, "bonjour.mac", True)):
+            with self.subTest(champ=nom_du_champ, valeur=valeur):
+                messages = capture_inventee()
+                messages[indice][champ] = valeur
+                self.ecrire(messages)
+                self.assertRefus(self.lancer(), "forme inconnue : %s (1 ligne(s), la premiere : %d)"
+                                 % (nom_du_champ, indice + 1))
+
+    def test_prefixe_40_echoue_sans_rien_ecrire(self):
+        """Un /40 de documentation : donnees_reseau() le laissait en clair et le controle final restait muet."""
+        messages = capture_inventee()
+        messages[2]["tlv"] = tlv(7, reseau_inventee() + prefixe_tlv(40)).hex().upper()
+        self.ecrire(messages)
+        self.assertRefus(self.lancer(),
+                         "prefixe de 17 a 40 bits dans la Network Data (diag.tlv) (1 ligne(s), la premiere : 3)")
 
     def test_prefixe_128_echoue_sans_rien_ecrire(self):
         """Un /128 (prefixe de documentation, identifiant d'interface invente) : l'identifiant resterait en clair."""
