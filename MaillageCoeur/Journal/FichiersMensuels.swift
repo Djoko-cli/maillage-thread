@@ -44,14 +44,19 @@ public struct FichiersMensuels: Sendable {
         }
     }
 
-    /// Lignes non vides des fichiers, dans l'ordre des mois puis des lignes ; `depuis` : seulement
+    /// Lignes non vides et en UTF-8 valide des fichiers, dans l'ordre des mois puis des lignes ; `depuis` : seulement
     /// les fichiers des mois qui finissent apres cette date.
     public func lignes(depuis debut: Date? = nil) throws -> [Data] {
         var lignes: [Data] = []
         for url in try fichiers() {
             if let debut, let fin = finDuMois(url.lastPathComponent), fin <= debut { continue }
-            let texte = try String(contentsOf: url, encoding: .utf8)
-            for l in texte.split(separator: "\n") where !l.isEmpty { lignes.append(Data(l.utf8)) }
+            // Ligne par ligne : une ligne abimee (octet non UTF-8, caractere coupe) est ignoree, les
+            // autres du fichier restent lues.
+            let donnees = try Data(contentsOf: url)
+            for l in donnees.split(separator: 0x0A, omittingEmptySubsequences: true)
+            where String(data: l, encoding: .utf8) != nil {
+                lignes.append(Data(l))
+            }
         }
         return lignes
     }

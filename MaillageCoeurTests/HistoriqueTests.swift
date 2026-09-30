@@ -52,6 +52,35 @@ struct HistoriqueTests {
         #expect(ReleveMaillage(m).enfants == [ReleveMaillage.Enfant(extMac: "E0000000000000B2", parent: 2, qualite: 2)])
     }
 
+    /// Un octet non UTF-8 (0xC3 isole : un caractere accentue coupe) abime sa ligne seulement : les
+    /// autres lignes du fichier sont lues, pour l'historique comme pour le journal.
+    @Test func octetNonUTF8() throws {
+        let d = Self.dossier()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let h = HistoriqueFichiers(dossier: d, calendrier: JournalTests.calendrier)
+        let avant = ReleveMaillage(Self.maillage(Self.date("2026-09-20T10:00:00Z")))
+        let apres = ReleveMaillage(Self.maillage(Self.date("2026-09-21T10:00:00Z")))
+        try h.ajouter(avant)
+        let f = try FileHandle(forWritingTo: d.appendingPathComponent("maillage-2026-09.jsonl"))
+        try f.seekToEnd()
+        try f.write(contentsOf: Data(#"{"date":"2026-09-20T11:00:00.000Z","partition":"0000000A","x":""#.utf8) + Data([0xC3]))
+        try f.write(contentsOf: Data("\"}\n".utf8))
+        try f.close()
+        try h.ajouter(apres)
+        #expect(try h.lire(depuis: .distantPast) == [avant, apres])
+
+        let j = JournalFichiers(dossier: d, calendrier: JournalTests.calendrier)
+        let e1 = Evenement(date: Self.date("2026-09-10T00:00:00Z"), type: .veille)
+        let e2 = Evenement(date: Self.date("2026-09-11T00:00:00Z"), type: .veille)
+        try j.ajouter([e1])
+        let g = try FileHandle(forWritingTo: d.appendingPathComponent("journal-2026-09.jsonl"))
+        try g.seekToEnd()
+        try g.write(contentsOf: Data([0x7B, 0xC3, 0x0A]))
+        try g.close()
+        try j.ajouter([e2])
+        #expect(try j.lire() == [e1, e2])
+    }
+
     /// Un identifiant de routeur hors de 0...62 (un RLOC16 ne porte que 6 bits de routeur) rend la
     /// ligne illisible, donc ignoree : ni plantage, ni repli sur un autre routeur (64 donnerait 0).
     /// Les lignes voisines restent lues.
