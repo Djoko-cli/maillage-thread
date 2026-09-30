@@ -663,7 +663,7 @@ Le plan 3a s'écrit ensuite à partir de ces faits.
 ## 8. Résultats de l'essai (nuit du 28 au 29/09)
 
 **Montage.** Troisième carte : ESP32-C6FH4, 4 Mo, sur `/dev/cu.usbmodem11301`
-(port désigné par Djoko). Firmware d'essai : branche `essai-sonde`, dossier
+(port désigné par Djoko). Firmware d'essai : commit `d568d7b`, dossier
 `sonde/`. Appairée à Maison avec le code d'essai. Mode `rn` (MED) dès le
 premier démarrage.
 

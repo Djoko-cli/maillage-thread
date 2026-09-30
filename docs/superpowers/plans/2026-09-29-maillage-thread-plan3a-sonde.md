@@ -26,7 +26,7 @@
 **Code validé avant exécution.** Le 29/09, tout le code de ce plan a été écrit, compilé et testé dans une copie du dépôt :
 - 122 tests pour le cœur et 55 pour l'app, tous verts ;
 - le firmware 1.0.0 compile ;
-- le plan a ensuite été rejoué tâche par tâche sur une copie neuve de `essai-sonde`. Les résultats attendus ci-dessous viennent de ce rejeu : l'erreur avant le code, les tests après, et la liste du `git add`, qui couvre chaque fichier touché. L'arbre final est identique à la copie validée.
+- le plan a ensuite été rejoué tâche par tâche sur une copie neuve de la branche d'essai de la sonde (commits `d568d7b` et `4f48851`). Les résultats attendus ci-dessous viennent de ce rejeu : l'erreur avant le code, les tests après, et la liste du `git add`, qui couvre chaque fichier touché. L'arbre final est identique à la copie validée.
 
 Ces effectifs et ces blocs sont ceux d'avant l'exécution : des relectures ont ensuite corrigé le code. La section « Écarts d'exécution (29/09) », à la fin du plan, liste ces corrections, les blocs qu'elles dépassent et les effectifs de tests à jour.
 
@@ -2843,7 +2843,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `sonde/src/main.cpp` (fichier entier ci-dessous), `sonde/platformio.ini` (blocs ci-dessous)
 
 **Interfaces:**
-- Consumes : le firmware d'essai de `essai-sonde` (`sonde/src/main.cpp`). Il porte le rôle MED par `--wrap` de `_SetThreadDeviceType`, et la table `huge_app.csv`.
+- Consumes : le firmware d'essai (commit `d568d7b`, `sonde/src/main.cpp`). Il porte le rôle MED par `--wrap` de `_SetThreadDeviceType`, et la table `huge_app.csv`.
 - Produces : le firmware 1.0.0, conforme à la section 3 de la spec :
   - `bonjour`, avec `version` « 1.0.0 » ;
   - `etat`, avec `ext` (l'ExtMac de la sonde) ;
@@ -5736,7 +5736,7 @@ Commit : `git add docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design
 
 | Spec | Tâches |
 |---|---|
-| 1. Firmware `sonde/` : pioarduino, MED, nœud Matter, client CoAP de diagnostic | 8 (sur la base de l'essai, branche `essai-sonde`) |
+| 1. Firmware `sonde/` : pioarduino, MED, nœud Matter, client CoAP de diagnostic | 8 (sur la base de l'essai, commit `d568d7b`) |
 | 1. `MaillageCoeur/Maillage/` : TLV, tournée, maillage, rapprochement | 2 à 7 |
 | 1. `MaillageThread/Sonde/` : liaison série, choix du port, numéro de série, boucle de tournée, `Surveillance` | 9, 10 |
 | 1. Sans sonde, l'app marche comme à l'étape 1 | 7 (disposition inchangée sans maillage), 10 |
@@ -5763,39 +5763,39 @@ Commit : `git add docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design
 
 Des relectures ont corrigé plusieurs comportements pendant l'exécution, par rapport au texte de ce plan. **Les blocs de code des tâches 2 à 11, et les textes des README des tâches 8 (la sonde) et 12, sont donc dépassés par les commits ci-dessous : le dépôt fait foi.** (Les corrections des tâches 3 et 10 touchent aussi des fichiers des tâches 5 et 9 ; celles de la revue finale, des fichiers des tâches 2, 5, 8, 9, 10 et 12.) Les effectifs de tests attendus ont aussi changé : à la fin de la revue finale, le cœur comptait 142 tests en 20 suites et l'app 69 en 17 suites, au lieu de 122 et 55 ; après les demandes de Djoko pendant la vérification sur la carte (les trois dernières entrées : interface, placement des libellés, sonde 1.0.2) et les dernières corrections, le cœur compte 180 tests en 21 suites et l'app 201 en 24 suites, verts en français et en anglais.
 
-- **Tâche 3, BBR principal** (`f875378`, qui touche aussi `Maillage.swift` et `MaillageTests.swift`, de la tâche 5).
+- **Tâche 3, BBR principal** (`acff492`, qui touche aussi `Maillage.swift` et `MaillageTests.swift`, de la tâche 5).
   - Défaut : `bbr` gardait l'ordre des Network Data alors que `ConstructionMaillage.reseau(_:)` en prenait le premier comme BBR principal, ce qui est faux dès qu'il y a deux entrées BBR.
   - Fait : la règle d'OpenThread (l'entrée du chef d'abord, puis le numéro de séquence le plus haut, puis le RLOC16 le plus haut ; serveurs aux données de moins de 7 octets ignorés), avec le tri dans `DonneesReseau` et le chef pris en compte par `ConstructionMaillage.reseau(_:)` ; 8 tests.
-- **Tâche 4, ligne machine au dernier RS** (`10f6148`).
+- **Tâche 4, ligne machine au dernier RS** (`d3b4de8`).
   - Défaut : `DecoupeurLignes` ne reconnaissait une ligne machine que si le RS était le premier octet de la ligne : du texte sans fin de ligne avant le RS, ou une ligne coupée suivie d'une complète, faisait perdre la réponse (fausse erreur « délai », faux routeur muet).
   - Fait : la ligne machine commence au dernier RS de la ligne, comme dans le récepteur du pont Halo (un RS recommence le tampon) ; 3 tests.
-- **Tâche 6, tournée** (`25e4769`), trois corrections :
+- **Tâche 6, tournée** (`d299396`), trois corrections :
   - Route64 sans chef. Défaut : avec le chef muet et une mémoire neuve (lancement de l'app), la Route64 n'était jamais obtenue et la tournée n'aboutissait plus, une liste de répondants vide écrasant les secours. Fait : la Route64 vient du chef, puis des répondants de la dernière tournée, puis d'une recherche sur les identifiants 0 à 62 par groupes de 8 ; sans Route64, la tournée ne rend rien et le dernier maillage vieillit.
   - Balayage des muets confirmés. Défaut : un routeur était traité en muet et balayé dès un seul échec, alors que la spec dit deux tournées de suite, d'où des balayages complets sous des routeurs qui répondent. Fait : balayage seulement sous les routeurs sans réponse qui sont muets (deux échecs de suite) ou n'ont jamais répondu (`dejaRepondu`).
   - Identités des enfants, une fois par demi-heure. Défaut : l'identité des enfants des tables était redemandée à chaque tournée quand ils ne répondaient pas, et vidée à chaque balayage. Fait : elle est demandée au plus une fois par demi-heure et par enfant, qu'il ait répondu ou non, et gardée jusqu'à une nouvelle réponse ; écart assumé à la spec (« sans les réveiller »), car la Child Table ne donne pas l'ExtMac.
   - 5 tests ajoutés, 2 adaptés.
-- **Tâche 7, tests du rangement des enfants** (`bba957d`).
+- **Tâche 7, tests du rangement des enfants** (`00611b9`).
   - Défaut : aucune assertion ne distinguait le tri des enfants par parent (le test passait sans le tri), et le repli d'angle, le parent inconnu et les enfants du centre n'étaient pas couverts.
   - Fait : des tests seulement (`RapprochementTests.swift`), une assertion discriminante et un mini-maillage construit à la main, avec le rouge prouvé en neutralisant le tri ; 4 tests ajoutés, code inchangé.
-- **Tâche 9, données de test inventées** (`603b55c`).
+- **Tâche 9, données de test inventées** (`7ccdfad`).
   - Défaut : `LiaisonSerieTests.swift` portait ce qui semble être le numéro de série d'un écran branché au Mac et un chemin de port plausible.
   - Fait : valeurs inventées (`ECRAN-FACTICE-01`, `/dev/cu.usbmodemECRAN0001`, `/dev/tty.maillage-inexistant`), dans le commit de la tâche avant son intégration et dans le bloc de test de la tâche 9 ci-dessus.
-- **Tâche 10, connexion sérialisée et fermeture attendue** (`6492daf`, qui touche aussi `LiaisonSerie.swift`, de la tâche 9).
+- **Tâche 10, connexion sérialisée et fermeture attendue** (`d65d3fb`, qui touche aussi `LiaisonSerie.swift`, de la tâche 9).
   - Défaut : `SondeMaillage.connecter` n'était pas sérialisé : deux changements de ports rapprochés ouvraient deux connexions, une connexion en cours échappait à `deconnecter` (« Oublier » ou un autre choix pouvait être annulé, le port rester ouvert, l'état contredire la liaison), et l'ancienne liaison se fermait sans être attendue, d'où un « port occupé » trompeur en rouvrant le même port.
   - Fait : un numéro d'essai qu'incrémente `deconnecter` (une connexion périmée ferme sa liaison et sort sans toucher à l'état), `.connexion` posé avant de lancer la tâche, un choix du port déjà connecté sans effet, et `connecter` qui attend la fermeture réelle de l'ancienne liaison (`LiaisonSerie` finit son flux après `close(fd)`, `SondeUSB.fermer()` attend la fin de sa lecture) ; 6 tests.
-- **Tâche 11, épaisseur des liens, tests indépendants de la langue, « Renommer… »** (`da283d5`), trois corrections :
+- **Tâche 11, épaisseur des liens, tests indépendants de la langue, « Renommer… »** (`bec60fc`), trois corrections :
   - Épaisseur. Défaut : l'épaisseur des liens radio ne dépendait pas de la qualité (spec, section 5). Fait : 3 pt pour la qualité 3, 2,2 pt pour 2, 1,4 pt pour 1 ou inconnue, et 1 pt de l'enfant à son parent, par une fonction pure testée (`GrapheCanvas.epaisseurLienSonde`).
   - Langue. Défaut : `AffichageSondeTests` ne passait que sur un hôte en français. Fait : les attentes reprennent les mêmes clés interpolées que le code.
   - « Renommer… ». Défaut : le bouton était inerte pour un nœud que seule la sonde connaît (surnom orphelin, indexé par un RLOC16 volatil). Fait : il est masqué pour un tel nœud (`FicheNoeud.renommable`).
   - 2 tests ajoutés.
-- **Tâche 12, documentation** (`d8f067c`, puis le commit « Documenter la sonde telle qu'executee et noter les ecarts du plan 3a »).
+- **Tâche 12, documentation** (`5b7a26d`, puis le commit « Documenter la sonde telle qu'executee et noter les ecarts du plan 3a »).
   - Défaut : la première passe laissait « l'app ne sonde jamais », faux depuis la sonde, et décrivait la tournée du plan plutôt que celle du code : identité de chaque nouvel enfant, liste des routeurs donnée par le chef seul, balayage sans la règle des routeurs qui n'ont jamais répondu ou sont muets deux tournées de suite.
   - Fait : les README (les deux langues) et cette section disent ce que fait le code ; la spec aussi, dans son en-tête, sa section 3 (la trame) et sa section 4 (la tournée), sauf pour la connexion à la sonde, un détail d'implémentation qu'elle ne décrit pas (l'épaisseur des liens y était déjà, en section 5 : c'est le code qui l'a rejointe) ; le bloc de test de la tâche 9 reprend les valeurs inventées.
-- **Revue finale, vague de corrections** (`4d68062`, `568a074`, `7c2aa2c`, `cc2c1aa`, puis le commit « Documenter la vague de corrections de la revue finale »), cinq corrections :
-  - Fraîcheur du maillage (`4d68062`, tâche 10). Défaut : le maillage était daté du début de sa tournée et la pause de 5 minutes courait depuis la fin : il passait « ancien » (plus de 6 minutes) dès que deux tournées de suite duraient plus de 60 s en tout, dès la première tournée au lancement et autour de chaque balayage, alors que la spec (section 4) réserve « ancien » à une sonde muette. Fait : l'âge du maillage se compte depuis sa réception, à la fin de sa tournée (`SondeMaillage.surMaillage` donne l'heure de réception, `Surveillance.recevoir(_:a:)` la garde) ; pendant une tournée (`SondeMaillage.surTournee`, `Surveillance.tourneeEnCours`), il n'est pas « ancien » ; le passage à « périmé » (15 minutes, retour aux pointillés) ne change pas ; API du cœur inchangée ; 3 tests ajoutés, 1 complété.
-  - Interrupteur « Sonde maillage » (`7c2aa2c`, tâche 8). Défaut : après un redémarrage, la sonde repartait allumée (`sSuspendue` à faux, `begin(true)`), quel que soit l'état montré par Maison, alors que la spec (section 2) garantit qu'éteinte, elle refuse les requêtes. Fait : le schéma de l'exemple `MatterOnOffPlugin` d'Arduino-ESP32 3.3.12 : l'état est gardé dans `Preferences` (allumé par défaut), relu avant `begin(état)`, appliqué par `updateAccessory()` après `Matter.begin()`, et sauvé par le rappel (`onChange`, que `updateAccessory()` appelle) ; vérifié par la compilation ; `sonde/README.md` le dit.
-  - Aucun port non désigné (`568a074`, tâche 10). Défaut : aucun test ne tenait l'invariant de la spec (section 3). Fait : 2 tests (sans sonde retenue, un C6 branché n'est pas ouvert ; avec une sonde retenue, un autre C6 ne l'est pas), dont le rouge est prouvé par une mutation de `portsChanges`.
-  - `errno` et commentaires (`cc2c1aa`, tâches 2, 5 et 9). Défaut : `PortSerie.erreur` lisait `errno` après avoir construit le message (`String(localized:)`, qui peut le changer), d'où un message ou un « port occupé » faussé ; le délai d'un enfant était décrit comme un délai de supervision. Fait : `errno` lu d'abord (message en `@autoclosure`), 1 test ; commentaires : c'est le Child Timeout, le délai d'expiration de l'enfant.
+- **Revue finale, vague de corrections** (`a78591e`, `1f639ce`, `343d738`, `772c719`, puis le commit « Documenter la vague de corrections de la revue finale »), cinq corrections :
+  - Fraîcheur du maillage (`a78591e`, tâche 10). Défaut : le maillage était daté du début de sa tournée et la pause de 5 minutes courait depuis la fin : il passait « ancien » (plus de 6 minutes) dès que deux tournées de suite duraient plus de 60 s en tout, dès la première tournée au lancement et autour de chaque balayage, alors que la spec (section 4) réserve « ancien » à une sonde muette. Fait : l'âge du maillage se compte depuis sa réception, à la fin de sa tournée (`SondeMaillage.surMaillage` donne l'heure de réception, `Surveillance.recevoir(_:a:)` la garde) ; pendant une tournée (`SondeMaillage.surTournee`, `Surveillance.tourneeEnCours`), il n'est pas « ancien » ; le passage à « périmé » (15 minutes, retour aux pointillés) ne change pas ; API du cœur inchangée ; 3 tests ajoutés, 1 complété.
+  - Interrupteur « Sonde maillage » (`343d738`, tâche 8). Défaut : après un redémarrage, la sonde repartait allumée (`sSuspendue` à faux, `begin(true)`), quel que soit l'état montré par Maison, alors que la spec (section 2) garantit qu'éteinte, elle refuse les requêtes. Fait : le schéma de l'exemple `MatterOnOffPlugin` d'Arduino-ESP32 3.3.12 : l'état est gardé dans `Preferences` (allumé par défaut), relu avant `begin(état)`, appliqué par `updateAccessory()` après `Matter.begin()`, et sauvé par le rappel (`onChange`, que `updateAccessory()` appelle) ; vérifié par la compilation ; `sonde/README.md` le dit.
+  - Aucun port non désigné (`1f639ce`, tâche 10). Défaut : aucun test ne tenait l'invariant de la spec (section 3). Fait : 2 tests (sans sonde retenue, un C6 branché n'est pas ouvert ; avec une sonde retenue, un autre C6 ne l'est pas), dont le rouge est prouvé par une mutation de `portsChanges`.
+  - `errno` et commentaires (`772c719`, tâches 2, 5 et 9). Défaut : `PortSerie.erreur` lisait `errno` après avoir construit le message (`String(localized:)`, qui peut le changer), d'où un message ou un « port occupé » faussé ; le délai d'un enfant était décrit comme un délai de supervision. Fait : `errno` lu d'abord (message en `@autoclosure`), 1 test ; commentaires : c'est le Child Timeout, le délai d'expiration de l'enfant.
   - Documentation (le dernier commit). La spec (en-tête, section 4 : le drapeau `muet` du maillage rendu, qu'aucune vue ne lit encore, et la fraîcheur comptée depuis la réception), les README (les deux langues) et ce plan (en-tête, tâche 12 : vérifications sur la carte, couverture de la spec, cette section).
 - **Vague d'interface pendant la vérification sur la carte** (demandes de Djoko, 29/09). Ce chantier dépasse les blocs des tâches 8 (firmware), 10 (modèle de l'app) et 11 (affichage) : le dépôt fait foi.
   - Firmware 1.0.1 : la sonde a un nom, « SONDE-01 » par défaut, gardé par la carte (commande `nom`), qui la suit d'un Mac à l'autre ; `bonjour` donne toujours son code d'appairage et son QR code, même appairée.
@@ -5803,7 +5803,7 @@ Des relectures ont corrigé plusieurs comportements pendant l'exécution, par ra
 - **Placement des libellés du graphe** (retour de Djoko pendant la vérification : deux libellés l'un sur l'autre, zone de clic aléatoire). Ce chantier dépasse lui aussi le bloc de la tâche 11 : le dépôt fait foi.
   - Jamais de chevauchement : un libellé garde sa place s'il en a, sinon en prend une autre autour de son point ; à défaut, il est écarté vers l'extérieur et relié à son point par un trait fin. Un fond discret passe sous chaque libellé, et le zoom est borné.
   - Clic, double clic et survol : la zone est le point (8 pt autour) et tout le libellé, le plus proche du curseur l'emportant ; le dessin et le clic partagent le même placement (`PlacementLibelles`).
-- **Sonde 1.0.2** (demande de Djoko pendant la vérification sur la carte, 29/09 ; un contrat commun, trois chantiers relus, puis intégrés : fusions `982421a` et `2cf48ff`, corrections d'intégration de `fda62ba` à `6f15e84`, puis le commit « Documenter l'acces reseau de la sonde 1.0.2 et les limites connues » ; après la relecture de l'intégration, `c026219` à `457e72a`, puis `61ef9f3` à `c3849aa`).
+- **Sonde 1.0.2** (demande de Djoko pendant la vérification sur la carte, 29/09 ; un contrat commun, trois chantiers relus, puis intégrés : fusions `8fb4736` et `9878bec`, corrections d'intégration de `e2e94d9` à `04233dd`, puis le commit « Documenter l'acces reseau de la sonde 1.0.2 et les limites connues » ; après la relecture de l'intégration, `4e7d216` à `4c0e2c7`, puis `cfed1e1` à `722b7a6`).
   - Demande : garder la sonde en FED (l'essai l'a montré : elle entend alors les routeurs voisins), afficher honnêtement les routeurs de bordure qu'elle ne peut pas identifier, et la joindre par le réseau Thread comme le pont Halo, pour la débrancher du Mac et la promener dans la maison.
   - Firmware 1.0.2 (`sonde/`, fusionné à part) : FED, `routeurs`, nom d'hôte dans `bonjour`, clé créée par l'USB, accès UDP au port 5480 avec l'enveloppe H1 de Halo.
   - Identités des routeurs : table des routeurs lue à chaque tournée, paires gardées d'un lancement à l'autre (`identites-routeurs.json`), règles du BBR principal et du chef (une seule annonce de ce rôle), élimination, candidats affichés et cliquables (spec, section 4).
