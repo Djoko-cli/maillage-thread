@@ -3,10 +3,43 @@ import MaillageCoeur
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Reglages : notifications par categorie, ouverture a la connexion, langue,
-/// noms de Maison (releve du passeur), sonde (liaison USB ou reseau Thread, acces
-/// reseau), diagnostic et capture.
+/// Onglets de la fenetre Reglages (`ControleurReglages`), dans la barre d'outils ; le dernier
+/// ouvert est garde (demande de Djoko, 30/09 : une seule page etait trop chargee).
+enum OngletReglages: String, CaseIterable {
+    case general, notifications, maison, sonde, diagnostic
+    static let cle = "reglages.onglet"
+
+    /// Libelle de l'onglet, et titre de la fenetre quand il est choisi.
+    var titre: String {
+        switch self {
+        case .general: String(localized: "Général")
+        case .notifications: String(localized: "Notifications")
+        case .maison: String(localized: "Maison")
+        case .sonde: String(localized: "Sonde")
+        case .diagnostic: String(localized: "Diagnostic")
+        }
+    }
+
+    /// Symbole SF de l'onglet.
+    var symbole: String {
+        switch self {
+        case .general: "gearshape"
+        case .notifications: "bell"
+        case .maison: "house"
+        case .sonde: "antenna.radiowaves.left.and.right"
+        case .diagnostic: "stethoscope"
+        }
+    }
+}
+
+/// Une page des Reglages, celle d'un onglet : General (ouverture a la connexion, langue),
+/// Notifications (par categorie), Maison (noms releves par le passeur), Sonde (liaison USB ou
+/// reseau Thread, acces reseau), Diagnostic (ecoute, capture, journal). La fenetre et ses
+/// onglets sont dans `ControleurReglages`.
 struct FenetreReglages: View {
+    let onglet: OngletReglages
+    /// Appele a chaque changement de hauteur de la page : la fenetre la suit (`ControleurReglages`).
+    var surHauteur: @MainActor (CGFloat) -> Void = { _ in }
     @Environment(Surveillance.self) private var surveillance
     @Environment(OuvertureSession.self) private var ouverture
     @Environment(NomsInternes.self) private var nomsMaison
@@ -20,147 +53,193 @@ struct FenetreReglages: View {
     @State private var messageLangue: String?
 
     var body: some View {
-        Form {
-            Section("Notifications") {
-                Toggle("Réseau scindé", isOn: $scission)
-                Toggle("Routeur de bordure disparu", isOn: $routeurDisparu)
-                Toggle("Au moins 3 appareils perdus en 10 min (une notification groupée)", isOn: $pertes)
-                Toggle("Autres changements", isOn: $informations)
+        Group {
+            switch onglet {
+            case .general:
+                page {
+                    ouvertureALaConnexion
+                    choixDeLangue
+                }
+            case .notifications: page { notifications }
+            case .maison: page { nomsDeMaison }
+            case .sonde: page { reglagesSonde }
+            case .diagnostic: page { diagnostic }
             }
-            Section("Ouverture") {
-                Toggle("Ouvrir à la connexion", isOn: Binding(get: { ouverture.active }, set: { ouverture.basculer($0) }))
-                if ouverture.approbationRequise {
-                    Button("Approuver dans Réglages Système…") { ouverture.ouvrirReglagesSysteme() }
-                }
-                if let e = ouverture.erreur {
-                    Text(e).foregroundStyle(.red)
-                }
+        }
+        .frame(width: 560)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { surHauteur($0) }
+        // Collee en haut : pendant que la fenetre change de hauteur, la page ne bouge pas.
+        .frame(maxHeight: .infinity, alignment: .top)
+        // Etat de l'ouverture a la connexion relu a chaque affichage de l'onglet (Reglages Systeme).
+        .onAppear { if onglet == .general { ouverture.actualiser() } }
+    }
+
+    /// Page d'un onglet : un formulaire groupe, a la hauteur de son contenu. Un formulaire groupe
+    /// connait sa hauteur ideale, mais accepte toute hauteur proposee : sans `fixedSize`, il
+    /// n'annoncerait pas sa hauteur a la fenetre. Mesure du 30/09 : 121 pt pour 2 lignes, 367 pour 8.
+    private func page<Contenu: View>(@ViewBuilder _ contenu: () -> Contenu) -> some View {
+        Form { contenu() }
+            .formStyle(.grouped)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Onglet Notifications : une categorie par interrupteur.
+    private var notifications: some View {
+        Section {
+            Toggle("Réseau scindé", isOn: $scission)
+            Toggle("Routeur de bordure disparu", isOn: $routeurDisparu)
+            Toggle("Au moins 3 appareils perdus en 10 min (une notification groupée)", isOn: $pertes)
+            Toggle("Autres changements", isOn: $informations)
+        }
+    }
+
+    /// Onglet General : ouverture a la connexion.
+    private var ouvertureALaConnexion: some View {
+        Section("Ouverture") {
+            Toggle("Ouvrir à la connexion", isOn: Binding(get: { ouverture.active }, set: { ouverture.basculer($0) }))
+            if ouverture.approbationRequise {
+                Button("Approuver dans Réglages Système…") { ouverture.ouvrirReglagesSysteme() }
             }
-            Section {
-                Picker("Langue", selection: $langue) {
-                    Text("Celle du Mac").tag(LangueApp.systeme)
-                    Text(verbatim: "Français").tag(LangueApp.francais)
-                    Text(verbatim: "English").tag(LangueApp.anglais)
-                }
-                .onChange(of: langue) { _, l in LangueApp.ecrire(l) }
-                if langue != LangueApp.auLancement {
-                    HStack {
-                        Text("La langue change au prochain lancement.").font(.caption).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Relancer maintenant") {
-                            Task {
-                                do { try await LangueApp.relancer() } catch { messageLangue = error.localizedDescription }
-                            }
-                        }
-                    }
-                }
-                if let messageLangue {
-                    Text(messageLangue).foregroundStyle(.red)
-                }
+            if let e = ouverture.erreur {
+                Text(e).foregroundStyle(.red)
             }
-            Section("Noms de Maison") {
-                if let n = nomsMaison.noms {
-                    LabeledContent("Noms lus",
-                                   value: String(localized: "\(n.accessoires.count) accessoires · \(n.date.formatted(date: .abbreviated, time: .shortened))"))
-                    // Rien pour un releve d'avant les zones.
-                    if let zones = n.zones {
-                        LabeledContent("Zones", value: Self.texteZones(zones))
-                    }
-                    if NomsInternes.estAncien(n, maintenant: .now) {
-                        Text("Noms du \(n.date.formatted(date: .abbreviated, time: .omitted)) : relance outils/passeur.sh pour les rafraîchir.")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-                }
-                if let p = nomsMaison.probleme {
-                    Text(p).font(.caption).foregroundStyle(.red)
-                }
+        }
+    }
+
+    /// Onglet General : langue de l'app, appliquee au prochain lancement.
+    private var choixDeLangue: some View {
+        Section {
+            Picker("Langue", selection: $langue) {
+                Text("Celle du Mac").tag(LangueApp.systeme)
+                Text(verbatim: "Français").tag(LangueApp.francais)
+                Text(verbatim: "English").tag(LangueApp.anglais)
+            }
+            .onChange(of: langue) { _, l in LangueApp.ecrire(l) }
+            if langue != LangueApp.auLancement {
                 HStack {
-                    // Une demande pendant un releve serait ignoree.
-                    Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
-                        .disabled(surveillance.mode == .demo || nomsMaison.releveEnCours)
-                    if nomsMaison.releveEnCours {
-                        ProgressView().controlSize(.small)
+                    Text("La langue change au prochain lancement.").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Relancer maintenant") {
+                        Task {
+                            do { try await LangueApp.relancer() } catch { messageLangue = error.localizedDescription }
+                        }
                     }
                 }
             }
-            Section("Sonde") {
-                if surveillance.mode == .demo {
-                    Text("Mode démo : pas de sonde.").foregroundStyle(.secondary)
-                } else {
-                    // Le reseau se propose une fois l'acces autorise (cle de ce Mac pour la sonde).
-                    if sonde.reseauDisponible || sonde.liaison == .reseau {
-                        Picker("Liaison", selection: Binding(get: { sonde.liaison }, set: { sonde.choisirLiaison($0) })) {
-                            Text("USB").tag(SondeMaillage.Liaison.usb)
-                            Text("Réseau Thread").tag(SondeMaillage.Liaison.reseau)
-                        }
-                        .pickerStyle(.segmented)
-                    }
-                    if sonde.liaison == .reseau {
-                        LabeledContent("Nom d'hôte", value: Self.texteHote(sonde.hote))
-                    } else {
-                        Picker("Port", selection: Binding(
-                            get: { sonde.ports.first { $0.serie != nil && $0.serie == sonde.serie }?.chemin ?? "" },
-                            set: { c in if let p = sonde.ports.first(where: { $0.chemin == c }) { sonde.choisir(p) } })) {
-                            Text("—").tag("")
-                            ForEach(sonde.ports) { p in
-                                Text(verbatim: Self.libellePort(p, serieRetenue: sonde.serie, nom: sonde.nom)).tag(p.chemin)
-                            }
-                        }
-                    }
-                    LabeledContent("État", value: Self.texteEtatSonde(sonde.etat, nom: sonde.nomEtat))
-                    DernierePerteSonde()
-                    if case .connectee(let b) = sonde.etat {
-                        LabeledContent("Firmware", value: b.version)
-                        let qr = b.qr.flatMap { $0.isEmpty ? nil : $0 }
-                        let code = b.code.flatMap { $0.isEmpty ? nil : $0 }
-                        if qr != nil || code != nil {
-                            CodeMatterSonde(qr: qr, code: code, appairee: b.appairee)
-                        } else if let note = Self.noteCodeMatter(b, liaison: sonde.liaison) {
-                            Text(note).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    ReleveSonde()
-                    // Le nom d'hote reste apres un oubli dont la cle n'a pas pu etre effacee.
-                    if sonde.serie != nil || sonde.hote != nil {
-                        AccesReseauSonde()
-                        Button("Oublier la sonde") { Task { await sonde.oublier() } }
-                    }
-                    Text("Seul le port choisi est ouvert. Un autre ESP32-C6 branché n'est jamais ouvert : ne le choisissez pas.")
+            if let messageLangue {
+                Text(messageLangue).foregroundStyle(.red)
+            }
+        }
+    }
+
+    /// Onglet Maison : noms, pieces et zones releves par le passeur.
+    private var nomsDeMaison: some View {
+        Section("Noms de Maison") {
+            if let n = nomsMaison.noms {
+                LabeledContent("Noms lus",
+                               value: String(localized: "\(n.accessoires.count) accessoires · \(n.date.formatted(date: .abbreviated, time: .shortened))"))
+                // Rien pour un releve d'avant les zones.
+                if let zones = n.zones {
+                    LabeledContent("Zones", value: Self.texteZones(zones))
+                }
+                if NomsInternes.estAncien(n, maintenant: .now) {
+                    Text("Noms du \(n.date.formatted(date: .abbreviated, time: .omitted)) : relance outils/passeur.sh pour les rafraîchir.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.orange)
                 }
             }
-            Section("Diagnostic") {
-                LabeledContent("Écoute", value: etatEcoute)
-                LabeledContent("Dernier relevé",
-                               value: surveillance.dernierReleve?.date.formatted(date: .abbreviated, time: .standard) ?? "—")
-                if let a = surveillance.dernierReleve {
-                    LabeledContent("Services vus", value: "_meshcop._udp \(a.routeurs.count) · _matter._tcp \(a.matter.count) · _hap._udp \(a.hap.count)")
-                    LabeledContent("Préfixes du Mac", value: a.prefixesLocaux.joined(separator: ", "))
-                }
-                LabeledContent("Table de routage", value: routes)
-                if let e = surveillance.erreurJournal {
-                    LabeledContent("Journal", value: e)
-                }
-                HStack {
-                    Button("Enregistrer une capture…") { enregistrerCapture() }
-                        .disabled(surveillance.dernierReleve == nil)
-                    Button("Afficher le journal dans le Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting(
-                            [Surveillance.dossierParDefaut.appendingPathComponent("Journal")])
-                    }
-                    .disabled(surveillance.mode == .demo)
-                }
-                if let messageCapture {
-                    Text(messageCapture).font(.caption).foregroundStyle(.secondary)
+            if let p = nomsMaison.probleme {
+                Text(p).font(.caption).foregroundStyle(.red)
+            }
+            HStack {
+                // Une demande pendant un releve serait ignoree.
+                Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
+                    .disabled(surveillance.mode == .demo || nomsMaison.releveEnCours)
+                if nomsMaison.releveEnCours {
+                    ProgressView().controlSize(.small)
                 }
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 560)
-        // Etat de l'ouverture a la connexion relu a chaque ouverture (Reglages Systeme).
-        .onAppear { ouverture.actualiser() }
+    }
+
+    /// Onglet Sonde : liaison, etat, code Matter, acces reseau, tournee.
+    private var reglagesSonde: some View {
+        Section {
+            if surveillance.mode == .demo {
+                Text("Mode démo : pas de sonde.").foregroundStyle(.secondary)
+            } else {
+                // Le reseau se propose une fois l'acces autorise (cle de ce Mac pour la sonde).
+                if sonde.reseauDisponible || sonde.liaison == .reseau {
+                    Picker("Liaison", selection: Binding(get: { sonde.liaison }, set: { sonde.choisirLiaison($0) })) {
+                        Text("USB").tag(SondeMaillage.Liaison.usb)
+                        Text("Réseau Thread").tag(SondeMaillage.Liaison.reseau)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                if sonde.liaison == .reseau {
+                    LabeledContent("Nom d'hôte", value: Self.texteHote(sonde.hote))
+                } else {
+                    Picker("Port", selection: Binding(
+                        get: { sonde.ports.first { $0.serie != nil && $0.serie == sonde.serie }?.chemin ?? "" },
+                        set: { c in if let p = sonde.ports.first(where: { $0.chemin == c }) { sonde.choisir(p) } })) {
+                        Text("—").tag("")
+                        ForEach(sonde.ports) { p in
+                            Text(verbatim: Self.libellePort(p, serieRetenue: sonde.serie, nom: sonde.nom)).tag(p.chemin)
+                        }
+                    }
+                }
+                LabeledContent("État", value: Self.texteEtatSonde(sonde.etat, nom: sonde.nomEtat))
+                DernierePerteSonde()
+                if case .connectee(let b) = sonde.etat {
+                    LabeledContent("Firmware", value: b.version)
+                    let qr = b.qr.flatMap { $0.isEmpty ? nil : $0 }
+                    let code = b.code.flatMap { $0.isEmpty ? nil : $0 }
+                    if qr != nil || code != nil {
+                        CodeMatterSonde(qr: qr, code: code, appairee: b.appairee)
+                    } else if let note = Self.noteCodeMatter(b, liaison: sonde.liaison) {
+                        Text(note).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                ReleveSonde()
+                // Le nom d'hote reste apres un oubli dont la cle n'a pas pu etre effacee.
+                if sonde.serie != nil || sonde.hote != nil {
+                    AccesReseauSonde()
+                    Button("Oublier la sonde") { Task { await sonde.oublier() } }
+                }
+                Text("Seul le port choisi est ouvert. Un autre ESP32-C6 branché n'est jamais ouvert : ne le choisissez pas.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Onglet Diagnostic : ecoute du reseau local, dernier releve, capture et journal.
+    private var diagnostic: some View {
+        Section {
+            LabeledContent("Écoute", value: etatEcoute)
+            LabeledContent("Dernier relevé",
+                           value: surveillance.dernierReleve?.date.formatted(date: .abbreviated, time: .standard) ?? "—")
+            if let a = surveillance.dernierReleve {
+                LabeledContent("Services vus", value: "_meshcop._udp \(a.routeurs.count) · _matter._tcp \(a.matter.count) · _hap._udp \(a.hap.count)")
+                LabeledContent("Préfixes du Mac", value: a.prefixesLocaux.joined(separator: ", "))
+            }
+            LabeledContent("Table de routage", value: routes)
+            if let e = surveillance.erreurJournal {
+                LabeledContent("Journal", value: e)
+            }
+            HStack {
+                Button("Enregistrer une capture…") { enregistrerCapture() }
+                    .disabled(surveillance.dernierReleve == nil)
+                Button("Afficher le journal dans le Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting(
+                        [Surveillance.dossierParDefaut.appendingPathComponent("Journal")])
+                }
+                .disabled(surveillance.mode == .demo)
+            }
+            if let messageCapture {
+                Text(messageCapture).font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     /// Zones de Maison lues par le passeur, dans l'ordre de Maison : « Rez-de-chaussee, Etage ».

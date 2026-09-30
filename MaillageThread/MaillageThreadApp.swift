@@ -10,6 +10,7 @@ struct MaillageThreadApp: App {
     @State private var ouverture: OuvertureSession
     @State private var nomsMaison: NomsInternes
     @State private var sonde: SondeMaillage
+    @State private var reglages: ControleurReglages
     private let notifications = Notifications()
     private static let demo = CommandLine.arguments.contains("-demo")
     /// Le graphe s'ouvre au lancement en mode demo et au tout premier lancement
@@ -33,6 +34,7 @@ struct MaillageThreadApp: App {
                                fichierIdentites: SondeMaillage.fichierIdentites(demo: Self.demo,
                                                                                 sousTests: Surveillance.sousTests))
         _sonde = State(initialValue: sm)
+        _reglages = State(initialValue: ControleurReglages(surveillance: s, ouverture: o, nomsMaison: d, sonde: sm))
         let premier = !UserDefaults.standard.bool(forKey: Self.clePremierGraphe)
         ouvrirGraphe = !Surveillance.sousTests && (Self.demo || premier)
         guard !Surveillance.sousTests else { return }
@@ -59,11 +61,19 @@ struct MaillageThreadApp: App {
                 .environment(ouverture)
                 .environment(nomsMaison)
                 .environment(sonde)
+                .environment(reglages)
         } label: {
             IconeBarre(ouvrirGraphe: ouvrirGraphe)
                 .environment(surveillance)
         }
         .menuBarExtraStyle(.window)
+        // Les Reglages sont une fenetre AppKit (`ControleurReglages`) : Cmd-virgule l'ouvre.
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Réglages…") { reglages.montrer() }
+                    .keyboardShortcut(",")
+            }
+        }
 
         Window("Maillage Thread", id: "graphe") {
             FenetreGraphe()
@@ -80,13 +90,5 @@ struct MaillageThreadApp: App {
         }
         .defaultSize(width: 720, height: 560)
         .defaultLaunchBehavior(.suppressed)
-
-        Settings {
-            FenetreReglages()
-                .environment(surveillance)
-                .environment(ouverture)
-                .environment(nomsMaison)
-                .environment(sonde)
-        }
     }
 }

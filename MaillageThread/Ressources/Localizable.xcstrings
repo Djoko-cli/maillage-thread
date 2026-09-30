@@ -1265,6 +1265,22 @@
         }
       }
     },
+    "Général" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "General"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Général"
+          }
+        }
+      }
+    },
     "HomeKit indisponible pour le passeur." : {
       "localizations" : {
         "en" : {
@@ -1565,6 +1581,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Maillage Thread"
+          }
+        }
+      }
+    },
+    "Maison" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maison"
           }
         }
       }
