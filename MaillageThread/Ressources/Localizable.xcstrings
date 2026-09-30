@@ -3574,7 +3574,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "the probe is busy and did not answer \"%@\""
+            "value" : "the probe is busy and did not answer “%@”"
           }
         },
         "fr" : {
