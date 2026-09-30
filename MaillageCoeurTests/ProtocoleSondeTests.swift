@@ -8,6 +8,13 @@ struct ProtocoleSondeTests {
         try CaptureSonde.lignes().compactMap { MessageSonde.lire(Data($0.utf8)) }
     }
 
+    /// Ligne JSON `erreur` de `octets` octets exactement (ASCII) : le message est complete par des `x`.
+    static func jsonErreur(octets: Int) -> (json: String, message: String) {
+        let debut = #"{"v":1,"t":"erreur","erreur":""#, fin = #""}"#
+        let message = String(repeating: "x", count: octets - debut.utf8.count - fin.utf8.count)
+        return (debut + message + fin, message)
+    }
+
     /// Toute la capture se relit : 2 bonjour, 9 etat, 53 diag.
     @Test func capture() throws {
         let m = try Self.messages()
@@ -45,6 +52,23 @@ struct ProtocoleSondeTests {
         #expect(e1.suspendue)
     }
 
+    /// Sonde detachee (ou eteinte) : le firmware rend `FFFE`, l'adresse courte invalide, sans
+    /// partition ni chef. La valeur se lit (0xFFFE), mais la sonde n'est pas attachee : la
+    /// tournee ne la prend pas pour son RLOC16 (`estAttachee`). Les 5 releves de la capture
+    /// avant l'appairage (role `disabled`) sont dans le meme cas.
+    @Test func rloc16DUneSondeDetachee() throws {
+        let detache = #"{"v":1,"t":"etat","role":"detached","rloc16":"FFFE","mode":"rn","parent":null,"partition":null,"chef":null,"canal":25,"prefixeMaille":null,"xp":null,"suspendue":false}"#
+        guard case .etat(let e)? = MessageSonde.lire(Data(detache.utf8)) else {
+            Issue.record("etat detache illisible")
+            return
+        }
+        #expect(e.rloc16Valeur == 0xFFFE)
+        #expect(!e.estAttachee)
+        let sansAttache = try Self.messages().compactMap { if case .etat(let e) = $0, !e.estAttachee { e } else { nil } }
+        #expect(sansAttache.count == 5)
+        #expect(sansAttache.allSatisfy { $0.role == "disabled" && $0.rloc16Valeur == 0xFFFE })
+    }
+
     /// bonjour du firmware 1.0.1 : nom, code et QR code, meme appairee (valeurs inventees) ;
     /// celui de la 1.0.0 n'a pas de nom.
     @Test func bonjourNom() {
@@ -80,6 +104,25 @@ struct ProtocoleSondeTests {
         #expect(b.hote == "0123456789ABCDEF")
         #expect(inconnu.hote == nil, "pas encore enregistre par SRP")
         #expect(ancien.hote == nil, "firmware 1.0.1")
+    }
+
+    /// `estSonde` : seul le produit exact est une sonde. Un autre produit (le pont Halo, un autre
+    /// firmware), une autre casse, un espace de trop ou un produit vide se lisent, mais ne sont
+    /// pas une sonde : l'app refuse alors le port. Sans `produit`, la ligne est illisible.
+    @Test func estSondeNegatif() {
+        func bonjour(produit: String) -> Bonjour? {
+            let json = #"{"v":1,"t":"bonjour","produit":"\#(produit)","version":"1.0.2","mac":"A00000000001","appairee":true}"#
+            guard case .bonjour(let b)? = MessageSonde.lire(Data(json.utf8)) else { return nil }
+            return b
+        }
+        #expect(bonjour(produit: ProtocoleSonde.produit)?.estSonde == true, "le produit attendu")
+        for autre in ["halo", "Sonde-Maillage", "sonde-maillage ", "sonde", ""] {
+            let lu = bonjour(produit: autre)
+            #expect(lu != nil, "\(autre) : bonjour lisible")
+            #expect(lu?.estSonde == false, "\(autre) : pas une sonde")
+        }
+        let sansProduit = #"{"v":1,"t":"bonjour","version":"1.0.2","mac":"A00000000001","appairee":true}"#
+        #expect(MessageSonde.lire(Data(sansProduit.utf8)) == nil, "sans produit : illisible")
     }
 
     /// Cle des vecteurs H1 (00..1F) et son empreinte (8 premiers hexa de SHA-256).
@@ -191,6 +234,7 @@ struct ProtocoleSondeTests {
     @Test func commandes() {
         #expect(CommandeSonde.bonjour.ligne == "bonjour\n")
         #expect(CommandeSonde.etat.ligne == "etat\n")
+        #expect(CommandeSonde.voisins.ligne == "voisins\n")
         #expect(CommandeSonde.routeurs.ligne == "routeurs\n")
         #expect(CommandeSonde.diag(cible: 0x5000, tlv: [0, 1, 5, 16, 8, 24], id: 12, delaiMs: 6000).ligne
                 == "diag 5000 0,1,5,16,8,24 12 6000\n")
@@ -246,5 +290,66 @@ struct ProtocoleSondeTests {
         #expect(d.ajouter(Data([ProtocoleSonde.separateur]) + trop + Data("\u{1E}{}\n".utf8)) == [Data("{}".utf8)],
                 "ligne machine trop longue, coupee")
         #expect(d.ajouter(trop + Data("\u{1E}{}\n".utf8)) == [Data("{}".utf8)], "texte trop long, sans fin de ligne")
+    }
+
+    /// RS suivi aussitot de LF : une ligne machine vide. Elle sort vide (le RS est retire), `lire`
+    /// la refuse, et la suite n'en souffre pas ; meme coupee entre deux morceaux, ou avec un CR.
+    @Test func decoupageRSLF() {
+        let json = #"{"v":1,"t":"erreur","erreur":"occupee"}"#
+        var d = DecoupeurLignes()
+        #expect(d.ajouter(Data([ProtocoleSonde.separateur, 0x0A])) == [Data()], "RS LF")
+        #expect(MessageSonde.lire(Data()) == nil, "une ligne vide est illisible : ignoree")
+        #expect(d.ajouter(Data([ProtocoleSonde.separateur])).isEmpty)
+        #expect(d.ajouter(Data([0x0A])) == [Data()], "RS et LF dans deux morceaux")
+        #expect(d.ajouter(Data([ProtocoleSonde.separateur, 0x0D, 0x0A])) == [Data()], "RS CR LF")
+        #expect(d.ajouter(Data("\u{1E}\(json)\n".utf8)) == [Data(json.utf8)], "la ligne suivante est intacte")
+    }
+
+    /// Frontiere de la longueur : la limite (`longueurMax`, 4096) porte sur la ligne machine, RS
+    /// compris et LF non compris. A 4096 octets la ligne passe, et `lire` la comprend ; a 4097
+    /// elle est ecartee en entier, sans ligne coupee. (Le firmware n'en emet jamais plus de
+    /// 4095, RS et LF compris : aucune ligne valide n'est perdue.)
+    @Test func decoupageFrontiereDeLongueur() {
+        #expect(ProtocoleSonde.longueurMax == 4096)
+        let juste = Self.jsonErreur(octets: ProtocoleSonde.longueurMax - 1)  // avec le RS : 4096
+        let trop = Self.jsonErreur(octets: ProtocoleSonde.longueurMax)  // avec le RS : 4097
+        let suivante = #"{"v":1,"t":"erreur","erreur":"occupee"}"#
+        var d = DecoupeurLignes()
+        let lignes = d.ajouter(Data("\u{1E}\(juste.json)\n".utf8))
+        #expect(lignes == [Data(juste.json.utf8)], "4096 octets, RS compris : la ligne passe")
+        #expect(lignes.compactMap { MessageSonde.lire($0) } == [.erreur(juste.message)], "et elle se lit")
+        #expect(d.ajouter(Data("\u{1E}\(trop.json)\n".utf8)).isEmpty, "4097 octets : ecartee")
+        #expect(d.ajouter(Data("\u{1E}\(suivante)\n".utf8)) == [Data(suivante.utf8)], "la ligne suivante est retrouvee")
+    }
+
+    /// Ligne trop longue coupee entre deux `ajouter` : l'etat "trop longue" passe d'un appel a
+    /// l'autre. Ni la fin de la ligne, seule dans le morceau suivant, ni un reste qui ressemble a
+    /// une ligne complete, ne sortent (surtout pas la ligne coupee a la limite) ; la limite
+    /// franchie dans le second morceau, ou pile entre les deux, se traite comme dans un seul.
+    @Test func decoupageTropLongueEntreDeuxMorceaux() {
+        let limite = ProtocoleSonde.longueurMax
+        let rs = Data([ProtocoleSonde.separateur]), lf = Data([0x0A])
+        func remplissage(_ n: Int) -> Data { Data(repeating: 0x41, count: n) }
+        let suivante = #"{"v":1,"t":"erreur","erreur":"occupee"}"#
+        let ressemble = Data("\(suivante)\n".utf8)
+        let cas: [(nom: String, morceaux: [Data], lignes: [Data])] = [
+            ("limite franchie dans le premier morceau, LF seul ensuite",
+             [rs + remplissage(5000), lf], []),
+            ("idem, puis un reste qui ressemble a une ligne complete",
+             [rs + remplissage(5000), ressemble], []),
+            ("limite franchie dans le second morceau",
+             [rs + remplissage(3000), remplissage(3000) + lf], []),
+            ("pile a la limite, LF dans le second morceau",
+             [rs + remplissage(limite - 1), lf], [remplissage(limite - 1)]),
+            ("un octet de plus dans le second morceau",
+             [rs + remplissage(limite - 1), remplissage(1) + lf], []),
+        ]
+        for (nom, morceaux, attendues) in cas {
+            var d = DecoupeurLignes()
+            var lignes: [Data] = []
+            for m in morceaux { lignes += d.ajouter(m) }
+            #expect(lignes == attendues, "\(nom)")
+            #expect(d.ajouter(rs + ressemble) == [Data(suivante.utf8)], "\(nom) : la ligne suivante est retrouvee")
+        }
     }
 }
