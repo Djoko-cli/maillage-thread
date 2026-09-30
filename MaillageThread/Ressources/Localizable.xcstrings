@@ -2230,7 +2230,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Home survey interrupted: the connection with Passeur Noms was cut."
+            "value" : "Home reading interrupted: the connection with Passeur Noms was cut."
           }
         },
         "fr" : {
