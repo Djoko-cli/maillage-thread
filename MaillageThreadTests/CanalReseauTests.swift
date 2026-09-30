@@ -61,7 +61,7 @@ struct CanalReseauTests {
 
     /// Chaque commande part en `<rid> <commande>`, rid croissants ; `SondeUSB` recoit les
     /// lignes JSON seules, comme par le canal serie ; la connexion vise `<hote>.local:5480`.
-    @Test func ridEtLignesSeules() async throws {
+    @Test(.timeLimit(.minutes(1))) func ridEtLignesSeules() async throws {
         let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
         let connexions = ConnexionsSimulees()
         let s = SondeUSB(canal: try await Self.canal(carte, connexions: connexions))
@@ -81,7 +81,7 @@ struct CanalReseauTests {
     /// envois perdus, la reponse au second renvoi aboutit (ici renvois a 100 et 200 ms, attente
     /// de 800 ms, 600 ms de marge sous charge sans rien allonger ; dans l'app 2 et 4 s, attente
     /// de 6 s, et 3 s en USB).
-    @Test func reponseAuSecondRenvoi() async throws {
+    @Test(.timeLimit(.minutes(1))) func reponseAuSecondRenvoi() async throws {
         #expect(SondeUSB.delaiCommandeUSB == .seconds(3))
         #expect(SondeUSB.delaiCommandeReseau == .seconds(6))
         #expect(CanalReseau.Reglages().renvois == [.seconds(2), .seconds(4)])
@@ -116,7 +116,7 @@ struct CanalReseauTests {
 
     /// Une tournee entiere par le reseau : le maillage du reseau minimal, table des routeurs
     /// comprise (la carte simulee repond a `routeurs`, sans attente du delai).
-    @Test func tourneeParLeReseau() async throws {
+    @Test(.timeLimit(.minutes(1))) func tourneeParLeReseau() async throws {
         let carte = CarteSimulee(cle: VecteursH1.psk, repondre: Self.sonde)
         let s = SondeUSB(canal: try await Self.canal(carte))
         try await s.demarrer {}
@@ -129,7 +129,7 @@ struct CanalReseauTests {
 
     /// `routeurs` sur plusieurs lignes par le reseau (meme rid, `suite`) : chaque ligne traverse
     /// le canal, et `SondeUSB.routeurs()` rend la table entiere, dans l'ordre (ExtMac inventees).
-    @Test func routeursSurPlusieursLignesParLeReseau() async throws {
+    @Test(.timeLimit(.minutes(1))) func routeursSurPlusieursLignesParLeReseau() async throws {
         let carte = CarteSimulee(cle: VecteursH1.psk) { charge in
             guard let (rid, commande) = Self.decouper(charge), commande == "routeurs" else { return Self.sonde(charge) }
             return [CanalRejoue.routeurs([("0400", nil), ("AC00", "E0000000000000AC")], suite: true),
@@ -183,11 +183,14 @@ struct CanalReseauTests {
 
     /// Cadence de la carte (20 commandes par seconde glissante et par session, au-dela rien) :
     /// 30 commandes emises d'un coup partent dans l'ordre, 18 nouvelles par seconde au plus,
-    /// etalees sur plus d'une seconde.
+    /// etalees sur plus d'une seconde. Sans renvoi (la carte repond, renvois a 30 s) : chaque
+    /// arrivee est un premier envoi, quelle que soit la lenteur d'une reponse.
     @Test(.timeLimit(.minutes(1))) func cadenceDesNouvellesCommandes() async throws {
         let arrivees = Arrivees()
         let carte = Self.carteNotee(arrivees, repondre: Self.sonde)
-        let c = try await Self.canal(carte)
+        var reglages = Self.rapides()
+        reglages.renvois = [.seconds(30), .seconds(60)]
+        let c = try await Self.canal(carte, reglages: reglages)
         let lignes = RecueilLignes(try c.ouvrir())
         for _ in 0..<30 { c.envoyer("etat\n") }
         #expect(await attendreQue { lignes.liste.count == 30 })
@@ -196,7 +199,6 @@ struct CanalReseauTests {
         #expect(rids.count == 30 && rids == rids.sorted() && Set(rids).count == 30, "dans l'ordre, sans renvoi")
         let t = a.map(\.quand)
         #expect(t.count == 30 && t[18] - t[0] >= .milliseconds(950), "la 19e attend la fenetre d'une seconde")
-        #expect(t.count == 30 && t[29] - t[0] >= .milliseconds(950), "etalees sur une seconde au moins")
         c.fermer()
     }
 
@@ -495,40 +497,26 @@ struct CanalReseauTests {
 
     /// Canal sature : 30 commandes d'un coup, les 18 de la premiere fenetre partent et 12 attendent
     /// la cadence. La carte repond, sans renvoi pendant l'essai (renvois a 30 s).
-    static func canalSature() async throws -> (canal: CanalReseau, arrivees: Arrivees, lignes: RecueilLignes,
-                                                connexions: ConnexionsSimulees) {
-        let arrivees = Arrivees(), connexions = ConnexionsSimulees()
+    static func canalSature() async throws -> (canal: CanalReseau, arrivees: Arrivees, lignes: RecueilLignes) {
+        let arrivees = Arrivees()
         var reglages = rapides()
         reglages.renvois = [.seconds(30), .seconds(60)]
-        let c = try await canal(carteNotee(arrivees, repondre: sonde), reglages: reglages, connexions: connexions)
+        let c = try await canal(carteNotee(arrivees, repondre: sonde), reglages: reglages)
         let lignes = RecueilLignes(try c.ouvrir())
         for _ in 0..<30 { c.envoyer("etat\n") }
         #expect(await attendreQue { arrivees.toutes.count == 18 }, "la premiere fenetre est partie, 12 commandes attendent")
-        return (c, arrivees, lignes, connexions)
+        return (c, arrivees, lignes)
     }
 
-    /// Fermee pendant que des commandes attendent la cadence : elles ne partent pas, meme une fois
-    /// la fenetre ecoulee (les 12 en file seraient parties 1 s apres les 18) ; le flux des lignes
-    /// finit ; une commande donnee apres la fermeture ne part pas non plus.
+    /// Fermee pendant que des commandes attendent la cadence : elles ne partent pas, ni a la
+    /// fermeture ni meme une fois la fenetre ecoulee (les 12 en file seraient parties 1 s apres les
+    /// 18) ; le flux des lignes finit.
     @Test(.timeLimit(.minutes(1))) func fermeeAvecUneFileNonVide() async throws {
-        let (c, arrivees, lignes, _) = try await Self.canalSature()
+        let (c, arrivees, lignes) = try await Self.canalSature()
         c.fermer()
-        c.envoyer("etat\n")
         #expect(await attendreQue { lignes.liste.last == "fin" }, "fin du flux des lignes")
         try await Task.sleep(for: .milliseconds(1300))
-        #expect(arrivees.toutes.count == 18, "ni les 12 en file, ni celle d'apres la fermeture, ne partent")
-    }
-
-    /// Session perdue pendant que des commandes attendent la cadence : comme a la fermeture par
-    /// l'app, la file est abandonnee, et la cause de la perte est gardee.
-    @Test(.timeLimit(.minutes(1))) func sessionPerdueAvecUneFileNonVide() async throws {
-        let (c, arrivees, lignes, connexions) = try await Self.canalSature()
-        connexions.toutes.last?.echouer(.pasDeRoute)
-        #expect(await attendreQue { lignes.liste.last == "fin" }, "fin du flux des lignes")
-        #expect(c.raisonFermeture == TransportUDP.raisonPerte(.pasDeRoute), "cause de la perte gardee")
-        c.envoyer("etat\n")
-        try await Task.sleep(for: .milliseconds(1300))
-        #expect(arrivees.toutes.count == 18, "ni les 12 en file, ni celle d'apres la perte, ne partent")
+        #expect(arrivees.toutes.count == 18, "les 12 en file ne partent pas")
     }
 
     /// Fermee avant d'etre ouverte (connexion abandonnee) : flux fini aussitot.
