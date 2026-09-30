@@ -17,7 +17,7 @@ Retire le code d'appairage et le QR code (null), et la cle (deja masquee par
 sonde_essai.py). Garde les RLOC16, partitions, qualites, signaux, delais,
 compteurs et versions de pile. Aucune valeur reelle n'est ecrite dans ce
 script : il les repere dans la capture. A la fin, il verifie qu'aucune ne
-reste dans la sortie.
+reste dans la sortie (a la minuscule, separateurs retires : une ExtMac ecrite par groupes serait vue).
 
 Une capture deja anonymisee ressort telle quelle : une valeur deja factice
 (ExtMac E000..., identifiant 0A00..., /48 fd00:1111:2222..., MAC A0000000...,
@@ -38,7 +38,9 @@ connait pas (des noms, jamais une valeur), devant :
 - une valeur qui n'a pas la forme de son champ : un objet ou une liste la ou
   l'outil n'en descend pas ; un texte libre qui n'est pas sur (texte_sur() :
   64 caracteres au plus, lettres, chiffres, espace, point, tiret, souligne,
-  « : » seul entre deux espaces, jamais 8 hexa de suite) ; un nombre qui
+  « : » seul entre deux espaces, jamais 8 hexa de suite une fois retires les
+  espaces, tirets, points, soulignes et « : » : DEAD BEEF 0000 0004, DE-AD-BE-EF-00-01,
+  DEAD.BEEF.0000.0004) ; un nombre qui
   n'est pas un entier de 32 bits (une ExtMac en demande 64) ; un RLOC16, une
   partition ou une heure mal formes ; autre chose que du texte dans un champ
   que l'outil remplace ;
@@ -119,6 +121,9 @@ OBJETS = {
 }
 TEXTE_SUR = re.compile(r"[A-Za-z0-9_. :-]{0,64}")
 HEXA_8 = re.compile(r"[0-9A-Fa-f]{8}")
+# Les separateurs qu'on glisse entre les groupes d'une ExtMac ou d'une MAC (DEAD BEEF, DE-AD-BE-EF, DEAD.BEEF, DE_AD,
+# DE:AD) : retires avant de chercher 8 hexa de suite.
+SEPARATEURS = re.compile(r"[ \-._:]")
 # TLV de diagnostic : 0, 7 et 8 sont traites ; les autres n'ont ni ExtMac ni adresse.
 TLV_CONNUS = frozenset({0, 1, 2, 5, 6, 7, 8, 16, 24, 25, 26, 27, 28})
 # Longueur exacte : ExtMac (0), Address16 (1), Mode (2), Leader Data (6), Version (24). Un octet de plus porterait un
@@ -159,11 +164,17 @@ PREFIXE_COURT_MAX_BITS = 16
 PREFIXE_REMPLACE_MIN_BITS = 41
 
 
+def sans_separateurs(x):
+    """`x` sans espace, tiret, point, souligne ni « : » : une ExtMac ecrite par groupes redevient une suite d'hexa."""
+    return SEPARATEURS.sub("", x)
+
+
 def texte_sur(x):
     """Un texte libre qui ne porte rien d'identifiant : 64 caracteres au plus, lettres, chiffres, espace, point,
     tiret, souligne, et « : » seul entre deux espaces (« cle non chargee : active au redemarrage ») ; jamais 8 hexa
-    de suite (une MAC, un /48, une ExtMac, un code d'appairage en ont 8 ou plus)."""
-    return (isinstance(x, str) and TEXTE_SUR.fullmatch(x) is not None and HEXA_8.search(x) is None
+    de suite une fois les separateurs retires (une MAC, un /48, une ExtMac, un code d'appairage en ont 8 ou plus,
+    ecrits d'une traite ou par groupes : DEAD BEEF 0000 0004, DE-AD-BE-EF-00-01, DEAD.BEEF.0000.0004)."""
+    return (isinstance(x, str) and TEXTE_SUR.fullmatch(x) is not None and HEXA_8.search(sans_separateurs(x)) is None
             and all(":" not in mot or mot == ":" for mot in x.split(" ")))
 
 
@@ -243,7 +254,7 @@ class Anonymiseur:
 
     def nom(self, x):
         return self.factice(self.noms, x, lambda n: "SONDE-%02d" % n,
-                            lambda v: re.fullmatch(r"SONDE-\d{2,}", v) is not None)
+                            lambda v: re.fullmatch(r"SONDE-[0-9]{2,}", v) is not None)
 
     def empreinte(self, x):
         return self.factice(self.empreintes, x, lambda n: "C1E0%04X" % n,
@@ -629,8 +640,9 @@ def main():
             valeur_illisible(numero)
     texte = "\n".join(lignes) + "\n"
     minuscule = texte.lower()
-    brut = texte.lower().replace(":", "")
-    fuites = [s for s in a.secrets() if s in minuscule or s in brut]
+    brut = sans_separateurs(minuscule)  # une ExtMac reelle ecrite par groupes serait vue
+    fuites = [s for s in a.secrets()
+              if s in minuscule or (len(sans_separateurs(s)) >= 8 and sans_separateurs(s) in brut)]
     if fuites:
         sys.exit("fuite : %d valeur(s) reelle(s) encore presente(s)" % len(fuites))
     open(sortie, "w", encoding="utf-8").write(texte)

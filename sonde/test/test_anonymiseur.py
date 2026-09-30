@@ -280,6 +280,70 @@ class Garde(unittest.TestCase):
             with self.subTest(valeur=valeur):
                 self.assertEqual(controle(dict(etat, role=valeur)), {"forme inconnue : etat.role": [1]})
 
+    EXTMAC_GROUPEES = ("DEAD BEEF 0000 0004", "DE-AD-BE-EF-00-01", "DEAD.BEEF.0000.0004", "DE AD BE EF 00 00 00 04",
+                       "DEAD_BEEF_0000_0004", "DE AD-BE.EF_00:00 00 04", "dead beef", "DEAD-BEEF", "x DEAD.BEEF y",
+                       "DE_AD_BE_EF_00_01", "DE:AD:BE:EF:00:01", "DEADBEEF0001", "D E A D B E E F")
+
+    def test_texte_libre_refuse_les_identifiants_ecrits_avec_des_separateurs(self):
+        """Une ExtMac ou une MAC ecrite par groupes (espace, tiret, point, souligne, deux-points) : 8 hexa de suite une
+        fois les separateurs retires."""
+        etat = capture_inventee()[1]
+        for valeur in self.EXTMAC_GROUPEES:
+            with self.subTest(valeur=valeur):
+                self.assertFalse(anon.texte_sur(valeur))
+                self.assertEqual(controle(dict(etat, role=valeur)), {"forme inconnue : etat.role": [1]})
+
+    def test_texte_libre_garde_les_formes_legitimes_malgre_les_separateurs(self):
+        """Retirer les separateurs ne doit pas refuser les textes que la sonde ecrit vraiment."""
+        for valeur in ("cle non chargee : active au redemarrage", "envoi NoBufs", "commande inconnue", "0.1.0-essai",
+                       "1.0.3", "2.04", "trop_long", "ResponseTimeout", "sonde-maillage", "delai", "a b c d e f",
+                       "DE AD BE", "DEAD BEE", "de-ad-be-e"):  # jusqu'a 7 hexa une fois colles : passe
+            with self.subTest(valeur=valeur):
+                self.assertTrue(anon.texte_sur(valeur))
+
+    def champs_texte(self):
+        """(type, chemin, message construit avec `valeur`) pour chaque champ de forme texte, dans CHAMPS_CONNUS et
+        dans OBJETS (objets et listes compris)."""
+        res = []
+        for t, champs in anon.CHAMPS_CONNUS.items():
+            for champ, forme in champs.items():
+                genre, _, nom = forme.rstrip("?").partition(" ")
+                if genre == "texte":
+                    res.append(("%s.%s" % (t, champ), lambda v, t=t, champ=champ: {"t": t, champ: v}))
+                elif genre in ("objet", "liste"):
+                    for sous, sforme in anon.OBJETS[nom].items():
+                        if sforme.rstrip("?") == "texte":
+                            def fabrique(v, t=t, champ=champ, sous=sous, genre=genre):
+                                o = {sous: v}
+                                return {"t": t, champ: o if genre == "objet" else [o]}
+                            res.append(("%s.%s.%s" % (t, champ, sous), fabrique))
+        return res
+
+    def test_tous_les_champs_texte_refusent_une_extmac_groupee(self):
+        """Tous les champs de forme texte de CHAMPS_CONNUS et d'OBJETS, pas seulement etat.role."""
+        champs = self.champs_texte()
+        chemins = {chemin for chemin, _ in champs}
+        for attendu in ("bonjour.produit", "bonjour.version", "etat.role", "etat.mode", "etat.erreur", "diag.code",
+                        "diag.erreur", "cle.msg", "erreur.erreur", "voisins.erreur", "routeurs.erreur"):
+            self.assertIn(attendu, chemins)
+        # Aucun champ texte des tables n'est oublie : on recompte a part, objets et listes compris.
+        a_part = sum(f.rstrip("?") == "texte" for champs_t in anon.CHAMPS_CONNUS.values() for f in champs_t.values())
+        for champs_t in anon.CHAMPS_CONNUS.values():
+            for f in champs_t.values():
+                genre, _, nom = f.rstrip("?").partition(" ")
+                if genre in ("objet", "liste"):
+                    a_part += sum(g.rstrip("?") == "texte" for g in anon.OBJETS[nom].values())
+        self.assertEqual(len(champs), a_part)
+        for chemin, fabrique in champs:
+            with self.subTest(champ=chemin, controle="un texte sur passe"):
+                self.assertEqual(controle(fabrique("x")), {})
+            for valeur in ("DEAD BEEF 0000 0004", "DE-AD-BE-EF-00-01", "DEAD.BEEF.0000.0004", "DEADBEEF00000004"):
+                with self.subTest(champ=chemin, valeur=valeur):
+                    self.assertEqual(controle(fabrique(valeur)), {"forme inconnue : %s" % chemin: [1]})
+        for champ in anon.CHAMPS_COMMUNS:
+            if anon.CHAMPS_COMMUNS[champ] == "texte":  # t : un type groupe n'est pas un type connu
+                self.assertEqual(controle({champ: "DEAD BEEF 0000 0004"}), {"type de message inconnu : (illisible)": [1]})
+
     def test_nombres_entiers_de_32_bits(self):
         """Une ExtMac tient dans un entier de 64 bits : un nombre n'en porte pas plus de 32."""
         etat = capture_inventee()[1]
@@ -777,6 +841,95 @@ class Remplacement(unittest.TestCase):
         a.nom("SONDE-02")
         self.assertEqual(a.nom(NOM), "SONDE-03")
 
+    def assertReelle(self, remplacer, valeur, factice):
+        """`valeur`, proche d'une forme factice mais reelle, est remplacee par la premiere factice libre (la meme
+        a chaque fois) et non gardee. Rend l'anonymiseur, pour en lire les secrets."""
+        a = anon.Anonymiseur()
+        self.assertEqual(remplacer(a, valeur), factice)
+        self.assertEqual(remplacer(a, valeur), factice)
+        self.assertNotEqual(factice, valeur)
+        return a
+
+    def test_une_extmac_proche_d_une_factice_mais_reelle_est_remplacee(self):
+        """Les bords de E0 + 14 chiffres, inferieurs a 2^16 : E1... et E0...010000 sont reelles."""
+        for reelle in ("E100000000000001", "E000000000010000", "E0FFFFFFFFFFFFFF", "DF00000000000001",
+                       "E001000000000001", "E000000100000001", "E000000000100000"):
+            with self.subTest(ext=reelle):
+                a = self.assertReelle(lambda a, v: a.hexa_ext(v), reelle, "E000000000000001")
+                self.assertIn(reelle.lower(), a.secrets())
+        for factice in ("E000000000000000", "E000000000000001", "E00000000000FFFF"):  # dedans : gardees
+            with self.subTest(ext=factice):
+                a = anon.Anonymiseur()
+                self.assertEqual(a.hexa_ext(factice), factice)
+                self.assertEqual(a.secrets(), set())
+
+    def test_un_identifiant_d_interface_proche_d_une_factice_mais_reel_est_remplace(self):
+        for reel in ("0A00000000010000", "0A00000000100000", "0A00FFFFFFFFFFFF", "0A01000000000001",
+                     "0B00000000000001", "0900000000000001"):
+            with self.subTest(iid=reel):
+                a = self.assertReelle(lambda a, v: a.iid(bytes.fromhex(v)).hex().upper(), reel, "0A00000000000001")
+                self.assertIn(reel.lower(), a.secrets())
+        for factice in ("0A00000000000000", "0A0000000000FFFF"):
+            with self.subTest(iid=factice):
+                a = anon.Anonymiseur()
+                self.assertEqual(a.iid(bytes.fromhex(factice)), bytes.fromhex(factice))
+
+    def test_un_prefixe_48_proche_d_un_factice_mais_reel_est_remplace(self):
+        """fd00:1111:2222 est le premier factice : fd00:1111:2223, fd00:1112:2222, fd01:1111:2222 sont reels."""
+        for reel in ("fd00:1111:2223", "fd00:1112:2222", "fd01:1111:2222", "fd00:1111:2221", "fd00:2222:1111"):
+            with self.subTest(prefixe=reel):
+                p = ipaddress.IPv6Address(reel + "::").packed[:6]
+                a = anon.Anonymiseur()
+                self.assertEqual(a.prefixe48(p), anon.p48_factice(1))
+                self.assertNotEqual(a.prefixe48(p), p)
+                self.assertIn(p.hex(), a.secrets())
+        a = anon.Anonymiseur()
+        for n in (1, 2, 4096):
+            self.assertEqual(a.prefixe48(anon.p48_factice(n)), anon.p48_factice(n))
+        self.assertEqual(a.secrets(), set())
+        self.assertNotIn(anon.p48_factice(4097), anon.P48_FACTICES)
+        b = anon.Anonymiseur()
+        self.assertNotEqual(b.prefixe48(anon.p48_factice(4097)), anon.p48_factice(4097))
+
+    def test_une_mac_proche_d_une_factice_mais_reelle_est_remplacee(self):
+        """A0000000 + 4 chiffres : un chiffre de trop, un de moins, une minuscule ou un espace ne sont pas factices."""
+        for reelle in ("A000000000001", "A0000000000", "A000000000", "A0000000000001", "A0000000000G", "B00000000001",
+                       "A0000000 0001", "a00000000001", "A00000010001", "A0000000000\n"):
+            with self.subTest(mac=reelle):
+                a = self.assertReelle(lambda a, v: a.mac(v), reelle, "A00000000001")
+                if len(reelle) >= 8:  # secrets() ignore ce qui a moins de 8 caracteres
+                    self.assertIn(reelle.lower(), a.secrets())
+        self.assertEqual(anon.Anonymiseur().mac("A0000000FFFF"), "A0000000FFFF")
+
+    def test_un_nom_proche_de_sonde_nn_mais_reel_est_remplace(self):
+        """SONDE-NN (2 chiffres ou plus) est factice : SONDE- seul, un chiffre, une lettre, une suite ou un prefixe
+        de trop ne le sont pas."""
+        for reel in ("SONDE-", "SONDE-1", "SONDE-A1", "SONDE-01A", "SONDE-0A", "SONDE-01 ", "SONDE--01", "sonde-01",
+                     "SONDE01", "SONDE-\u0660\u0661", "XSONDE-01", "SONDE-01\n", "SONDE-0 1"):
+            with self.subTest(nom=reel):
+                a = self.assertReelle(lambda a, v: a.nom(v), reel, "SONDE-01")
+                if len(reel) >= 8:
+                    self.assertIn(reel.lower(), a.secrets())
+        for factice in ("SONDE-01", "SONDE-99", "SONDE-100"):
+            self.assertEqual(anon.Anonymiseur().nom(factice), factice)
+
+    def test_une_empreinte_proche_d_une_factice_mais_reelle_est_remplacee(self):
+        """C1E0 + 4 hexa : C1E0ABCDE (un de trop), C1E0ABC (un de moins), une minuscule ne sont pas factices."""
+        for reelle in ("C1E0ABCDE", "C1E0ABC", "C1E0", "C1E1ABCD", "c1e0abcd", "C1E0ABCG", "D1E0ABCD", "C1E0 ABC",
+                       "C1E0ABCD\n"):
+            with self.subTest(empreinte=reelle):
+                a = self.assertReelle(lambda a, v: a.empreinte(v), reelle, "C1E00001")
+                if len(reelle) >= 8:
+                    self.assertIn(reelle.lower(), a.secrets())
+        for factice in ("C1E00000", "C1E0ABCD", "C1E0FFFF"):
+            self.assertEqual(anon.Anonymiseur().empreinte(factice), factice)
+
+    def test_un_xp_proche_du_factice_mais_reel_est_remplace(self):
+        a = anon.Anonymiseur()
+        proche = "A0A1A2A3A4A5A6A8"
+        self.assertEqual(a.message({"t": "etat", "xp": proche})["xp"], anon.XP_FACTICE)
+        self.assertIn(proche.lower(), a.secrets())
+
     def test_le_nom_d_hote_suit_l_ext_de_la_sonde(self):
         """Matter tire le nom d'hote SRP de l'ExtMac : les deux ont la meme factice, dans l'ordre ou ils viennent."""
         a = anon.Anonymiseur()
@@ -953,6 +1106,50 @@ class Outil(unittest.TestCase):
         self.ecrire(messages)
         self.assertRefus(self.lancer(),
                          "prefixe de plus de 96 bits dans la Network Data (diag.tlv) (1 ligne(s), la premiere : 3)")
+
+    def test_texte_libre_avec_une_extmac_groupee_echoue_sans_la_citer(self):
+        for valeur in ("DEAD BEEF 0000 0004", "DE-AD-BE-EF-00-01", "DEAD.BEEF.0000.0004"):
+            with self.subTest(valeur=valeur):
+                messages = capture_1_0_3()
+                messages[1]["role"] = valeur
+                self.ecrire(messages)
+                r = self.lancer()
+                self.assertRefus(r, "forme inconnue : etat.role (1 ligne(s), la premiere : 2)")
+                for morceau in ("dead", "beef", "0004", "de-ad"):
+                    self.assertNotIn(morceau, r.stderr.lower())
+
+    def fuite(self, groupee):
+        """main() en-process, la garde neutralisee : une ExtMac reelle (celle du parent) reste dans un champ texte,
+        ecrite `groupee`. Rend le SystemExit."""
+        messages = capture_1_0_3()
+        messages[1]["erreur"] = groupee
+        self.ecrire(messages)
+        with mock.patch.object(anon, "controler", return_value={}), \
+                mock.patch.object(sys, "argv", ["anonymiser-sonde.py", self.entree, self.sortie]):
+            with self.assertRaises(SystemExit) as e:
+                anon.main()
+        return e.exception
+
+    def test_le_controle_final_refuse_une_fuite_sans_rien_ecrire(self):
+        """Le cas « fuite » : la sortie garde une ExtMac reelle, ou le nom reel de la sonde (dont les tirets peuvent
+        devenir des espaces), ecrits par groupes. Refus, rien d'ecrit, aucune valeur citee."""
+        for groupee in (EXT_PARENT, EXT_PARENT.lower(), "DEAD:BEEF:0000:0001", "DEAD BEEF 0000 0001",
+                        "DE-AD-BE-EF-00-00-00-01", "DEAD.BEEF.0000.0001", "DEAD_BEEF_0000_0001",
+                        "DE AD.BE-EF_00:00 00.01", "le sonde du salon", "SONDE_DU_SALON", "sonde.du.salon"):
+            with self.subTest(ext=groupee):
+                sortie = self.fuite(groupee)
+                self.assertEqual(str(sortie), "fuite : 1 valeur(s) reelle(s) encore presente(s)")
+                for morceau in ("dead", "beef", "0001", "salon"):
+                    self.assertNotIn(morceau, str(sortie).lower())
+                self.assertFalse(os.path.exists(self.sortie), "la sortie ne doit pas etre creee")
+                self.assertEqual(os.listdir(self.dossier), ["brute.jsonl"])
+
+    def test_le_controle_final_ne_touche_pas_une_sortie_qui_existe(self):
+        with open(self.sortie, "w", encoding="utf-8") as f:
+            f.write("sortie d'une autre capture\n")
+        self.fuite("DEAD BEEF 0000 0001")
+        with open(self.sortie, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "sortie d'une autre capture\n")
 
     def test_capture_1_0_3_anonymisee_sans_valeur_reelle(self):
         messages = capture_1_0_3()
