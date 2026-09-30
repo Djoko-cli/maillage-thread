@@ -236,7 +236,7 @@ int main() {
   // LED de la carte (1.0.3). V : eclair vert, E : eclair de l'extinction,
   // B : bref eclair de la suspension, P : sa periode.
   const uint32_t V = Voyant::kVertMs, E = Voyant::kExtinctionMs, B = Voyant::kBrefMs, P = Voyant::kPeriodeMs;
-  CHECK(V == 100 && E == 500 && B == 100 && P == 10000, "durees : 100, 500, 100 ms et 10 s");
+  CHECK(V == 100 && E == 500 && B == 100 && P == 5000, "durees : 100, 500, 100 ms et 5 s");
   Voyant neuf;
   CHECK(neuf.couleur(0) == Voyant::kNoire, "LED neuve : eteinte");
   Voyant v;
@@ -248,13 +248,13 @@ int main() {
   CHECK(couleurs(v, 40000 + V, 40000 + 2 * V, Voyant::kNoire), "pause entre les eclairs verts");
   CHECK(couleurs(v, 40000 + 2 * V, 40000 + 3 * V, Voyant::kVerte), "second eclair vert");
   CHECK(couleurs(v, 40000 + 3 * V, 80000, Voyant::kNoire), "apres les eclairs verts : eteinte");
-  // Eteint : un eclair orange d'une demi-seconde, puis un bref toutes les 10 s.
+  // Eteint : un eclair orange d'une demi-seconde, puis un bref toutes les 5 s.
   v.changer(true, 100000);
   CHECK(couleurs(v, 100000, 100000 + E, Voyant::kOrange), "extinction : orange 500 ms");
-  CHECK(couleurs(v, 100000 + E, 100000 + P, Voyant::kNoire), "puis rien jusqu'a 10 s");
-  CHECK(couleurs(v, 100000 + P, 100000 + P + B, Voyant::kOrange), "bref eclair orange a 10 s");
-  CHECK(couleurs(v, 100000 + P + B, 100000 + 2 * P, Voyant::kNoire), "puis rien jusqu'a 20 s");
-  CHECK(couleurs(v, 100000 + 2 * P, 100000 + 2 * P + B, Voyant::kOrange), "bref eclair orange a 20 s");
+  CHECK(couleurs(v, 100000 + E, 100000 + P, Voyant::kNoire), "puis rien jusqu'a 5 s");
+  CHECK(couleurs(v, 100000 + P, 100000 + P + B, Voyant::kOrange), "bref eclair orange a 5 s");
+  CHECK(couleurs(v, 100000 + P + B, 100000 + 2 * P, Voyant::kNoire), "puis rien jusqu'a 10 s");
+  CHECK(couleurs(v, 100000 + 2 * P, 100000 + 2 * P + B, Voyant::kOrange), "bref eclair orange a 10 s");
   // Rallume pendant la suspension : les eclairs verts, puis plus d'orange.
   v.changer(false, 125000);
   CHECK(couleurs(v, 125000, 125000 + V, Voyant::kVerte), "rallumee : vert tout de suite");
@@ -264,12 +264,12 @@ int main() {
   CHECK(v.couleur(300000) == Voyant::kVerte, "eclairs verts en cours");
   v.changer(true, 300000 + V / 2);
   CHECK(couleurs(v, 300000 + V / 2, 300000 + V / 2 + E, Voyant::kOrange), "eteinte pendant le vert : orange");
-  // Suspendue au demarrage (etat garde) : un bref eclair des le demarrage, puis toutes les 10 s.
+  // Suspendue au demarrage (etat garde) : un bref eclair des le demarrage, puis toutes les 5 s.
   Voyant s;
   s.demarrer(true, 5000);
   CHECK(couleurs(s, 5000, 5000 + B, Voyant::kOrange), "suspendue au demarrage : bref eclair tout de suite");
   CHECK(couleurs(s, 5000 + B, 5000 + P, Voyant::kNoire), "suspendue au demarrage : puis rien");
-  CHECK(couleurs(s, 5000 + P, 5000 + P + B, Voyant::kOrange), "suspendue au demarrage : et a 10 s");
+  CHECK(couleurs(s, 5000 + P, 5000 + P + B, Voyant::kOrange), "suspendue au demarrage : et a 5 s");
   // loop() retenue : l'eclair en cours se voit encore, les echeances passees sont sautees.
   Voyant lent;
   lent.demarrer(true, 0);
@@ -292,12 +292,12 @@ int main() {
   CHECK(couleurs(y, 0xFFFFFFF0u + 3 * V, 1000, Voyant::kNoire), "zero : fin des eclairs verts");
   CHECK(couleurs(y, 0xFFFFFFF0u, 0xFFFFFFF0u + 3 * V, Voyant::kNoire),
         "sequence finie : pas ranimee quand millis() repasse par les memes valeurs");
-  // Suspendue plus de 49,7 jours, un tour toutes les 5 s : un eclair toutes les
-  // 10 s de temps reel, avant, pendant et apres le retour a zero de millis().
+  // Suspendue plus de 49,7 jours, un tour toutes les 2,5 s : un eclair toutes les
+  // 5 s de temps reel, avant, pendant et apres le retour a zero de millis().
   Voyant longue;
   longue.demarrer(true, 0);
   uint64_t horsDeLHeure = 0, eclairs = 0;
-  for (uint64_t reel = 0; reel < (1ull << 32) + 3 * P; reel += 5000) {
+  for (uint64_t reel = 0; reel < (1ull << 32) + 3 * P; reel += 2500) {
     const bool orange = longue.couleur((uint32_t)reel) == Voyant::kOrange;
     eclairs += orange;
     if (orange != (reel % P == 0)) horsDeLHeure++;

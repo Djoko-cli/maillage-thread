@@ -274,7 +274,7 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   événement.
 - Éteindre « Sonde maillage » dans Maison suspend la sonde : pas de tournée,
   même après un redémarrage de la sonde. Sa LED donne alors un bref éclair
-  orange toutes les 10 s (firmware 1.0.3). Après un `oubli`, la commande USB
+  orange toutes les 5 s (firmware 1.0.3). Après un `oubli`, la commande USB
   qui désappaire la sonde (voir `sonde/README.md`), la sonde revient allumée,
   comme à sa première mise en service.
 - Les captures de la sonde contiennent les adresses du réseau de la maison :

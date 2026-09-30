@@ -166,7 +166,7 @@ Sans sonde, l'app marche exactement comme à l'étape 1.
 - **LED (1.0.3).** La LED couleur de la carte (WS2812 sur IO8), à faible
   intensité, montre l'interrupteur : deux éclairs verts rapides quand il
   s'allume, un éclair orange d'une demi-seconde quand il s'éteint, puis un
-  bref éclair orange toutes les 10 s tant que la sonde est suspendue, aussi
+  bref éclair orange toutes les 5 s tant que la sonde est suspendue, aussi
   après un redémarrage. Seule la boucle principale la pilote : jamais sous le
   verrou d'OpenThread, jamais depuis le rappel de Matter.
 - **Limites (révisées le 29/09) :**

@@ -6,7 +6,7 @@
 //  maillage » de Maison :
 //  - allume : deux eclairs verts rapides ;
 //  - eteint : un eclair orange d'une demi-seconde ;
-//  - tant que la sonde est suspendue : un bref eclair orange toutes les 10 s,
+//  - tant que la sonde est suspendue : un bref eclair orange toutes les 5 s,
 //    aussi apres un redemarrage (le premier des le demarrage) ;
 //  - sinon, eteinte.
 //  main.cpp la pilote dans loop(), jamais sous le verrou OpenThread ni depuis
@@ -25,7 +25,7 @@ class Voyant {
   static constexpr uint32_t kVertMs = 100;        // chaque eclair vert, et la pause entre eux
   static constexpr uint32_t kExtinctionMs = 500;  // eclair orange quand l'interrupteur s'eteint
   static constexpr uint32_t kBrefMs = 100;        // bref eclair orange de la suspension...
-  static constexpr uint32_t kPeriodeMs = 10000;   // ... toutes les 10 s
+  static constexpr uint32_t kPeriodeMs = 5000;    // ... toutes les 5 s (choix de Djoko, 30/09)
 
   // Demarrage, avec l'etat relu de la NVS : aucun eclair de changement ;
   // suspendue, un bref eclair tout de suite.
@@ -62,7 +62,7 @@ class Voyant {
     if (e >= 0x80000000u) return kNoire;
     if (e % kPeriodeMs < kBrefMs) return kOrange;
     // Eclair fini (plusieurs si loop() a ete retenue) : le suivant, sur la
-    // meme grille de 10 s.
+    // meme grille de 5 s.
     prochain_ += (e / kPeriodeMs + 1) * kPeriodeMs;
     return kNoire;
   }

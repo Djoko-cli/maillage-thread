@@ -69,7 +69,7 @@ canal, comme le voyant du pont Halo) :
 |---|---|
 | deux éclairs verts rapides (100 ms, 100 ms de pause) | l'interrupteur vient de s'allumer dans Maison |
 | un éclair orange d'une demi-seconde | l'interrupteur vient de s'éteindre |
-| un bref éclair orange (100 ms) toutes les 10 s | la sonde est suspendue ; dès le démarrage si elle l'était avant |
+| un bref éclair orange (100 ms) toutes les 5 s | la sonde est suspendue ; dès le démarrage si elle l'était avant |
 | éteinte | la sonde est allumée |
 
 Seule la boucle principale écrit la LED, jamais sous le verrou d'OpenThread :

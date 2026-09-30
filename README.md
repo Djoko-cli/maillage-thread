@@ -261,7 +261,7 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   changes show up within a minute, with no other event needed.
 - Switching "Sonde maillage" off in Home suspends the probe: no tour, even
   after the probe restarts. The board's LED then gives a short orange flash
-  every 10 s (firmware 1.0.3). After `oubli`, the USB command that unpairs
+  every 5 s (firmware 1.0.3). After `oubli`, the USB command that unpairs
   the probe (see `sonde/README.md`), the probe comes back on, as when first
   set up.
 - Probe captures hold the home network's addresses:
