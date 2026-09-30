@@ -107,6 +107,19 @@ public struct Maillage: Hashable, Sendable {
     public var chef: RouteurMaillage? { routeurs.first(where: \.chef) }
     /// Identifiant de routeur du parent de la sonde.
     public var parentSonde: Int? { enfants.first { $0.source == .sonde }?.parent }
+
+    /// Enfants identifies (ExtMac connue), un par ExtMac. Vu deux fois (il a change de parent),
+    /// l'entree fraiche (table d'un routeur qui repond, la sonde) passe avant celle d'un
+    /// balayage, qui peut dater de 30 minutes ; a egalite, la premiere par RLOC16.
+    public var enfantsIdentifies: [String: EnfantMaillage] {
+        var parExtMac: [String: EnfantMaillage] = [:]
+        for e in enfants {
+            guard let x = e.extMac else { continue }
+            if let deja = parExtMac[x], deja.source != .balayage || e.source == .balayage { continue }
+            parExtMac[x] = e
+        }
+        return parExtMac
+    }
 }
 
 /// Assemble un `Maillage` au fil des reponses d'une tournee.
