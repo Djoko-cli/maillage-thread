@@ -142,15 +142,17 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
 - Au premier lancement de chaque compilation, macOS dit que l'app est
   « endommagée » : cliquer Annuler, puis Réglages Système › Confidentialité et
   sécurité › « Ouvrir quand même ». Autoriser ensuite l'accès à Maison. Ouvert
-  ainsi à la main, Passeur Noms lit Maison, montre ce qu'il a lu, n'envoie
-  rien et se ferme après 10 s.
+  ainsi à la main, Passeur Noms lit Maison, montre ce qu'il a lu et se ferme
+  après 10 s. Il n'envoie rien, sauf si Maillage Thread le demande pendant
+  ces 10 s.
 - Un relevé : Maillage Thread écoute sur `127.0.0.1` (TCP, sur un port choisi
-  par le système), tire un jeton à usage unique et lance Passeur Noms en
-  arrière-plan avec `--port` et `--jeton`. Passeur Noms lit Maison, se
-  connecte, envoie le jeton, la longueur du JSON puis le JSON, et se ferme
-  dès que l'app a tout lu. L'app vérifie le jeton, lit au plus 8 Mo et écrit
-  `noms.json` dans son conteneur (écriture atomique). La boucle locale ne
-  demande pas l'accès au réseau local.
+  par le système), tire un jeton à usage unique et ouvre Passeur Noms en
+  arrière-plan avec l'URL `maillage-passeur://releve?port=…&jeton=…` (une app
+  du bac à sable ne peut pas passer d'arguments de lancement : macOS les
+  retire). Passeur Noms lit Maison, se connecte, envoie le jeton, la longueur
+  du JSON puis le JSON, et se ferme dès que l'app a tout lu. L'app vérifie le
+  jeton, lit au plus 8 Mo et écrit `noms.json` dans son conteneur (écriture
+  atomique). La boucle locale ne demande pas l'accès au réseau local.
 - Priorité des noms : surnom > Maison > HomeKit (`_hap._udp`) > hôte.
 - Le dernier relevé valide est gardé. Un échec (par exemple Passeur Noms
   introuvable ou refusé, rien en 2 minutes, jeton faux, longueur ou JSON

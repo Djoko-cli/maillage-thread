@@ -235,15 +235,17 @@ routeur ↔ routeur, qualité), vides tant que la sonde n'existe pas.
   avec batterie, tous avec l'alerte, 26 avec le niveau, 6 avec l'état de charge.
 - **Révision du 30/09 (plan 4a ; spec de la vue par pièces, section 3) :
   plus de dossier.** L'app écoute sur `127.0.0.1` (TCP, port choisi par le
-  système), tire un jeton à usage unique, puis lance le passeur sans
-  l'activer, avec `--port` et `--jeton` dans ses arguments de lancement. Le
-  passeur lit Maison, se connecte et envoie le jeton, la longueur du JSON puis
-  le JSON (`NomsMaison`, trame `EnvoiPasseur`) ; il se ferme dès que l'app a
-  tout lu (10 s d'envoi au plus). Ouvert à la main (sans port ni jeton), il
-  n'envoie rien : il montre ce qu'il a lu et se ferme 10 s plus tard. Sa
-  fenêtre passe toujours un instant derrière les autres. Aucune invite
-  « réseau local » : la boucle locale n'en demande pas (essai du
-  passeur-démon, 30/09).
+  système), tire un jeton à usage unique, puis ouvre le passeur sans
+  l'activer, avec l'URL `maillage-passeur://releve?port=<port>&jeton=<jeton>`.
+  Le passeur lit Maison, se connecte et envoie le jeton, la longueur du JSON
+  puis le JSON (`NomsMaison`, trame `EnvoiPasseur`) ; il se ferme dès que
+  l'app a tout lu (10 s d'envoi au plus). Ouvert à la main (sans URL), il
+  montre ce qu'il a lu et se ferme 10 s plus tard ; il n'envoie rien, sauf si
+  l'app l'appelle pendant ses 10 s. Sa fenêtre passe toujours un instant
+  derrière les autres. Aucune invite « réseau local » : la boucle locale n'en
+  demande pas (essai du passeur-démon, 30/09). Les arguments de lancement
+  d'une app du bac à sable ne passent pas : macOS les retire (vérifié avec
+  Djoko le 30/09) ; d'où l'URL.
   Auparavant, il écrivait `noms.json` dans un dossier choisi une fois, et
   l'app y déposait `passeur-demande.json` avant de le lancer.
 

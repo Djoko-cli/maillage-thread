@@ -140,14 +140,16 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
 - First launch of each build: macOS says the app is "damaged". Click Cancel,
   then System Settings › Privacy & Security › "Open Anyway". Then allow Home
   access. Opened by hand like this, Passeur Noms reads Home, shows what it
-  read, sends nothing and quits after 10 s.
+  read and quits after 10 s. It sends nothing, unless Maillage Thread asks
+  during those 10 s.
 - A reading: Maillage Thread listens on `127.0.0.1` (TCP, on a port chosen by
-  the system), generates a one-time token and launches Passeur Noms in the
-  background with `--port` and `--jeton`. Passeur Noms reads Home, connects,
-  sends the token, the length of the JSON, then the JSON, and quits once the
-  app has read it all. The app checks the token, reads at most 8 MB and
-  writes `noms.json` in its own container (atomic write). The loopback needs
-  no local network permission.
+  the system), generates a one-time token and opens Passeur Noms in the
+  background with the URL `maillage-passeur://releve?port=…&jeton=…` (a
+  sandboxed app cannot pass launch arguments: macOS drops them). Passeur Noms
+  reads Home, connects, sends the token, the length of the JSON, then the
+  JSON, and quits once the app has read it all. The app checks the token,
+  reads at most 8 MB and writes `noms.json` in its own container (atomic
+  write). The loopback needs no local network permission.
 - Priority of names: nickname > Home > HomeKit (`_hap._udp`) > host.
 - The last valid reading is kept. A failure (for example Passeur Noms not
   found or refused, nothing within 2 minutes, wrong token, unreadable length

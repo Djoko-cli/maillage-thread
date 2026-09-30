@@ -112,12 +112,14 @@ Décisions de Djoko pendant la conception, dans l'ordre :
 Le passeur est l'app iOS « conçue pour iPad » lancée sur le Mac, avec l'équipe gratuite et sans App Group. La voie a été validée par l'essai du passeur-démon (30/09) :
 
 1. L'app ouvre une écoute TCP sur `127.0.0.1`, sur un port choisi par le système. Elle tire un **jeton à usage unique** : 32 octets aléatoires, en hexa.
-2. Elle lance le passeur sans l'activer, avec `NSWorkspace.OpenConfiguration.arguments = ["--port", <port>, "--jeton", <jeton>]`.
+2. Elle ouvre le passeur sans l'activer, avec l'URL `maillage-passeur://releve?port=<port>&jeton=<jeton>`, par `NSWorkspace.open(_:withApplicationAt:configuration:)`.
 3. Le passeur lit Maison, se connecte à `127.0.0.1:<port>` et envoie :
    - le jeton, sur une ligne ;
    - puis la longueur du JSON (entier décimal), sur une ligne ;
    - puis le JSON de `NomsMaison`, puis il se ferme.
 4. L'app vérifie le jeton, en comparaison à temps constant, et lit au plus 8 Mo. Elle décode le JSON, puis l'écrit dans son conteneur (`Application Support/…/noms.json`) par une écriture atomique, et ferme l'écoute.
+
+**Révision du 30/09, à la vérification :** le relevé réel a montré que macOS retire les arguments de lancement passés par une app du bac à sable (le passeur n'a reçu que le chemin de son exécutable) ; l'essai du passeur-démon ne l'avait pas vu, car il lançait depuis le shell. Le port et le jeton passent donc par l'URL, et un passeur déjà ouvert la reçoit aussi : il envoie alors le relevé qu'il vient de montrer.
 
 **Échecs :** passeur introuvable, lancement refusé, aucune connexion dans le délai, jeton faux, longueur ou JSON illisible.
 - Le **délai** est de 120 s : le premier lancement attend la réponse de Djoko à la demande d'accès à Maison.
