@@ -50,11 +50,30 @@ Thread les montre dans Réglages › Sonde : le QR code, et le code mis en forme
 La sonde apparaît comme une prise « Sonde maillage », allumée par défaut.
 Éteinte, elle refuse les requêtes de diagnostic (`suspendue`). Son état est
 gardé d'un démarrage à l'autre : éteinte dans Maison, elle reste suspendue
-après un redémarrage ou un débranchement.
+après un redémarrage ou un débranchement. Sa LED le montre (voir « LED »).
 
-`oubli` efface la clé d'accès réseau, désappaire la sonde et la redémarre.
-Retirée de Maison sans `oubli`, elle efface aussi sa clé : un nouveau
-propriétaire ne garde pas l'accès de l'ancien.
+`oubli` efface la clé d'accès réseau, désappaire la sonde et la redémarre
+allumée, interrupteur compris, comme à sa première mise en service (depuis
+la 1.0.3 ; avant, une sonde éteinte revenait éteinte, donc suspendue après
+un nouvel appairage). Retirée de Maison sans `oubli`, elle efface aussi sa
+clé (un nouveau propriétaire ne garde pas l'accès de l'ancien), mais garde
+l'état de son interrupteur.
+
+## LED
+
+Depuis la 1.0.3, la LED couleur de la carte (WS2812, sur IO8) montre
+l'interrupteur « Sonde maillage », à faible intensité (24/255 au plus par
+canal, comme le voyant du pont Halo) :
+
+| LED | Signification |
+|---|---|
+| deux éclairs verts rapides (100 ms, 100 ms de pause) | l'interrupteur vient de s'allumer dans Maison |
+| un éclair orange d'une demi-seconde | l'interrupteur vient de s'éteindre |
+| un bref éclair orange (100 ms) toutes les 10 s | la sonde est suspendue ; dès le démarrage si elle l'était avant |
+| éteinte | la sonde est allumée |
+
+Seule la boucle principale écrit la LED, jamais sous le verrou d'OpenThread :
+le rappel de Matter ne fait que noter l'état de l'interrupteur.
 
 ## Nom
 
@@ -79,14 +98,17 @@ le C6, il faut mettre DTR et RTS à 0 dans un seul appel (voir benq).
 | `voisins` | routeurs voisins à lien établi (le parent n'y est pas : voir `etat`) |
 | `routeurs` | table des routeurs d'OpenThread : `{"v":1,"t":"routeurs","liste":[{"id":…,"rloc16":"XXXX","ext":"<16 hexa>"\|null,"lqIn":…,"lqOut":…,"age":…,"lien":…}],"suite":…}`, plusieurs lignes si besoin (`"suite":true` sur toutes sauf la dernière) |
 | `diag <cible> <t,t,…> <id> [<délai ms>]` | TLV de la réponse en hexa, ou l'erreur : `delai`, `suspendue`, `occupee` (8 requêtes en vol), `envoi…` |
-| `cle` | `{"v":1,"t":"cle","empreinte":"<8 hexa>"\|null,…}`, avec `effacement_en_echec`, le nom d'hôte, les compteurs du transport (`udp`, dont `lignes_perdues`) et le tas (`tas`) |
+| `cle` | `{"v":1,"t":"cle","empreinte":"<8 hexa>"\|null,…}`, avec `effacement_en_echec`, le nom d'hôte, les compteurs du transport (`udp`, dont `lignes_perdues` et `refus_cadence`) et le tas (`tas`) |
 | `cle efface` | efface la clé (plus d'accès réseau) ; la réponse de `cle`, ou l'erreur `ecriture` |
 | `cle nouvelle <64 HEXA> <id>` | nouvelle clé (réservé à l'app) : `{"v":1,"t":"cle","id":<id>,"cle":"<64 HEXA>","empreinte":"<8 hexa>","hote":…}`, **une seule fois** ; sans `id` : erreur `syntaxe` ; clé écrite mais pas chargée : un `msg` en plus |
 | `oubli` | efface la clé, désappaire et redémarre : `{"v":1,"t":"oubli","cle_effacee":true\|false}` |
 
 `<cible>` est un RLOC16 en 4 hexa, ou une adresse IPv6 du réseau maillé :
-chiffres hexa, `:` et `.` seulement, sinon `syntaxe`. Le délai va de 3 à
-60 s, 45 s par défaut.
+chiffres hexa, `:` et `.` seulement, sinon `syntaxe`. `<id>` et
+`<délai ms>` sont des entiers décimaux de 10 chiffres au plus (4294967295
+au plus), sinon `syntaxe` (depuis la 1.0.3). Le délai va de 3 à 60 s, 45 s
+par défaut ; l'échec `delai` tombe à son terme (depuis la 1.0.3 : un délai
+de 10 à 15 s n'est plus arrondi à 15 s).
 
 Si la mémoire (NVS) refuse d'effacer la clé (`cle efface`, retrait de Maison),
 la clé quitte la mémoire vive (plus d'accès réseau) mais reviendrait au
@@ -135,8 +157,12 @@ et promenée dans la maison, l'app la joint par le réseau.
   par session ; au-delà, un rid répété relance la commande, une lecture), ou
   ne dit rien si un `diag` de ce rid est encore en vol. Prendre un rid neuf
   par requête.
-- **Cadence** : 20 commandes par seconde et par session au plus (comme
-  Halo) ; au-delà, rien n'est exécuté ni répondu, l'app renvoie.
+- **Cadence** : 20 commandes par seconde glissante et par session au plus
+  (comme Halo) ; au-delà, rien n'est exécuté ni répondu, l'app renvoie.
+  L'app, elle, envoie au plus 18 nouvelles commandes par seconde glissante ;
+  ses renvois ne comptent pas dans ces 18. La carte compte ses refus depuis
+  le démarrage (`udp.refus_cadence` de `cle`, depuis la 1.0.3) : ce compteur
+  dit si la marge suffit.
 - **Sans clé : silence total**, ni réponse ni ICMPv6 « port injoignable »
   (le port reste tenu par OpenThread).
 - Débit plafonné comme Halo (3000 octets/s, priorité basse, réserve de
@@ -168,5 +194,7 @@ par `outils/anonymiser-sonde.py` avant de les mettre dans le dépôt.
 
 `sh sonde/test/lancer.sh` : les tests hôte purs, sans carte (clang, ASan et
 UBSan ; ce ne sont pas des tests `pio test`) : l'enveloppe H1
-(`test_h1.cpp`, repris de benq) et les commandes à distance
-(`test_distant.cpp` : rid, liste blanche, réponses gardées, cadence).
+(`test_h1.cpp`, repris de benq) et les briques pures de `distant.cpp`
+(`test_distant.cpp` : rid, liste blanche, réponses gardées, cadence ; depuis
+la 1.0.3, lecture des entiers, reprises CoAP d'un `diag` et séquence de la
+LED).

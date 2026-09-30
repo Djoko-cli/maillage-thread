@@ -1,5 +1,6 @@
 #include "distant.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 namespace distant {
@@ -164,6 +165,69 @@ bool Cadence::allow(uint32_t now) {
   idx_ = (uint8_t)((idx_ + 1) % kLines);
   if (n_ < kLines) n_++;
   return true;
+}
+
+// ===========================================================================
+//  Entiers des commandes, reprises CoAP d'un diag
+// ===========================================================================
+
+bool lireEntier(const char *s, uint32_t *v) {
+  const size_t n = strlen(s);
+  if (n == 0 || n > 10 || strspn(s, "0123456789") != n) return false;
+  const unsigned long long x = strtoull(s, nullptr, 10);
+  if (x > 0xFFFFFFFFull) return false;
+  *v = (uint32_t)x;
+  return true;
+}
+
+Reprises reprisesDiag(uint32_t delaiMs) {
+  Reprises r;
+  // Sous 15 s, trois reprises feraient tomber l'accuse sous 1 s : le plancher
+  // allongerait l'attente (jusqu'a 15 s pour un delai de 10 s).
+  r.reprises = delaiMs < 15000 ? 1 : 3;
+  const uint32_t facteur = (1u << (r.reprises + 1)) - 1;
+  r.accuseMs = delaiMs / facteur;
+  if (r.accuseMs < 1000) r.accuseMs = 1000;
+  return r;
+}
+
+// ===========================================================================
+//  LED de la carte
+// ===========================================================================
+
+void Voyant::demarrer(bool suspendue, uint32_t maintenant) {
+  sequence_ = kAucune;
+  suspendue_ = suspendue;
+  prochain_ = maintenant;
+}
+
+void Voyant::changer(bool suspendue, uint32_t maintenant) {
+  sequence_ = suspendue ? kOrangeLong : kDeuxVerts;
+  debut_ = maintenant;
+  suspendue_ = suspendue;
+  prochain_ = maintenant + kPeriodeMs;
+}
+
+Voyant::Couleur Voyant::couleur(uint32_t maintenant) {
+  const uint32_t t = maintenant - debut_;
+  if (sequence_ == kDeuxVerts) {
+    // Vert, pause, vert, d'une duree kVertMs chacun.
+    if (t < 3 * kVertMs) return t / kVertMs == 1 ? kNoire : kVerte;
+    sequence_ = kAucune;
+  } else if (sequence_ == kOrangeLong) {
+    if (t < kExtinctionMs) return kOrange;
+    sequence_ = kAucune;
+  }
+  if (!suspendue_) return kNoire;
+  // Ecart depuis le prochain bref eclair : au-dela de 2^31 ms, il est encore a
+  // venir (prochain_ n'est jamais a plus d'une periode en avance).
+  const uint32_t e = maintenant - prochain_;
+  if (e >= 0x80000000u) return kNoire;
+  if (e % kPeriodeMs < kBrefMs) return kOrange;
+  // Eclair fini (plusieurs si loop() a ete retenue) : le suivant, sur la meme
+  // grille de 10 s.
+  prochain_ += (e / kPeriodeMs + 1) * kPeriodeMs;
+  return kNoire;
 }
 
 }  // namespace distant

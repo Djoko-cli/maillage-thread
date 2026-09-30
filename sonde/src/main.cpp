@@ -1,6 +1,7 @@
 // ===========================================================================
-//  Sonde de maillage Thread, firmware 1.0.2 (spec de la sonde, sections 2 et
-//  3 ; contrat de la 1.0.2 : FED, routeurs, acces reseau comme le pont Halo)
+//  Sonde de maillage Thread, firmware 1.0.3 (spec de la sonde, sections 2 et
+//  3 ; contrat de la 1.0.2 : FED, routeurs, acces reseau comme le pont Halo ;
+//  1.0.3 : LED, retour allume apres oubli, refus de la cadence comptes)
 //
 //  Noeud Matter sur Thread, en FED non eligible routeur (Full End Device) :
 //  il recoit en permanence mais ne relaie rien, ne devient jamais routeur ni
@@ -38,19 +39,21 @@
 //    diag <cible> <t,t,...> <id> [ms] DIAG_GET vers <cible> : RLOC16 en 4 hexa
 //                                     (adresse RLOC formee sur le prefixe du
 //                                     reseau maille) ou adresse IPv6 (hexa,
-//                                     ':' et '.' seulement) ; delai de 3 a
-//                                     60 s, 45 s par defaut
+//                                     ':' et '.' seulement) ; id et delai en
+//                                     decimal, sinon « syntaxe » ; delai de
+//                                     3 a 60 s, 45 s par defaut
 //    cle                              empreinte de la cle d'acces reseau
 //                                     (null sans cle), effacement_en_echec,
-//                                     hote, compteurs udp (lignes_perdues
-//                                     comprises), tas libre et minimum
+//                                     hote, compteurs udp (lignes_perdues et
+//                                     refus_cadence compris), tas libre et
+//                                     minimum
 //    cle efface                       efface la cle : plus d'acces reseau
 //    cle nouvelle <64 HEXA> <id>      nouvelle cle (alea de l'app), rendue
 //                                     UNE fois, dans la reponse ; sans id :
 //                                     erreur « syntaxe », jamais de cle
 //    oubli                            efface la cle (cle_effacee dans la
 //                                     reponse), desappaire la sonde et
-//                                     redemarre
+//                                     redemarre ; elle revient allumee
 //
 //  Reseau (reseau.h) : UDP sur IPv6, port 5480, enveloppe H1 du pont Halo,
 //  cle creee par l'USB. Charge d'un message : "<rid> <commande>" ; reponse :
@@ -58,12 +61,19 @@
 //  plus. Permis : bonjour (sans code ni QR code), etat, voisins, routeurs,
 //  diag ; le reste : erreur « refuse ». Un rid repete ne relance rien (les 8
 //  dernieres reponses, dans la limite de 4096 octets par session) ; 20
-//  commandes par seconde et par session au plus. Sans cle : silence total.
+//  commandes par seconde et par session au plus (au-dela, rien, et le refus
+//  est compte : udp.refus_cadence de cle). Sans cle : silence total.
 //
 //  Dans Maison : un interrupteur « Sonde maillage », allume par defaut.
 //  Eteint, la sonde refuse les requetes (erreur « suspendue »). Son etat est
 //  garde d'un demarrage a l'autre, comme le nom de la sonde (« SONDE-01 » par
-//  defaut) : il suit la carte d'un Mac a l'autre.
+//  defaut) : il suit la carte d'un Mac a l'autre. Apres un oubli, la sonde
+//  revient allumee, comme a sa premiere mise en service.
+//
+//  LED de la carte (WS2812 sur IO8), a faible intensite : deux eclairs verts
+//  rapides quand l'interrupteur s'allume, un eclair orange d'une demi-seconde
+//  quand il s'eteint, puis un bref eclair orange toutes les 10 s tant que la
+//  sonde est suspendue, aussi apres un redemarrage.
 // ===========================================================================
 
 #include <Arduino.h>
@@ -82,11 +92,13 @@
 #include <openthread/thread_ftd.h>
 #include <stdarg.h>
 
+#include <atomic>
+
 #include "distant.h"
 #include "h1_proto.h"
 #include "reseau.h"
 
-static const char *const kVersion = "1.0.2";
+static const char *const kVersion = "1.0.3";
 
 // ---------------------------------------------------------------------------
 //  FED des la creation de la pile Thread, jamais eligible routeur (repris de
@@ -173,7 +185,9 @@ static MatterOnOffPlugin sInterrupteur;  // « Sonde maillage »
 // MatterOnOffPlugin d'Arduino-ESP32 : relu au demarrage, allume par defaut.
 static Preferences sPreferences;
 static const char *const kCleInterrupteur = "interrupteur";
-static volatile bool sSuspendue = false;  // pose par demarrerMatter(), puis par le rappel
+// Pose par demarrerMatter(), puis par le rappel Matter (tache CHIP) ; lu par
+// loop(), qui en tire aussi la LED.
+static std::atomic<bool> sSuspendue{false};
 static bool sThreadPret = false;  // pile Thread creee par Matter.begin()
 static char sMac[13] = "?";
 // Nom de la sonde, garde dans la NVS a cote de l'interrupteur (commande `nom`).
@@ -227,6 +241,10 @@ static distant::Cadence sCadences[kPlacesReseau];
 // Lignes pour le reseau que la file d'emission n'a pas prises (pleine) :
 // perdues en route, mais gardees pour un rid repete (Halo : json_perdus).
 static uint32_t sLignesPerdues = 0;
+// Commandes du reseau que la cadence a refusees (plus de 20 dans la seconde),
+// toutes sessions confondues, depuis le demarrage : pour mesurer la cadence
+// de l'app (18 par seconde).
+static uint32_t sRefusCadence = 0;
 
 static char sLigne[4096];
 static size_t sLong = 0;
@@ -310,8 +328,10 @@ static void ajouteHote() {
 //  Matter
 // ---------------------------------------------------------------------------
 
-// Maison change l'interrupteur, ou updateAccessory() applique l'etat relu au
-// demarrage : l'etat est garde pour le prochain demarrage.
+// Maison change l'interrupteur, updateAccessory() applique l'etat relu au
+// demarrage, ou oubli le rallume (setOnOff) : l'etat est garde pour le
+// prochain demarrage. Jamais la LED ici : loop() voit sSuspendue changer et
+// la pilote (voyantTour).
 static bool surInterrupteur(bool allume) {
   sSuspendue = !allume;
   sPreferences.putBool(kCleInterrupteur, allume);
@@ -570,11 +590,16 @@ static constexpr uint32_t kDelaiDefaut = 45000, kDelaiMin = 3000, kDelaiMax = 60
 
 static bool sCoapDemarre = false;
 
-// Un emplacement par requete en vol. `enVol` et `finie` passent de la tache
-// OpenThread (rappel CoAP) a celle de loop() ; le reste est ecrit avant.
+// Un emplacement par requete en vol. loop() le remplit (id, cible, sortie,
+// debut), pose finie a faux puis enVol, sous le verrou OT, avant l'envoi. Le
+// rappel CoAP (tache OpenThread) ecrit la reponse (fin, erreur, code, charge,
+// longueur, tronquee), puis pose finie. loop() ne lit la reponse qu'apres
+// avoir vu finie, puis libere l'emplacement (finie et enVol a faux). finie
+// est atomique : son ecriture ne passe pas avant celles de la reponse, ce que
+// volatile ne garantissait pas. enVol ne quitte pas la tache de loop().
 struct Requete {
-  volatile bool enVol;
-  volatile bool finie;
+  std::atomic<bool> enVol;
+  std::atomic<bool> finie;
   uint32_t id;
   char cible[48];
   uint32_t debutMs, finMs;
@@ -604,14 +629,11 @@ static void surReponse(void *contexte, otMessage *msg, const otMessageInfo *, ot
   r.finie = true;
 }
 
-// Reprises CoAP reglees pour que l'echec tombe au bout du delai demande :
-// attente totale = accuse x (2^(reprises+1) - 1), facteur aleatoire de 1.
+// Reprises CoAP reglees pour que l'echec tombe au bout du delai demande
+// (distant::reprisesDiag), facteur aleatoire de 1.
 static otCoapTxParameters parametres(uint32_t delaiMs) {
-  const uint8_t reprises = delaiMs < 10000 ? 1 : 3;
-  const uint32_t facteur = (1u << (reprises + 1)) - 1;
-  uint32_t accuse = delaiMs / facteur;
-  if (accuse < 1000) accuse = 1000;  // plancher d'OpenThread
-  otCoapTxParameters p = {accuse, 1, 1, reprises};
+  const distant::Reprises r = distant::reprisesDiag(delaiMs);
+  otCoapTxParameters p = {r.accuseMs, 1, 1, r.reprises};
   return p;
 }
 
@@ -626,20 +648,23 @@ static void repondreDiagErreur(uint32_t id, const char *cible, const char *erreu
 // (sans echappement), qui doit rester valide, sur l'USB comme a distance.
 static const char kCaracteresCible[] = "0123456789abcdefABCDEF:.";
 
-// diag <cible> <t,t,...> <id> [<delai ms>]
+// diag <cible> <t,t,...> <id> [<delai ms>]. id et delai en decimal
+// (distant::lireEntier), sinon « syntaxe », avec l'id s'il a pu etre lu (0
+// sinon).
 static void cmdDiag(char *args) {
   char *cible = strtok(args, " ");
   char *liste = strtok(nullptr, " ");
   char *idTexte = strtok(nullptr, " ");
   char *delaiTexte = strtok(nullptr, " ");
-  const uint32_t id = idTexte ? strtoul(idTexte, nullptr, 10) : 0;
-  if (!cible || !liste || !idTexte || strlen(cible) >= sizeof(sRequetes[0].cible) ||
+  uint32_t id = 0, delai = kDelaiDefaut;
+  const bool idLu = idTexte && distant::lireEntier(idTexte, &id);
+  const bool delaiLu = !delaiTexte || distant::lireEntier(delaiTexte, &delai);
+  if (!cible || !liste || !idLu || !delaiLu || strlen(cible) >= sizeof(sRequetes[0].cible) ||
       strspn(cible, kCaracteresCible) != strlen(cible)) {
     repondreDiagErreur(id, "", "syntaxe");
     return;
   }
   if (sSuspendue) return repondreDiagErreur(id, cible, "suspendue");
-  uint32_t delai = delaiTexte ? strtoul(delaiTexte, nullptr, 10) : kDelaiDefaut;
   if (delai < kDelaiMin) delai = kDelaiMin;
   if (delai > kDelaiMax) delai = kDelaiMax;
 
@@ -790,20 +815,11 @@ static bool effacerCle() {
   return ok;
 }
 
-// Entier decimal de 1 a 10 chiffres, 4294967295 au plus.
-static bool lireEntier(const char *s, uint32_t *v) {
-  const size_t n = strlen(s);
-  if (n == 0 || n > 10 || strspn(s, "0123456789") != n) return false;
-  const unsigned long long x = strtoull(s, nullptr, 10);
-  if (x > 0xFFFFFFFFull) return false;
-  *v = (uint32_t)x;
-  return true;
-}
-
 // {"v":1,"t":"cle","empreinte":"<8 hexa>"|null} ; aussi le nom d'hote, les
 // compteurs du transport (bloc reseau.ip.udp du pont Halo, plus les lignes
-// perdues faute de place dans la file d'emission) et le tas (libre, minimum
-// depuis le demarrage : la 1.0.2 prend ~18 Ko de RAM de plus).
+// perdues faute de place dans la file d'emission et les commandes refusees
+// par la cadence) et le tas (libre, minimum depuis le demarrage : la 1.0.2
+// prend ~18 Ko de RAM de plus).
 static void repondreCle() {
   char kid[h1::kKidHex + 1];
   CompteursReseau c;
@@ -822,7 +838,8 @@ static void repondreCle() {
          (unsigned long)c.tx, (unsigned long)c.txPerdus, (unsigned long)c.txErreurs);
   if (c.tamponsMinConnu) ajoute(",\"tampons_min\":%u", (unsigned)c.tamponsMin);
   else ajoute(",\"tampons_min\":null");
-  ajoute(",\"lignes_perdues\":%lu}", (unsigned long)sLignesPerdues);
+  ajoute(",\"lignes_perdues\":%lu,\"refus_cadence\":%lu}", (unsigned long)sLignesPerdues,
+         (unsigned long)sRefusCadence);
   ajoute(",\"tas\":{\"libre\":%lu,\"min\":%lu}", (unsigned long)tasLibre, (unsigned long)tasMin);
   fin();
 }
@@ -834,7 +851,7 @@ static void cleNouvelle(const char *hex, const char *idTexte) {
   uint8_t alea[32];
   uint32_t id = 0;
   // 64 hexa MAJUSCULES (h1::fromHex refuse les minuscules), comme Halo.
-  const bool ok = strlen(hex) == 64 && h1::fromHex(hex, sizeof(alea), alea) && lireEntier(idTexte, &id);
+  const bool ok = strlen(hex) == 64 && h1::fromHex(hex, sizeof(alea), alea) && distant::lireEntier(idTexte, &id);
   if (!ok) {
     h1::wipe(alea, sizeof(alea));
     return repondreErreur("syntaxe");
@@ -886,6 +903,10 @@ static void cmdCle(char *args) {
 // ses propres espaces NVS. La reponse dit si la cle est bien partie
 // (cle_effacee false : la NVS a refuse, la cle reviendra au redemarrage ;
 // cle efface ensuite). USB seulement.
+// La sonde revient allumee, comme a sa premiere mise en service (1.0.3) :
+// setOnOff(true) allume l'interrupteur dans Matter et passe par le rappel
+// (surInterrupteur), qui garde l'etat dans la NVS de la sonde, que
+// decommission() n'efface pas. Deja allume : rien a faire.
 static void cmdOubli() {
   if (sSortie.reseau) return repondreErreur("refuse");
   const bool effacee = effacerCle();
@@ -893,6 +914,7 @@ static void cmdOubli() {
   ajoute(",\"cle_effacee\":%s", effacee ? "true" : "false");
   fin();
   Serial.flush();
+  sInterrupteur.setOnOff(true);
   Matter.decommission();  // efface l'appairage et redemarre
 }
 
@@ -941,7 +963,8 @@ static void executer(char *c);
 // possible : ignoree. Un rid deja servi ne relance rien : la reponse gardee
 // repart, ou rien si un diag de ce rid est encore en vol. Puis la cadence,
 // comme Halo apres l'id (benq cli.cpp) : plus de 20 commandes dans la seconde,
-// rien, sans reponse (l'app renvoie). Hors liste blanche : erreur « refuse ».
+// rien, sans reponse (l'app renvoie), mais le refus est compte
+// (sRefusCadence). Hors liste blanche : erreur « refuse ».
 void reseauRecu(uint8_t place, char *charge) {
   uint32_t rid = 0;
   char *commande = nullptr;
@@ -956,7 +979,10 @@ void reseauRecu(uint8_t place, char *charge) {
   renvoi.n = distant::texteRid(rid, renvoi.prefixe);
   renvoi.prefixe[renvoi.n++] = ' ';
   if (sGardees[place].rendre(rid, renvoyerLigne, &renvoi)) return;
-  if (!sCadences[place].allow(millis())) return;
+  if (!sCadences[place].allow(millis())) {
+    sRefusCadence++;
+    return;
+  }
 
   sSortie.reseau = true;
   sSortie.place = place;
@@ -967,6 +993,45 @@ void reseauRecu(uint8_t place, char *charge) {
   else repondreErreur("refuse");
   sGardees[place].terminer();
   sSortie = Sortie();
+}
+
+// ---------------------------------------------------------------------------
+//  LED de la carte (1.0.3)
+// ---------------------------------------------------------------------------
+
+// WS2812 de la SuperMini, sur IO8 : rien d'autre n'y touche dans ce firmware.
+// Faible intensite, comme le voyant du pont Halo sur la meme carte : 24/255 au
+// plus par canal ; orange : un quart de vert (le vert d'une WS2812 parait bien
+// plus fort que son rouge). Ordre GRB par defaut de rgbLedWrite.
+static constexpr uint8_t kBrocheVoyant = 8;
+static constexpr uint8_t kVoyantMax = 24;
+static distant::Voyant sVoyant;
+static bool sVoyantSuspendue = false;  // etat de l'interrupteur que la LED montre
+static int sVoyantEcrit = -1;          // couleur ecrite ; -1 : rien encore
+
+// rgbLedWrite (Arduino-ESP32 3.x) : 24 bits par le RMT, environ 30 us ; le
+// canal RMT est cree au premier appel, puis reutilise. Seulement si la
+// couleur change.
+static void ecrireVoyant(distant::Voyant::Couleur c) {
+  if ((int)c == sVoyantEcrit) return;
+  sVoyantEcrit = (int)c;
+  switch (c) {
+    case distant::Voyant::kVerte: rgbLedWrite(kBrocheVoyant, 0, kVoyantMax, 0); break;
+    case distant::Voyant::kOrange: rgbLedWrite(kBrocheVoyant, kVoyantMax, kVoyantMax / 4, 0); break;
+    default: rgbLedWrite(kBrocheVoyant, 0, 0, 0); break;
+  }
+}
+
+// Dans loop() seulement, hors de tout verrou : le rappel Matter ne fait que
+// poser sSuspendue, et un changement vu ici lance les eclairs de
+// l'interrupteur. Sans attente : la sequence se lit sur millis().
+static void voyantTour(uint32_t maintenant) {
+  const bool suspendue = sSuspendue;
+  if (suspendue != sVoyantSuspendue) {
+    sVoyantSuspendue = suspendue;
+    sVoyant.changer(suspendue, maintenant);
+  }
+  ecrireVoyant(sVoyant.couleur(maintenant));
 }
 
 // ---------------------------------------------------------------------------
@@ -995,8 +1060,15 @@ static void executer(char *c) {
 
 void setup() {
   Serial.begin(115200);
+  // LED au noir d'abord : une WS2812 garde sa couleur a travers un redemarrage
+  // (son alimentation ne coupe pas). IO8, broche de strapping, est deja
+  // echantillonnee a ce stade.
+  ecrireVoyant(distant::Voyant::kNoire);
   demarrerMatter();
   reseauDebut();
+  // Etat relu de la NVS : suspendue, un bref eclair orange des le premier tour.
+  sVoyantSuspendue = sSuspendue;
+  sVoyant.demarrer(sVoyantSuspendue, millis());
   cmdBonjour();
 }
 
@@ -1018,5 +1090,6 @@ void loop() {
   diagsFinis();
   reseauTour();
   surveillerAppairage(millis());
+  voyantTour(millis());
   delay(5);
 }

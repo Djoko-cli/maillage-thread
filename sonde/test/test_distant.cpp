@@ -1,5 +1,6 @@
 // Tests hote de sonde/src/distant.{h,cpp} : rid, liste blanche, reponses
-// gardees, cadence. Lancer : sh sonde/test/lancer.sh
+// gardees, cadence ; entiers des commandes, reprises CoAP d'un diag, LED de
+// la carte (1.0.3). Lancer : sh sonde/test/lancer.sh
 #include <stdio.h>
 #include <string.h>
 
@@ -41,6 +42,28 @@ static std::vector<std::string> rendre(Gardees &g, uint32_t r, bool *trouve = nu
 }
 
 static void ajoute(Gardees &g, const std::string &s) { g.ajouter((const uint8_t *)s.data(), s.size()); }
+
+static bool entier(const char *texte, uint32_t attendu) {
+  uint32_t v = 12345;
+  return lireEntier(texte, &v) && v == attendu;
+}
+
+static bool pasEntier(const char *texte) {
+  uint32_t v = 12345;
+  return !lireEntier(texte, &v) && v == 12345;  // refuse, et v intact
+}
+
+// Attente totale d'un diag avant l'echec « delai » : accuse x (2^(r+1) - 1).
+static uint64_t attente(Reprises r) { return (uint64_t)r.accuseMs * ((1u << (r.reprises + 1)) - 1); }
+
+// Couleurs de la LED sur [de, a), lues a chaque milliseconde (loop() les lit
+// toutes les 5 ms environ) ; a peut suivre le retour a zero. true si toutes
+// valent c.
+static bool couleurs(Voyant &v, uint32_t de, uint32_t a, Voyant::Couleur c) {
+  bool ok = true;
+  for (uint32_t t = de; t != a; t++) ok = v.couleur(t) == c && ok;
+  return ok;
+}
 
 int main() {
   uint32_t r = 0;
@@ -178,6 +201,109 @@ int main() {
   for (uint32_t i = 0; i < 20; i++) w.allow(0xFFFFFF00u + i);
   CHECK(!w.allow(0xFFFFFFF0u), "retour a zero : refusee dans la seconde");
   CHECK(w.allow(0xFFFFFF00u + 1000u), "retour a zero : acceptee une seconde apres (millis repasse par 0)");
+
+  // Entiers des commandes (1.0.3) : id et delai de diag, id de cle nouvelle.
+  CHECK(entier("0", 0) && entier("7", 7) && entier("45000", 45000), "entiers simples");
+  CHECK(entier("007", 7) && entier("0000000000", 0), "zeros de tete permis");
+  CHECK(entier("4294967295", 4294967295u), "max");
+  const char *pasEntiers[] = {"", "4294967296", "99999999999", "00000000001", "-1", "+1", " 1",
+                              "1 ", "12x", "x", "0x10", "1.5", "6000ms"};
+  for (const char *x : pasEntiers) CHECK(pasEntier(x), "pas un entier : '%s'", x);
+
+  // Reprises CoAP d'un diag (1.0.3) : l'echec tombe au bout du delai demande.
+  const Reprises r6 = reprisesDiag(6000), r8 = reprisesDiag(8000);
+  CHECK(r6.reprises == 1 && r6.accuseMs == 2000 && r8.reprises == 1 && r8.accuseMs == 2666,
+        "6 et 8 s (ceux de l'app) : inchanges");
+  CHECK(attente(reprisesDiag(10000)) == 9999 && attente(reprisesDiag(12000)) == 12000,
+        "10 a 15 s : plus arrondi a 15 s");
+  CHECK(reprisesDiag(14999).reprises == 1 && attente(reprisesDiag(14999)) == 14997, "14999 ms : une reprise");
+  CHECK(reprisesDiag(15000).reprises == 3 && reprisesDiag(15000).accuseMs == 1000, "15 s : trois reprises");
+  CHECK(reprisesDiag(45000).accuseMs == 3000 && reprisesDiag(60000).accuseMs == 4000, "45 et 60 s");
+  CHECK(reprisesDiag(3000).accuseMs == 1000 && attente(reprisesDiag(3000)) == 3000, "3 s : accuse de 1 s");
+  CHECK(reprisesDiag(0).accuseMs == 1000 && reprisesDiag(2999).accuseMs == 1000,
+        "sous 3 s (main.cpp borne avant) : accuse jamais sous 1 s");
+  // Tout delai permis : accuse d'au moins 1 s, attente au plus le delai, a l'arrondi pres.
+  uint32_t fautif = 0;
+  for (uint32_t d = 3000; d <= 60000 && !fautif; d++) {
+    const Reprises rd = reprisesDiag(d);
+    const uint64_t a = attente(rd), facteur = (1u << (rd.reprises + 1)) - 1;
+    if (rd.accuseMs < 1000 || a > d || d - a >= facteur) fautif = d;
+  }
+  CHECK(!fautif, "delai %u ms : attente hors du delai", (unsigned)fautif);
+
+  // LED de la carte (1.0.3). V : eclair vert, E : eclair de l'extinction,
+  // B : bref eclair de la suspension, P : sa periode.
+  const uint32_t V = Voyant::kVertMs, E = Voyant::kExtinctionMs, B = Voyant::kBrefMs, P = Voyant::kPeriodeMs;
+  CHECK(V == 100 && E == 500 && B == 100 && P == 10000, "durees : 100, 500, 100 ms et 10 s");
+  Voyant neuf;
+  CHECK(neuf.couleur(0) == Voyant::kNoire, "LED neuve : eteinte");
+  Voyant v;
+  v.demarrer(false, 1000);
+  CHECK(couleurs(v, 1000, 30000, Voyant::kNoire), "allumee au demarrage : eteinte, aucun eclair");
+  // Interrupteur allume : deux eclairs verts rapides, puis rien.
+  v.changer(false, 40000);
+  CHECK(couleurs(v, 40000, 40000 + V, Voyant::kVerte), "premier eclair vert");
+  CHECK(couleurs(v, 40000 + V, 40000 + 2 * V, Voyant::kNoire), "pause entre les eclairs verts");
+  CHECK(couleurs(v, 40000 + 2 * V, 40000 + 3 * V, Voyant::kVerte), "second eclair vert");
+  CHECK(couleurs(v, 40000 + 3 * V, 80000, Voyant::kNoire), "apres les eclairs verts : eteinte");
+  // Eteint : un eclair orange d'une demi-seconde, puis un bref toutes les 10 s.
+  v.changer(true, 100000);
+  CHECK(couleurs(v, 100000, 100000 + E, Voyant::kOrange), "extinction : orange 500 ms");
+  CHECK(couleurs(v, 100000 + E, 100000 + P, Voyant::kNoire), "puis rien jusqu'a 10 s");
+  CHECK(couleurs(v, 100000 + P, 100000 + P + B, Voyant::kOrange), "bref eclair orange a 10 s");
+  CHECK(couleurs(v, 100000 + P + B, 100000 + 2 * P, Voyant::kNoire), "puis rien jusqu'a 20 s");
+  CHECK(couleurs(v, 100000 + 2 * P, 100000 + 2 * P + B, Voyant::kOrange), "bref eclair orange a 20 s");
+  // Rallume pendant la suspension : les eclairs verts, puis plus d'orange.
+  v.changer(false, 125000);
+  CHECK(couleurs(v, 125000, 125000 + V, Voyant::kVerte), "rallumee : vert tout de suite");
+  CHECK(couleurs(v, 125000 + 3 * V, 200000, Voyant::kNoire), "rallumee : plus d'eclair orange");
+  // Eteint pendant les eclairs verts : l'orange tout de suite.
+  v.changer(false, 300000);
+  CHECK(v.couleur(300000) == Voyant::kVerte, "eclairs verts en cours");
+  v.changer(true, 300000 + V / 2);
+  CHECK(couleurs(v, 300000 + V / 2, 300000 + V / 2 + E, Voyant::kOrange), "eteinte pendant le vert : orange");
+  // Suspendue au demarrage (etat garde) : un bref eclair des le demarrage, puis toutes les 10 s.
+  Voyant s;
+  s.demarrer(true, 5000);
+  CHECK(couleurs(s, 5000, 5000 + B, Voyant::kOrange), "suspendue au demarrage : bref eclair tout de suite");
+  CHECK(couleurs(s, 5000 + B, 5000 + P, Voyant::kNoire), "suspendue au demarrage : puis rien");
+  CHECK(couleurs(s, 5000 + P, 5000 + P + B, Voyant::kOrange), "suspendue au demarrage : et a 10 s");
+  // loop() retenue : l'eclair en cours se voit encore, les echeances passees sont sautees.
+  Voyant lent;
+  lent.demarrer(true, 0);
+  CHECK(lent.couleur(0) == Voyant::kOrange, "premier eclair");
+  CHECK(lent.couleur(3 * P + B / 2) == Voyant::kOrange, "retenue 30 s : l'eclair en cours");
+  CHECK(lent.couleur(3 * P + B) == Voyant::kNoire && lent.couleur(4 * P - 1) == Voyant::kNoire,
+        "retenue : rien jusqu'au suivant");
+  CHECK(lent.couleur(4 * P) == Voyant::kOrange, "retenue : le suivant a l'heure");
+  CHECK(lent.couleur(7 * P + P / 2) == Voyant::kNoire && lent.couleur(8 * P) == Voyant::kOrange,
+        "retenue entre deux eclairs : recalee sur la periode");
+  // Retour a zero de millis() : les eclairs continuent ; une sequence finie ne revient pas.
+  Voyant z;
+  z.demarrer(true, 0xFFFFFF00u);
+  CHECK(z.couleur(0xFFFFFF00u) == Voyant::kOrange, "zero : eclair juste avant");
+  CHECK(couleurs(z, 0xFFFFFF00u + B, 0xFFFFFF00u + P, Voyant::kNoire), "zero : rien en passant par 0");
+  CHECK(couleurs(z, 0xFFFFFF00u + P, 0xFFFFFF00u + P + B, Voyant::kOrange), "zero : eclair a l'heure apres");
+  Voyant y;
+  y.changer(false, 0xFFFFFFF0u);
+  CHECK(couleurs(y, 0xFFFFFFF0u, 0xFFFFFFF0u + V, Voyant::kVerte), "zero : eclair vert a cheval");
+  CHECK(couleurs(y, 0xFFFFFFF0u + 3 * V, 1000, Voyant::kNoire), "zero : fin des eclairs verts");
+  CHECK(couleurs(y, 0xFFFFFFF0u, 0xFFFFFFF0u + 3 * V, Voyant::kNoire),
+        "sequence finie : pas ranimee quand millis() repasse par les memes valeurs");
+  // Suspendue plus de 49,7 jours, un tour toutes les 5 s : un eclair toutes les
+  // 10 s de temps reel, avant, pendant et apres le retour a zero de millis().
+  Voyant longue;
+  longue.demarrer(true, 0);
+  uint64_t horsDeLHeure = 0, eclairs = 0;
+  for (uint64_t reel = 0; reel < (1ull << 32) + 3 * P; reel += 5000) {
+    const bool orange = longue.couleur((uint32_t)reel) == Voyant::kOrange;
+    eclairs += orange;
+    if (orange != (reel % P == 0)) horsDeLHeure++;
+  }
+  CHECK(!horsDeLHeure && eclairs == ((1ull << 32) + 3 * P - 1) / P + 1,
+        "suspendue 50 jours : %llu tour(s) hors de l'heure, %llu eclairs", (unsigned long long)horsDeLHeure,
+        (unsigned long long)eclairs);
+
   printf("test_distant : %d verification(s), %d echec(s)\n", gChecks, gFails);
   return gFails ? 1 : 0;
 }
