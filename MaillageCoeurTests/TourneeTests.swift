@@ -27,8 +27,8 @@ final class ReleveAvancement: Sendable {
 }
 
 /// Sonde rejouee : repond avec les TLV de la capture, echoue en `delai` pour le reste (ou en
-/// `trop_long`, reponse de plus de 1100 octets par le reseau, pour `tropLongs`), et note ses
-/// requetes.
+/// `trop_long`, reponse de plus de 1100 octets par le reseau, pour `tropLongs` ; ou refuse la
+/// requete, pour `refus`), et note ses requetes.
 struct SondeRejouee: InterlocuteurSonde {
     actor Registre {
         /// Requetes `diag`, "<cible>|<tlv,...>".
@@ -49,7 +49,17 @@ struct SondeRejouee: InterlocuteurSonde {
     var table: [RouteurSonde]? = []
     /// "<cible>|<tlv,...>" dont la reponse est trop longue pour le reseau.
     var tropLongs: Set<String> = []
+    /// Refus de la sonde (`occupee`, `suspendue`...) d'une requete "<cible>|<tlv,...>" : elle ne
+    /// part pas ; nil : pas de refus.
+    var refus: @Sendable (String) -> String? = { _ in nil }
+    /// "<cible>|<tlv,...>" dont la reponse arrive plus tard ; les autres reviennent aussitot.
+    var retards: [String: Duration] = [:]
     let registre = Registre()
+
+    /// Cle d'une requete : "<cible>|<tlv,...>".
+    static func cle(_ cible: UInt16, _ tlv: [UInt8]) -> String {
+        String(format: "%04X|", cible) + tlv.map(String.init).joined(separator: ",")
+    }
 
     func etat() async throws -> EtatSonde { etatSonde }
 
@@ -70,8 +80,12 @@ struct SondeRejouee: InterlocuteurSonde {
     }
 
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
-        let cle = String(format: "%04X|", cible) + tlv.map(String.init).joined(separator: ",")
+        let cle = Self.cle(cible, tlv)
         await registre.noter(cle)
+        if let e = refus(cle) {
+            return ResultatDiag(id: 0, cible: String(format: "%04X", cible), ok: false, erreur: e)
+        }
+        if let d = retards[cle] { try await Task.sleep(for: d) }
         if tropLongs.contains(cle) {
             return ResultatDiag(id: 0, cible: String(format: "%04X", cible), ok: false, erreur: "trop_long")
         }
@@ -106,7 +120,14 @@ struct SondeRejouee: InterlocuteurSonde {
 
     /// La meme sonde, avec seulement les reponses dont la cle est gardee ; registre neuf.
     func filtree(_ garder: (String) -> Bool) -> SondeRejouee {
-        SondeRejouee(etatSonde: etatSonde, reponses: reponses.filter { garder($0.key) }, table: table, tropLongs: tropLongs)
+        SondeRejouee(etatSonde: etatSonde, reponses: reponses.filter { garder($0.key) }, table: table, tropLongs: tropLongs,
+                     refus: refus, retards: retards)
+    }
+
+    /// La meme sonde, qui refuse (`erreur`) les requetes dont la cle est choisie ; registre neuf.
+    func refusant(_ erreur: String = "occupee", _ choisies: @escaping @Sendable (String) -> Bool) -> SondeRejouee {
+        SondeRejouee(etatSonde: etatSonde, reponses: reponses, table: table, tropLongs: tropLongs,
+                     refus: { choisies($0) ? erreur : nil }, retards: retards)
     }
 }
 
@@ -257,6 +278,51 @@ struct TourneeTests {
         #expect(mem3.estMuet(20))
         #expect(mem3.muetsBalayes == [1, 20, 43, 45, 51, 57], "muet : balaye")
         #expect(await sans20.registre.requetes.contains("5001|0,1,2,8"))
+    }
+
+    /// La sonde refuse (`occupee`) les requetes aux routeurs deux tournees de suite : ce n'est pas
+    /// un silence des routeurs. Aucun echec de plus, aucun routeur muet ni balaye ; le maillage
+    /// les marque sans reponse a la tournee, et les secours restent.
+    @Test func refusNeComptentPasCommeSilence() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let occupee = sonde.refusant { $0.hasSuffix("|0,1,5,16,8,24") }
+        let (m2, mem2) = try #require(try await Tournee.complete(occupee, memoire: mem1, maintenant: Self.t0 + 300))
+        let (m3, mem3) = try #require(try await Tournee.complete(occupee, memoire: mem2, maintenant: Self.t0 + 600))
+        #expect(mem3.echecs == mem1.echecs, "aucun echec de plus")
+        #expect(!mem3.estMuet(20) && !mem3.estMuet(24) && !mem3.estMuet(43))
+        #expect(mem3.muetInterroge.isEmpty)
+        #expect(m2.routeurs.filter(\.muet).count == 7 && m3.routeurs.filter(\.muet).count == 7, "sans reponse")
+        #expect(mem3.muetsBalayes == [1, 43, 45, 51, 57], "ni 20 ni 24 balayes")
+        let requetes = await occupee.registre.requetes
+        #expect(!requetes.contains { ($0.hasPrefix("50") || $0.hasPrefix("60")) && $0.hasSuffix("|0,1,2,8") })
+        #expect(requetes.filter { $0 == "AC00|0,1,5,16,8,24" }.count == 2, "pas muet : interroge a chaque tournee")
+        #expect(mem3.repondants == [20, 24])
+    }
+
+    /// Balayage du (30 min) dont la sonde refuse toutes les requetes : il ne remplace pas le
+    /// precedent. Les enfants trouves restent affiches, et il est refait a la tournee suivante. Un
+    /// balayage de silences (`delai` : plus aucun enfant) remplace le precedent, lui.
+    @Test func balayageRefuseGardeLePrecedent() async throws {
+        let sonde = try SondeRejouee.capture()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        #expect(mem1.balayes.count == 7)
+        let refuse = sonde.refusant("suspendue") { $0.hasSuffix("|0,1,2,8") }
+        let (m2, mem2) = try #require(try await Tournee.complete(refuse, memoire: mem1, maintenant: Self.t0 + 1800))
+        #expect(await refuse.registre.requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48, "balayage tente")
+        #expect(mem2.balayes == mem1.balayes)
+        #expect(mem2.dernierBalayage == Self.t0 && mem2.muetsBalayes == mem1.muetsBalayes, "a refaire")
+        #expect(m2.enfants(de: 43).count == 8, "7 enfants balayes et la sonde")
+
+        let avant = await sonde.registre.requetes.count
+        let (_, mem3) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 2100))
+        #expect(await sonde.registre.requetes.dropFirst(avant).filter { $0.hasSuffix("|0,1,2,8") }.count == 48, "refait")
+        #expect(mem3.dernierBalayage == Self.t0 + 2100)
+
+        let silences = sonde.filtree { !$0.hasSuffix("|0,1,2,8") }
+        let (m4, mem4) = try #require(try await Tournee.complete(silences, memoire: mem1, maintenant: Self.t0 + 1800))
+        #expect(mem4.balayes.isEmpty && mem4.dernierBalayage == Self.t0 + 1800)
+        #expect(m4.enfants(de: 43).map(\.source) == [.sonde])
     }
 
     /// TLV (hexa) d'une reponse dont le type est dans `types`, dans leur ordre : une moitie de

@@ -50,7 +50,8 @@ public struct AvancementTournee: Hashable, Sendable {
 
 /// Ce que la tournee retient d'une fois sur l'autre (spec de la sonde, section 4).
 public struct MemoireTournee: Hashable, Sendable {
-    /// Echecs de suite, par routeur : muet a partir de 2.
+    /// Silences de suite (`delai`), par routeur : muet a partir de 2. Un refus de la sonde
+    /// (`occupee`, `suspendue`...) n'en est pas un.
     public var echecs: [Int: Int] = [:]
     /// Derniere interrogation d'un routeur muet : une fois par heure.
     public var muetInterroge: [Int: Date] = [:]
@@ -62,7 +63,8 @@ public struct MemoireTournee: Hashable, Sendable {
     /// ExtMac des routeurs, par RLOC16 : parents successifs de la sonde, routeurs qui repondent,
     /// routeurs que la sonde entend (sa table des routeurs). Une ExtMac n'a qu'un RLOC16 (`retenir`).
     public var identites: [UInt16: String] = [:]
-    /// Enfants des routeurs balayes, trouves au dernier balayage.
+    /// Enfants des routeurs balayes, trouves au dernier balayage (un balayage dont la sonde a
+    /// refuse toutes les requetes ne compte pas).
     public var balayes: [UInt16: EnfantMaillage] = [:]
     /// Enfants des tables identifies (ExtMac, adresses), par RLOC16 : gardes jusqu'a une nouvelle reponse.
     public var identifies: [UInt16: EnfantMaillage] = [:]
@@ -216,7 +218,8 @@ public enum Tournee {
                     sansExtMac.append(id)
                 }
                 repondants.append(id)
-            } else {
+            } else if r.silence {
+                // Seul un silence compte : un refus de la sonde ne dit rien du routeur.
                 mem.echecs[id, default: 0] += 1
                 if mem.estMuet(id) { mem.muetInterroge[id] = maintenant }
             }
@@ -272,19 +275,25 @@ public enum Tournee {
             var faitesAvant = 0
             signaler(.balayage, 0, prevues.reduce(0, +))
             var trouves: [UInt16: EnfantMaillage] = [:]
+            var refuse = true
             for (i, m) in routeurs.enumerated() {
                 var faites = 0
-                let enfants = try await balayer(sonde, routeur: m, sauf: moi) { f, p in
+                let b = try await balayer(sonde, routeur: m, sauf: moi) { f, p in
                     faites = f
                     prevues[i] = p
                     signaler(.balayage, faitesAvant + f, prevues.reduce(0, +))
                 }
-                for e in enfants { trouves[e.rloc16] = e }
+                for e in b.enfants { trouves[e.rloc16] = e }
+                refuse = refuse && b.refuse
                 faitesAvant += faites
             }
-            mem.balayes = trouves
-            mem.dernierBalayage = maintenant
-            mem.muetsBalayes = aBalayer
+            // Toutes ses requetes refusees par la sonde : il ne dit rien des enfants. Le precedent
+            // reste, et le balayage est refait a la tournee suivante.
+            if !refuse {
+                mem.balayes = trouves
+                mem.dernierBalayage = maintenant
+                mem.muetsBalayes = aBalayer
+            }
         } else {
             signaler(.balayage, 0, 0)
         }
@@ -355,11 +364,14 @@ public enum Tournee {
 
     /// Enfants d'un routeur muet, numero par numero, 8 en vol : de 1 a 32, en
     /// s'arretant 8 numeros apres le dernier trouve (la sonde compte, sans etre interrogee).
-    /// `suivi` : requetes revenues et prevues sous ce routeur, a chaque requete revenue ; un
-    /// enfant qui repond loin repousse la fin tout de suite.
+    /// `refuse` : la sonde a refuse toutes les requetes. `suivi` : requetes revenues et prevues
+    /// sous ce routeur, a chaque requete revenue ; un enfant qui repond loin repousse la fin tout
+    /// de suite.
     static func balayer(_ sonde: some InterlocuteurSonde, routeur m: Int, sauf moi: UInt16,
-                        suivi: (_ faites: Int, _ prevues: Int) -> Void = { _, _ in }) async throws -> [EnfantMaillage] {
+                        suivi: (_ faites: Int, _ prevues: Int) -> Void = { _, _ in }) async throws
+        -> (enfants: [EnfantMaillage], refuse: Bool) {
         var trouves: [EnfantMaillage] = []
+        var refuse = true
         var dernier = dernierConnu(routeur: m, sauf: moi)
         var debut = 1
         var faites = 0
@@ -374,6 +386,7 @@ public enum Tournee {
                 suivi(avant + n, numerosPrevus(routeur: m, dernier: dernier, sauf: moi))
             })
             for (cible, r) in resultats {
+                refuse = refuse && r.refus
                 guard let rep = r.reponse else { continue }
                 trouves.append(EnfantMaillage(rloc16: cible, extMac: rep.extMac, endormi: rep.mode?.endormi,
                                               adresses: rep.adresses, source: .balayage))
@@ -381,7 +394,7 @@ public enum Tournee {
             faites += cibles.count
             debut = fin + 1
         }
-        return trouves
+        return (trouves, refuse)
     }
 
     /// Au plus `enVol` requetes a la fois ; resultats dans l'ordre des elements.
@@ -408,4 +421,13 @@ public enum Tournee {
         }
         return resultats.sorted { $0.0 < $1.0 }.map { ($0.1, $0.2) }
     }
+}
+
+fileprivate extension ResultatDiag {
+    /// Silence de la cible : la requete est partie, et rien n'est revenu a temps (`delai`).
+    var silence: Bool { !ok && erreur == "delai" }
+
+    /// Refus de la sonde (`occupee`, `suspendue`, `envoi...`) : la requete n'est pas partie. Ni
+    /// reponse ni silence, il ne dit rien de la cible.
+    var refus: Bool { !ok && !tropLong && !silence }
 }
