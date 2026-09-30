@@ -864,10 +864,11 @@ struct TourneeTests {
         #expect(m3.routeur(2)?.muet == true)
     }
 
-    /// Le 2, seul routeur balaye, sort de la liste : ses enfants balayes et sa place parmi les
-    /// balayes sont oublies. Son identifiant, reattribue a un routeur muet, n'affiche pas les
-    /// enfants de l'ancien : le nouveau est balaye tout de suite (Route64 et enfant inventes ;
-    /// le 20 et le 24 repondent).
+    /// Le 2, seul routeur balaye, sort de la liste : ses enfants balayes sont oublies. Son
+    /// identifiant, reattribue a un routeur muet, n'affiche pas les enfants de l'ancien. Limite
+    /// connue : l'ensemble a balayer ({2}) n'ayant pas change, le nouveau 2 n'est balaye qu'a
+    /// l'echeance ; ses enfants manquent en attendant (Route64 et enfant inventes ; le 20 et le
+    /// 24 repondent).
     @Test func balayesOubliesHorsDeLaListe() async throws {
         var mem = MemoireTournee()
         mem.partition = "46CBEBCD"
@@ -878,13 +879,18 @@ struct TourneeTests {
         let sans2 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([20, 24])])
         let (_, mem1) = try #require(try await Tournee.complete(sans2, memoire: mem, maintenant: Self.t0))
         #expect(mem1.dernierBalayage == Self.t0 - 60, "rien a balayer, pas du")
-        #expect(mem1.balayes.isEmpty && mem1.muetsBalayes.isEmpty)
+        #expect(mem1.balayes.isEmpty, "ses enfants balayes, oublies")
+        #expect(mem1.muetsBalayes == [2], "le declencheur n'est pas filtre")
 
         let nouveau2 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([2, 20, 24])])
         let (m2, mem2) = try #require(try await Tournee.complete(nouveau2, memoire: mem1, maintenant: Self.t0 + 300))
         #expect(m2.enfants(de: 2).isEmpty, "pas les enfants de l'ancien 2")
-        #expect(await nouveau2.registre.requetes.contains("0801|0,1,2,8"), "le nouveau 2 est balaye")
-        #expect(mem2.muetsBalayes == [2] && mem2.dernierBalayage == Self.t0 + 300)
+        #expect(await !nouveau2.registre.requetes.contains("0801|0,1,2,8"), "pas balaye avant l'echeance")
+        #expect(mem2.dernierBalayage == Self.t0 - 60)
+
+        let (_, mem3) = try #require(try await Tournee.complete(nouveau2, memoire: mem2, maintenant: Self.t0 + 1740))
+        #expect(await nouveau2.registre.requetes.contains("0801|0,1,2,8"), "balaye a l'echeance")
+        #expect(mem3.muetsBalayes == [2] && mem3.dernierBalayage == Self.t0 + 1740)
     }
 
     /// Un routeur balaye qui sort de la liste change l'ensemble a balayer (spec, section 4) : le
