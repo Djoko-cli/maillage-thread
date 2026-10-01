@@ -119,6 +119,48 @@ struct CameraSceneTests {
         #expect(fin.champ == o.champ)
     }
 
+    /// Orbite sans NaN ni infini.
+    static func finie(_ o: Orbite) -> Bool {
+        [o.cible.x, o.cible.y, o.cible.z, o.distance, o.azimut, o.inclinaison, o.champ].allSatisfy(\.isFinite)
+    }
+
+    /// Un aspect nul, negatif, non fini ou minuscule (cadre vide pendant une mise en page) laisse la
+    /// camera finie : vue d'ensemble, bornes, zoom, envol et vols.
+    @Test(arguments: [0, -1, Double.nan, Double.infinity, 1e-9])
+    func aspectDegenere(_ aspect: Double) {
+        let g = Self.geometrie
+        for u in [0.0, 1.0] {
+            let o = CameraScene.canonique(g, aspect: aspect, u: u)
+            #expect(Self.finie(o), "canonique, u = \(u)")
+            let b = CameraScene.bornes(g, aspect: aspect, troisD: u == 1, champ: o.champ)
+            #expect(b.lowerBound.isFinite && b.upperBound.isFinite, "bornes, u = \(u)")
+            #expect(Self.finie(CameraScene.zoomer(o, facteur: -0.4, ancre: SIMD3(3, 0, -2), bornes: b)), "zoom, u = \(u)")
+            #expect(Self.finie(CameraScene.zoomer(o, facteur: 0.4, ancre: nil, bornes: b)), "dezoom, u = \(u)")
+            let e = Envol(depuis: o, t: u, vers: 1 - u, geometrie: g, aspect: aspect)
+            for q in [0.0, 0.5, 1.0] {
+                #expect(Self.finie(e.pose(q, geometrie: g, aspect: aspect).orbite), "envol, u = \(u), q = \(q)")
+            }
+            let piece = CameraScene.volVersPiece(o, centre: SIMD3(-12, 0.5, 3), largeur: 8.75, profondeur: 9.3,
+                                                 aspect: aspect, troisD: u == 1)
+            let ensemble = CameraScene.volVersEnsemble(o, g, aspect: aspect, u: u, troisD: u == 1)
+            for q in [0.0, 0.5, 1.0] {
+                #expect(Self.finie(piece.orbite(q, depuis: o)), "vol vers une piece, u = \(u), q = \(q)")
+                #expect(Self.finie(ensemble.orbite(q, depuis: o)), "vol vers l'ensemble, u = \(u), q = \(q)")
+            }
+        }
+    }
+
+    /// Un facteur de zoom non fini laisse la camera inchangee.
+    @Test func zoomNonFini() {
+        let g = Self.geometrie
+        let o = CameraScene.canonique(g, aspect: Self.aspect, u: 0)
+        let b = CameraScene.bornes(g, aspect: Self.aspect, troisD: false, champ: o.champ)
+        for f in [Double.nan, .infinity, -.infinity] {
+            #expect(CameraScene.zoomer(o, facteur: f, ancre: SIMD3(3, 0, -2), bornes: b) == o, "facteur \(f)")
+            #expect(CameraScene.zoomer(o, facteur: f, ancre: nil, bornes: b) == o, "facteur \(f)")
+        }
+    }
+
     /// Geometrie : plateaux empiles de 1,5 fois le plus grand rayon ; sphere et boite de la spec.
     @Test func geometrie() {
         let g = Self.geometrie

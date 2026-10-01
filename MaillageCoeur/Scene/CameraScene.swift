@@ -248,18 +248,32 @@ public enum CameraScene {
         x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2
     }
 
+    /// Aspect (largeur / hauteur du cadre) sur, a l'entree de chaque fonction qui le recoit. Un cadre
+    /// vide pendant une mise en page donne un aspect nul ou non fini, qui rendrait la camera NaN (vue
+    /// infinie, puis inf - inf) et l'y laisserait : un aspect non fini, nul ou negatif vaut 1,6, le
+    /// repli de l'app pour une hauteur nulle (format d'une fenetre ordinaire) ; les autres sont
+    /// bornes de 0,05 a 20, bien au-dela de toute fenetre reelle, ce qui garde les distances finies
+    /// (au plus 20 fois la vue d'ensemble ordinaire). Entre 0,05 et 20, l'aspect est rendu tel quel.
+    fileprivate static func aspectSur(_ aspect: Double) -> Double {
+        guard aspect.isFinite, aspect > 0 else { return 1.6 }
+        return min(20, max(0.05, aspect))
+    }
+
     /// Hauteur de vue de la vue d'ensemble 2D, centree sur la boite de cadrage.
     public static func vue2D(_ g: GeometrieMaison, aspect: Double) -> Double {
-        max((g.boite.z1 - g.boite.z0) * 1.1, (g.boite.x1 - g.boite.x0) * 1.05 / aspect)
+        let aspect = aspectSur(aspect)
+        return max((g.boite.z1 - g.boite.z0) * 1.1, (g.boite.x1 - g.boite.x0) * 1.05 / aspect)
     }
 
     /// Hauteur de vue de la vue d'ensemble 3D, centree sur la sphere.
     public static func vue3D(_ g: GeometrieMaison, aspect: Double) -> Double {
-        2.4 * g.rayonSphere * max(1, 1 / aspect)
+        let aspect = aspectSur(aspect)
+        return 2.4 * g.rayonSphere * max(1, 1 / aspect)
     }
 
     public static func vue(_ g: GeometrieMaison, aspect: Double, u: Double) -> Double {
-        vue2D(g, aspect: aspect) + (vue3D(g, aspect: aspect) - vue2D(g, aspect: aspect)) * u
+        let aspect = aspectSur(aspect)
+        return vue2D(g, aspect: aspect) + (vue3D(g, aspect: aspect) - vue2D(g, aspect: aspect)) * u
     }
 
     /// Champ a l'avancement u de la bascule : 2 + 38 u^1,6 degres.
@@ -267,6 +281,7 @@ public enum CameraScene {
 
     /// Pose canonique a l'avancement u de la bascule : vue d'ensemble 2D (u = 0), 3D (u = 1).
     public static func canonique(_ g: GeometrieMaison, aspect: Double, u: Double) -> Orbite {
+        let aspect = aspectSur(aspect)
         let f = champ(u)
         return Orbite(cible: g.cible2D + (g.centreSphere - g.cible2D) * u,
                       distance: Orbite.distance(pourHauteur: vue(g, aspect: aspect, u: u), champ: f),
@@ -276,6 +291,7 @@ public enum CameraScene {
     /// Bornes de la distance : de 3 unites de hauteur de vue a 3 fois la vue d'ensemble en 2D ; de 5
     /// unites a 2,5 fois la vue d'ensemble en 3D.
     public static func bornes(_ g: GeometrieMaison, aspect: Double, troisD: Bool, champ: Double) -> ClosedRange<Double> {
+        let aspect = aspectSur(aspect)
         if troisD {
             return 5...max(5, Orbite.distance(pourHauteur: vue3D(g, aspect: aspect) * 2.5, champ: champ))
         }
@@ -284,8 +300,10 @@ public enum CameraScene {
     }
 
     /// Zoom d'un pas (`facteur` : log du rapport des distances), borne ; vers `ancre` si elle est donnee
-    /// (le point du monde sous le curseur, qui reste sous le curseur).
+    /// (le point du monde sous le curseur, qui reste sous le curseur). Un facteur non fini laisse la
+    /// camera inchangee.
     public static func zoomer(_ o: Orbite, facteur: Double, ancre: SIMD3<Double>?, bornes: ClosedRange<Double>) -> Orbite {
+        guard facteur.isFinite else { return o }
         var r = o
         let d = min(bornes.upperBound, max(bornes.lowerBound, o.distance * exp(facteur)))
         if let a = ancre { r.cible = a + (o.cible - a) * (d / o.distance) }
@@ -301,12 +319,14 @@ public enum CameraScene {
     /// Vol vers une piece isolee : hauteur de vue max(largeur / aspect, profondeur) 1,3 1,8 + 6 unites.
     public static func volVersPiece(_ o: Orbite, centre: SIMD3<Double>, largeur: Double, profondeur: Double,
                                     aspect: Double, troisD: Bool) -> Vol {
+        let aspect = aspectSur(aspect)
         let d = Orbite.distance(pourHauteur: max(largeur / aspect, profondeur) * 1.3 * 1.8 + 6, champ: o.champ)
         return Vol(depuis: o, oeil: centre + directionVue(o, troisD: troisD) * d, cible: centre)
     }
 
     /// Vol de retour a la vue d'ensemble, a l'avancement u de la bascule.
     public static func volVersEnsemble(_ o: Orbite, _ g: GeometrieMaison, aspect: Double, u: Double, troisD: Bool) -> Vol {
+        let aspect = aspectSur(aspect)
         let c = g.cible2D + (g.centreSphere - g.cible2D) * u
         let d = Orbite.distance(pourHauteur: vue(g, aspect: aspect, u: u), champ: o.champ)
         return Vol(depuis: o, oeil: c + directionVue(o, troisD: troisD) * d, cible: c)
@@ -344,7 +364,7 @@ public struct Envol: Hashable, Sendable {
     public var ecartInclinaison: Double
 
     public init(depuis o: Orbite, t: Double, vers arrivee: Double, geometrie g: GeometrieMaison, aspect: Double) {
-        let c = CameraScene.canonique(g, aspect: aspect, u: t)
+        let c = CameraScene.canonique(g, aspect: CameraScene.aspectSur(aspect), u: t)
         depart = t
         self.arrivee = arrivee
         ecartCible = o.cible - c.cible
@@ -357,7 +377,7 @@ public struct Envol: Hashable, Sendable {
     public func pose(_ q: Double, geometrie g: GeometrieMaison, aspect: Double) -> (t: Double, orbite: Orbite) {
         let e = CameraScene.rampe(min(1, max(0, q)))
         let t = depart + (arrivee - depart) * e
-        var o = CameraScene.canonique(g, aspect: aspect, u: t)
+        var o = CameraScene.canonique(g, aspect: CameraScene.aspectSur(aspect), u: t)
         let r = 1 - e
         o.cible += ecartCible * r
         o.distance *= exp(ecartLogDistance * r)
