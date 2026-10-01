@@ -49,7 +49,7 @@ struct CourbesFicheTests {
         #expect(r.signal.map(\.valeur) == [-61, -61])
     }
 
-    /// La fiche montre les courbes des qu'il y a un historique (jamais en demo), et le graphe lui
+    /// La fiche montre les courbes des qu'il y a un historique (jamais en demo), et la vue lui
     /// garde plus de place en bas ; pour un noeud sans historique, une ligne de texte.
     @Test func ficheEtMarge() throws {
         let s = try Self.surveillance()
@@ -57,9 +57,9 @@ struct CourbesFicheTests {
         let demo = Surveillance(mode: .demo, dossier: nil)
         demo.demarrer()
         #expect(!FicheNoeud.courbesVisibles(dans: demo))
-        #expect(FenetreGraphe.margeBas(fiche: false, courbes: true) == 30)
-        #expect(FenetreGraphe.margeBas(fiche: true, courbes: false) == 190)
-        #expect(FenetreGraphe.margeBas(fiche: true, courbes: true) == 360)
+        #expect(FenetrePieces.margeBas(fiche: false, courbes: true) == 30)
+        #expect(FenetrePieces.margeBas(fiche: true, courbes: false) == 190)
+        #expect(FenetrePieces.margeBas(fiche: true, courbes: true) == 360)
         let avec = NSHostingView(rootView: CourbesFiche(id: JournalMaillageTests.appareil, instant: Date()).environment(s)).fittingSize
         let sans = NSHostingView(rootView: CourbesFiche(id: "instance:inconnue", instant: Date()).environment(s)).fittingSize
         #expect(avec.height > sans.height + 100, "\(avec) \(sans)")

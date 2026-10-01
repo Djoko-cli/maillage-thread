@@ -1,22 +1,6 @@
 {
   "sourceLanguage" : "fr",
   "strings" : {
-    "%@ (partagé)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ (shared)"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ (partagé)"
-          }
-        }
-      }
-    },
     "%@ (profil de 7 jours expiré ? relance outils/passeur.sh)" : {
       "localizations" : {
         "en" : {
@@ -2273,22 +2257,6 @@
         }
       }
     },
-    "Partition %@ · %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Partition %1$@ · %2$@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Partition %1$@ · %2$@"
-          }
-        }
-      }
-    },
     "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans README.fr.md." : {
       "localizations" : {
         "en" : {
@@ -3277,22 +3245,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Réseau scindé en %1$lld partitions, constaté le %2$@ · à part : %3$@"
-          }
-        }
-      }
-    },
-    "Sans partition connue" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No known partition"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sans partition connue"
           }
         }
       }

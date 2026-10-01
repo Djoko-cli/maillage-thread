@@ -228,7 +228,7 @@ struct FicheNoeud: View {
     @ViewBuilder
     private func colonnesSonde(_ n: NoeudSonde, _ m: MaillageAffiche) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(GrapheCanvas.libelleInconnu(n, noms: nomsRouteurs)).font(.title3.weight(.semibold))
+            Text(LibellesNoeuds.inconnu(n, noms: nomsRouteurs)).font(.title3.weight(.semibold))
             Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud)).foregroundStyle(.secondary)
             if !n.candidats.isEmpty {
                 // Chaque candidat ouvre la fiche de son annonce, pas dessinee a part.

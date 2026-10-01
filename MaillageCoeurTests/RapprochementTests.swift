@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import MaillageCoeur
 
-@Suite("Rapprochement du maillage et disposition avec la sonde")
+@Suite("Rapprochement du maillage avec l'instantane")
 struct RapprochementTests {
     static let omr = "fd00:5555:6666::/64"
 
@@ -36,11 +36,6 @@ struct RapprochementTests {
     static func maillage(entendus: [UInt16: String] = [:]) async throws -> Maillage {
         let sonde = try SondeRejouee.capture(table: SondeRejouee.table(entendus: entendus))
         return try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: .now)).maillage
-    }
-
-    /// Anneau interieur de la zone principale, dans l'ordre.
-    static func interieur(_ d: Disposition) -> [String] {
-        d.noeuds.filter { abs($0.position.distance(Point2D(0, 0)) - Disposition.rayonInterieur) < 0.001 }.map(\.id)
     }
 
     static func affiches(_ i: Instantane) -> [AppareilAffiche] {
@@ -78,44 +73,9 @@ struct RapprochementTests {
         #expect(m.noeud("Apple TV")?.rloc16 == 0xB400)
     }
 
-    /// Anneau interieur : routeurs de bordure hors centre, appareils qui routent,
-    /// routeurs inconnus ; enfants pres de leur parent ; liens de la sonde, et le
-    /// rattachement pour les noeuds qu'elle ne relie pas. L'annonce du HomePod du salon,
-    /// candidate des routeurs de bordure non identifies, n'est pas dessinee a part.
-    @Test func disposition() async throws {
-        let i = Self.instantane()
-        let r = try #require(i.reseaux.first)
-        let m = MaillageAffiche(maillage: try await Self.maillage(), reseau: r, appareils: i.appareils)
-        let d = Disposition(reseau: r, appareils: Self.affiches(i), maillage: m)
-        #expect(d.noeud("Apple TV")?.genre == .centre)
-        let interieur = Self.interieur(d)
-        #expect(interieur == ["HomePod bureau", "E000000000000002", "E000000000000003", "rloc:0400", "rloc:CC00", "rloc:E400"])
-        #expect(d.noeud("HomePod salon") == nil, "candidate : portee par les routeurs non identifies")
-        #expect(d.noeud("E000000000000002")?.genre == .appareil)
-        #expect(d.noeud("E000000000000002")?.rayon == 9)
-        #expect(d.noeud("rloc:0400")?.genre == .routeur)
-        #expect(d.noeud("rloc:6002")?.genre == .appareil, "enfant inconnu : sur l'anneau exterieur")
-        #expect(d.liens.filter { $0.genre == .radio }.count == 7)
-        #expect(d.liens.contains(Disposition.Lien(de: "E000000000000004", vers: "E000000000000002", genre: .parent, qualite: 2)))
-        #expect(d.liens.contains(Disposition.Lien(de: "rloc:E400", vers: "Apple TV")), "sans lien connu : rattachement")
-        #expect(d.liens.contains(Disposition.Lien(de: "Absent", vers: "Apple TV")))
-        #expect(!d.liens.contains { $0.de == "E000000000000004" && $0.genre == .rattachement })
-        // Les deux enfants de 5000 (E...04 et E...05) cote a cote sur l'anneau exterieur.
-        let exterieur = d.noeuds.filter { $0.genre == .appareil && !interieur.contains($0.id) }.map(\.id)
-        let i4 = try #require(exterieur.firstIndex(of: "E000000000000004"))
-        let i5 = try #require(exterieur.firstIndex(of: "E000000000000005"))
-        #expect(abs(i4 - i5) == 1)
-        // Le tri range par angle du parent, non par nom : E...0A (enfant de "HomePod bureau", premier de l'anneau
-        // interieur) passe avant E...04 (enfant de E...02), alors que l'ordre alphabetique dirait l'inverse.
-        let iA = try #require(exterieur.firstIndex(of: "E00000000000000A"))
-        #expect(iA < i4)
-        // "Absent", que la sonde ne voit pas (aucun parent), est rejete en fin d'anneau.
-        #expect(exterieur.last == "Absent")
-    }
-
     /// Elimination : la sonde entend CC00 et E400 (leur `xa`), son parent AC00 et le BBR principal
     /// B400 sont connus ; reste un seul routeur de bordure non identifie (0400) et une seule
-    /// annonce non reprise (le HomePod palier) : c'est lui. Un seul noeud pour ce routeur.
+    /// annonce non reprise (le HomePod palier) : c'est lui (un seul noeud : `GrapheReseauTests`).
     @Test func elimination() async throws {
         let i = Self.instantane(autres: [("HomePod bureau", "E000000000000007"), ("HomePod chambre", "E0000000000000E4"),
                                          ("HomePod palier", "E0000000000000D2"), ("HomePod salon", "E0000000000000CC")])
@@ -128,14 +88,11 @@ struct RapprochementTests {
         #expect(m.routeurs.values.filter(\.deduit).count == 1)
         #expect(m.annoncesCandidates.isEmpty)
         #expect(m.inconnus.filter { $0.genre == .routeur }.isEmpty)
-        let d = Disposition(reseau: r, appareils: Self.affiches(i), maillage: m)
-        #expect(Self.interieur(d) == ["HomePod bureau", "HomePod chambre", "HomePod palier", "HomePod salon",
-                                      "E000000000000002", "E000000000000003"])
     }
 
     /// Deux routeurs de bordure non identifies (0400, CC00), deux annonces non reprises : pas
-    /// d'elimination ; chacun a les deux pour candidates, qui ne sont plus dessinees a part.
-    /// Un seul noeud par routeur : le centre et six sur l'anneau interieur, pour 7 routeurs.
+    /// d'elimination ; chacun a les deux pour candidates, qui ne sont plus des noeuds a part
+    /// (`GrapheReseauTests`).
     @Test func candidats() async throws {
         let i = Self.instantane(autres: [("HomePod bureau", "E000000000000007"), ("HomePod chambre", "E0000000000000E4"),
                                          ("HomePod avant", "E0000000000000D1"), ("HomePod palier", "E0000000000000D2")])
@@ -147,18 +104,9 @@ struct RapprochementTests {
             #expect(m.routeurs[id]?.candidats == ["HomePod avant", "HomePod palier"])
         }
         #expect(m.annoncesCandidates == ["HomePod avant", "HomePod palier"])
-        let d = Disposition(reseau: r, appareils: Self.affiches(i), maillage: m)
-        #expect(Self.interieur(d) == ["HomePod bureau", "HomePod chambre", "E000000000000002", "E000000000000003",
-                                      "rloc:0400", "rloc:CC00"])
-        #expect(d.noeud("HomePod avant") == nil && d.noeud("HomePod palier") == nil)
-        // Sans sonde, rien ne change : les annonces sont dessinees.
-        let sans = Disposition(reseau: r, appareils: Self.affiches(i))
-        #expect(Self.interieur(sans) == ["HomePod bureau", "HomePod chambre", "HomePod avant", "HomePod palier"])
     }
 
-    /// Reseau scinde : les candidats ne viennent que de la partition de la sonde, et seules ses
-    /// annonces candidates ne sont pas dessinees ; l'autre partition garde toutes les siennes, meme
-    /// non reprises (ExtMac inventees).
+    /// Reseau scinde : les candidats ne viennent que de la partition de la sonde (ExtMac inventees).
     @Test func autrePartitionAvecCandidats() async throws {
         let i = Self.instantane(ailleurs: [("Aqara", "E0000000000000AA"), ("HomePod isole", "E0000000000000A9")])
         let r = try #require(i.reseaux.first)
@@ -166,9 +114,6 @@ struct RapprochementTests {
         let m = MaillageAffiche(maillage: try await Self.maillage(), reseau: r, appareils: i.appareils)
         #expect(m.annoncesCandidates == ["HomePod salon"])
         #expect(m.routeurs[1]?.candidats == ["HomePod salon"])
-        let d = Disposition(reseau: r, appareils: Self.affiches(i), maillage: m)
-        #expect(d.noeud("HomePod salon") == nil)
-        #expect(d.noeud("Aqara")?.zone == "73586B68" && d.noeud("HomePod isole")?.zone == "73586B68")
     }
 
     /// Network Data en echec a la seconde tournee : les routeurs de bordure restent connus (les
@@ -197,7 +142,7 @@ struct RapprochementTests {
         let m = MaillageAffiche(maillage: try await Self.maillage(entendus: entendus), reseau: r, appareils: avecXa.appareils)
         #expect(m.routeurs[1] == NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true))
         #expect(m.annoncesCandidates.isEmpty)
-        #expect(Disposition(reseau: r, appareils: Self.affiches(avecXa), maillage: m).noeud("HomePod avant") != nil)
+        #expect(GrapheReseau(reseau: r, appareils: Self.affiches(avecXa), maillage: m).noeud("HomePod avant") != nil)
 
         let sansXa = Self.instantane(autres: [("HomePod bureau", "E000000000000007"), ("HomePod chambre", "E0000000000000E4"),
                                               ("HomePod avant", nil), ("HomePod salon", "E0000000000000CC")])
@@ -221,7 +166,7 @@ struct RapprochementTests {
         let m = MaillageAffiche(maillage: c.maillage(), reseau: r, appareils: i.appareils)
         #expect(m.routeurs[2] == NoeudSonde(id: "rloc:0800", rloc16: 0x0800, genre: .routeur, reconnu: false, bordure: false))
         #expect(m.annoncesCandidates.isEmpty)
-        #expect(Disposition(reseau: r, appareils: [], maillage: m).noeud("HomePod avant") != nil)
+        #expect(GrapheReseau(reseau: r, appareils: [], maillage: m).noeud("HomePod avant") != nil)
     }
 
     /// Mini-maillage de deux routeurs de bordure sans ExtMac (0400, le chef, et 0800) ;
@@ -317,114 +262,13 @@ struct RapprochementTests {
         #expect(!m.annoncesCandidates.contains("HomePod bureau (2)"))
     }
 
-    /// Le centre de la zone peut etre candidat (ici le premier par nom : annonces Thread 1.3, sans
-    /// role) ; il reste dessine, au centre. L'autre annonce candidate, non.
+    /// Le centre de la partition peut etre candidat (ici le premier par nom : annonces Thread 1.3,
+    /// sans role) ; il reste un noeud, au centre (`GrapheReseauTests`).
     @Test func centreCandidat() throws {
         var b = Banc()
         b.routeur("Alpha", partition: "46CBEBCD", role: nil, lien: "fe80::1", xa: "E0000000000000C1")
         b.routeur("HomePod avant", partition: "46CBEBCD", role: nil, lien: "fe80::2", xa: "E0000000000000D1")
-        let i = Instantane(annonces: b.annonces)
-        let r = try #require(i.reseaux.first)
-        let m = try Self.deuxRouteurs(i)
+        let m = try Self.deuxRouteurs(Instantane(annonces: b.annonces))
         #expect(m.routeurs[1]?.candidats == ["Alpha", "HomePod avant"] && m.routeurs[2]?.candidats == ["Alpha", "HomePod avant"])
-        let d = Disposition(reseau: r, appareils: [], maillage: m)
-        #expect(d.noeud("Alpha")?.genre == .centre)
-        #expect(d.noeud("HomePod avant") == nil)
-        #expect(Self.interieur(d) == ["rloc:0400", "rloc:0800"])
-    }
-
-    /// Mini-maillage a la main, pour les branches du rangement des enfants que la capture n'atteint pas.
-    /// Partition 46CBEBCD, centre "Centre" (routeur 1, RLOC16 0400, reconnu par son `xa`). Routeurs 2 a 6
-    /// inconnus (0800 a 1800) : l'anneau interieur, en partant du haut dans le sens horaire, 0800 a -90 degres,
-    /// 0C00 a -18, 1000 a 54, 1400 a 126, 1800 a 198 (dernier quart : `atan2` y rend -162). Routeur 7 (1C00)
-    /// reconnu comme l'appareil E...0F, que la disposition n'affiche pas : sans place sur les anneaux.
-    /// Un enfant par RLOC16 donne, sous le routeur `rloc16 >> 10` (0001 : le routeur 0, absent du maillage).
-    /// Rend la disposition.
-    static func dispositionDeLaSonde(enfants: [UInt16]) throws -> Disposition {
-        var b = Banc()
-        b.routeur("Centre", partition: "46CBEBCD", role: .chef, lien: "fe80::1", xa: "E0000000000000C1")
-        b.appareil("E00000000000000F", noeud: 1, adresses: ["fd00:5555:6666:0:b00::f"])
-        let i = Instantane(annonces: b.annonces)
-        let r = try #require(i.reseaux.first)
-        var c = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
-        c.routeurs(Route64(sequence: 0, routes: (1...7).map {
-            RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1)
-        }), chef: 1)
-        c.identite("E0000000000000C1", routeur: 1)
-        c.identite("E00000000000000F", routeur: 7)
-        for rloc in enfants { c.enfant(EnfantMaillage(rloc16: rloc, source: .balayage)) }
-        let m = MaillageAffiche(maillage: c.maillage(), reseau: r, appareils: i.appareils)
-        let d = Disposition(reseau: r, appareils: [], maillage: m)
-        #expect(m.routeurs[1]?.id == "Centre" && m.routeurs[7]?.id == "E00000000000000F")
-        #expect(d.noeud("Centre")?.genre == .centre)
-        #expect(d.noeuds.filter { $0.genre == .routeur }.map(\.id) == ["rloc:0800", "rloc:0C00", "rloc:1000", "rloc:1400", "rloc:1800"])
-        return d
-    }
-
-    /// Rend l'anneau exterieur de cette disposition, dans l'ordre de ses noeuds.
-    static func exterieur(enfants: [UInt16]) throws -> [String] {
-        try dispositionDeLaSonde(enfants: enfants).noeuds.filter { $0.genre == .appareil }.map(\.id)
-    }
-
-    /// Zone dont le centre est la seule annonce et sans appareil sur l'anneau exterieur, mais avec des routeurs de
-    /// la sonde (les cinq inconnus) sur l'anneau interieur : son rayon compte cet anneau (90, plus la marge), et non
-    /// le nombre d'annonces (une seule, ce qui donnait 60, moins que l'anneau). Tout noeud tient dans sa zone, son
-    /// propre rayon compris. Avec des enfants sur l'anneau exterieur, c'est lui qui donne le rayon.
-    @Test func rayonDeZoneAvecLAnneauInterieurDeLaSonde() throws {
-        func toutDansSaZone(_ d: Disposition) throws {
-            let zone = try #require(d.zones.first)
-            for n in d.noeuds {
-                #expect(n.position.distance(zone.centre) + n.rayon <= zone.rayon, "\(n.id) dans sa zone")
-            }
-        }
-        let sansEnfants = try Self.dispositionDeLaSonde(enfants: [])
-        #expect(try #require(sansEnfants.zones.first).rayon == Disposition.rayonInterieur + Disposition.marge)
-        try toutDansSaZone(sansEnfants)
-        let avecEnfants = try Self.dispositionDeLaSonde(enfants: [0x0801, 0x0C01])
-        #expect(try #require(avecEnfants.zones.first).rayon == Disposition.rayonExterieurMin + Disposition.marge)
-        try toutDansSaZone(avecEnfants)
-    }
-
-    /// Les enfants du centre (angle 3 pi / 2) passent apres ceux de tous les routeurs de l'anneau, dernier quart
-    /// compris, et ne se melent pas a ceux du premier routeur (0800, en haut).
-    @Test func enfantsDuCentreEnFinDAnneau() throws {
-        let ordre = try Self.exterieur(enfants: [0x0401, 0x0801, 0x1401, 0x1801])
-        #expect(ordre == ["rloc:0801", "rloc:1401", "rloc:1801", "rloc:0401"])
-    }
-
-    /// Parent du dernier quart de l'anneau (1800, a 198 degres) : le repli t + 2 pi ramene l'angle negatif de
-    /// `atan2` (-162) a 198, donc apres les enfants de 1400 (126), et non avant ceux de 0C00 (-18).
-    @Test func repliDeLAngleAuDernierQuartDeLAnneau() throws {
-        let ordre = try Self.exterieur(enfants: [0x0C01, 0x1401, 0x1801])
-        #expect(ordre == ["rloc:0C01", "rloc:1401", "rloc:1801"])
-    }
-
-    /// Le premier noeud de l'anneau est en haut, a -pi/2 ; `atan2` peut le rendre un ulp (ou moins) en dessous, et le
-    /// repli ne doit pas l'envoyer en fin d'anneau avec le dernier quart. Celui-ci, des qu'il s'ecarte de la
-    /// tolerance, est replie de 2 pi ; le reste n'est pas touche.
-    @Test func repliDeLAngleALaFrontiereDuHaut() {
-        let haut = -Double.pi / 2
-        for t in [haut, haut.nextUp, haut.nextDown, haut - 1e-12, haut + 1e-12] {
-            #expect(abs(Disposition.angleAnneau(t) - haut) < 1e-9, "\(t) reste en haut")
-        }
-        let dernierQuart = haut - 0.01
-        #expect(Disposition.angleAnneau(dernierQuart) == dernierQuart + 2 * .pi)
-        #expect(Disposition.angleAnneau(-Double.pi + 0.1) == -Double.pi + 0.1 + 2 * .pi)
-        for t in [0.0, 1.0, Double.pi / 2, Double.pi] { #expect(Disposition.angleAnneau(t) == t) }
-    }
-
-    /// Enfant sans parent dans le maillage (0001 : le routeur 0 n'y est pas) : rejete en fin d'anneau, apres tous les
-    /// autres, y compris ceux du dernier quart (1801, angle 3,46) et ceux du centre (0401 : 3 pi / 2, soit 4,71, la
-    /// plus grande cle d'un parent connu). La sentinelle doit depasser toutes les cles.
-    @Test func enfantSansParentEnFinDAnneau() throws {
-        let ordre = try Self.exterieur(enfants: [0x0001, 0x0C01, 0x1401, 0x0401, 0x1801])
-        #expect(ordre == ["rloc:0C01", "rloc:1401", "rloc:1801", "rloc:0401", "rloc:0001"])
-    }
-
-    /// Enfant dont le parent est connu mais sans place sur les anneaux (1C01 : le routeur 7, l'appareil E...0F
-    /// que la disposition n'affiche pas) : rejete en fin d'anneau, comme celui qui n'a pas de parent.
-    @Test func enfantDUnParentSansPlaceEnFinDAnneau() throws {
-        let ordre = try Self.exterieur(enfants: [0x1C01, 0x0C01, 0x1401])
-        #expect(ordre == ["rloc:0C01", "rloc:1401", "rloc:1C01"])
     }
 }

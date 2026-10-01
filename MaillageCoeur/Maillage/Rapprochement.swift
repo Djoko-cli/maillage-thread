@@ -64,7 +64,7 @@ public struct MaillageAffiche: Hashable, Sendable {
     public let enfants: [UInt16: NoeudSonde]
     public let liens: [LienAffiche]
     /// Annonces candidates d'au moins un routeur de bordure non identifie : ce routeur les porte,
-    /// elles ne sont pas dessinees a part (le centre de la zone excepte, voir `Disposition`).
+    /// elles ne sont pas des noeuds a part (le centre de la partition excepte, voir `GrapheReseau`).
     public let annoncesCandidates: Set<String>
 
     /// Rapproche le maillage des routeurs de bordure de sa partition et des appareils :

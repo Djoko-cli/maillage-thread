@@ -12,11 +12,11 @@ struct AffichageSondeTests {
     /// langue de l'hote. (Un litteral sans interpolation n'est pas une cle du catalogue :
     /// il resterait en francais.)
     @Test func libelles() {
-        #expect(GrapheCanvas.libelleInconnu(NoeudSonde(id: "rloc:B400", rloc16: 0xB400, genre: .routeur, reconnu: false,
+        #expect(LibellesNoeuds.inconnu(NoeudSonde(id: "rloc:B400", rloc16: 0xB400, genre: .routeur, reconnu: false,
                                                        bordure: true)) == String(localized: "Routeur de bordure · \("B400")"))
-        #expect(GrapheCanvas.libelleInconnu(NoeudSonde(id: "rloc:5000", rloc16: 0x5000, genre: .routeur, reconnu: false,
+        #expect(LibellesNoeuds.inconnu(NoeudSonde(id: "rloc:5000", rloc16: 0x5000, genre: .routeur, reconnu: false,
                                                        bordure: false)) == String(localized: "Routeur · \("5000")"))
-        #expect(GrapheCanvas.libelleInconnu(NoeudSonde(id: "rloc:AC05", rloc16: 0xAC05, genre: .enfant, reconnu: false,
+        #expect(LibellesNoeuds.inconnu(NoeudSonde(id: "rloc:AC05", rloc16: 0xAC05, genre: .enfant, reconnu: false,
                                                        bordure: false)) == String(localized: "Non identifié · \("AC05")"))
     }
 
@@ -27,16 +27,16 @@ struct AffichageSondeTests {
         let deux = NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false, bordure: true,
                               candidats: ["hp-droit", "HomePod Palier"])
         let liste = ["HomePod Avant", "HomePod Palier"].formatted(.list(type: .or))
-        #expect(GrapheCanvas.libelleInconnu(deux, noms: ["hp-droit": "HomePod Avant"])
+        #expect(LibellesNoeuds.inconnu(deux, noms: ["hp-droit": "HomePod Avant"])
                 == String(localized: "\(liste) · \("0400")"))
         let un = NoeudSonde(id: "rloc:CC00", rloc16: 0xCC00, genre: .routeur, reconnu: false, bordure: true,
                             candidats: ["HomePod salon"])
-        #expect(GrapheCanvas.libelleInconnu(un) == String(localized: "\("HomePod salon")\u{202F}? · \("CC00")"))
-        #expect(GrapheCanvas.libelleInconnu(un) != GrapheCanvas.libelleInconnu(deux))
+        #expect(LibellesNoeuds.inconnu(un) == String(localized: "\("HomePod salon")\u{202F}? · \("CC00")"))
+        #expect(LibellesNoeuds.inconnu(un) != LibellesNoeuds.inconnu(deux))
     }
 
-    /// Noms des routeurs de bordure d'un reseau, par instance, en un seul endroit (libelles du
-    /// graphe, fiche, candidats) : le surnom d'abord, l'instance sinon.
+    /// Noms des routeurs de bordure d'un reseau, par instance, en un seul endroit (libelles de la
+    /// vue, fiche, candidats) : le surnom d'abord, l'instance sinon.
     @Test func nomsDesRouteurs() throws {
         let s = Surveillance(mode: .demo, dossier: nil)
         s.demarrer()
@@ -79,20 +79,6 @@ struct AffichageSondeTests {
         #expect(Palette.NiveauLien(nil) == .inconnu)
     }
 
-    /// Epaisseur d'un lien de la sonde : le lien radio s'epaissit avec la qualite (la couleur
-    /// seule se lit mal en daltonisme rouge-vert) ; de l'enfant a son parent : 1 pt, sans egard
-    /// a la qualite.
-    @Test func epaisseurs() {
-        #expect(GrapheCanvas.epaisseurLienSonde(.radio, qualite: 3) == 3)
-        #expect(GrapheCanvas.epaisseurLienSonde(.radio, qualite: 2) == 2.2)
-        #expect(GrapheCanvas.epaisseurLienSonde(.radio, qualite: 1) == 1.4)
-        #expect(GrapheCanvas.epaisseurLienSonde(.radio, qualite: 0) == 1.4, "inconnue : comme faible")
-        #expect(GrapheCanvas.epaisseurLienSonde(.radio, qualite: nil) == 1.4, "inconnue : comme faible")
-        for qualite in [3, 2, 1, 0, nil] as [Int?] {
-            #expect(GrapheCanvas.epaisseurLienSonde(.parent, qualite: qualite) == 1)
-        }
-    }
-
     /// Mode demo : maillage de demo ; fiche d'un enfant et d'un routeur.
     @Test func ficheEtDemo() throws {
         let s = Surveillance(mode: .demo, dossier: nil)
@@ -112,58 +98,6 @@ struct AffichageSondeTests {
                     == String(localized: "RLOC16 \("0400") · voisins : \(voisins) · enfants : \(enfants)"))
         #expect(FicheNoeud.texteQualite(nil) == String(localized: "qualité inconnue"))
         #expect(FicheNoeud.texteQualite(3) == String(localized: "qualité \(3)"))
-    }
-
-    /// Ce qui est entre les chevrons de la premiere `nom<…>` d'un type imprime, chevrons imbriques
-    /// compris ; nil sans `nom<` ni chevron fermant.
-    private static func entreChevrons(_ nom: String, dans type: String) -> Substring? {
-        guard let ouverture = type.range(of: nom + "<") else { return nil }
-        var profondeur = 1
-        var i = ouverture.upperBound
-        while i < type.endIndex {
-            switch type[i] {
-            case "<": profondeur += 1
-            case ">":
-                profondeur -= 1
-                if profondeur == 0 { return type[ouverture.upperBound..<i] }
-            default: break
-            }
-            i = type.index(after: i)
-        }
-        return nil
-    }
-
-    /// « Ancien » (6 min) et « perime » (15 min) ne dependent que de l'heure, que rien n'observe
-    /// (`Surveillance.maintenant`) : quand la sonde se tait, aucun evenement ne redessine le
-    /// graphe. Sa fenetre est donc une `TimelineView` qui se redessine chaque minute
-    /// (`FenetreGraphe.horloge`), avec dedans tout ce qui lit l'heure (la legende, le dessin, la
-    /// fiche) : le premier redessin apres chaque seuil montre le nouvel etat, moins d'une minute
-    /// plus tard.
-    @Test func grapheRedessineChaqueMinute() throws {
-        // Cablage, lu sur le type du corps (on ne l'evalue pas : il lit l'environnement ;
-        // `String(reflecting:)` donne les types concrets, ceux des methodes en `some View` compris) :
-        // une TimelineView sur cette horloge, avec la legende, le dessin et la fiche dedans.
-        let horloge = String(reflecting: type(of: FenetreGraphe.horloge))
-        let corps = String(reflecting: FenetreGraphe.Body.self)
-        let dedans = try #require(Self.entreChevrons("TimelineView", dans: corps), "le corps est une TimelineView")
-        #expect(dedans.hasPrefix(horloge), "sur l'horloge")
-        for vue in ["LegendeLiens", "GrapheCanvas", "FicheNoeud"] {
-            #expect(dedans.contains(vue), "\(vue) est dans la TimelineView, pas a cote")
-        }
-        // Cadence : jamais plus d'une minute entre deux redessins, quelle que soit la phase ;
-        // puis, pour chaque seuil de `Surveillance.fraicheur`, un redessin qui suit de pres.
-        let recu = Date(timeIntervalSince1970: 1_790_000_000)
-        let redessins = FenetreGraphe.horloge.entries(from: recu, mode: .normal).prefix(20).filter { $0 >= recu }
-        #expect(zip(redessins, redessins.dropFirst()).allSatisfy { $1.timeIntervalSince($0) <= 60 },
-                "moins d'une minute entre deux redessins")
-        for etat in [Surveillance.Fraicheur.ancien, .perime] {
-            // Premiere seconde de l'etat, lue dans `Surveillance.fraicheur` : aucun seuil copie ici.
-            let seuil = try #require((0...1200).first {
-                Surveillance.fraicheur(recu, maintenant: recu + TimeInterval($0)) == etat
-            })
-            let premier = try #require(redessins.first { Surveillance.fraicheur(recu, maintenant: $0) == etat })
-            #expect(premier.timeIntervalSince(recu) - TimeInterval(seuil) < 60, "\(etat) : moins d'une minute apres son seuil")
-        }
     }
 
     /// « Renommer… » : pour un routeur de l'instantane, un appareil connu ou un appareil disparu

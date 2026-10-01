@@ -1,168 +1,12 @@
 import MaillageCoeur
 import SwiftUI
 
+// Morceaux de la fenetre de la vue par pieces, repris de celle du graphe : barre d'outils, ligne de
+// la tournee, bandeau de scission, legende des liens, ecran d'attente, appareils IP, « Renommer… ».
+
 /// Noeud choisi pour une feuille (surnom).
 struct NoeudChoisi: Identifiable {
     let id: String
-}
-
-/// Fenetre du graphe : le graphe occupe toute la fenetre ; barre d'outils,
-/// bandeau d'alerte, legende des pointilles et fiche flottent par-dessus, en verre.
-struct FenetreGraphe: View {
-    @Environment(Surveillance.self) private var surveillance
-    @Environment(NomsInternes.self) private var nomsMaison
-    /// Sonde retenue ou non : la marge du haut garde la place de la ligne de la tournee.
-    @Environment(SondeMaillage.self) private var sonde
-    @Environment(\.colorScheme) private var apparence
-    /// `--args -selection <id>` : fiche ouverte au lancement (captures d'ecran).
-    @State private var selection: String? = UserDefaults.standard.string(forKey: "selection")
-    @State private var survol: String?
-    @State private var zoom: CGFloat = 1
-    @State private var zoomEnCours: CGFloat = 1
-    @State private var decalage: CGSize = .zero
-    @State private var decalageEnCours: CGSize = .zero
-    @State private var aRenommer: NoeudChoisi?
-    @State private var memoire = MemoirePlacement()
-
-    var body: some View {
-        let palette = Palette(sombre: apparence == .dark)
-        // Redessin chaque minute (`horloge`) : le contenu lit l'heure, que rien n'observe. La fiche la
-        // recoit (`instant`) : sinon SwiftUI la sauterait, ses entrees n'ayant pas change.
-        TimelineView(Self.horloge) { contexte in
-            ZStack {
-                RadialGradient(gradient: palette.fond, center: UnitPoint(x: 0.3, y: 0.35), startRadius: 0, endRadius: 900)
-                    .ignoresSafeArea()
-                if let r = surveillance.reseau {
-                    graphe(r, palette)
-                } else {
-                    EtatVide()
-                }
-                VStack(spacing: Self.espacement) {
-                    EnTeteGraphe()
-                    Spacer()
-                    if let r = surveillance.reseau, selection == nil {
-                        LegendeLiens(sonde: surveillance.maillageAffiche(pour: r) != nil, ancien: surveillance.maillageAncien)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    if let selection {
-                        FicheNoeud(id: selection, instant: surveillance.maintenant(a: contexte.date), aRenommer: $aRenommer,
-                                   choisir: { self.selection = $0 }) {
-                            self.selection = nil
-                        }
-                    }
-                }
-                .padding(Self.bord)
-            }
-        }
-        .frame(minWidth: 820, minHeight: 560)
-        .sheet(item: $aRenommer) { FeuilleRenommer(id: $0.id) }
-        .task {
-            // Batteries de Maison a jour tant que le graphe est ouvert.
-            while !Task.isCancelled {
-                nomsMaison.rafraichirSiAncien()
-                try? await Task.sleep(for: .seconds(3600))
-            }
-        }
-        .fenetreDeLApp()
-    }
-
-    /// Bord des elements poses sur le graphe, et ecart entre eux (pt).
-    static let bord: CGFloat = 16
-    static let espacement: CGFloat = 10
-
-    /// Redessin de la fenetre au debut de chaque minute. « Ancien » (6 min) et « perime » (15 min)
-    /// ne dependent que de l'heure (`Surveillance.maintenant`), que rien n'observe : quand la
-    /// sonde se tait, aucun evenement ne redessine le graphe ; l'etat parait avec une minute de
-    /// retard au plus, et le redessin n'a lieu que dans cette fenetre, tant qu'elle est ouverte.
-    static let horloge = EveryMinuteTimelineSchedule()
-
-    /// Marge du haut du graphe (pt) : la barre d'outils et la bande des titres des zones, puis
-    /// une ligne de 40 pt pour le bandeau d'un reseau scinde, et une pour la tournee tant qu'une
-    /// sonde est retenue, pendant une tournee ou non : rien ne bouge au debut ni a la fin d'une
-    /// tournee, le graphe seulement quand une sonde est retenue ou oubliee.
-    static func margeHaut(scinde: Bool, sondeRetenue: Bool) -> CGFloat {
-        70 + (scinde ? 40 : 0) + (sondeRetenue ? 40 : 0)
-    }
-
-    /// Marge du bas du graphe (pt) : la legende, ou la fiche ouverte, plus haute avec les courbes
-    /// de l'historique (la fiche les montre pour tout noeud des qu'il y en a : le graphe ne bouge
-    /// pas d'un noeud a l'autre).
-    static func margeBas(fiche: Bool, courbes: Bool) -> CGFloat {
-        guard fiche else { return 30 }
-        return courbes ? 360 : 190
-    }
-
-    private func graphe(_ r: Reseau, _ palette: Palette) -> some View {
-        let affiches = surveillance.appareilsAffiches(pour: r)
-        let maillage = surveillance.maillageAffiche(pour: r)
-        let disposition = Disposition(reseau: r, appareils: affiches, maillage: maillage)
-        let parId = Dictionary(affiches.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let nomsRouteurs = surveillance.nomsRouteurs(pour: r)
-        let libelles = GrapheCanvas.libelles(disposition: disposition, reseau: r, appareils: parId,
-                                             nomsRouteurs: nomsRouteurs, maillage: maillage)
-        return GeometryReader { geo in
-            let projection = Projection(cadre: disposition.cadre, taille: geo.size,
-                                        marges: (haut: Self.margeHaut(scinde: r.estScinde, sondeRetenue: sonde.serie != nil),
-                                                 bas: Self.margeBas(fiche: selection != nil,
-                                                                    courbes: FicheNoeud.courbesVisibles(dans: surveillance)),
-                                                 cotes: 60),
-                                        zoom: zoom * zoomEnCours,
-                                        decalage: CGSize(width: decalage.width + decalageEnCours.width,
-                                                         height: decalage.height + decalageEnCours.height))
-            // Libelles places pour le dessin et le clic ; recalcules seulement si la
-            // disposition, l'echelle ou les noms changent (le decalage les deplace).
-            let placement = memoire.placement(disposition, libelles: libelles, echelle: projection.echelle)
-                .decale(projection.origine)
-            GrapheCanvas(disposition: disposition, appareils: parId, nomsRouteurs: nomsRouteurs, maillage: maillage,
-                         libelles: libelles, placement: placement, projection: projection, selection: selection,
-                         survol: survol, palette: palette)
-                .contentShape(Rectangle())
-                // Clic et survol : le point (8 pt autour) ou tout le libelle.
-                .onContinuousHover { phase in
-                    switch phase {
-                    case .active(let p): survol = placement.cible(a: p)
-                    case .ended: survol = nil
-                    }
-                }
-                .onTapGesture(count: 2) {
-                    zoom = 1
-                    decalage = .zero
-                }
-                .simultaneousGesture(SpatialTapGesture().onEnded { v in
-                    selection = placement.cible(a: v.location)
-                })
-                .gesture(MagnifyGesture()
-                    .onChanged { zoomEnCours = $0.magnification }
-                    .onEnded { v in
-                        zoom = Projection.zoomBorne(zoom * v.magnification)
-                        zoomEnCours = 1
-                    })
-                .simultaneousGesture(DragGesture(minimumDistance: 4)
-                    .onChanged { decalageEnCours = $0.translation }
-                    .onEnded { v in
-                        decalage.width += v.translation.width
-                        decalage.height += v.translation.height
-                        decalageEnCours = .zero
-                    })
-        }
-    }
-}
-
-/// Haut de la fenetre du graphe, pose sur lui : barre d'outils, bandeau d'un reseau scinde,
-/// puis la ligne de la tournee (sa place est gardee dans la marge du haut du graphe tant
-/// qu'une sonde est retenue : `FenetreGraphe.margeHaut`).
-struct EnTeteGraphe: View {
-    @Environment(Surveillance.self) private var surveillance
-
-    var body: some View {
-        VStack(spacing: FenetreGraphe.espacement) {
-            BarreOutils()
-            if let r = surveillance.reseau, r.estScinde {
-                BandeauScission(reseau: r)
-            }
-            LigneTournee()
-        }
-    }
 }
 
 /// Barre d'outils flottante : reseau, appareils IP, journal, rafraichir.
@@ -236,7 +80,7 @@ struct BarreOutils: View {
 /// Ligne de la tournee en cours, centree sous la barre d'outils (et le bandeau d'un reseau
 /// scinde) : la barre garde sa largeur, son bouton rafraichir ne bouge pas sous le pointeur.
 /// Rien hors tournee. Vue a part : seule elle se redessine a chaque pas de la tournee, pas la
-/// fenetre du graphe.
+/// fenetre de la vue.
 struct LigneTournee: View {
     @Environment(SondeMaillage.self) private var sonde
 
@@ -309,9 +153,9 @@ struct BandeauScission: View {
     }
 }
 
-/// Legende des liens du graphe (en bas a gauche, cachee sous une fiche) : avec
-/// la sonde, traits pleins (lien radio, colore par la qualite) et pointilles
-/// (rattachement suppose) ; « ancien » si la sonde ne repond plus.
+/// Legende des liens (en bas a gauche, cachee sous une fiche) : avec la sonde,
+/// traits pleins (lien radio, colore par la qualite) et pointilles (rattachement
+/// suppose) ; « ancien » si la sonde ne repond plus.
 struct LegendeLiens: View {
     var sonde = false
     var ancien = false
@@ -324,7 +168,7 @@ struct LegendeLiens: View {
                     p.addLine(to: CGPoint(x: 22, y: 1))
                 }
                 .stroke(Palette(sombre: true).lienSonde(3),
-                        style: StrokeStyle(lineWidth: GrapheCanvas.epaisseurLienSonde(.radio, qualite: 3), lineCap: .round))
+                        style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .frame(width: 22, height: 2)
                 .accessibilityHidden(true)
                 Text("lien radio (qualité)")

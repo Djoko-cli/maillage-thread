@@ -1,5 +1,4 @@
 {
-  "%@ (partagé)": "%@ (shared)",
   "%@ (profil de 7 jours expiré ? relance outils/passeur.sh)": "%@ (7-day profile expired? Run outils/passeur.sh again)",
   "%@ : %@ %lld/%lld…": "%1$@: %2$@ %3$lld/%4$lld…",
   "%@ : %@…": "%1$@: %2$@…",
@@ -140,7 +139,6 @@
   "Partition": "Partition",
   "Partition %@": "Partition %@",
   "Partition %@ (incertaine : préfixe partagé)": "Partition %@ (uncertain: shared prefix)",
-  "Partition %@ · %@": "Partition %1$@ · %2$@",
   "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans README.fr.md.": "No IPv6 route to the Thread network: this Mac has no route to the OMR prefix, where the probe's address is. See “Route to the Thread network” in README.md.",
   "Pas encore d'historique de la sonde pour ce nœud sur cette période.": "No probe history for this node over this period yet.",
   "Pas encore de pièces de Maison : lance le passeur": "No rooms from Home yet: run Passeur Noms",
@@ -203,7 +201,6 @@
   "Réseau scindé en %lld partitions depuis le %@ · à part : %@": "Network split into %1$lld partitions since %2$@ · separate: %3$@",
   "Réseau scindé en %lld partitions · à part : %@": "Network split into %1$lld partitions · separate: %2$@",
   "Réseau scindé en %lld partitions, constaté le %@ · à part : %@": "Network split into %1$lld partitions, found on %2$@ · separate: %3$@",
-  "Sans partition connue": "No known partition",
   "Sans pièce": "No room",
   "Services vus": "Services seen",
   "Seul le port choisi est ouvert. Un autre ESP32-C6 branché n'est jamais ouvert : ne le choisissez pas.": "Only the chosen port is opened. Another plugged-in ESP32-C6 is never opened: don't choose it.",

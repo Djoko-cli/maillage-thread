@@ -1,7 +1,7 @@
 import MaillageCoeur
 import SwiftUI
 
-/// Couleurs du graphe, en mode sombre (fond profond) et clair (fond pale).
+/// Couleurs de la vue par pieces, en mode sombre (fond profond) et clair (fond pale).
 struct Palette {
     let sombre: Bool
 
@@ -12,25 +12,10 @@ struct Palette {
                                    Color.white])
     }
 
-    var texte: Color { sombre ? Color(white: 0.9) : Color(white: 0.2) }
-    var texteDiscret: Color { sombre ? Color(white: 0.7) : Color(white: 0.4) }
-    var lien: Color { sombre ? Color.white.opacity(0.28) : Color.black.opacity(0.22) }
-    var lienEclaire: Color { sombre ? Color.white.opacity(0.85) : Color.black.opacity(0.7) }
     var selection: Color { sombre ? .white : .black }
-    /// Fond discret sous un libelle : la couleur du fond du graphe, un peu transparente.
-    /// Dessine par-dessus les liens et les traits, il les cache sous le texte.
-    var fondLibelle: Color {
-        sombre ? Color(red: 0.06, green: 0.09, blue: 0.16).opacity(0.8) : Color(red: 0.95, green: 0.96, blue: 0.99).opacity(0.85)
-    }
     /// Pastille d'une batterie faible : orange vif en halo, texte brun fonce.
     var batterieFaible: Color { Color(red: 1.0, green: 0.62, blue: 0.1) }
     var texteBatterieFaible: Color { Color(red: 0.25, green: 0.12, blue: 0.0) }
-
-    /// La principale en bleu, les autres en ambre, les sans-partition en gris.
-    func zone(_ z: Disposition.Zone) -> Color {
-        if z.id.isEmpty { return .gray }
-        return z.principale ? Color(red: 0.23, green: 0.51, blue: 0.96) : Color(red: 0.96, green: 0.62, blue: 0.04)
-    }
 
     /// Qualite d'un lien vu par la sonde : 3 bon, 2 moyen, 1 faible ; 0 ou inconnue.
     enum NiveauLien: Equatable {

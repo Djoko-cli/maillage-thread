@@ -263,7 +263,7 @@ final class Surveillance {
         func sujet(_ n: NoeudSonde?, rloc16: UInt16, genre: NoeudSonde.Genre, bordure: Bool) -> Sujet {
             let noeud = n ?? NoeudSonde(id: String(format: "rloc:%04X", rloc16), rloc16: rloc16, genre: genre,
                                         reconnu: false, bordure: bordure)
-            return Sujet(id: noeud.id, nom: nomNoeud(noeud.id, maillage: affiche) ?? GrapheCanvas.libelleInconnu(noeud))
+            return Sujet(id: noeud.id, nom: nomNoeud(noeud.id, maillage: affiche) ?? LibellesNoeuds.inconnu(noeud))
         }
         var s = SujetsMaillage()
         for r in m.routeurs {
@@ -435,7 +435,7 @@ final class Surveillance {
         if let a = appareil(id) { return nom(a) }
         guard let n = m?.noeud(id) else { return nil }
         let noms = Dictionary((instantane?.routeurs ?? []).map { ($0.instance, nom($0)) }, uniquingKeysWith: { a, _ in a })
-        return GrapheCanvas.libelleInconnu(n, noms: noms)
+        return LibellesNoeuds.inconnu(n, noms: noms)
     }
     func accessoire(_ a: Appareil) -> AccessoireMaison? { noms.accessoire(de: a, fabriqueApple: fabriqueApple) }
 
