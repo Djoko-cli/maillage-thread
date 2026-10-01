@@ -48,6 +48,15 @@ struct MoteurPiecesTests {
         try #require(e.scene.pieces.firstIndex { $0.nom == .maison(nom) })
     }
 
+    /// Attend, 5 s au plus, que `condition` soit vraie (une disposition calculee hors du fil principal).
+    static func attendre(_ condition: () -> Bool) async throws {
+        var n = 0
+        while !condition() && n < 500 {
+            try await Task.sleep(for: .milliseconds(10))
+            n += 1
+        }
+    }
+
     /// Disposition installee, premiere image : un nom par noeud, etage et piece, et « ⌂ Maison ».
     @Test func installerEtDessiner() throws {
         let (m, e) = try Self.moteur()
@@ -229,6 +238,102 @@ struct MoteurPiecesTests {
         m.replacerPieces()
         #expect(m.places.maison(e.domicile).etages.isEmpty)
         #expect(PlacesGardees.lire(url).maison(e.domicile).ordreEtages == ["zone:Étage", "zone:Rez-de-chaussée"])
+    }
+
+    /// « Replacer les pieces automatiquement » pendant un geste, un releve en attente de sa fin : c'est
+    /// ce releve qui est recalcule, puis pose ; il ne se perd pas.
+    @Test(.timeLimit(.minutes(1))) func replacerGardeLeReleveEnAttente() async throws {
+        let (s, r, e) = try NomsSceneTests.demo()
+        let m = Self.moteur(e)
+        s.renommer("56B1E064401F74EF", en: "Pont du bureau, sous la lampe de l'écran")
+        let autre = EntreeScene(surveillance: s, reseau: r, places: m.places)
+        let fond = CGPoint(x: 5, y: Self.taille.height / 2)
+        m.glisser(fond, depart: fond)
+        m.glisser(CGPoint(x: fond.x + 30, y: fond.y), depart: fond)
+        m.recevoir(autre)
+        #expect(m.entree == e, "pendant le geste, le releve attend")
+        m.replacerPieces()
+        m.relacher(CGPoint(x: fond.x + 30, y: fond.y))
+        try await Self.attendre { m.entree == autre }
+        #expect(m.entree == autre, "le releve en attente est pose")
+    }
+
+    /// Glisser annule (sans relachement : la vue quitte la fenetre, ou le geste est interrompu) :
+    /// `abandonnerGeste`, appele quand SwiftUI remet l'etat du geste a zero, le clot. La piece garde
+    /// sa place, le releve en attente s'applique, et plus rien ne retient l'horloge ni les releves.
+    @Test func glisserAnnule() throws {
+        let url = Self.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (m, e) = try Self.moteur(fichier: url)
+        var autre = e
+        autre.apparences["Apple TV 4K"] = DessinNoeud.Apparence(forme: .anneau, couleur: .appareil(.disparu))
+        let cuisine = try Self.indice(e, "Cuisine")
+        let depart = try Self.pointDePiece(m, cuisine)
+        m.glisser(depart, depart: depart)
+        m.glisser(CGPoint(x: depart.x + 30, y: depart.y), depart: depart)
+        let fin = m.positions[cuisine]
+        m.recevoir(autre)
+        #expect(m.occupe && m.entree == e && m.doitContinuer(MoteurPieces.maintenant() + 1))
+        m.abandonnerGeste()
+        #expect(!m.occupe && !m.estIsolee)
+        #expect(m.entree == autre && m.positions[cuisine] == fin, "le releve s'applique, la piece garde sa place")
+        let gardee = PlacesGardees.lire(url).maison(e.domicile).etages["zone:Rez-de-chaussée"]?["piece:Cuisine"]
+        #expect(gardee == PlacesGardees.Place(x: fin.x, z: fin.y))
+        #expect(!m.doitContinuer(MoteurPieces.maintenant() + 1), "l'horloge peut s'arreter")
+        m.recevoir(e)
+        #expect(m.entree == e, "le releve suivant s'applique tout de suite")
+    }
+
+    /// En 3D, un geste reste ouvert arrete la rotation lente ; clos par `abandonnerGeste`, elle reprend.
+    @Test func rotationLenteApresUnGesteAnnule() throws {
+        let (_, _, e) = try NomsSceneTests.demo()
+        let m = MoteurPieces(troisD: true)
+        m.marges = (84, 50)
+        m.poserTaille(Self.taille)
+        m.installerMaintenant(e)
+        Self.dessiner(m)
+        let fond = CGPoint(x: 5, y: Self.taille.height / 2)
+        m.glisser(fond, depart: fond)
+        let azimut = m.orbite.azimut
+        Self.dessiner(m)
+        Self.dessiner(m)
+        #expect(m.orbite.azimut == azimut, "geste ouvert : pas de rotation lente")
+        m.abandonnerGeste()
+        Self.dessiner(m)
+        Self.dessiner(m)
+        #expect(m.orbite.azimut < azimut, "la rotation lente reprend")
+    }
+
+    /// `abandonnerGeste` suit aussi un geste fini : SwiftUI remet l'etat du geste a zero quand il se
+    /// termine, avant ou apres `onEnded` (relacher). Dans les deux ordres, un glisser reste un glisser
+    /// et un clic reste un clic.
+    @Test func abandonEtRelachementDansLesDeuxOrdres() throws {
+        let (_, _, e) = try NomsSceneTests.demo()
+        let cuisine = try Self.indice(e, "Cuisine")
+        for abandonDAbord in [false, true] {
+            // Glisser une piece, relachee sur elle-meme : elle garde sa place, rien ne s'isole.
+            let m = Self.moteur(e)
+            let depart = try Self.pointDePiece(m, cuisine)
+            let arrivee = CGPoint(x: depart.x - 30, y: depart.y)
+            #expect(m.projetee?.piece(sous: arrivee) == cuisine)
+            m.glisser(depart, depart: depart)
+            m.glisser(arrivee, depart: depart)
+            if abandonDAbord { m.abandonnerGeste() }
+            m.relacher(arrivee)
+            if !abandonDAbord { m.abandonnerGeste() }
+            #expect(!m.occupe && !m.estIsolee && m.focus == nil && m.selection == nil,
+                    "glisser, abandon d'abord : \(abandonDAbord)")
+            #expect(m.places.maison(e.domicile).etages["zone:Rez-de-chaussée"]?["piece:Cuisine"]
+                    == PlacesGardees.Place(x: m.positions[cuisine].x, z: m.positions[cuisine].y))
+            // Clic sur une piece : elle s'isole.
+            let n = Self.moteur(e)
+            let point = try Self.pointDePiece(n, cuisine)
+            n.glisser(point, depart: point)
+            if abandonDAbord { n.abandonnerGeste() }
+            n.relacher(point)
+            if !abandonDAbord { n.abandonnerGeste() }
+            #expect(n.estIsolee && n.focus == cuisine, "clic, abandon d'abord : \(abandonDAbord)")
+        }
     }
 
     /// Bascule : un envol, ou un fondu si « Reduire les animations » ; une piece isolee est relachee.

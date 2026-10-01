@@ -98,6 +98,10 @@ final class MoteurPieces {
     /// Point de depart du geste en cours : un glisser qui part d'ailleurs en commence un autre.
     @ObservationIgnored private var departGeste = CGPoint.zero
     @ObservationIgnored private var bouge = false
+    /// Le dernier geste, qui avait bouge, a ete clos par `abandonnerGeste` : si son relachement arrive
+    /// encore (SwiftUI peut remettre l'etat du geste a zero avant d'appeler `onEnded`), ce n'est pas un
+    /// clic.
+    @ObservationIgnored private var abandonApresGlisser = false
     @ObservationIgnored private var precedent = CGPoint.zero
     @ObservationIgnored private var derniereActivite = 0.0
     @ObservationIgnored private var instant: Double?
@@ -388,9 +392,11 @@ final class MoteurPieces {
     }
 
     /// « Replacer les pieces automatiquement » : oublie les places gardees de la maison (pas l'ordre
-    /// des etages) et recalcule la disposition ; l'ancienne reste affichee pendant ce temps.
+    /// des etages) et recalcule la disposition de la scene la plus recente (celle qui attend la fin d'un
+    /// mouvement ou d'un geste, sinon celle du calcul en cours, sinon celle affichee) ; l'ancienne reste
+    /// affichee pendant ce temps.
     func replacerPieces() {
-        guard let e = enCalcul ?? entree else { return }
+        guard let e = attente ?? enCalcul ?? entree else { return }
         places.replacer(domicile: e.domicile)
         enregistrer()
         cleCalculee = nil
@@ -706,6 +712,7 @@ final class MoteurPieces {
         if geste != nil, d != departGeste { terminerGeste() }
         if geste == nil {
             bouge = false
+            abandonApresGlisser = false
             precedent = d
             departGeste = d
             if !estIsolee, !enMouvement, let scene, let i = projetee?.piece(sous: d), i < scene.pieces.count,
@@ -749,9 +756,10 @@ final class MoteurPieces {
     /// scene recue pendant le geste s'applique ensuite, avec la place gardee de la piece glissee.
     func relacher(_ p: CGPoint, a instant: Double = MoteurPieces.maintenant()) {
         let g = geste
-        let clic = !bouge
+        let clic = !bouge && !(g == nil && abandonApresGlisser)
         geste = nil
         bouge = false
+        abandonApresGlisser = false
         if case .piece(let id, _)? = g, !clic {
             garder(id)
         } else if clic {
@@ -765,6 +773,17 @@ final class MoteurPieces {
                 cliquer(p)
             }
         }
+        if !occupe, let e = attente { appliquer(e) }
+        reveiller()
+    }
+
+    /// Geste annule : SwiftUI remet l'etat du geste a zero sans appeler `onEnded` (la vue quitte la
+    /// fenetre pendant le geste, ou le geste est interrompu). Il est clos sans clic, la piece glissee
+    /// garde sa place, et la scene en attente s'applique. Apres un relachement, plus de geste : rien.
+    func abandonnerGeste() {
+        guard geste != nil else { return }
+        abandonApresGlisser = bouge
+        terminerGeste()
         if !occupe, let e = attente { appliquer(e) }
         reveiller()
     }

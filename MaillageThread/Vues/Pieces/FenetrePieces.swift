@@ -158,6 +158,9 @@ struct VuePieces: View {
     let palette: Palette
     let marges: (haut: CGFloat, bas: CGFloat)
     @Environment(\.displayScale) private var echelle
+    /// Un glisser est en cours. SwiftUI le remet a faux a la fin du geste, meme annule (sans `onEnded`) :
+    /// le moteur clot alors un geste qui serait reste ouvert.
+    @GestureState private var glisse = false
 
     /// Espace de coordonnees de la vue et de ce qui est pose dessus.
     nonisolated static let espace = "pieces"
@@ -178,6 +181,7 @@ struct VuePieces: View {
             }
         }
         .gesture(DragGesture(minimumDistance: 0)
+            .updating($glisse) { _, g, _ in g = true }
             .onChanged { moteur.glisser($0.location, depart: $0.startLocation) }
             .onEnded { moteur.relacher($0.location) })
         .simultaneousGesture(MagnifyGesture()
@@ -185,9 +189,16 @@ struct VuePieces: View {
             .onEnded { _ in moteur.finPincement() })
         .contextMenu { MenuPieces(moteur: moteur) }
         .background(SondeFenetre { moteur.fenetre = $0 })
+        .onChange(of: glisse) { _, g in
+            if !g { moteur.abandonnerGeste() }
+        }
         .onChange(of: entree, initial: true) { _, e in moteur.recevoir(e) }
         .onAppear { moteur.ecouter() }
-        .onDisappear { moteur.arreterEcoute() }
+        .onDisappear {
+            moteur.arreterEcoute()
+            // La vue quitte la fenetre pendant un geste : ni `onEnded`, ni peut-etre le changement ci-dessus.
+            moteur.abandonnerGeste()
+        }
     }
 }
 
