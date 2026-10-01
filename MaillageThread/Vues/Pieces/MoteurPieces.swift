@@ -54,7 +54,7 @@ final class MoteurPieces {
     @ObservationIgnored private let fichierPlaces: URL?
     /// Scene affichee, posee sur sa disposition.
     @ObservationIgnored private(set) var entree: EntreeScene?
-    /// Scene recue pendant un mouvement : appliquee a sa fin.
+    /// Scene recue pendant un mouvement ou un glisser : appliquee a sa fin.
     @ObservationIgnored private var attente: EntreeScene?
     /// Scene dont la disposition se calcule : `entree` reste affichee jusqu'a la fin du calcul.
     @ObservationIgnored private var enCalcul: EntreeScene?
@@ -95,6 +95,8 @@ final class MoteurPieces {
     @ObservationIgnored private var dernierPincement = 1.0
     @ObservationIgnored private var rotationEnAttente = SIMD2<Double>.zero
     @ObservationIgnored private var geste: Geste?
+    /// Point de depart du geste en cours : un glisser qui part d'ailleurs en commence un autre.
+    @ObservationIgnored private var departGeste = CGPoint.zero
     @ObservationIgnored private var bouge = false
     @ObservationIgnored private var precedent = CGPoint.zero
     @ObservationIgnored private var derniereActivite = 0.0
@@ -128,8 +130,9 @@ final class MoteurPieces {
 
     private enum Geste {
         case fond
-        /// Une piece qu'on glisse, sur le plan horizontal y = `hauteur`.
-        case piece(Int, hauteur: Double)
+        /// Une piece qu'on glisse (son identifiant, jamais un indice qui perimerait), sur le plan
+        /// horizontal y = `hauteur`.
+        case piece(String, hauteur: Double)
     }
 
     /// Fondu de 0,3 s par le fond (« Reduire les animations ») : la scene s'efface, la camera saute a
@@ -160,14 +163,16 @@ final class MoteurPieces {
     /// Une piece est isolee (et non en train d'etre quittee).
     var estIsolee: Bool { focus != nil && sCible == 1 }
     var enMouvement: Bool { envol != nil || fondu != nil || vol != nil }
+    /// Un mouvement, ou un glisser en cours (spec, sections 5 et 7) : une scene recue attend sa fin.
+    var occupe: Bool { enMouvement || geste != nil }
 
     // MARK: Scene et disposition
 
-    /// Nouvelle scene : appliquee tout de suite, ou a la fin du mouvement en cours (envol, vol). Si
-    /// ses etages, ses pieces, ses noeuds ou leurs noms changent, la disposition est recalculee hors
-    /// du fil principal ; l'ancienne reste affichee pendant ce temps.
+    /// Nouvelle scene : appliquee tout de suite, ou a la fin du mouvement en cours (envol, vol, fondu)
+    /// ou du glisser. Si ses etages, ses pieces, ses noeuds ou leurs noms changent, la disposition est
+    /// recalculee hors du fil principal ; l'ancienne reste affichee pendant ce temps.
     func recevoir(_ e: EntreeScene) {
-        if enMouvement {
+        if occupe {
             attente = e
             return
         }
@@ -222,7 +227,8 @@ final class MoteurPieces {
     }
 
     /// Une disposition calculee : gardee par cles (piece, etage), puis posee avec sa scene, si une
-    /// scene plus recente ne l'a pas depassee ; a la fin du mouvement en cours, s'il y en a un.
+    /// scene plus recente ne l'a pas depassee ; a la fin du mouvement ou du glisser en cours, s'il y en
+    /// a un.
     private func retenir(_ d: DispositionPieces, cartes: [CartesPieces.Carte], cle: [String: [String: [String]]]) {
         guard let e = enCalcul, e.cleDisposition == cle else { return }
         let scene = e.scene
@@ -231,7 +237,7 @@ final class MoteurPieces {
         cartesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { (scene.pieces[$0].id, cartes[$0]) })
         cleCalculee = cle
         enCalcul = nil
-        if enMouvement {
+        if occupe {
             if attente == nil { attente = e }
             return
         }
@@ -344,8 +350,8 @@ final class MoteurPieces {
     }
 
     /// Garde la place d'une piece qu'on vient de glisser : elle est desormais fixee.
-    private func garder(_ i: Int) {
-        guard let e = entree, i < e.scene.pieces.count else { return }
+    private func garder(_ id: String) {
+        guard let e = entree, let i = e.scene.pieces.firstIndex(where: { $0.id == id }), i < positions.count else { return }
         let p = e.scene.pieces[i]
         places.garder(positions[i], piece: p.id, etage: e.scene.etages[p.etage].id, domicile: e.domicile)
         placesCalculees[p.id] = positions[i]
@@ -597,7 +603,7 @@ final class MoteurPieces {
         } else if envol == nil && fondu == nil {
             controles()
         }
-        if !enMouvement, let e = attente { appliquer(e) }
+        if !occupe, let e = attente { appliquer(e) }
     }
 
     /// Rotation lente, rotation amortie, zoom amorti.
@@ -625,7 +631,8 @@ final class MoteurPieces {
     // MARK: Horloge
 
     func doitContinuer(_ now: Double) -> Bool {
-        if enMouvement || s != sCible || attente != nil { return true }
+        // Une scene qui attend la fin d'un glisser s'applique au relachement : pas d'image pour elle.
+        if enMouvement || s != sCible || (attente != nil && geste == nil) { return true }
         if fk.contains(where: { $0 != 0 && $0 != 1 }) { return true }
         if troisD && t == 1 && rotation && !reduire && focus == nil { return true }
         if zoomEnAttente != 0 || rotationEnAttente != .zero || (geste != nil && bouge) { return true }
@@ -683,11 +690,15 @@ final class MoteurPieces {
     }
 
     func glisser(_ p: CGPoint, depart d: CGPoint) {
+        // Un geste reste d'un glisser annule (sans relachement), et celui-ci part d'ailleurs : il est clos.
+        if geste != nil, d != departGeste { terminerGeste() }
         if geste == nil {
             bouge = false
             precedent = d
-            if !estIsolee, !enMouvement, let i = projetee?.piece(sous: d), let c = centrePiece(i) {
-                geste = .piece(i, hauteur: c.y)
+            departGeste = d
+            if !estIsolee, !enMouvement, let scene, let i = projetee?.piece(sous: d), i < scene.pieces.count,
+               let c = centrePiece(i) {
+                geste = .piece(scene.pieces[i].id, hauteur: c.y)
             } else {
                 geste = .fond
             }
@@ -698,8 +709,10 @@ final class MoteurPieces {
         guard !enMouvement, let geste else { return }
         let proj = ProjectionScene(orbite, cadre: cadre)
         switch geste {
-        case .piece(let i, let h):
-            guard let scene, let a = proj.sol(precedent, hauteur: h), let b = proj.sol(p, hauteur: h) else { return }
+        case .piece(let id, let h):
+            guard let scene, let i = scene.pieces.firstIndex(where: { $0.id == id }), i < positions.count,
+                  i < cartes.count, scene.pieces[i].etage < geometrie.rayons.count,
+                  let a = proj.sol(precedent, hauteur: h), let b = proj.sol(p, hauteur: h) else { return }
             var pos = positions[i] + SIMD2(b.x - a.x, b.z - a.z)
             let r = max(0, geometrie.rayons[scene.pieces[i].etage] - 0.5 * hypot(cartes[i].largeur, cartes[i].profondeur))
             if simd_length(pos) > r { pos = simd_length(pos) > 0 ? simd_normalize(pos) * r : .zero }
@@ -720,14 +733,15 @@ final class MoteurPieces {
     }
 
     /// Fin d'un glisser, ou clic. Deux clics sur le fond, a moins de l'intervalle du double-clic de
-    /// macOS et de 5 points : le second est un double-clic ; le premier a agi comme un clic simple.
+    /// macOS et de 5 points : le second est un double-clic ; le premier a agi comme un clic simple. Une
+    /// scene recue pendant le geste s'applique ensuite, avec la place gardee de la piece glissee.
     func relacher(_ p: CGPoint, a instant: Double = MoteurPieces.maintenant()) {
         let g = geste
         let clic = !bouge
         geste = nil
         bouge = false
-        if case .piece(let i, _)? = g, !clic {
-            garder(i)
+        if case .piece(let id, _)? = g, !clic {
+            garder(id)
         } else if clic {
             let fond = noeudSous(p) == nil && projetee?.piece(sous: p) == nil
             if fond, let c = clicFond, instant - c.instant <= NSEvent.doubleClickInterval,
@@ -739,7 +753,17 @@ final class MoteurPieces {
                 cliquer(p)
             }
         }
+        if !occupe, let e = attente { appliquer(e) }
         reveiller()
+    }
+
+    /// Clot un geste reste ouvert (glisser annule, sans relachement) : la piece glissee garde sa place,
+    /// sans clic. La scene en attente s'applique a la fin du geste suivant (sinon les indices de la
+    /// projection, qui a servi a le commencer, periment).
+    private func terminerGeste() {
+        if case .piece(let id, _)? = geste, bouge { garder(id) }
+        geste = nil
+        bouge = false
     }
 
     /// Clic sans glisser : un appareil ouvre sa fiche ; une piece s'isole (en piece isolee, une autre

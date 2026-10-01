@@ -43,8 +43,7 @@ struct MoteurPiecesTests {
         try #require(e.scene.pieces.firstIndex { $0.nom == .maison(nom) })
     }
 
-    /// Disposition installee, premiere image : un nom par noeud, etage et piece, et « ⌂ Maison » ;
-    /// la ligne de niveau suit le zoom.
+    /// Disposition installee, premiere image : un nom par noeud, etage et piece, et « ⌂ Maison ».
     @Test func installerEtDessiner() throws {
         let (m, e) = try Self.moteur()
         #expect(m.pret)
@@ -52,9 +51,41 @@ struct MoteurPiecesTests {
         #expect(m.etiquettes.count == e.scene.noeuds.count + e.scene.etages.count + e.scene.pieces.count + 1)
         #expect(m.projetee?.blocs.count == e.scene.pieces.count)
         #expect(m.etiquettes.contains { $0.vu })
+    }
+
+    /// La ligne de niveau suit le zoom (precision 7 du plan 4b) : sous k = 0,42, les pieces seules ;
+    /// jusqu'a 0,6, les pieces et les routeurs ; au-dela, les noms masques ou tous lisibles. Une piece
+    /// isolee la remplace.
+    @Test func ligneDeNiveauSelonLeZoom() throws {
+        let (m, e) = try Self.moteur()
         m.fige = true
+        func texte(_ k: Double) throws -> String {
+            m.poserZoom(echelle: k, vers: nil)
+            Self.dessiner(m)
+            let p = try #require(m.projetee)
+            #expect(abs(p.echelle - k) < 1e-6)
+            return LigneNiveauVue.texte(m.ligneNiveau)
+        }
+        #expect(try texte(0.3) == String(localized: "Vue d'ensemble : les pièces"))
+        #expect(try texte(0.4) == String(localized: "Vue d'ensemble : les pièces"))
+        #expect(try texte(0.45) == String(localized: "Mi-distance : les pièces et les routeurs"))
+        #expect(try texte(0.55) == String(localized: "Mi-distance : les pièces et les routeurs"))
+        let loin = try texte(1)
+        switch m.ligneNiveau {
+        case .lisibles:
+            #expect(loin == String(localized: "Tous les noms sont lisibles"))
+        case .masques(1):
+            #expect(loin == String(localized: "1 nom masqué faute de place : rapprochez-vous (molette)"))
+        case .masques(let n):
+            #expect(n > 1)
+            #expect(loin == String(localized: "\(n) noms masqués faute de place : rapprochez-vous (molette)"))
+        default:
+            Issue.record("au-dela de 0,6 : les noms masques ou tous lisibles, pas \(m.ligneNiveau)")
+        }
+        m.poserIsolement(try Self.indice(e, "Salon"))
         Self.dessiner(m)
-        #expect(m.ligneNiveau != .isolee(""))
+        let isolee = String(localized: "Pièce isolée : \("Salon") · clic sur une autre pièce pour y aller, clic à côté ou Échap pour revenir")
+        #expect(LigneNiveauVue.texte(m.ligneNiveau) == isolee)
     }
 
     /// Clic sur une piece : elle s'isole (le fil la nomme) ; sur un appareil : sa fiche ; a cote : la
@@ -92,6 +123,88 @@ struct MoteurPiecesTests {
         #expect(!m.estIsolee, "un glisser n'isole pas")
         let gardee = PlacesGardees.lire(url).maison(e.domicile).etages["zone:Rez-de-chaussée"]?["piece:Cuisine"]
         #expect(gardee == PlacesGardees.Place(x: apres.x, z: apres.y))
+    }
+
+    /// Un releve recu pendant le glisser d'une piece (meme structure, un etat change) attend le
+    /// relachement : la piece ne saute pas a son ancienne place, et la place gardee est celle du geste ;
+    /// la scene s'applique ensuite, avec cette place.
+    @Test func relevePendantUnGlisser() throws {
+        let url = Self.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (m, e) = try Self.moteur(fichier: url)
+        var autre = e
+        autre.apparences["Apple TV 4K"] = DessinNoeud.Apparence(forme: .anneau, couleur: .appareil(.disparu))
+        #expect(autre != e && autre.cleDisposition == e.cleDisposition)
+        let cuisine = try Self.indice(e, "Cuisine")
+        let avant = m.positions[cuisine]
+        let depart = try Self.pointDePiece(m, cuisine)
+        m.glisser(depart, depart: depart)
+        m.glisser(CGPoint(x: depart.x + 30, y: depart.y), depart: depart)
+        let pendant = m.positions[cuisine]
+        #expect(pendant != avant)
+        m.recevoir(autre)
+        #expect(m.entree == e, "pendant le glisser, la scene attend")
+        #expect(m.positions[cuisine] == pendant, "la piece ne revient pas a sa place d'avant le geste")
+        m.glisser(CGPoint(x: depart.x + 60, y: depart.y), depart: depart)
+        let fin = m.positions[cuisine]
+        #expect(fin.x > pendant.x)
+        m.relacher(CGPoint(x: depart.x + 60, y: depart.y))
+        let gardee = PlacesGardees.lire(url).maison(e.domicile).etages["zone:Rez-de-chaussée"]?["piece:Cuisine"]
+        #expect(gardee == PlacesGardees.Place(x: fin.x, z: fin.y), "la place gardee est celle du geste")
+        #expect(m.entree == autre, "au relachement, la scene en attente s'applique")
+        #expect(m.positions[cuisine] == fin, "avec la place du geste")
+        // Glisser annule (sans relachement) : le geste suivant, parti d'ailleurs, le clot ; la piece garde
+        // sa place, et la scene en attente s'applique a la fin de ce geste.
+        let (n, _) = try Self.moteur()
+        n.glisser(depart, depart: depart)
+        n.glisser(CGPoint(x: depart.x + 30, y: depart.y), depart: depart)
+        let annule = n.positions[cuisine]
+        n.recevoir(autre)
+        let fond = CGPoint(x: 5, y: Self.taille.height / 2)
+        n.glisser(fond, depart: fond)
+        #expect(n.entree == e && n.places.maison(e.domicile).etages["zone:Rez-de-chaussée"]?["piece:Cuisine"]
+                == PlacesGardees.Place(x: annule.x, z: annule.y))
+        n.relacher(fond)
+        #expect(n.entree == autre && n.positions[cuisine] == annule)
+    }
+
+    /// Un releve qui change la structure (une piece de moins) pendant le glisser d'une piece : ni
+    /// indice perime ni plantage, que sa disposition finisse pendant le geste ou soit lancee apres ; la
+    /// scene s'applique au relachement, la piece glissee a la place du geste.
+    @Test(.timeLimit(.minutes(1))) func releveQuiChangeLaStructurePendantUnGlisser() async throws {
+        let (s, r, _) = try NomsSceneTests.demo()
+        var maison = try #require(s.noms.maison)
+        for k in maison.accessoires.indices where maison.accessoires[k].piece == "Chambre d'amis" {
+            maison.accessoires[k].piece = "Chambre"
+        }
+        s.noms.maison = maison
+        let autre = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        // Disposition finie pendant le geste (`installerMaintenant` : comme un calcul qui se termine).
+        let (m, e) = try Self.moteur()
+        #expect(autre.scene.pieces.count == e.scene.pieces.count - 1)
+        let sdb = try Self.indice(e, "Salle de bain")
+        #expect(sdb >= autre.scene.pieces.count, "son indice n'existe plus dans la nouvelle scene")
+        let depart = try Self.pointDePiece(m, sdb)
+        m.glisser(depart, depart: depart)
+        m.glisser(CGPoint(x: depart.x + 20, y: depart.y), depart: depart)
+        m.installerMaintenant(autre)
+        #expect(m.entree == e, "pendant le glisser, la scene attend")
+        m.glisser(CGPoint(x: depart.x + 40, y: depart.y), depart: depart)
+        let fin = m.positions[sdb]
+        m.relacher(CGPoint(x: depart.x + 40, y: depart.y))
+        #expect(m.entree == autre && m.positions.count == autre.scene.pieces.count)
+        #expect(m.positions[try Self.indice(autre, "Salle de bain")] == fin)
+        // Releve recu pendant le geste : sa disposition, lancee au relachement, garde la place du geste.
+        let (n, _) = try Self.moteur()
+        let depart2 = try Self.pointDePiece(n, sdb)
+        n.glisser(depart2, depart: depart2)
+        n.glisser(CGPoint(x: depart2.x + 20, y: depart2.y), depart: depart2)
+        n.recevoir(autre)
+        n.glisser(CGPoint(x: depart2.x + 40, y: depart2.y), depart: depart2)
+        let fin2 = n.positions[sdb]
+        n.relacher(CGPoint(x: depart2.x + 40, y: depart2.y))
+        while n.entree != autre { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(n.positions[try Self.indice(autre, "Salle de bain")] == fin2)
     }
 
     /// Clics droits : l'ordre des etages change et se garde ; « Replacer les pieces automatiquement »
