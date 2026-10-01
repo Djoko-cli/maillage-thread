@@ -119,11 +119,22 @@ struct MenuPlacer: View {
         return [Article(texte: premier, piece: nil)] + p.pieces.map { Article(texte: $0, piece: $0) }
     }
 
+    /// Le choix en cours, que le menu coche : nil (le premier article) quand la piece choisie n'est plus
+    /// une piece du menu. Un choix perime ne compte plus, la scene l'ignore ; sans cela, le menu ne
+    /// cocherait aucun article. Il reste dans le fichier.
+    var selection: Binding<String?> {
+        Binding(
+            get: {
+                guard let c = choisies.pieceChoisie(placement.cle, domicile: domicile),
+                      placement.pieces.contains(c) else { return nil }
+                return c
+            },
+            set: { choisies.choisir($0, placement.cle, domicile: domicile) })
+    }
+
     var body: some View {
         Menu("Placer dans une pièce…") {
-            Picker("Placer dans une pièce…", selection: Binding(
-                get: { choisies.pieceChoisie(placement.cle, domicile: domicile) },
-                set: { choisies.choisir($0, placement.cle, domicile: domicile) })) {
+            Picker("Placer dans une pièce…", selection: selection) {
                 ForEach(Self.articles(placement), id: \.piece) { Text(verbatim: $0.texte).tag($0.piece) }
             }
             .pickerStyle(.inline)

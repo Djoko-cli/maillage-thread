@@ -184,6 +184,39 @@ struct PiecesAppareilsTests {
         #expect(avant.version <= 1 && avant.maisons == routeurs)
     }
 
+    /// Un `appareils` mal forme (champ facultatif que l'app n'ecrit jamais ainsi : fichier edite a la
+    /// main ou abime) ne fait pas perdre les choix des routeurs : le champ seul est ignore, et le
+    /// prochain choix reecrit un fichier sain. `null` vaut un champ absent (deja le cas avant).
+    @Test(arguments: [#"["x"]"#, #""texte""#, #"{"Maison inventée": ["x"]}"#,
+                      #"{"Maison inventée": {"DEADBEEF00000001": 5}}"#, "null"])
+    func appareilsMalForme(champ: String) throws {
+        let url = PiecesRouteursTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let json = """
+            {
+              "appareils" : \(champ),
+              "maisons" : {
+                "Maison inventée" : {
+                  "Apple TV" : "Salon",
+                  "HomePod Palier" : "Bureau"
+                }
+              },
+              "version" : 1
+            }
+            """
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(json.utf8).write(to: url)
+        let routeurs = [Self.domicile: ["Apple TV": "Salon", "HomePod Palier": "Bureau"]]
+        var p = PiecesRouteurs.lire(url)
+        #expect(p.maisons == routeurs && p.version == 1, "les choix des routeurs restent")
+        #expect(p.appareils.isEmpty, "le champ mal forme est ignore")
+        p.choisir("Salon", appareil: "DEADBEEF00000001", domicile: Self.domicile)
+        try p.ecrire(dans: url)
+        let relu = PiecesRouteurs.lire(url)
+        #expect(relu == p && relu.maisons == routeurs, "le fichier reecrit est sain")
+        #expect(relu.choix(appareil: "DEADBEEF00000001", domicile: Self.domicile) == "Salon")
+    }
+
     /// « Sans piece » (nil) efface le choix d'un appareil ; la cle est l'ExtMac en majuscules ; les
     /// choix des routeurs restent.
     @Test func sansPieceEffaceLeChoix() throws {

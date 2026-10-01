@@ -94,8 +94,8 @@ Décisions de Djoko pendant la conception, dans l'ordre :
   - **pour qui** : tout nœud sans pièce de Maison, dans une maison qui a des pièces, dont l'ExtMac est connue, par la sonde ou par son nom d'hôte Matter. Ce sont les appareils que la sonde seule connaît, les appareils annoncés que Maison ne reconnaît pas, et les routeurs Thread qui ne sont pas des routeurs de bordure. Les routeurs de bordure gardent les règles ci-dessus : celui que la sonde seule connaît, sans annonce reconnue, n'a pas de choix (précision 25). Un nœud sans ExtMac connue n'en a pas non plus ;
   - **le menu** : « Sans pièce » d'abord, qui efface le choix, puis les pièces de la maison, triées comme pour les routeurs ; le choix en cours est coché ;
   - **la priorité** : la pièce de Maison, puis le choix, puis « Sans pièce » ; il n'y a pas de règle du nom. Quand l'annonce revient et que Maison donne une pièce, Maison l'emporte, et le choix reste dans le fichier, sans effet. Une pièce choisie qui n'est plus dans Maison ne compte plus ;
-  - **la clé** : l'ExtMac, par maison (section 2.4). Elle ne change ni avec le parent, ni avec le RLOC16, ni au redémarrage, ni quand l'appareil passe de « connu de la sonde seule » à « annoncé ».
-- **Nœud sans pièce :** un appareil que Maison ne connaît pas et qu'aucun choix ne place, ou un routeur connu seulement par son RLOC16. Il va dans une carte « **Sans pièce** », sur le plateau du bas.
+  - **la clé** : l'ExtMac, par maison (section 2.4). Elle ne change ni avec le parent, ni avec le RLOC16, ni au redémarrage, ni quand l'appareil passe de « connu de la sonde seule » à « annoncé ». Le choix ne s'applique que tant que l'ExtMac du nœud est connue : après un changement de parent (nouveau RLOC16), ou au lancement de l'app, un appareil endormi sous un routeur qui répond reste « Sans pièce » jusqu'à ce que la sonde lise son ExtMac : dans la même tournée s'il répond dans les 8 s, sinon jusqu'à 30 minutes plus tard. Le choix reste dans le fichier.
+- **Nœud sans pièce :** un appareil que Maison ne connaît pas et qu'aucun choix ne place, ou un routeur connu seulement par son RLOC16 et qu'aucun choix ne place. Il va dans une carte « **Sans pièce** », sur le plateau du bas.
 - **Liens :** les mêmes que le graphe actuel.
   - liens radio entre routeurs : couleur de qualité, 2 pt ;
   - rattachements enfant → parent : trait fin ;
@@ -428,6 +428,11 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
   - seuils du zoom sémantique.
 - **`PlacesGardees` :** aller-retour sur disque, une pièce renommée, l'ordre des étages.
 - **Pièce des routeurs** (section 2.3) : mots entiers, casse et accents ignorés, le nom de pièce le plus long, l'égalité, le choix avant le nom, un choix dont la pièce a disparu, aller-retour sur disque.
+- **Pièce des autres nœuds** (section 2.3, précision 27) :
+  - la clé ExtMac : un choix place l'appareil que la sonde seule connaît, et le routeur Thread qui n'est pas de bordure, mais pas un routeur de bordure ; le même appareil garde son choix sous un autre RLOC16, ou quand son annonce revient ;
+  - la priorité de Maison : sa pièce passe avant le choix, qui reste dans le fichier ;
+  - pas de choix ni de menu sans ExtMac ; « Sans pièce » efface le choix ;
+  - le fichier : un ancien fichier (les routeurs seuls) relu sans perte, puis réécrit sans perdre les routeurs ; un champ `appareils` mal formé, qui ne fait pas perdre les choix des routeurs.
 - **Temps de calcul**, sur une grande maison inventée (20 pièces, 100 appareils) :
   - la disposition tient **sous 1 s**, en Release ;
   - le placement de 150 noms tient sous 2 ms, en Release, dans une fenêtre ordinaire : c'est le cas que mesure son premier test ;
@@ -439,6 +444,7 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
   - un bon jeton : le relevé est retenu et écrit ;
   - un mauvais jeton, une longueur fausse, un JSON illisible, ou un délai dépassé : le dernier relevé valide est gardé ;
   - une seule écoute à la fois.
+- **Menu « Placer dans une pièce… »** (précision 27) : proposé pour un nœud sans pièce de Maison dont l'ExtMac est connue, pas pour un nœud sans ExtMac ni pour un appareil que Maison place ; « Sans pièce » d'abord pour un appareil, « D'après son nom » pour un routeur de bordure ; un choix dont la pièce a disparu ne coche que ce premier article ; un nœud placé passe dans sa pièce dans la scène.
 - **Rendu de démo :** PNG en 2D, pendant l'envol, en 3D, en pièce isolée, et au survol, produits par un argument de lancement comme les captures actuelles. Ce sont des images de relecture, sans comparaison au pixel.
 - **Catalogue :** nouveaux textes en français et en anglais, avec `CataloguesTests`.
 

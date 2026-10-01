@@ -186,6 +186,30 @@ struct FenetrePiecesTests {
         #expect(PiecesChoisies(fichier: url).choix.choix(routeur: "HomePod Palier", domicile: domicile) == "Salon")
     }
 
+    /// Un choix perime (sa piece n'est plus dans Maison) ne compte plus : la scene l'ignore, et la
+    /// selection du menu rend nil, le premier article (« Sans piece » pour un appareil, « D'apres son
+    /// nom » pour un routeur), au lieu d'une piece que le menu n'a pas et qui ne cocherait rien. Le
+    /// choix reste dans le fichier : il compte de nouveau si la piece revient.
+    @Test func choixPerimeNonCoche() throws {
+        let (s, _) = try NomsSceneTests.demoAvecInconnus()
+        let domicile = "Maison (démo)"
+        let choisies = PiecesChoisies(fichier: nil)
+        for id in ["rloc:041F", "HomePod Palier"] {
+            let placement = try #require(PiecesChoisies.placement(id, dans: s), "\(id)")
+            let menu = MenuPlacer(placement: placement, domicile: domicile, choisies: choisies)
+            #expect(menu.selection.wrappedValue == nil, "\(id) : aucun choix")
+            menu.selection.wrappedValue = "Cuisine"
+            #expect(choisies.pieceChoisie(placement.cle, domicile: domicile) == "Cuisine", "\(id) : le choix est garde")
+            #expect(menu.selection.wrappedValue == "Cuisine", "\(id) : une piece du menu est cochee")
+            // Cuisine n'est plus dans Maison.
+            let sansCuisine = PiecesChoisies.Placement(cle: placement.cle, pieces: placement.pieces.filter { $0 != "Cuisine" })
+            let perime = MenuPlacer(placement: sansCuisine, domicile: domicile, choisies: choisies)
+            #expect(perime.selection.wrappedValue == nil, "\(id) : choix perime")
+            #expect(choisies.pieceChoisie(placement.cle, domicile: domicile) == "Cuisine", "\(id) : le choix reste")
+            #expect(menu.selection.wrappedValue == "Cuisine", "\(id) : la piece revient, le choix compte de nouveau")
+        }
+    }
+
     /// Places des pieces : a cote des identites des routeurs, ni en demo ni sous les tests.
     @Test func fichierDesPlaces() {
         #expect(FenetrePieces.fichierPlaces(demo: true, sousTests: false) == nil)

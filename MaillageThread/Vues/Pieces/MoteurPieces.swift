@@ -797,8 +797,9 @@ final class MoteurPieces {
     }
 
     /// Clot un geste reste ouvert (glisser annule, sans relachement) : la piece glissee garde sa place,
-    /// sans clic. La scene en attente s'applique a la fin du geste suivant (sinon les indices de la
-    /// projection, qui a servi a le commencer, periment).
+    /// sans clic. Depuis `glisser`, la scene en attente s'applique a la fin du geste suivant (sinon les
+    /// indices de la projection, qui a servi a le commencer, periment) ; depuis `abandonnerGeste`, elle
+    /// s'applique tout de suite apres, sauf pendant un mouvement.
     private func terminerGeste() {
         if case .piece(let id, _)? = geste, bouge { garder(id) }
         geste = nil
