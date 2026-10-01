@@ -765,12 +765,22 @@ final class MoteurPieces {
         if cible != cibleMenu { cibleMenu = cible }
     }
 
-    /// Clic droit : un nom d'etage, ou le fond (ni piece, ni noeud).
+    /// Piece sous un point : son nom (le nom et le compte de ses appareils), sinon sa boite, la plus proche
+    /// (verification du 02/10 : en 3D, les boites sont petites, et l'on clique volontiers sur le nom). Le nom,
+    /// dessine par-dessus les boites, l'emporte sur celle d'une autre piece qu'il recouvre.
+    func pieceSous(_ p: CGPoint) -> Int? {
+        for l in etiquettes where l.vu && l.rect.contains(p) {
+            if case .piece(let i) = l.genre { return i }
+        }
+        return projetee?.piece(sous: p)
+    }
+
+    /// Clic droit : un nom d'etage, ou le fond (ni piece, ni son nom, ni noeud).
     func cible(en p: CGPoint) -> CibleMenu {
         for l in etiquettes where l.vu && l.rect.insetBy(dx: -2, dy: -2).contains(p) {
             if case .etage(let i) = l.genre { return .etage(i) }
         }
-        if noeudSous(p) == nil && projetee?.piece(sous: p) == nil { return .fond }
+        if noeudSous(p) == nil && pieceSous(p) == nil { return .fond }
         return .aucune
     }
 
@@ -830,7 +840,7 @@ final class MoteurPieces {
         if case .piece(let id, _)? = g, !clic {
             garder(id)
         } else if clic {
-            let fond = noeudSous(p) == nil && projetee?.piece(sous: p) == nil
+            let fond = noeudSous(p) == nil && pieceSous(p) == nil
             if fond, let c = clicFond, instant - c.instant <= NSEvent.doubleClickInterval,
                hypot(p.x - c.point.x, p.y - c.point.y) <= 5 {
                 clicFond = nil
@@ -865,8 +875,8 @@ final class MoteurPieces {
         bouge = false
     }
 
-    /// Clic sans glisser : un appareil ouvre sa fiche ; une piece s'isole (en piece isolee, une autre
-    /// piece y mene, meme pendant le vol) ; a cote des pieces, la fiche se ferme et la vue revient a la
+    /// Clic sans glisser : un appareil ou son nom ouvre sa fiche ; une piece ou son nom l'isole (en piece isolee,
+    /// une autre piece y mene, meme pendant le vol) ; a cote des pieces, la fiche se ferme et la vue revient a la
     /// maison. Rien pendant l'envol.
     func cliquer(_ p: CGPoint) {
         guard envol == nil, fondu == nil else { return }
@@ -874,7 +884,7 @@ final class MoteurPieces {
             selection = n
             return
         }
-        let i = projetee?.piece(sous: p)
+        let i = pieceSous(p)
         if focus != nil {
             if let i {
                 if i != focus || sCible == 0 { isoler(i) }

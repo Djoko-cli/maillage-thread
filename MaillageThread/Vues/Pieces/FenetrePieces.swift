@@ -209,6 +209,9 @@ struct VuePieces: View {
             .onChanged { moteur.pincer($0.magnification, en: $0.startLocation) }
             .onEnded { _ in moteur.finPincement() })
         .contextMenu { MenuPieces(moteur: moteur) }
+        // Le premier clic agit aussi dans une fenetre inactive (verification du 02/10) : il active la fenetre et
+        // isole la piece, ouvre la fiche ou commence un glisser ; sinon AppKit le garde pour activer la fenetre.
+        .allowsWindowActivationEvents(true)
         .background(SondeFenetre { moteur.fenetre = $0 })
         .onChange(of: glisse) { _, g in
             if !g { moteur.abandonnerGeste() }

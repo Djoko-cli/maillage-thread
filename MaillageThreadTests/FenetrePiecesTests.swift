@@ -32,6 +32,76 @@ struct FenetrePiecesTests {
         s.reseau.map { EntreeScene(surveillance: s, reseau: $0, places: PlacesGardees()) }
     }
 
+    /// La vraie fenetre de la vue par pieces, hors ecran, de `taille` pt, sur la surveillance `s`, avec les
+    /// preferences `p` (jamais celles de l'app) et « Reduire les animations » impose ; et son moteur (l'etat
+    /// `moteur` de la vue). A retirer par `fermer`.
+    static func fenetre(_ s: Surveillance, taille: CGSize, preferences p: UserDefaults,
+                        reduire: Bool = false) throws -> (NSWindow, MoteurPieces) {
+        let vue = FenetrePieces(fichierPlaces: nil)
+        let etat = try #require(Mirror(reflecting: vue).children.first { $0.label == "_moteur" }?.value)
+        let moteur = try #require(Mirror(reflecting: etat).descendant("_value") as? MoteurPieces)
+        let fenetre = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: taille.width, height: taille.height),
+                               styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered,
+                               defer: false)
+        fenetre.isReleasedWhenClosed = false
+        fenetre.contentView = NSHostingView(rootView: vue
+            .environment(s)
+            .environment(NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit))
+            .environment(SondeMaillage(preferences: p, actif: false))
+            .environment(\._accessibilityReduceMotion, reduire)
+            .defaultAppStorage(p))
+        fenetre.setContentSize(taille)
+        fenetre.orderFrontRegardless()
+        return (fenetre, moteur)
+    }
+
+    static func fermer(_ fenetre: NSWindow) {
+        fenetre.orderOut(nil)
+        fenetre.contentView = nil
+    }
+
+    /// Le premier clic sur une piece agit aussi dans une fenetre inactive (verification du 02/10) : sans
+    /// `allowsWindowActivationEvents`, AppKit le gardait pour activer la fenetre, et la piece ne s'isolait pas (le
+    /// diagnostic l'a reproduit : 0 fois sur 4). Un clic envoye a la vraie fenetre, hors ecran et jamais cle, au
+    /// milieu du salon.
+    @Test(.timeLimit(.minutes(1))) func premierClicDansUneFenetreInactive() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p)
+        defer { Self.fermer(fenetre) }
+        // La vue en place : la disposition posee, la legende mesuree, les marges arrivees.
+        try await MoteurPiecesTests.attendre {
+            moteur.pret && moteur.projetee != nil && moteur.cadresInterface["legende"] != nil && !moteur.margesEnRoute
+        }
+        try await Task.sleep(for: .milliseconds(500))
+        let salon = try MoteurPiecesTests.indice(try #require(moteur.entree), "Salon")
+        // Un point du salon ou un clic l'isole : sur sa boite, loin des pastilles, des noms et de l'interface.
+        let ancre = try #require(moteur.projetee?.ancresPieces[salon])
+        let points = stride(from: 0.9, through: 0.1, by: -0.1).flatMap { fy in
+            stride(from: 0.9, through: 0.1, by: -0.1).map { fx in
+                CGPoint(x: ancre.minX + ancre.width * fx, y: ancre.minY + ancre.height * fy)
+            }
+        }
+        let point = try #require(points.first { p in
+            moteur.pieceSous(p) == salon && moteur.noeudSous(p) == nil
+                && !moteur.cadresInterface.values.contains { $0.insetBy(dx: -4, dy: -4).contains(p) }
+        })
+        #expect(moteur.focus == nil && !fenetre.isKeyWindow, "une fenetre inactive, sans piece isolee")
+        let dansFenetre = NSPoint(x: point.x, y: fenetre.frame.height - point.y)
+        for (genre, pression) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, Float(0))] {
+            let evenement = try #require(NSEvent.mouseEvent(with: genre, location: dansFenetre, modifierFlags: [],
+                                                            timestamp: ProcessInfo.processInfo.systemUptime,
+                                                            windowNumber: fenetre.windowNumber, context: nil,
+                                                            eventNumber: 0, clickCount: 1, pressure: pression))
+            fenetre.sendEvent(evenement)
+            try await Task.sleep(for: .milliseconds(60))
+        }
+        try await MoteurPiecesTests.attendre { moteur.focus != nil }
+        #expect(moteur.focus == salon && moteur.estIsolee, "le premier clic isole la piece (focus \(String(describing: moteur.focus)))")
+    }
+
     /// « Ancien » (6 min) et « perime » (15 min) ne dependent que de l'heure, que rien n'observe : la
     /// fenetre est une `TimelineView` qui se redessine chaque minute (`FenetrePieces.horloge`), avec
     /// dedans tout ce qui lit l'heure (le bas de la fenetre et sa pastille d'un releve ancien, la scene,

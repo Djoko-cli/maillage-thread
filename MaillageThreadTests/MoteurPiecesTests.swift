@@ -198,6 +198,60 @@ struct MoteurPiecesTests {
         #expect(m.selection == nil && !m.estIsolee && m.isolee == nil && m.focus == nil)
     }
 
+    /// Un clic sur le nom d'une piece (son nom et le compte de ses appareils) l'isole, comme un clic sur sa carte ou
+    /// sa boite (verification du 02/10) : en 3D, les boites sont petites, et l'on clique volontiers sur le nom, pose a
+    /// cote. Un clic au centre du nom de chaque piece de la demo isole cette piece, en 2D et en 3D ; le nom, dessine
+    /// par-dessus, l'emporte sur la boite d'une autre piece qu'il recouvre. Par le geste entier (appuyer, relacher sans
+    /// bouger), et un double-clic sur le nom n'est pas celui du fond (qui ramenerait a la vue d'ensemble). Un clic droit
+    /// sur le nom n'est pas sur le fond. Un clic sur le nom d'un appareil ouvre toujours sa fiche.
+    @Test(arguments: [false, true]) func clicSurLeNomDUnePiece(troisD: Bool) throws {
+        let (_, _, e) = try NomsSceneTests.demo()
+        func moteur() -> MoteurPieces {
+            let m = MoteurPieces(troisD: troisD)
+            m.marges = (84, 50)
+            m.poserTaille(Self.taille)
+            m.installerMaintenant(e)
+            // La premiere image pose les noms, la seconde les garde a leur place.
+            for _ in 0..<2 { Self.dessiner(m) }
+            return m
+        }
+        let m = moteur()
+        let projetee = try #require(m.projetee)
+        let noms = m.etiquettes.compactMap { l -> (Int, CGPoint)? in
+            guard l.vu, case .piece(let i) = l.genre else { return nil }
+            return (i, CGPoint(x: l.rect.midX, y: l.rect.midY))
+        }
+        let cas = "3D : \(troisD)"
+        #expect(noms.count == e.scene.pieces.count, "\(cas) : chaque piece montre son nom")
+        #expect(noms.allSatisfy { projetee.piece(sous: $0.1) != $0.0 }, "\(cas) : chaque nom est pose hors de sa boite")
+        for (i, c) in noms {
+            #expect(m.noeudSous(c) == nil && m.cible(en: c) != .fond, "\(cas) : le nom de la piece \(i) n'est pas le fond")
+            m.cliquer(c)
+            #expect(m.focus == i && m.estIsolee, "\(cas) : un clic sur le nom de la piece \(i) l'isole (focus \(String(describing: m.focus)))")
+        }
+        // Le geste entier, puis un second clic sur le nom, assez tot pour un double-clic.
+        let n = moteur()
+        let (i, c) = try #require(noms.first)
+        n.glisser(c, depart: c)
+        n.relacher(c, a: 100)
+        #expect(n.focus == i && n.estIsolee, "\(cas) : appuyer et relacher sur le nom")
+        n.glisser(c, depart: c)
+        n.relacher(c, a: 100.1)
+        #expect(n.focus == i && n.estIsolee, "\(cas) : un double-clic sur le nom n'est pas celui du fond")
+        // Le nom d'un appareil, de pres : sa fiche.
+        let a = moteur()
+        a.poserZoom(echelle: 1.6, vers: a.centrePiece(try Self.indice(e, "Salon")))
+        for _ in 0..<2 { Self.dessiner(a) }
+        let appareil = a.etiquettes.compactMap { l -> (String, CGPoint)? in
+            guard l.vu, case .noeud(let id) = l.genre else { return nil }
+            let c = CGPoint(x: l.rect.midX, y: l.rect.midY)
+            return a.projetee?.noeud(sous: c) == nil ? (id, c) : nil
+        }.first
+        let (id, centre) = try #require(appareil, "\(cas) : un nom d'appareil pose, loin des pastilles")
+        a.cliquer(centre)
+        #expect(a.selection == id && a.focus == nil, "\(cas) : le nom d'un appareil ouvre sa fiche")
+    }
+
     /// Retour lance avant la premiere image de l'isolement (isoler puis sortir, sans image entre les
     /// deux) : rien a defaire, la piece est relachee tout de suite, ses reperes « ailleurs » partent, et
     /// les noms des appareils sont de nouveau voulus.
