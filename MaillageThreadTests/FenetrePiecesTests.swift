@@ -438,6 +438,59 @@ struct FenetrePiecesTests {
         #expect(!(sous(500, 200) is BandeFenetre.Vue), "la scene")
     }
 
+    /// La premiere sous-vue de ce type, dans `racine` ou plus bas.
+    static func sousVue<T: NSView>(_ type: T.Type, dans racine: NSView) -> T? {
+        if let trouvee = racine as? T { return trouvee }
+        for sous in racine.subviews {
+            if let trouvee = sousVue(type, dans: sous) { return trouvee }
+        }
+        return nil
+    }
+
+    /// Chaque capsule du haut garde la largeur de son contenu (spec de B, section 1 : « Chaque capsule prend la
+    /// taille de son contenu ») : la bande vide entre elles prend la place qui reste, meme a la taille minimale de
+    /// la fenetre, en 2D comme en 3D (ou « Rotation lente » s'ajoute a la capsule de droite). Sans cela, les deux
+    /// capsules et la bande se partageaient la place, et la capsule du reseau tronquait ses boutons (« Appareil… »,
+    /// « A… »). Tout tient : la bande commence au bord de la capsule de gauche, finit au bord de celle de droite, et
+    /// n'est pas vide.
+    @Test(arguments: [false, true])
+    func capsulesALeurLargeurIdeale(troisD: Bool) throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let sonde = SondeMaillage(preferences: p, actif: false)
+        let noms = NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit)
+        let s = Surveillance(mode: .demo, dossier: nil)
+        s.demarrer()
+        let moteur = MoteurPieces(troisD: troisD)
+        func hote(_ vue: some View) -> NSHostingView<AnyView> {
+            NSHostingView(rootView: AnyView(vue.environment(s).environment(sonde).environment(noms)))
+        }
+        // La largeur de chaque capsule seule : celle de son contenu.
+        let gauche = hote(BarreOutils().capsuleDeVerre()).fittingSize.width
+        let droite = hote(CommandesVue(moteur: moteur, troisD: .constant(troisD)).capsuleDeVerre()).fittingSize.width
+        // Le haut de la fenetre a sa taille minimale, comme `FenetrePieces` le pose.
+        let largeur = FenetrePieces.tailleMinimale.width
+        let fenetre = NSWindow(contentRect: NSRect(x: 0, y: 0, width: largeur, height: 200),
+                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
+                               defer: false)
+        fenetre.isReleasedWhenClosed = false
+        defer { fenetre.contentView = nil }
+        let haut = hote(HautPieces(moteur: moteur, troisD: .constant(troisD))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
+        fenetre.contentView = haut
+        FenetrePieces.sansBarreDeTitre(fenetre)
+        haut.layoutSubtreeIfNeeded()
+        fenetre.layoutIfNeeded()
+        let bande = try #require(Self.sousVue(BandeFenetre.Vue.self, dans: haut), "la bande")
+        let cadre = bande.convert(bande.bounds, to: haut)
+        let cas = "3D : \(troisD), fenetre de \(Int(largeur)) pt, capsules de \(gauche) et \(droite) pt"
+        #expect(abs(cadre.minX - (CadreFeux.defaut.droite + HautPieces.ecartFeux + gauche)) < 1,
+                "\(cas) : la bande commence au bord de la capsule du reseau (x = \(cadre.minX))")
+        #expect(abs(cadre.maxX - (largeur - HautPieces.bordDroit - droite)) < 1,
+                "\(cas) : la bande finit au bord de la capsule de la vue (x = \(cadre.maxX))")
+        #expect(cadre.width > 0, "\(cas) : la bande n'est pas vide (\(cadre.width) pt)")
+    }
+
     /// La fenetre reste sombre, meme quand le Mac est en clair : sa barre, ses menus, sa fiche et ses
     /// feuilles en apparence sombre.
     @Test func fenetreToujoursSombre() {

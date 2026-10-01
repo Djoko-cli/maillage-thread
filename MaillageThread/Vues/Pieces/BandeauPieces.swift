@@ -141,13 +141,17 @@ struct HautPieces: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
+            // Chaque capsule garde la largeur de son contenu (`fixedSize`) : la bande vide prend la place qui
+            // reste. Sans cela, les trois se la partagent et la capsule du reseau tronque ses boutons.
             HStack(spacing: 0) {
                 BarreOutils()
                     .capsuleDeVerre()
+                    .fixedSize()
                 BandeFenetre()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 CommandesVue(moteur: moteur, troisD: $troisD)
                     .capsuleDeVerre()
+                    .fixedSize()
             }
             .frame(height: 2 * feux.milieu)
             .obstacle("ligne", moteur)
