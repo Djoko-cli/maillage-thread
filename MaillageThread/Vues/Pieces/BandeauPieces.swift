@@ -275,8 +275,8 @@ extension View {
     }
 }
 
-/// Fond d'une capsule de verre dans une capture : celui de la maquette.
-private let fondVerreCapture = Color(.sRGB, red: 40 / 255, green: 48 / 255, blue: 72 / 255)
+/// Fond du verre dans une capture (capsules, fiche) : celui des maquettes.
+let fondVerreCapture = Color(.sRGB, red: 40 / 255, green: 48 / 255, blue: 72 / 255)
 
 private struct CapsuleDeVerre: ViewModifier {
     @Environment(\.capturePieces) private var capture

@@ -38,11 +38,11 @@ struct FicheNoeud: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
-                    .buttonStyle(.glass)
+                    .boutonDeFiche()
                     .help("Fermer")
                     if Self.renommable(id, dans: surveillance) {
                         Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
-                            .buttonStyle(.glass)
+                            .boutonDeFiche()
                     }
                     if let piecesChoisies, let entree,
                        let placement = PiecesChoisies.placement(id, dans: surveillance, entree: entree) {
@@ -57,7 +57,7 @@ struct FicheNoeud: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .modifier(FondDeFiche())
     }
 
     /// Le noeud est couronne : un chef de la scene du meme rendu (`EntreeScene.chefs`), routeur de
@@ -385,6 +385,42 @@ struct FicheNoeud: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+        }
+    }
+}
+
+extension View {
+    /// Bouton de verre de la fiche ; dans une capture, qui ne rend pas le verre, celui des capsules.
+    func boutonDeFiche() -> some View {
+        modifier(BoutonDeFiche())
+    }
+}
+
+private struct BoutonDeFiche: ViewModifier {
+    @Environment(\.capturePieces) private var capture
+
+    func body(content: Content) -> some View {
+        if capture {
+            content.buttonStyle(StyleBoutonCapsule())
+        } else {
+            content.buttonStyle(.glass)
+        }
+    }
+}
+
+/// Fond de la fiche : du verre aux coins de 22 pt ; dans une capture, celui de la maquette de la fiche
+/// (rgba(40, 48, 72, 0,40), filet de 0,5 pt blanc a 0,22, ombre noire a 0,4).
+private struct FondDeFiche: ViewModifier {
+    @Environment(\.capturePieces) private var capture
+
+    func body(content: Content) -> some View {
+        if capture {
+            content
+                .background(RoundedRectangle(cornerRadius: 22).fill(fondVerreCapture.opacity(0.4))
+                    .shadow(color: .black.opacity(0.4), radius: 12, y: 8))
+                .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Color.white.opacity(0.22), lineWidth: 0.5))
+        } else {
+            content.glassEffect(.regular, in: .rect(cornerRadius: 22))
         }
     }
 }

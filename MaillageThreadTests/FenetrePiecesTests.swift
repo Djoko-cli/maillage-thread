@@ -404,6 +404,22 @@ struct FenetrePiecesTests {
         }
     }
 
+    /// Les images de la demo : les douze de la vue par pieces, puis la fiche du chef, avec sa pastille, et
+    /// la legende repliee. La fiche est celle d'un noeud couronne de la demo.
+    @Test func imagesDeDemo() throws {
+        #expect(CapturesPieces.cas.map(\.nom) == [
+            "01-2d", "02-envol-30", "03-envol-55", "04-envol-80", "05-3d", "06-3d-tournee", "07-2d-zoom-salon",
+            "08-2d-mi-distance", "09-2d-loin", "10-3d-isolee-salon", "11-2d-isolee-chambre", "12-2d-survol",
+            "13-2d-fiche-du-chef", "14-2d-legende-repliee",
+        ])
+        #expect(CapturesPieces.cas.filter(\.legendeRepliee).map(\.nom) == ["14-2d-legende-repliee"])
+        let (_, _, e) = try NomsSceneTests.demo()
+        let m = MoteurPieces()
+        try #require(CapturesPieces.cas.first { $0.nom == "13-2d-fiche-du-chef" }).poser(m, e.scene)
+        let choisi = try #require(m.selection)
+        #expect(FicheNoeud.couronne(choisi, entree: e))
+    }
+
     /// Places des pieces : a cote des identites des routeurs, ni en demo ni sous les tests.
     @Test func fichierDesPlaces() {
         #expect(FenetrePieces.fichierPlaces(demo: true, sousTests: false) == nil)

@@ -6,13 +6,51 @@ import UniformTypeIdentifiers
 
 /// Images de la vue par pieces rendues par l'app elle-meme, en mode demo (`--args -demo -captures
 /// <dossier>`), pour la relecture (spec de la vue par pieces, section 10) : 2D, envol, 3D, zooms,
-/// pieces isolees, survol. Sans fenetre ni capture d'ecran ; l'app quitte ensuite. `ImageRenderer` ne
-/// rend ni la fenetre ni le verre : le haut de la fenetre y est dessine comme dans la maquette du
-/// bandeau (`capturePieces`), avec les trois boutons de la fenetre a leur place (`FeuxDeCapture`).
+/// pieces isolees, survol, la fiche du chef, la legende repliee. Sans fenetre ni capture d'ecran ;
+/// l'app quitte ensuite. `ImageRenderer` ne rend ni la fenetre ni le verre : le haut de la fenetre et la
+/// fiche y sont dessines comme dans les maquettes (`capturePieces`), avec les trois boutons de la
+/// fenetre a leur place (`FeuxDeCapture`).
 @MainActor
 enum CapturesPieces {
     /// Contenu d'une fenetre de 1440 x 900, en 2x.
     static let taille = CGSize(width: 1440, height: 900)
+
+    /// Une image : son nom, l'etat a poser sur le moteur, et la legende repliee.
+    struct Cas {
+        var nom: String
+        var poser: (MoteurPieces, ScenePieces) -> Void
+        var legendeRepliee = false
+    }
+
+    /// Indice d'une piece de Maison de la scene (la premiere, sans elle).
+    static func piece(_ scene: ScenePieces, _ nom: String) -> Int {
+        scene.pieces.firstIndex { $0.nom == .maison(nom) } ?? 0
+    }
+
+    /// Les images, dans l'ordre : 2D, envol, 3D, zooms, pieces isolees, survol ; puis la fiche du chef de
+    /// la demo, avec sa pastille, la vue relevee au-dessus d'elle ; et la legende repliee.
+    static let cas: [Cas] = [
+        Cas(nom: "01-2d") { _, _ in },
+        Cas(nom: "02-envol-30") { m, _ in m.poserBascule(0.3) },
+        Cas(nom: "03-envol-55") { m, _ in m.poserBascule(0.55) },
+        Cas(nom: "04-envol-80") { m, _ in m.poserBascule(0.8) },
+        Cas(nom: "05-3d") { m, _ in m.poserBascule(1) },
+        Cas(nom: "06-3d-tournee") { m, _ in
+            m.poserBascule(1)
+            m.poserAzimut(-1.9)
+        },
+        Cas(nom: "07-2d-zoom-salon") { m, sc in m.poserZoom(echelle: 2.2, vers: m.centrePiece(piece(sc, "Salon"))) },
+        Cas(nom: "08-2d-mi-distance") { m, _ in m.poserZoom(echelle: 0.5, vers: nil) },
+        Cas(nom: "09-2d-loin") { m, _ in m.poserZoom(echelle: 0.36, vers: nil) },
+        Cas(nom: "10-3d-isolee-salon") { m, sc in
+            m.poserBascule(1)
+            m.poserIsolement(piece(sc, "Salon"))
+        },
+        Cas(nom: "11-2d-isolee-chambre") { m, sc in m.poserIsolement(piece(sc, "Chambre")) },
+        Cas(nom: "12-2d-survol") { m, _ in m.poserSurvol("9A28601B74FF90A7") },
+        Cas(nom: "13-2d-fiche-du-chef") { m, _ in m.selection = "Apple TV 4K" },
+        Cas(nom: "14-2d-legende-repliee", poser: { _, _ in }, legendeRepliee: true),
+    ]
 
     /// Ecrit les images dans `dossier` ; rend leurs noms.
     @discardableResult
@@ -25,31 +63,8 @@ enum CapturesPieces {
         let haut = NSHostingView(rootView: HautPieces(moteur: MoteurPieces(), troisD: .constant(false))
             .pourCapture(s, sonde, nomsMaison)).fittingSize.height
         let marges = (FenetrePieces.margeHaut(bas: haut), FenetrePieces.margeBas(fiche: false, courbes: false))
-        func piece(_ scene: ScenePieces, _ nom: String) -> Int {
-            scene.pieces.firstIndex { $0.nom == .maison(nom) } ?? 0
-        }
-        let cas: [(String, (MoteurPieces, ScenePieces) -> Void)] = [
-            ("01-2d", { _, _ in }),
-            ("02-envol-30", { m, _ in m.poserBascule(0.3) }),
-            ("03-envol-55", { m, _ in m.poserBascule(0.55) }),
-            ("04-envol-80", { m, _ in m.poserBascule(0.8) }),
-            ("05-3d", { m, _ in m.poserBascule(1) }),
-            ("06-3d-tournee", { m, _ in
-                m.poserBascule(1)
-                m.poserAzimut(-1.9)
-            }),
-            ("07-2d-zoom-salon", { m, sc in m.poserZoom(echelle: 2.2, vers: m.centrePiece(piece(sc, "Salon"))) }),
-            ("08-2d-mi-distance", { m, _ in m.poserZoom(echelle: 0.5, vers: nil) }),
-            ("09-2d-loin", { m, _ in m.poserZoom(echelle: 0.36, vers: nil) }),
-            ("10-3d-isolee-salon", { m, sc in
-                m.poserBascule(1)
-                m.poserIsolement(piece(sc, "Salon"))
-            }),
-            ("11-2d-isolee-chambre", { m, sc in m.poserIsolement(piece(sc, "Chambre")) }),
-            ("12-2d-survol", { m, _ in m.poserSurvol("9A28601B74FF90A7") }),
-        ]
         var noms: [String] = []
-        for (nom, preparer) in cas {
+        for c in cas {
             let m = MoteurPieces()
             m.fige = true
             m.marges = marges
@@ -57,24 +72,30 @@ enum CapturesPieces {
             let e = EntreeScene(surveillance: s, reseau: r, places: m.places)
             m.installerMaintenant(e)
             // La vue d'ensemble se cadre au-dessus de la legende ouverte : la hauteur mesuree de la ligne du
-            // bas, comme dans la fenetre.
-            let legende = NSHostingView(rootView: LigneDuBas(moteur: MoteurPieces(), entree: e, legendeForcee: false)
-                .pourCapture(s, sonde, nomsMaison)).fittingSize.height
-            m.marges.bas = FenetrePieces.margeBas(fiche: false, courbes: false, legendeOuverte: legende)
+            // bas, comme dans la fenetre ; repliee, la marge d'avant.
+            if !c.legendeRepliee {
+                let legende = NSHostingView(rootView: LigneDuBas(moteur: MoteurPieces(), entree: e, legendeForcee: false)
+                    .pourCapture(s, sonde, nomsMaison)).fittingSize.height
+                m.marges.bas = FenetrePieces.margeBas(fiche: false, courbes: false, legendeOuverte: legende)
+            }
             m.poserTaille(taille)
-            preparer(m, e.scene)
+            c.poser(m, e.scene)
+            if m.selection != nil {
+                m.marges.bas = FenetrePieces.margeBas(fiche: true, courbes: false)
+                m.poserTaille(taille)
+            }
             // Deux passages : le premier pose les noms, le second les dessine a leur place.
             var image: CGImage?
             for _ in 0..<2 {
-                let rendu = ImageRenderer(content: VueCapture(moteur: m, palette: palette)
+                let rendu = ImageRenderer(content: VueCapture(moteur: m, palette: palette, legendeRepliee: c.legendeRepliee)
                     .frame(width: taille.width, height: taille.height)
                     .pourCapture(s, sonde, nomsMaison))
                 rendu.scale = 2
                 image = rendu.cgImage
             }
             guard let image else { continue }
-            ecrire(image, vers: (dossier as NSString).appendingPathComponent(nom + ".png"))
-            noms.append(nom)
+            ecrire(image, vers: (dossier as NSString).appendingPathComponent(c.nom + ".png"))
+            noms.append(c.nom)
         }
         return noms
     }
@@ -88,10 +109,12 @@ enum CapturesPieces {
 }
 
 /// La vue d'une capture : le fond, la scene, le haut de la fenetre (avec ses trois boutons), la legende
-/// ouverte et la ligne de niveau, sans horloge ni geste.
+/// (ouverte, ou repliee) et la ligne de niveau, ou la fiche du noeud choisi ; sans horloge ni geste.
 struct VueCapture: View {
+    @Environment(Surveillance.self) private var surveillance
     let moteur: MoteurPieces
     let palette: Palette
+    var legendeRepliee = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -99,9 +122,14 @@ struct VueCapture: View {
             Canvas { ctx, taille in moteur.image(&ctx, taille: taille, echelle: 2, palette: palette) }
             HautPieces(moteur: moteur, troisD: .constant(moteur.troisD))
             FeuxDeCapture()
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
                 Spacer()
-                LigneDuBas(moteur: moteur, entree: moteur.entree, legendeForcee: false)
+                LigneDuBas(moteur: moteur, entree: moteur.entree, legende: moteur.selection == nil,
+                           legendeForcee: legendeRepliee)
+                if let id = moteur.selection {
+                    FicheNoeud(id: id, entree: moteur.entree, instant: surveillance.maintenant,
+                               aRenommer: .constant(nil)) {}
+                }
             }
             .padding(FenetrePieces.bord)
         }

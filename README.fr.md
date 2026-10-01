@@ -71,9 +71,12 @@ open "…/Maillage Thread.app" --args -demo -selection 86E7BD1A75F28E6D   # fich
 open "…/Maillage Thread.app" --args -demo -captures ~/Library/Containers/fr.djoko.maillage/Data/tmp/captures
 ```
 
-Avec `-captures <dossier>`, l'app écrit douze images PNG de la vue par pièces
-(2D, envol, 3D, zooms, pièces isolées, survol), puis quitte, sans fenêtre.
-L'app vit dans un bac à sable : le dossier doit être dans son conteneur.
+Avec `-captures <dossier>`, l'app écrit quatorze images PNG de la vue par
+pièces (2D, envol, 3D, zooms, pièces isolées, survol, la fiche du chef, la
+légende repliée), puis quitte, sans fenêtre. Son rendu ne dessine ni la
+fenêtre ni le verre : le haut de la fenêtre et la fiche y sont dessinés comme
+dans leurs maquettes, avec les trois boutons de la fenêtre à leur place. L'app
+vit dans un bac à sable : le dossier doit être dans son conteneur.
 
 La démo rejoue la panne du 27 septembre, reconstituée à partir du relevé réel
 du 28 septembre (`docs/releves/2026-09-28/`) : rien n'est écrit, rien n'est
@@ -138,6 +141,18 @@ par-dessus. Elle reste sombre, comme sa maquette, même quand le Mac est en
 clair. Conception :
 `docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md`.
 
+- **La fenêtre** n'a pas de barre de titre : la vue monte jusqu'en haut, sous
+  les trois boutons de la fenêtre. Deux capsules de verre sont posées sur leur
+  ligne : celle du réseau (menu du réseau, appareils IP, journal, rafraîchir)
+  juste après les boutons, celle de la vue (2D / 3D, rotation lente) contre le
+  bord droit. Glisser la bande vide entre elles déplace la fenêtre ; un
+  double-clic y fait ce que fait un double-clic sur une barre de titre sur ce
+  Mac (réglages Bureau et Dock). 820 × 680 points au moins.
+- **Légende** en bas à gauche : routeurs, appareils, liens radio par qualité
+  et autres signes, seulement ceux que la vue montre. Ouverte, la vue
+  d'ensemble se cadre au-dessus d'elle ; elle se replie sur son étiquette, qui
+  rend la place, et reste comme on l'a laissée. Quand le relevé de la sonde
+  est ancien, une pastille orange le dit, à côté de la ligne de niveau.
 - **Étages et pièces.** Les étages sont les zones de Maison, dans leur ordre
   (le premier en bas) ; une pièce dans plusieurs zones va dans la première,
   les pièces hors zone forment « Autres pièces », et une maison sans zones n'a
@@ -157,10 +172,10 @@ clair. Conception :
   et « Sans pièce » l'efface. Les nœuds qui restent sans pièce vont dans
   « Sans pièce », sur le plateau du bas. Sans aucune pièce de Maison (Passeur
   Noms jamais passé), une carte par routeur, avec ses enfants.
-- **2D et 3D** (barre d'outils ; le mode est gardé d'un lancement à l'autre) :
-  la 2D est une vue de dessus, les étages côte à côte ; la 3D les empile dans
-  la sphère de la maison, avec une rotation lente qu'on peut couper. La
-  bascule est un envol de 2,6 s.
+- **2D et 3D** (capsule de droite ; le mode est gardé d'un lancement à
+  l'autre) : la 2D est une vue de dessus, les étages côte à côte ; la 3D les
+  empile dans la sphère de la maison, avec une rotation lente qu'on peut
+  couper. La bascule est un envol de 2,6 s.
 - **Gestes.** Molette ou pincement : zoom, vers le curseur en 2D. Glisser le
   fond : déplacer la vue en 2D, tourner autour de la maison en 3D. Glisser une
   pièce : la déplacer dans son étage ; sa place est gardée
@@ -168,7 +183,9 @@ clair. Conception :
   une pièce : l'isoler (les autres s'estompent, un repère montre un parent
   situé ailleurs) ; clic à côté, Échap ou « Maison » dans le fil : revenir.
   Double-clic sur le fond : retour à la vue d'ensemble, zoom et déplacement
-  annulés. Clic sur un appareil ou sur son nom : sa fiche.
+  annulés. Clic sur un appareil ou sur son nom : sa fiche, qui glisse depuis le
+  bas pendant que la vue se relève ; la fiche du chef du réseau Thread porte
+  « 👑 Chef du réseau Thread, élu automatiquement ».
 - **Clics droits** : sur un nom d'étage, « Monter d'un étage » et « Descendre
   d'un étage » ; sur le fond, « Replacer les pièces automatiquement » (les
   places gardées partent, pas l'ordre des étages).
@@ -177,7 +194,8 @@ clair. Conception :
   combien de noms sont masqués faute de place.
 - « Réduire les animations » (accessibilité de macOS) : l'envol et le retour
   par double-clic deviennent un fondu, les autres vols de caméra sont
-  immédiats, la rotation lente est coupée.
+  immédiats, la rotation lente est coupée, la fiche et les bandeaux du haut
+  vont et viennent par un simple fondu, et la vue se recadre par un fondu.
 - La disposition des pièces est calculée hors du fil principal : quelques
   centièmes de seconde pour la démo, moins d'une seconde pour 20 pièces et 100
   appareils (`outils/mesurer.sh`).
@@ -298,13 +316,13 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   la dernière (`"suite":false`) se perd ; détails dans la spec (section
   3 bis).
 - Une tournée toutes les 5 minutes, et au rafraîchissement : le bouton
-  rafraîchir de la barre d'outils relit le réseau, lance une tournée (sauf
+  rafraîchir de la capsule du réseau relit le réseau, lance une tournée (sauf
   s'il y en a déjà une) et Passeur Noms ; son aide dit lesquels il lancera
-  vraiment. Pendant une tournée, une ligne sous la barre d'outils (et sous le
+  vraiment. Pendant une tournée, une ligne sous cette capsule (au-dessus du
   bandeau d'un réseau scindé) montre son étape, un compteur de requêtes et sa
   durée (« Balayage des routeurs muets · 24/48 · 0:42 ») ; sa place reste
-  gardée au-dessus de la vue tant qu'une sonde est retenue : rien ne bouge au
-  début ni à la fin d'une tournée. Réglages › Sonde et la ligne du menu
+  gardée tant qu'une sonde est retenue : rien ne bouge au début ni à la fin
+  d'une tournée. Réglages › Sonde et la ligne du menu
   montrent aussi l'étape et le compteur.
 - La liste des routeurs vient du chef ; s'il se tait, d'un routeur qui a déjà
   répondu ; sinon des autres routeurs de la table de la sonde, puis d'une

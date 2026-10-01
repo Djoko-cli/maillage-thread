@@ -378,7 +378,7 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
 - **Passeur en échec :** section 3.1.
 - **Grande maison**, 20 pièces et 100 appareils par exemple : la disposition est calculée hors du fil principal (section 4.3), et le zoom sémantique garde la vue lisible.
 - **Sans sonde :** pas de liens radio mesurés. Les rattachements supposés sont en pointillés, et aucune pièce ne manque.
-- **Plusieurs partitions :** couleur des nœuds (principale en bleu, les autres en ambre, sans partition en gris), et bandeau de scission.
+- **Plusieurs partitions :** couleur des nœuds (principale en bleu, les autres en ambre ; un appareil sans partition prend la couleur de son état, comme le dit la légende, correction du polissage B), et bandeau de scission.
 - **Fenêtre petite :** le zoom sémantique et le compteur de noms masqués.
 
 ## 9. Architecture et fichiers

@@ -35,6 +35,8 @@ Elle passe par le crochet AppKit qui force déjà la fenêtre en sombre (`SondeF
 
 Chaque capsule prend la taille de son contenu. Entre les deux, la scène reste visible.
 
+**Les capsules se centrent sur les trois boutons**, et restent donc collées en haut de la fenêtre : centrées sur des boutons à 16 pt du haut, elles commencent à 1,5 pt du bord (choix de Djoko du 01/10, sur les premières images ; la maquette les pose plus bas, sous des boutons plus petits).
+
 **Sous la capsule de gauche**, en plus petit et alignés sur elle :
 - la ligne de la tournée de la sonde ;
 - le bandeau de scission, s'il y a lieu ;
@@ -49,6 +51,12 @@ Un bandeau qui apparaît glisse depuis le haut avec un fondu, en 0,3 s. Il repar
 ## 2. La légende A, adaptée
 
 **Elle remplace la petite légende des liens d'aujourd'hui** (`LegendeLiens`), à la même place, en bas à gauche, à côté de la ligne de niveau.
+
+**La vue d'ensemble se cadre au-dessus de la légende ouverte** (choix de Djoko du 01/10, sur les premières images, où la légende cachait des pièces) :
+- la marge du bas suit la hauteur **mesurée** de la légende et de la ligne de niveau, comme la marge du haut suit le bandeau ;
+- repliée, la légende rend la place : la marge reprend sa valeur d'avant ;
+- une fiche ouverte, qui cache la légende, garde ses marges (190 ou 360 pt) ;
+- un changement de marge recadre la vue d'ensemble comme aujourd'hui, sauf si Djoko a zoomé ou isolé une pièce. Le repli et l'ouverture la recadrent avec l'animation de la fiche, ou par un fondu avec « Réduire les animations ».
 
 **Aspect**, comme la maquette A :
 - panneau sombre (fond de la vue à environ 92 %) ;
@@ -123,7 +131,7 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 - les entrées de la légende selon la scène : une scène inventée par cas, une entrée par signe, et un groupe vide qui disparaît ;
 - le repli gardé ;
 - la pastille du chef, sur un routeur de bordure et sur un routeur de la sonde, mêmes chefs que la scène ;
-- la marge du haut mesurée ;
+- la marge du haut mesurée ; celle du bas, sous la légende ouverte ;
 - la taille minimale de la fenêtre.
 
 **Captures de démo.** Elles changent toutes, puisque la fenêtre change. Les nouvelles sont montrées à Djoko à côté des maquettes.
@@ -132,7 +140,7 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 - déplacer la fenêtre par la bande du haut ;
 - les gestes de la scène ;
 - la fiche qui glisse ;
-- la légende contextuelle et son repli gardé ;
+- la légende contextuelle et son repli gardé, la vue cadrée au-dessus d'elle ;
 - la pastille du chef ;
 - le Mac en clair ;
 - « Réduire les animations » ;

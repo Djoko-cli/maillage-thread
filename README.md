@@ -70,9 +70,12 @@ open "…/Maillage Thread.app" --args -demo -selection 86E7BD1A75F28E6D   # card
 open "…/Maillage Thread.app" --args -demo -captures ~/Library/Containers/fr.djoko.maillage/Data/tmp/captures
 ```
 
-With `-captures <folder>`, the app writes twelve PNG images of the room view
-(2D, flight, 3D, zooms, isolated rooms, hover), then quits, with no window.
-The app is sandboxed: the folder must be inside its container.
+With `-captures <folder>`, the app writes fourteen PNG images of the room view
+(2D, flight, 3D, zooms, isolated rooms, hover, the leader's card, the folded
+legend), then quits, with no window. Its renderer draws neither the window nor
+glass: the top of the window and the card are drawn as in their mockups, with
+the window's three buttons in place. The app is sandboxed: the folder must be
+inside its container.
 
 The demo replays the September 27 outage, rebuilt from the real survey of
 September 28 (`docs/releves/2026-09-28/`): nothing is written, nothing is
@@ -137,6 +140,18 @@ stays dark, like its mockup, even when the Mac is in light mode. Design:
 `docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md` (in
 French).
 
+- **The window** has no title bar: the view goes up to the top, under the
+  window's three buttons. Two glass capsules sit on their line: the network
+  one (network menu, IP devices, Log, refresh) right after the buttons, the
+  view one (2D / 3D, slow rotation) against the right edge. Drag the empty
+  band between them to move the window; a double-click there does what a
+  double-click on a title bar does on your Mac (Desktop & Dock settings). At
+  least 820 × 680 points.
+- **Legend** at the bottom left: routers, devices, radio links by quality and
+  the other signs, only those the view shows. Open, the overview is framed
+  above it; it folds to its label, giving the room back, and stays as you left
+  it. When the probe's survey is old, an orange tag says so next to the level
+  line.
 - **Floors and rooms.** Floors are the Home zones, in their order (the first
   at the bottom); a room in several zones goes to the first one, rooms outside
   any zone make "Other rooms", and a house without zones has a single "Home"
@@ -154,16 +169,18 @@ French).
   the choice is kept under the device's ExtMac, and "No room" clears it. Nodes
   still without a room go to "No room", on the bottom platform. With no Home
   room at all (Passeur Noms never ran), one card per router, with its children.
-- **2D and 3D** (toolbar; the mode is kept from one launch to the next): 2D is
-  a top view, floors side by side; 3D stacks them inside the house sphere,
-  with a slow rotation you can turn off. Switching is a 2.6 s flight.
+- **2D and 3D** (right capsule; the mode is kept from one launch to the next):
+  2D is a top view, floors side by side; 3D stacks them inside the house
+  sphere, with a slow rotation you can turn off. Switching is a 2.6 s flight.
 - **Gestures.** Scroll wheel or pinch: zoom, towards the pointer in 2D. Drag
   the background: pan in 2D, orbit around the house in 3D. Drag a room: move
   it within its floor; its place is kept (`positions-pieces.json` in the app
   folder, never in the demo). Click a room: isolate it (the others fade, a tag
   points to a parent elsewhere); click outside, Esc or "Home" in the path:
   come back. Double-click the background: back to the overview, zoom and pan
-  undone. Click a device or its name: its card.
+  undone. Click a device or its name: its card, which slides up from the
+  bottom as the view rises; the card of the Thread network's leader shows
+  "👑 Thread network leader, elected automatically".
 - **Right clicks**: on a floor name, "Move up one floor" and "Move down one
   floor"; on the background, "Arrange rooms automatically" (kept places go,
   not the floor order).
@@ -172,7 +189,8 @@ French).
   are hidden for lack of room.
 - "Reduce motion" (macOS accessibility): the flight and the double-click
   return become a fade, other camera flights are immediate, the slow rotation
-  is off.
+  is off, the card and the top banners come and go with a plain fade, and the
+  view reframes itself through a fade.
 - The room layout is computed off the main thread: a few hundredths of a
   second for the demo, under a second for 20 rooms and 100 devices
   (`outils/mesurer.sh`).
@@ -284,13 +302,13 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   (a batch of 8 `diag` may see some of them wait for the 2 s resend); a lost
   `routeurs` line gives a partial table, or none if the last one
   (`"suite":false`) is lost; details in the spec (section 3 bis).
-- A tour every 5 minutes, and on refresh: the refresh button of the toolbar
-  rereads the network, starts a tour (unless one is running) and launches
-  Passeur Noms; its help tag says which of these it will actually start. While
-  a tour runs, a line under the toolbar (and under the split-network banner)
-  shows its step, a counter of requests and its duration ("Scan of silent
-  routers · 24/48 · 0:42"); its place stays reserved above the view while a
-  probe is remembered, so nothing moves when a tour starts or ends.
+- A tour every 5 minutes, and on refresh: the refresh button of the network
+  capsule rereads the network, starts a tour (unless one is running) and
+  launches Passeur Noms; its help tag says which of these it will actually
+  start. While a tour runs, a line under that capsule (above the split-network
+  banner) shows its step, a counter of requests and its duration ("Scan of
+  silent routers · 24/48 · 0:42"); its place stays reserved while a probe is
+  remembered, so nothing moves when a tour starts or ends.
   Settings › Probe and the menu line show the step and the counter too.
 - The list of routers comes from the leader; if it is silent, from a router
   that has already answered; otherwise from the other routers in the probe's
