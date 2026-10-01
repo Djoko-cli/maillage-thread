@@ -4576,6 +4576,22 @@
           }
         }
       }
+    },
+    "⌂ Maison" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌂ Home"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌂ Maison"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
