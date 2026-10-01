@@ -48,9 +48,10 @@ struct FenetrePiecesTests {
         #expect(zip(redessins, redessins.dropFirst()).allSatisfy { $1.timeIntervalSince($0) <= 60 })
     }
 
-    /// Le haut de la fenetre (barre, bandeaux, tournee, fil) tient dans la marge du haut de la vue
-    /// d'ensemble, dans tous les cas ; la fiche la plus haute de la demo, avec la ligne de niveau,
-    /// dans la marge du bas ; avec les courbes de l'historique, dans la marge du bas avec courbes.
+    /// La marge du haut de la vue d'ensemble suit la hauteur mesuree du haut de la fenetre (la ligne des
+    /// capsules, la tournee, les bandeaux, le fil) : son bas, arrondi, et l'espacement ; un bandeau ou la
+    /// ligne de la tournee la font grandir. La fiche la plus haute de la demo, avec la ligne de niveau,
+    /// tient dans la marge du bas ; avec les courbes de l'historique, dans la marge du bas avec courbes.
     @Test(.timeLimit(.minutes(1))) func marges() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -61,25 +62,21 @@ struct FenetrePiecesTests {
         demo.demarrer()
         let sansReseau = Surveillance(mode: .direct, dossier: nil)
         func haut(_ s: Surveillance, sansPieces: Bool) -> CGFloat {
-            let m = MoteurPieces()
-            let vue = VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
-                EnTetePieces(moteur: m, troisD: .constant(true), sansPieces: sansPieces)
-                FilPieces(moteur: m)
-            }
-            return FenetrePieces.bord + NSHostingView(rootView: vue.environment(s).environment(sonde).environment(noms))
-                .fittingSize.height
+            let vue = HautPieces(moteur: MoteurPieces(), troisD: .constant(true), sansPieces: sansPieces)
+            return NSHostingView(rootView: vue.environment(s).environment(sonde).environment(noms)).fittingSize.height
         }
+        #expect(FenetrePieces.margeHaut(bas: 57.2) == 58 + FenetrePieces.espacement, "le bas arrondi, et l'espacement")
         #expect(demo.reseau?.estScinde == true, "la demo : reseau scinde, bandeau affiche")
-        for (s, scinde) in [(sansReseau, false), (demo, true)] {
-            #expect(haut(s, sansPieces: false) <= FenetrePieces.margeHaut(scinde: scinde, sondeRetenue: false, sansPieces: false))
-        }
+        let seul = haut(sansReseau, sansPieces: false)
+        let scinde = haut(demo, sansPieces: false)
+        #expect(seul > 2 * CadreFeux.defaut.milieu, "la ligne des capsules, puis le fil")
+        #expect(scinde > seul, "le bandeau de scission")
+        #expect(haut(demo, sansPieces: true) > scinde, "le bandeau d'une maison sans pieces")
         await sonde.connecter(SondeMaillageTests.port, choisi: true)
         await journal.attendre(SondeMaillageTests.listeRetenue)
         await SondeMaillageTests.attendre { sonde.avancement != nil }
-        for (s, scinde) in [(sansReseau, false), (demo, true)] {
-            #expect(haut(s, sansPieces: false) <= FenetrePieces.margeHaut(scinde: scinde, sondeRetenue: true, sansPieces: false))
-        }
-        #expect(haut(demo, sansPieces: true) <= FenetrePieces.margeHaut(scinde: true, sondeRetenue: true, sansPieces: true))
+        #expect(haut(demo, sansPieces: false) > scinde, "la ligne de la tournee")
+        #expect(FenetrePieces.margeHaut(bas: haut(demo, sansPieces: false)) > FenetrePieces.margeHaut(bas: scinde))
         await sonde.oublier()
         var fiche: CGFloat = 0
         let sansRouteurs = Surveillance(mode: .demo, dossier: nil)
@@ -119,6 +116,91 @@ struct FenetrePiecesTests {
                 == String(localized: "\(3) noms masqués faute de place : rapprochez-vous (molette)"))
         #expect(LigneNiveauVue.texte(.isolee("Salon")).contains("Salon"))
         #expect(LigneNiveauVue.texte(.lisibles) == String(localized: "Tous les noms sont lisibles"))
+    }
+
+    /// Sans barre de titre : le contenu couvre toute la fenetre, la barre de titre est transparente et le
+    /// titre masque ; il reste celui de la fenetre. Les trois boutons restent : la capsule de gauche
+    /// commence apres eux, centree sur eux ; sous macOS 27, a leur place de `CadreFeux.defaut`.
+    @Test func fenetreSansBarreDeTitre() throws {
+        let fenetre = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
+                               defer: false)
+        fenetre.isReleasedWhenClosed = false
+        fenetre.title = "Maillage Thread"
+        FenetrePieces.sansBarreDeTitre(fenetre)
+        #expect(fenetre.styleMask.contains(.fullSizeContentView))
+        #expect(fenetre.titlebarAppearsTransparent)
+        #expect(fenetre.titleVisibility == .hidden)
+        #expect(fenetre.title == "Maillage Thread")
+        let feux = try #require(CadreFeux(fenetre: fenetre))
+        let agrandir = try #require(fenetre.standardWindowButton(.zoomButton))
+        #expect(feux.droite == agrandir.convert(agrandir.bounds, to: nil).maxX)
+        #expect(feux == CadreFeux.defaut)
+        FenetrePieces.sansBarreDeTitre(nil)
+    }
+
+    /// La bande du haut : un clic, glisse, deplace la fenetre ; un double-clic fait ce que dit le reglage
+    /// du Mac (agrandir, reduire ou rien ; « Remplir », sans API publique, agrandit). Elle agit aussi dans
+    /// une fenetre inactive, et seule : AppKit ne deplace pas la fenetre a sa place.
+    @Test func bandeDeLaFenetre() throws {
+        #expect(ActionDoubleClic.cle == "AppleActionOnDoubleClick")
+        #expect(ActionDoubleClic(reglage: "Maximize") == .agrandir)
+        #expect(ActionDoubleClic(reglage: "Fill") == .agrandir)
+        #expect(ActionDoubleClic(reglage: nil) == .agrandir)
+        #expect(ActionDoubleClic(reglage: "Minimize") == .reduire)
+        #expect(ActionDoubleClic(reglage: "None") == .rien)
+        let fenetre = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+                               backing: .buffered, defer: false)
+        fenetre.isReleasedWhenClosed = false
+        let bande = BandeFenetre.Vue(frame: NSRect(x: 0, y: 0, width: 200, height: 32))
+        fenetre.contentView?.addSubview(bande)
+        var glissers = 0
+        var doubles = 0
+        bande.glisser = { f, _ in if f === fenetre { glissers += 1 } }
+        bande.doubleCliquer = { f in if f === fenetre { doubles += 1 } }
+        func clic(_ n: Int) throws -> NSEvent {
+            try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 20, y: 10), modifierFlags: [],
+                                            timestamp: 0, windowNumber: fenetre.windowNumber, context: nil,
+                                            eventNumber: 0, clickCount: n, pressure: 1))
+        }
+        bande.mouseDown(with: try clic(1))
+        #expect(glissers == 1 && doubles == 0, "un clic : la fenetre suit le glisser")
+        bande.mouseDown(with: try clic(2))
+        #expect(glissers == 1 && doubles == 1, "le second clic : le double-clic")
+        #expect(bande.acceptsFirstMouse(for: nil))
+        #expect(!bande.mouseDownCanMoveWindow)
+    }
+
+    /// Sur la ligne des trois boutons, la bande, et elle seule, recoit les clics entre les deux capsules :
+    /// ni les capsules, ni la scene dessous.
+    @Test func bandeEntreLesCapsules() throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let sonde = SondeMaillage(preferences: p, actif: false)
+        let noms = NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit)
+        let s = Surveillance(mode: .demo, dossier: nil)
+        s.demarrer()
+        let fenetre = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
+                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
+                               defer: false)
+        fenetre.isReleasedWhenClosed = false
+        let vue = ZStack(alignment: .topLeading) {
+            Color.black.onTapGesture {}
+            HautPieces(moteur: MoteurPieces(), troisD: .constant(true))
+        }
+        let hote = NSHostingView(rootView: vue.ignoresSafeArea().environment(s).environment(sonde).environment(noms))
+        fenetre.contentView = hote
+        FenetrePieces.sansBarreDeTitre(fenetre)
+        hote.layoutSubtreeIfNeeded()
+        fenetre.layoutIfNeeded()
+        let cadre = try #require(hote.superview)
+        func sous(_ x: CGFloat, _ y: CGFloat) -> NSView? { cadre.hitTest(NSPoint(x: x, y: fenetre.frame.height - y)) }
+        let milieu = CadreFeux.defaut.milieu
+        #expect(sous(500, milieu) is BandeFenetre.Vue, "entre les capsules")
+        #expect(sous(500, 2) !== hote, "au bord du haut : le cadre de la fenetre")
+        #expect(!(sous(CadreFeux.defaut.droite + HautPieces.ecartFeux + 20, milieu) is BandeFenetre.Vue), "la capsule de gauche")
+        #expect(!(sous(1000 - HautPieces.bordDroit - 20, milieu) is BandeFenetre.Vue), "la capsule de droite")
+        #expect(!(sous(500, 200) is BandeFenetre.Vue), "la scene")
     }
 
     /// La fenetre reste sombre, meme quand le Mac est en clair : sa barre, ses menus, sa fiche et ses

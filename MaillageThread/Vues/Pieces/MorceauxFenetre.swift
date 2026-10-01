@@ -9,7 +9,7 @@ struct NoeudChoisi: Identifiable {
     let id: String
 }
 
-/// Barre d'outils flottante : reseau, appareils IP, journal, rafraichir.
+/// Capsule de gauche du haut de la fenetre : reseau, appareils IP, journal, rafraichir.
 struct BarreOutils: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(SondeMaillage.self) private var sonde
@@ -36,69 +36,90 @@ struct BarreOutils: View {
     }
 
     var body: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 6) {
-                Menu {
-                    ForEach(surveillance.instantane?.reseaux ?? []) { r in
-                        Button(r.nom) { surveillance.reseauChoisi = r.id }
-                    }
-                } label: {
-                    Text(surveillance.reseau?.nom ?? String(localized: "Aucun réseau Thread"))
+        HStack(spacing: 5) {
+            // « Reseau demo ▾ » : le menu, dessine comme les autres boutons de la capsule.
+            Menu {
+                ForEach(surveillance.instantane?.reseaux ?? []) { r in
+                    Button(r.nom) { surveillance.reseauChoisi = r.id }
                 }
-                .menuStyle(.button)
-                .buttonStyle(.glass)
-                .fixedSize()
-                Button {
-                    appareilsIP = true
-                } label: {
-                    Text("Appareils IP · \(surveillance.instantane?.appareilsIP.count ?? 0)")
-                }
-                .buttonStyle(.glass)
-                .popover(isPresented: $appareilsIP) { ListeAppareilsIP() }
-                Button("Journal") {
-                    openWindow(id: "journal")
-                }
-                .buttonStyle(.glass)
-                // Pendant une tournee : le reseau et les noms, sans seconde tournee.
-                Button {
-                    surveillance.rafraichir()
-                    sonde.rafraichir()
-                    if Self.lancePasseur(mode: surveillance.mode) {
-                        nomsMaison.lancerPasseur()
-                    }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.glass)
-                .help(Self.aideRafraichir(tournee: sonde.tourneeAuRafraichir,
-                                          passeur: Self.lancePasseur(mode: surveillance.mode)))
+            } label: {
+                Text(verbatim: (surveillance.reseau?.nom ?? String(localized: "Aucun réseau Thread")) + " ▾")
             }
+            .menuStyle(.button)
+            .buttonStyle(StyleBoutonCapsule())
+            .fixedSize()
+            Button {
+                appareilsIP = true
+            } label: {
+                Text("Appareils IP · \(surveillance.instantane?.appareilsIP.count ?? 0)")
+            }
+            .buttonStyle(StyleBoutonCapsule())
+            .popover(isPresented: $appareilsIP) { ListeAppareilsIP() }
+            Button("Journal") {
+                openWindow(id: "journal")
+            }
+            .buttonStyle(StyleBoutonCapsule())
+            // Pendant une tournee : le reseau et les noms, sans seconde tournee.
+            Button {
+                surveillance.rafraichir()
+                sonde.rafraichir()
+                if Self.lancePasseur(mode: surveillance.mode) {
+                    nomsMaison.lancerPasseur()
+                }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(StyleBoutonCapsule())
+            .help(Self.aideRafraichir(tournee: sonde.tourneeAuRafraichir,
+                                      passeur: Self.lancePasseur(mode: surveillance.mode)))
         }
     }
 }
 
-/// Ligne de la tournee en cours, centree sous la barre d'outils (et le bandeau d'un reseau
-/// scinde) : la barre garde sa largeur, son bouton rafraichir ne bouge pas sous le pointeur.
-/// Rien hors tournee. Vue a part : seule elle se redessine a chaque pas de la tournee, pas la
-/// fenetre de la vue.
+/// Ligne de la tournee en cours, sous la capsule de gauche, en plus petit : la capsule garde sa
+/// largeur, son bouton rafraichir ne bouge pas sous le pointeur. Hors tournee, sa place reste gardee
+/// tant qu'une sonde est retenue : ni la scene ni ce qui est dessous ne bougent au debut ou a la fin
+/// d'une tournee (precision 21 du plan 4b). Vue a part : seule elle se redessine a chaque pas de la
+/// tournee, pas la fenetre de la vue.
 struct LigneTournee: View {
     @Environment(SondeMaillage.self) private var sonde
 
+    /// Ce que montre la ligne : l'indicateur pendant une tournee, sa place (vide) tant qu'une sonde
+    /// est retenue, rien sinon.
+    enum Place: Equatable {
+        case indicateur(AvancementTournee, debut: Date)
+        case gardee
+        case aucune
+    }
+
+    static func place(serie: String?, avancement: AvancementTournee?, debut: Date?) -> Place {
+        if let avancement, let debut { return .indicateur(avancement, debut: debut) }
+        return serie != nil ? .gardee : .aucune
+    }
+
     var body: some View {
-        if let a = sonde.avancement, let debut = sonde.debutTournee {
+        switch Self.place(serie: sonde.serie, avancement: sonde.avancement, debut: sonde.debutTournee) {
+        case .indicateur(let a, let debut):
             IndicateurTournee(avancement: a, debut: debut)
+        case .gardee:
+            IndicateurTournee(avancement: AvancementTournee(etape: .etatSonde, fait: 0, total: 1), debut: nil)
+                .hidden()
+                .accessibilityHidden(true)
+        case .aucune:
+            EmptyView()
         }
     }
 }
 
 /// Tournee de la sonde en cours : un petit indicateur de progression et « Balayage des
-/// routeurs muets · 24/48 · 0:42 », la duree a jour chaque seconde.
+/// routeurs muets · 24/48 · 0:42 », la duree a jour chaque seconde. Sans debut : la place de la
+/// ligne, sans horloge.
 struct IndicateurTournee: View {
     let avancement: AvancementTournee
-    let debut: Date
+    let debut: Date?
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             if avancement.total > 0 {
                 ProgressView(value: Double(avancement.fait), total: Double(avancement.total))
                     .progressViewStyle(.circular)
@@ -111,17 +132,16 @@ struct IndicateurTournee: View {
                 ForEach(AvancementTournee.Etape.allCases, id: \.self) { e in
                     Text(TexteTournee.gabaritBarre(e)).hidden()
                 }
-                TimelineView(.periodic(from: debut, by: 1)) { contexte in
-                    Text(TexteTournee.barre(avancement, debut: debut, maintenant: contexte.date))
+                if let debut {
+                    TimelineView(.periodic(from: debut, by: 1)) { contexte in
+                        Text(TexteTournee.barre(avancement, debut: debut, maintenant: contexte.date))
+                    }
                 }
             }
             .monospacedDigit()
         }
         .controlSize(.small)
-        .font(.callout)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .glassEffect(.regular, in: .capsule)
+        .piluleDuHaut()
     }
 }
 
@@ -133,10 +153,7 @@ struct BandeauScission: View {
 
     var body: some View {
         Label(texte, systemImage: "exclamationmark.triangle.fill")
-            .font(.callout)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .glassEffect(.regular.tint(.orange.opacity(0.35)), in: .capsule)
+            .piluleDuHaut(teinte: .orange.opacity(0.35))
     }
 
     private var texte: String {

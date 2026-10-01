@@ -2,20 +2,24 @@ import AppKit
 import MaillageCoeur
 import SwiftUI
 
-/// Fenetre de la vue par pieces (spec de la vue par pieces, sections 1 et 7) : la scene occupe toute
-/// la fenetre ; la barre d'outils (avec 2D / 3D et « Rotation lente »), les bandeaux, la ligne de la
-/// tournee et le fil flottent en haut ; la ligne de niveau, la legende et la fiche en bas. Elle reste
-/// sombre, comme la maquette, meme quand le Mac est en clair (precision 15 du plan 4b).
+/// Fenetre de la vue par pieces (spec de la vue par pieces, sections 1 et 7 ; polissage B, section 1) :
+/// sans barre de titre, la scene occupe toute la fenetre, jusque sous ses trois boutons ; en haut, les
+/// deux capsules du bandeau, la bande qui deplace la fenetre, la ligne de la tournee, les bandeaux et
+/// le fil (`HautPieces`) ; en bas, la ligne de niveau, la legende et la fiche. Elle reste sombre, comme
+/// la maquette, meme quand le Mac est en clair (precision 15 du plan 4b).
 struct FenetrePieces: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(NomsInternes.self) private var nomsMaison
-    @Environment(SondeMaillage.self) private var sonde
     @Environment(\.accessibilityReduceMotion) private var reduire
     /// Le mode 2D ou 3D, garde d'un lancement a l'autre.
     @AppStorage(FenetrePieces.cleMode) private var troisD = false
     @State private var moteur: MoteurPieces
     @State private var piecesChoisies: PiecesChoisies
     @State private var aRenommer: NoeudChoisi?
+    /// Les trois boutons de la fenetre, lus sur elle : la capsule de gauche commence apres eux.
+    @State private var feux = CadreFeux.defaut
+    /// Marge du haut de la vue d'ensemble, d'apres la hauteur mesuree du haut de la fenetre.
+    @State private var margeHautMesuree = FenetrePieces.margeHautInitiale
 
     /// Preference du mode 2D ou 3D.
     static let cleMode = "vuePieces3D"
@@ -39,6 +43,16 @@ struct FenetrePieces: View {
         fenetre?.appearance = NSAppearance(named: .darkAqua)
     }
 
+    /// Sans barre de titre (polissage B, section 1) : le contenu couvre toute la fenetre, sous la barre
+    /// de titre devenue transparente, dont les trois boutons restent poses sur la scene. Le titre
+    /// « Maillage Thread » reste celui de la fenetre (Mission Control, menu Fenetre), sans etre affiche.
+    static func sansBarreDeTitre(_ fenetre: NSWindow?) {
+        guard let fenetre else { return }
+        fenetre.styleMask.insert(.fullSizeContentView)
+        fenetre.titlebarAppearsTransparent = true
+        fenetre.titleVisibility = .hidden
+    }
+
     /// Places des pieces, a cote des identites des routeurs ; ni en demo ni sous les tests.
     static func fichierPlaces(demo: Bool, sousTests: Bool) -> URL? {
         demo || sousTests ? nil : Surveillance.dossierParDefaut.appendingPathComponent("positions-pieces.json")
@@ -50,12 +64,16 @@ struct FenetrePieces: View {
     /// plus, et le redessin n'a lieu que dans cette fenetre, tant qu'elle est ouverte.
     static let horloge = EveryMinuteTimelineSchedule()
 
-    /// Marge du haut de la vue d'ensemble (pt) : la barre d'outils et le fil, puis une ligne de 40 pt
-    /// pour le bandeau d'un reseau scinde, une pour la tournee tant qu'une sonde est retenue (rien ne
-    /// bouge au debut ni a la fin d'une tournee), et 44 pt pour le bandeau d'une maison sans pieces.
-    static func margeHaut(scinde: Bool, sondeRetenue: Bool, sansPieces: Bool) -> CGFloat {
-        72 + (scinde ? 40 : 0) + (sondeRetenue ? 40 : 0) + (sansPieces ? 44 : 0)
+    /// Marge du haut de la vue d'ensemble (pt) : le bas de ce qui est pose en haut de la fenetre, mesure
+    /// (`HautPieces` : la ligne des capsules, la place de la tournee tant qu'une sonde est retenue, les
+    /// bandeaux presents, le fil), puis l'espacement. Elle remplace les valeurs fixes du plan 4b
+    /// (precision 21).
+    static func margeHaut(bas: CGFloat) -> CGFloat {
+        ceil(bas) + espacement
     }
+
+    /// Avant la premiere mesure : la ligne des capsules, l'espacement et le fil.
+    static let margeHautInitiale = margeHaut(bas: 2 * CadreFeux.defaut.milieu + espacement + 16)
 
     /// Marge du bas de la vue d'ensemble (pt) : la legende et la ligne de niveau (elles debordent un
     /// peu sur la vue, comme la legende du graphe d'avant), ou la fiche ouverte, plus haute avec les
@@ -76,25 +94,23 @@ struct FenetrePieces: View {
             }
             ZStack {
                 RadialGradient(gradient: palette.fond, center: UnitPoint(x: 0.3, y: 0.35), startRadius: 0, endRadius: 900)
-                    .ignoresSafeArea()
-                if let r = surveillance.reseau, let entree {
+                if let entree {
                     VuePieces(moteur: moteur, entree: entree, palette: palette,
-                              marges: (Self.margeHaut(scinde: r.estScinde, sondeRetenue: sonde.serie != nil,
-                                                      sansPieces: entree.scene.sansPiecesMaison),
-                                       Self.margeBas(fiche: moteur.selection != nil,
-                                                     courbes: FicheNoeud.courbesVisibles(dans: surveillance))))
+                              marges: (margeHautMesuree, Self.margeBas(fiche: moteur.selection != nil,
+                                                                courbes: FicheNoeud.courbesVisibles(dans: surveillance))))
                     if !moteur.pret {
                         ProgressView().controlSize(.small)
                     }
                 } else {
                     EtatVide()
                 }
+                HautPieces(moteur: moteur, troisD: $troisD, sansPieces: entree?.scene.sansPiecesMaison == true,
+                           feux: feux)
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(VuePieces.espace)).maxY } action: {
+                        margeHautMesuree = Self.margeHaut(bas: $0)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 VStack(alignment: .leading, spacing: Self.espacement) {
-                    EnTetePieces(moteur: moteur, troisD: $troisD, sansPieces: entree?.scene.sansPiecesMaison == true)
-                        .frame(maxWidth: .infinity)
-                        .obstacle("en-tete", moteur)
-                    FilPieces(moteur: moteur)
-                        .obstacle("fil", moteur)
                     Spacer()
                     if moteur.selection == nil {
                         HStack(alignment: .center, spacing: 12) {
@@ -120,11 +136,19 @@ struct FenetrePieces: View {
                 .padding(Self.bord)
             }
             .coordinateSpace(.named(VuePieces.espace))
+            .ignoresSafeArea()
         }
         .frame(minWidth: 820, minHeight: 560)
         .environment(piecesChoisies)
         .environment(\.colorScheme, .dark)
-        .background(SondeFenetre { Self.assombrir($0) })
+        .background(SondeFenetre { fenetre in
+            Self.assombrir(fenetre)
+            Self.sansBarreDeTitre(fenetre)
+            // Hors de la mise a jour de la vue en cours.
+            if let fenetre, let c = CadreFeux(fenetre: fenetre) {
+                Task { @MainActor in feux = c }
+            }
+        })
         .sheet(item: $aRenommer) { FeuilleRenommer(id: $0.id) }
         .onChange(of: reduire, initial: true) { _, r in moteur.reduire = r }
         .task {
@@ -222,60 +246,24 @@ struct MenuPieces: View {
     }
 }
 
-/// Haut de la fenetre, pose sur la vue : barre d'outils et commandes de la vue, bandeau d'un reseau
-/// scinde, ligne de la tournee (sa place est gardee tant qu'une sonde est retenue :
-/// `FenetrePieces.margeHaut`), bandeau d'une maison sans pieces.
-struct EnTetePieces: View {
-    @Environment(Surveillance.self) private var surveillance
-    let moteur: MoteurPieces
-    @Binding var troisD: Bool
-    /// Maison n'a encore aucune piece : le bandeau du passeur.
-    var sansPieces = false
-
-    var body: some View {
-        VStack(spacing: FenetrePieces.espacement) {
-            HStack(spacing: 6) {
-                BarreOutils()
-                CommandesVue(moteur: moteur, troisD: $troisD)
-            }
-            if let r = surveillance.reseau, r.estScinde {
-                BandeauScission(reseau: r)
-            }
-            LigneTournee()
-            if sansPieces {
-                BandeauSansPieces()
-            }
-        }
-    }
-}
-
-/// Interrupteur 2D / 3D, puis « Rotation lente », en 3D seulement (coupee par « Reduire les
-/// animations »).
+/// Capsule de droite du haut de la fenetre : l'interrupteur 2D / 3D, puis « Rotation lente », en 3D
+/// seulement (coupee par « Reduire les animations »).
 struct CommandesVue: View {
     let moteur: MoteurPieces
     @Binding var troisD: Bool
 
     var body: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 6) {
-                Picker("Vue", selection: Binding(get: { moteur.troisD }, set: { v in
-                    moteur.basculer(troisD: v)
-                    troisD = v
-                })) {
-                    Text("2D").tag(false)
-                    Text("3D").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                if moteur.troisD {
-                    Toggle("Rotation lente", isOn: Binding(get: { moteur.rotation && !moteur.reduire },
-                                                           set: { _ in moteur.basculerRotation() }))
-                        .toggleStyle(.button)
-                        .buttonStyle(.glass)
-                        .disabled(moteur.reduire)
-                        .help(moteur.reduire ? String(localized: "Coupée par « Réduire les animations »") : "")
-                }
+        HStack(spacing: 5) {
+            SelecteurVue(troisD: Binding(get: { moteur.troisD }, set: { v in
+                moteur.basculer(troisD: v)
+                troisD = v
+            }))
+            if moteur.troisD {
+                Toggle("Rotation lente", isOn: Binding(get: { moteur.rotation && !moteur.reduire },
+                                                       set: { _ in moteur.basculerRotation() }))
+                    .toggleStyle(StyleBasculeCapsule())
+                    .disabled(moteur.reduire)
+                    .help(moteur.reduire ? String(localized: "Coupée par « Réduire les animations »") : "")
             }
         }
     }
@@ -287,24 +275,21 @@ struct BandeauSansPieces: View {
     @Environment(NomsInternes.self) private var nomsMaison
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Label("Pas encore de pièces de Maison : lance le passeur", systemImage: "house")
             Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
-                .buttonStyle(.glass)
+                .buttonStyle(StyleBoutonCapsule(taille: 10))
                 .disabled(surveillance.mode == .demo)
         }
-        .font(.callout)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 5)
-        .glassEffect(.regular, in: .capsule)
+        .piluleDuHaut()
     }
 }
 
-/// Fil, en haut a gauche : « Maison », puis « › Salon » en piece isolee ; « Maison » y ramene.
-/// `capture` : sans bouton (une capture ne dessine pas les controles d'AppKit).
+/// Fil, sous la capsule de gauche : « Maison », puis « › Salon » en piece isolee ; « Maison » y
+/// ramene. Une capture le dessine sans bouton.
 struct FilPieces: View {
+    @Environment(\.capturePieces) private var capture
     let moteur: MoteurPieces
-    var capture = false
 
     var body: some View {
         HStack(spacing: 4) {

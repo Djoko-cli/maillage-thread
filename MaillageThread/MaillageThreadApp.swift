@@ -54,7 +54,7 @@ struct MaillageThreadApp: App {
         s.demarrer()
         // `--args -demo -captures <dossier>` : images de la vue par pieces, puis l'app quitte.
         if Self.demo, let dossier = UserDefaults.standard.string(forKey: "captures") {
-            CapturesPieces.ecrire(dans: dossier, surveillance: s)
+            CapturesPieces.ecrire(dans: dossier, surveillance: s, sonde: sm, nomsMaison: d)
             exit(0)
         }
     }

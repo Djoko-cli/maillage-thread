@@ -41,9 +41,24 @@ struct FenetreTests {
         #expect(Set(largeurs).count == 1, "\(largeurs)")
     }
 
-    /// Pendant une tournee, la barre d'outils garde sa largeur : le bouton rafraichir ne bouge
+    /// La place de la tournee : l'indicateur pendant une tournee ; hors tournee, sa place, de la meme
+    /// taille, tant qu'une sonde est retenue (rien ne bouge au debut ni a la fin d'une tournee) ; rien
+    /// sans sonde.
+    @Test func placeDeLaTournee() {
+        let a = AvancementTournee(etape: .balayage, fait: 24, total: 48)
+        let debut = Date(timeIntervalSince1970: 1_790_000_000)
+        #expect(LigneTournee.place(serie: "A0:00:00:00:00:01", avancement: a, debut: debut) == .indicateur(a, debut: debut))
+        #expect(LigneTournee.place(serie: "A0:00:00:00:00:01", avancement: nil, debut: nil) == .gardee)
+        #expect(LigneTournee.place(serie: nil, avancement: nil, debut: nil) == .aucune)
+        let tournee = NSHostingView(rootView: IndicateurTournee(avancement: a, debut: debut)).fittingSize
+        let place = NSHostingView(rootView: IndicateurTournee(avancement: AvancementTournee(etape: .etatSonde, fait: 0, total: 1),
+                                                              debut: nil).hidden()).fittingSize
+        #expect(place == tournee)
+    }
+
+    /// Pendant une tournee, la capsule du reseau garde sa largeur : le bouton rafraichir ne bouge
     /// pas sous le pointeur. L'indicateur est sur sa propre ligne, qui ne prend aucune place
-    /// hors tournee (pas meme l'espacement de la pile).
+    /// sans sonde retenue (pas meme l'espacement de la pile).
     @Test(.timeLimit(.minutes(1))) func barreImmobilePendantUneTournee() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }

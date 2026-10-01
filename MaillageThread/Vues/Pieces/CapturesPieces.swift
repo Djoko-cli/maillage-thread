@@ -6,7 +6,9 @@ import UniformTypeIdentifiers
 
 /// Images de la vue par pieces rendues par l'app elle-meme, en mode demo (`--args -demo -captures
 /// <dossier>`), pour la relecture (spec de la vue par pieces, section 10) : 2D, envol, 3D, zooms,
-/// pieces isolees, survol. Sans fenetre ni capture d'ecran ; l'app quitte ensuite.
+/// pieces isolees, survol. Sans fenetre ni capture d'ecran ; l'app quitte ensuite. `ImageRenderer` ne
+/// rend ni la fenetre ni le verre : le haut de la fenetre y est dessine comme dans la maquette du
+/// bandeau (`capturePieces`), avec les trois boutons de la fenetre a leur place (`FeuxDeCapture`).
 @MainActor
 enum CapturesPieces {
     /// Contenu d'une fenetre de 1440 x 900, en 2x.
@@ -14,12 +16,15 @@ enum CapturesPieces {
 
     /// Ecrit les images dans `dossier` ; rend leurs noms.
     @discardableResult
-    static func ecrire(dans dossier: String, surveillance s: Surveillance) -> [String] {
+    static func ecrire(dans dossier: String, surveillance s: Surveillance, sonde: SondeMaillage,
+                       nomsMaison: NomsInternes) -> [String] {
         try? FileManager.default.createDirectory(atPath: dossier, withIntermediateDirectories: true)
         guard let r = s.reseau else { return [] }
         let palette = Palette(sombre: true)
-        let marges = (FenetrePieces.margeHaut(scinde: r.estScinde, sondeRetenue: false, sansPieces: false),
-                      FenetrePieces.margeBas(fiche: false, courbes: false))
+        // Marge du haut : la hauteur du haut de la fenetre, mesuree comme dans la fenetre.
+        let haut = NSHostingView(rootView: HautPieces(moteur: MoteurPieces(), troisD: .constant(false))
+            .pourCapture(s, sonde, nomsMaison)).fittingSize.height
+        let marges = (FenetrePieces.margeHaut(bas: haut), FenetrePieces.margeBas(fiche: false, courbes: false))
         func piece(_ scene: ScenePieces, _ nom: String) -> Int {
             scene.pieces.firstIndex { $0.nom == .maison(nom) } ?? 0
         }
@@ -56,8 +61,9 @@ enum CapturesPieces {
             // Deux passages : le premier pose les noms, le second les dessine a leur place.
             var image: CGImage?
             for _ in 0..<2 {
-                let rendu = ImageRenderer(content: VueCapture(moteur: m, palette: palette).frame(width: taille.width,
-                                                                                                height: taille.height))
+                let rendu = ImageRenderer(content: VueCapture(moteur: m, palette: palette)
+                    .frame(width: taille.width, height: taille.height)
+                    .pourCapture(s, sonde, nomsMaison))
                 rendu.scale = 2
                 image = rendu.cgImage
             }
@@ -76,7 +82,8 @@ enum CapturesPieces {
     }
 }
 
-/// La vue d'une capture : le fond, la scene, le fil et la ligne de niveau, sans horloge ni geste.
+/// La vue d'une capture : le fond, la scene, le haut de la fenetre (avec ses trois boutons) et la
+/// ligne de niveau, sans horloge ni geste.
 struct VueCapture: View {
     let moteur: MoteurPieces
     let palette: Palette
@@ -85,14 +92,26 @@ struct VueCapture: View {
         ZStack(alignment: .topLeading) {
             RadialGradient(gradient: palette.fond, center: UnitPoint(x: 0.3, y: 0.35), startRadius: 0, endRadius: 900)
             Canvas { ctx, taille in moteur.image(&ctx, taille: taille, echelle: 2, palette: palette) }
+            HautPieces(moteur: moteur, troisD: .constant(moteur.troisD))
+            FeuxDeCapture()
             VStack(alignment: .leading) {
-                FilPieces(moteur: moteur, capture: true)
-                    .padding(.top, 56)
                 Spacer()
                 LigneNiveauVue(ligne: moteur.ligneNiveau)
             }
             .padding(FenetrePieces.bord)
         }
-        .environment(\.colorScheme, .dark)
+        .coordinateSpace(.named(VuePieces.espace))
+    }
+}
+
+extension View {
+    /// Ce qu'une vue de la fenetre lit dans une capture : la surveillance, la sonde et les noms de la
+    /// demo, l'apparence sombre, et le rendu de capture.
+    func pourCapture(_ s: Surveillance, _ sonde: SondeMaillage, _ noms: NomsInternes) -> some View {
+        environment(\.capturePieces, true)
+            .environment(\.colorScheme, .dark)
+            .environment(s)
+            .environment(sonde)
+            .environment(noms)
     }
 }

@@ -108,13 +108,13 @@ struct MoteurPiecesTests {
     /// chevauchent), tous restent dans le cadre, et aucun ne touche une pastille opaque.
     @Test(arguments: [CGSize(width: 820, height: 560), CGSize(width: 1400, height: 900)], [false, true])
     func demoSansChevauchement(_ taille: CGSize, troisD: Bool) throws {
-        let (_, r, e) = try NomsSceneTests.demo()
+        let (_, _, e) = try NomsSceneTests.demo()
         let salon = try Self.indice(e, "Salon")
         for k in [0.5, 1, 2.5] {
             let m = MoteurPieces(troisD: troisD)
             m.fige = true
-            m.marges = (FenetrePieces.margeHaut(scinde: r.estScinde, sondeRetenue: false, sansPieces: false),
-                        FenetrePieces.margeBas(fiche: false, courbes: false))
+            // Le haut de la fenetre de la demo : la ligne des capsules, le bandeau de scission et le fil.
+            m.marges = (FenetrePieces.margeHaut(bas: 90), FenetrePieces.margeBas(fiche: false, courbes: false))
             m.poserTaille(taille)
             m.installerMaintenant(e)
             m.poserZoom(echelle: k, vers: m.centrePiece(salon))
