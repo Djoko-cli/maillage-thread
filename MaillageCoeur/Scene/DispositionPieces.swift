@@ -45,6 +45,9 @@ public struct DispositionPieces: Hashable, Sendable {
         var joues = 0
         var retenu: [SIMD2<Double>] = []
         var coutRetenu = Double.infinity
+        // Meilleur depart dont aucune carte libre ne recouvre une autre carte (voir plus bas).
+        var sain: [SIMD2<Double>]?
+        var coutSain = Double.infinity
         var depart = 0.0
         var epuise = false
         for essai in 0..<Self.departs where !epuise {
@@ -82,6 +85,27 @@ public struct DispositionPieces: Hashable, Sendable {
             if c < coutRetenu {
                 coutRetenu = c
                 retenu = courant
+            }
+            if c < coutSain && !calcul.recouvre(courant) {
+                coutSain = c
+                sain = courant
+            }
+        }
+        // Avec des pieces fixees, une carte libre peut finir sur une autre carte : le tassement
+        // l'attire vers le centre, parmi les fixees, et la separation s'arrete sur un point fixe ou
+        // les poussees des fixees voisines s'annulent dans un meme tour ; le cout ne penalise pas un
+        // recouvrement. Dans ce cas seulement, on garde le moins couteux du meilleur depart sans
+        // recouvrement et de la disposition retenue degagee. Sans recouvrement, rien ne change.
+        if calcul.recouvre(retenu) {
+            var degage = retenu
+            calcul.degager(&degage)
+            let coutDegage = calcul.cout(degage)
+            if let s = sain, coutSain <= coutDegage {
+                retenu = s
+                coutRetenu = coutSain
+            } else {
+                retenu = degage
+                coutRetenu = coutDegage
             }
         }
         positions = retenu
@@ -245,6 +269,82 @@ public struct DispositionPieces: Hashable, Sendable {
                         if !fixe[b] { pos[b] -= v }
                     }
                 }
+            }
+        }
+
+        /// Jeu sous lequel deux cartes ne se recouvrent pas (unites) : les arrondis d'une separation
+        /// exacte laissent des recouvrements de l'ordre de 1e-15.
+        static let jeu = 1e-6
+
+        /// Les cartes `a` et `b`, centrees en `pa` et `pb`, se recouvrent (ecarts `gap` et `lab`
+        /// compris), au-dela du jeu.
+        func chevauchent(_ pa: SIMD2<Double>, _ a: Int, _ pb: SIMD2<Double>, _ b: Int) -> Bool {
+            let px = (w[a] + w[b]) / 2 + gap - abs(pb.x - pa.x)
+            let pz = (d[a] + d[b]) / 2 + gap + lab - abs(pb.y - pa.y)
+            return px > Self.jeu && pz > Self.jeu
+        }
+
+        /// La carte libre `p` recouvre une autre carte de son etage.
+        func coincee(_ pos: [SIMD2<Double>], _ p: Int) -> Bool {
+            parEtage[etage[p]].contains { $0 != p && chevauchent(pos[p], p, pos[$0], $0) }
+        }
+
+        /// Une carte libre recouvre une autre carte. Deux fixees qui se recouvrent ne comptent pas :
+        /// rien ne peut les ecarter.
+        func recouvre(_ pos: [SIMD2<Double>]) -> Bool {
+            pos.indices.contains { !fixe[$0] && coincee(pos, $0) }
+        }
+
+        /// Place la plus proche de `pos[p]` ou la carte `p` ne recouvre aucune autre carte de son
+        /// etage. Le bord de la zone interdite est fait des cotes des rectangles elargis des autres
+        /// cartes : la place la plus proche a pour x celui de la carte ou celui d'un cote vertical,
+        /// pour z celui de la carte ou celui d'un cote horizontal ; il suffit d'essayer ces
+        /// combinaisons. Il en existe toujours une libre (a droite de toutes les autres cartes).
+        func placeLibre(_ pos: [SIMD2<Double>], _ p: Int) -> SIMD2<Double> {
+            let autres = parEtage[etage[p]].filter { $0 != p }
+            var xs = [pos[p].x], zs = [pos[p].y]
+            for o in autres {
+                let hx = (w[p] + w[o]) / 2 + gap, hz = (d[p] + d[o]) / 2 + gap + lab
+                xs += [pos[o].x - hx, pos[o].x + hx]
+                zs += [pos[o].y - hz, pos[o].y + hz]
+            }
+            var place = pos[p]
+            var dm = Double.infinity
+            for x in xs {
+                for z in zs {
+                    let q = SIMD2(x, z), v = q - pos[p]
+                    let dq = v.x * v.x + v.y * v.y
+                    if dq < dm && !autres.contains(where: { chevauchent(q, p, pos[$0], $0) }) {
+                        dm = dq
+                        place = q
+                    }
+                }
+            }
+            return place
+        }
+
+        /// Dernier recours, quand la separation laisse une carte libre sur une autre : tant qu'une
+        /// carte libre en recouvre une autre, celle qui a le moins a bouger va a sa place libre la
+        /// plus proche (les fixees ne bougent jamais). Chaque deplacement ote tous les recouvrements
+        /// de la carte deplacee sans en creer : le nombre de paires qui se recouvrent baisse a chaque
+        /// tour, et le plafond de tours n'est jamais atteint. Il ne reste a la fin que les
+        /// recouvrements entre fixees, sans solution. Un etage sans fixee est ensuite recentre.
+        func degager(_ pos: inout [SIMD2<Double>]) {
+            for e in 0..<nbEtages {
+                let liste = parEtage[e]
+                var bouge = false
+                for _ in 0..<(liste.count * liste.count) {
+                    var choix: (piece: Int, place: SIMD2<Double>, distance: Double)?
+                    for p in liste where !fixe[p] && coincee(pos, p) {
+                        let q = placeLibre(pos, p), v = q - pos[p]
+                        let dq = v.x * v.x + v.y * v.y
+                        if dq < choix?.distance ?? .infinity { choix = (p, q, dq) }
+                    }
+                    guard let c = choix else { break }
+                    pos[c.piece] = c.place
+                    bouge = true
+                }
+                if bouge && !liste.contains(where: { fixe[$0] }) { recentrer(&pos, e) }
             }
         }
 

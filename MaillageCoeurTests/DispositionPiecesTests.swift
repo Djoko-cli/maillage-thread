@@ -57,6 +57,64 @@ struct DispositionPiecesTests {
         #expect(figee.coups == 0)
     }
 
+    /// Pieces fixees d'un tirage : piece `i` fixee au tirage `k` pour `pourcent` %, par un hachage
+    /// entier deterministe (aucun hasard).
+    static func fixee(_ i: Int, tirage k: Int, pourcent: Int) -> Bool {
+        var h = UInt32(truncatingIfNeeded: i &* 73 &+ k &* 1009 &+ 17)
+        h ^= h >> 13
+        h = h &* 0x5bd1e995
+        h ^= h >> 15
+        return Int(h % 100) < pourcent
+    }
+
+    /// Une seule piece libre (nouvelle ou renommee), toutes les autres fixees a une disposition
+    /// valide : la libre se place sans recouvrement, et aucune fixee ne bouge. Chaque piece tour a
+    /// tour, sur la maison de 8 pieces et sur celle de 20.
+    @Test(arguments: [(8, 30, 4), (20, 100, 6)])
+    func uneSeuleLibre(_ maison: (Int, Int, Int)) {
+        let np = maison.0
+        let (s, c) = MaisonInventee.scene(pieces: np, appareils: maison.1, routeurs: maison.2)
+        let base = DispositionPieces(scene: s, cartes: c)
+        #expect(Self.recouvrements(s, c, base) == [])
+        for libre in 0..<np {
+            var fixees: [Int: SIMD2<Double>] = [:]
+            for i in 0..<np where i != libre { fixees[i] = base.positions[i] }
+            let d = DispositionPieces(scene: s, cartes: c, fixees: fixees)
+            #expect(Self.recouvrements(s, c, d) == [], "libre \(libre)")
+            for (i, p) in fixees { #expect(d.positions[i] == p, "fixee \(i), libre \(libre)") }
+        }
+    }
+
+    /// Sous-ensembles deterministes de pieces fixees a une disposition valide (10 tirages par
+    /// maison) : aucun recouvrement, et aucune fixee ne bouge.
+    @Test(arguments: [10, 30, 50, 80])
+    func piecesFixees(_ pourcent: Int) {
+        for (np, na, nr) in [(8, 30, 4), (12, 50, 4), (20, 100, 6)] {
+            let (s, c) = MaisonInventee.scene(pieces: np, appareils: na, routeurs: nr)
+            let base = DispositionPieces(scene: s, cartes: c)
+            for k in 0..<10 {
+                var fixees: [Int: SIMD2<Double>] = [:]
+                for i in 0..<np where Self.fixee(i, tirage: k, pourcent: pourcent) { fixees[i] = base.positions[i] }
+                if fixees.isEmpty || fixees.count == np { continue }
+                let d = DispositionPieces(scene: s, cartes: c, fixees: fixees)
+                #expect(Self.recouvrements(s, c, d) == [], "\(np) pieces, tirage \(k)")
+                for (i, p) in fixees { #expect(d.positions[i] == p, "\(np) pieces, tirage \(k), fixee \(i)") }
+            }
+        }
+    }
+
+    /// Cas sans solution : deux fixees qui se recouvrent entre elles. Le calcul se termine, les
+    /// fixees ne bougent pas, et les libres ne recouvrent aucune carte ; seul reste le recouvrement
+    /// des deux fixees.
+    @Test func fixeesQuiSeRecouvrent() {
+        let (s, c) = MaisonInventee.scene(pieces: 6, appareils: 20, routeurs: 3)
+        let a = s.etages[0].pieces[0], b = s.etages[0].pieces[1]
+        let fixees = [a: SIMD2(0.0, 0.0), b: SIMD2(0.5, 0.5)]
+        let d = DispositionPieces(scene: s, cartes: c, fixees: fixees)
+        #expect(Self.recouvrements(s, c, d) == ["\(s.pieces[a].id) / \(s.pieces[b].id)"])
+        #expect(d.positions[a] == fixees[a] && d.positions[b] == fixees[b])
+    }
+
     /// Budget : au plus `budget` coups ; le resultat reste sans recouvrement, et au plus le cout du depart.
     @Test func budget() {
         let (s, c) = MaisonInventee.scene(pieces: 8, appareils: 30, routeurs: 4)
