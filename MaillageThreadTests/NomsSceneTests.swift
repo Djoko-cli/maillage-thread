@@ -64,6 +64,41 @@ struct NomsSceneTests {
                 == "↑ HomePod mini chambre · Chambre, Étage")
     }
 
+    /// Un nom de plus de 40 caracteres est coupe a 39, suivi de « … », avant la couronne et ☾.
+    @Test func nomCoupeA40Caracteres() throws {
+        let (s, r, _) = try Self.demo()
+        let serrure = "Serrure connectée de la porte arrière, garage"
+        let atv = "Apple TV du salon, sous la télévision murale"
+        #expect(serrure.count == 45 && atv.count == 44)
+        s.renommer("86E7BD1A75F28E6D", en: serrure)
+        s.renommer("Apple TV 4K", en: atv)
+        let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        #expect(e.libelles["86E7BD1A75F28E6D"]?.texte == "Serrure connectée de la porte arrière, …" + " ☾")
+        #expect(e.libelles["Apple TV 4K"]?.texte == "Apple TV du salon, sous la télévision m…" + " 👑")
+        #expect(String(serrure.prefix(39)) == "Serrure connectée de la porte arrière, ")
+    }
+
+    /// Repere « ailleurs » d'un enfant dont le parent est le chef : le nom du parent sans la couronne,
+    /// avec ☾ ou ⚠︎ s'il en a (precision 20).
+    @Test func repereAilleursSansCouronne() throws {
+        let (_, _, e) = try Self.demo()
+        #expect(e.libelles["Apple TV 4K"]?.texte == "Apple TV 4K 👑")
+        let reperes = e.scene.pieces.indices.flatMap { SceneProjetee.reperes(e.scene, focus: $0) }
+        let a = try #require(reperes.first { $0.parent == "Apple TV 4K" })
+        let salon = LibellesNoeuds.nom(e.scene.pieces[a.piece].nom, libelles: e.libelles)
+        #expect(salon == "Salon")
+        let suite = a.sens == .memeEtage ? "" : ", " + LibellesNoeuds.nom(e.scene.etages[a.etage].nom)
+        let fleche = switch a.sens {
+        case .memeEtage: "↗"
+        case .dessous: "↓"
+        case .dessus: "↑"
+        }
+        #expect(LibellesNoeuds.ailleurs(a, scene: e.scene, libelles: e.libelles) == "\(fleche) Apple TV 4K · Salon\(suite)")
+        var disparu = e.libelles
+        disparu["Apple TV 4K"]?.texte = "Apple TV 4K 👑 ☾ ⚠︎"
+        #expect(LibellesNoeuds.ailleurs(a, scene: e.scene, libelles: disparu) == "\(fleche) Apple TV 4K ☾ ⚠︎ · Salon\(suite)")
+    }
+
     /// Routeurs de bordure que Maison ne place pas : la piece de leur nom (« HomePod mini chambre »), sinon
     /// celle qu'on leur a choisie, qui passe avant ; les autres vont dans « Sans piece ». Un routeur que
     /// Maison place garde sa piece.
