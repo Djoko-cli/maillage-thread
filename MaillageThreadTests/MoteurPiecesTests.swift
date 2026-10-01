@@ -565,7 +565,7 @@ struct MoteurPiecesTests {
     }
 
     /// Ordre des couches : plateaux et equateur, blocs, liens enfant -> parent, liens entre routeurs,
-    /// pastilles, liseré de la sphere, traits, noms.
+    /// pastilles, lisere de la sphere, traits, noms.
     @Test func ordreDesCouches() {
         #expect(RenduCanvas.couches == [.plateaux, .blocs, .liensEnfants, .liensRouteurs, .pastilles, .sphere, .traits, .noms])
         #expect(Set(RenduCanvas.couches) == Set(RenduCanvas.Couche.allCases))

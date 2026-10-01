@@ -15,5 +15,11 @@ xcodebuild -project MaillageThread.xcodeproj -scheme MaillageCoeur -destination 
   > "$JOURNAL" 2>&1
 CODE=$?
 grep -E "(error|warning): |✘|mesure : |Test run with|\*\* TEST" "$JOURNAL" | grep -v -e appintentsmetadataprocessor -e "\[Connection\]"
+# Un test de temps saute (compilation non optimisee) passe sans rien mesurer : il faut ses deux lignes.
+MESURES=$(grep -c "mesure : " "$JOURNAL")
+if [ "$CODE" -eq 0 ] && [ "$MESURES" -ne 2 ]; then
+  echo "echec : $MESURES ligne(s) « mesure : » au lieu de 2 (un test de temps a ete saute)"
+  CODE=1
+fi
 echo "journal complet : $JOURNAL (code $CODE)"
 exit $CODE

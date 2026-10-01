@@ -69,7 +69,7 @@ public struct Ailleurs: Hashable, Sendable {
 /// Ce que la camera rend au moteur `Canvas` (spec, section 9), en coordonnees de l'ecran : le contrat
 /// entre la scene et le moteur. Couches, sans tri de profondeur global : plateaux et equateur, blocs
 /// (du plus loin au plus proche, faces tournees vers l'oeil), liens enfant-parent (avec les
-/// rattachements et les fils « ailleurs »), liens entre routeurs, pastilles, liseré de la sphere ;
+/// rattachements et les fils « ailleurs »), liens entre routeurs, pastilles, lisere de la sphere ;
 /// puis les traits de rappel et les noms, que le moteur pose avec `PlacementNoms`.
 public struct SceneProjetee: Sendable {
     public struct Plateau: Sendable {
@@ -187,7 +187,7 @@ public struct SceneProjetee: Sendable {
                                     disque: proj.disque(c, r), opacite: fo, profondeur: proj.profondeur(c)))
         }
 
-        // Sphere de la maison : liseré et equateur, pendant l'envol et en 3D.
+        // Sphere de la maison : lisere et equateur, pendant l'envol et en 3D.
         let rs = g.rayonSphere * (0.8 + 0.2 * t)
         if 0.18 * t * fo > 0.002 {
             equateur = Equateur(contour: proj.polyligne(Self.cercle(g.centreSphere, rs, 192), fermee: true),

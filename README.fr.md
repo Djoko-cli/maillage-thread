@@ -147,8 +147,9 @@ clair. Conception :
   routeur va dans la pièce dont le nom figure dans le sien (« HomePod mini
   chambre » dans « Chambre » : en mots entiers, sans égard à la casse ni aux
   accents ; le nom de pièce le plus long gagne, une égalité ne place rien).
-  Pour les autres, sa fiche propose « Placer dans une pièce… » : le choix passe
-  avant le nom, et il est gardé sous le nom de son annonce
+  La fiche de tout routeur de bordure que Maison ne place pas, même s'il est
+  déjà placé par son nom, propose « Placer dans une pièce… » : ce choix
+  l'emporte sur le nom, et il est gardé sous le nom de son annonce
   (`pieces-routeurs.json` dans le dossier de l'app, jamais en démo). Les
   nœuds qui restent sans pièce vont dans « Sans pièce », sur le plateau du
   bas. Sans aucune pièce de Maison (Passeur Noms jamais passé), une carte par

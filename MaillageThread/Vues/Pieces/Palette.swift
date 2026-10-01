@@ -86,11 +86,11 @@ struct Palette {
     var trait: Color { Color(.sRGB, red: 230 / 255, green: 236 / 255, blue: 250 / 255, opacity: 0.45) }
     /// « ⌂ Maison » : blanc a 0,9, ombre noire.
     var texteMaison: Color { Color(white: 1, opacity: 0.9) }
-    /// Sphere de la maison : liseré (0,55 ; 0,72 ; 1,0) et equateur #dfe6f3.
+    /// Sphere de la maison : lisere (0,55 ; 0,72 ; 1,0) et equateur #dfe6f3.
     var bulle: Color { Color(.sRGB, red: 0.55, green: 0.72, blue: 1.0) }
     var equateur: Color { Color(.sRGB, red: 0xDF / 255, green: 0xE6 / 255, blue: 0xF3 / 255) }
 
-    /// Liseré de la sphere : l'alpha de la maquette, force (0,02 + 0,45 (1 - |n.v|)^2,5), ou |n.v| vaut
+    /// Lisere de la sphere : l'alpha de la maquette, force (0,02 + 0,45 (1 - |n.v|)^2,5), ou |n.v| vaut
     /// racine(1 - rho^2) a la distance rho du centre du disque ; echantillonne plus serre vers le bord.
     func degradeBulle(force: Double) -> Gradient {
         let rhos: [Double] = [0, 0.35, 0.55, 0.68, 0.77, 0.84, 0.89, 0.925, 0.95, 0.968, 0.98, 0.989, 0.995, 1]

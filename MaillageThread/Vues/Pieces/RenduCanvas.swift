@@ -61,7 +61,7 @@ enum RenduCanvas {
 
     /// Ordre des couches, de la plus basse a la plus haute : plateaux et equateur, blocs, liens enfant
     /// -> parent (avec les rattachements et les fils « ailleurs »), liens entre routeurs, pastilles (et
-    /// l'anneau de la selection), liseré de la sphere, traits de rappel, noms.
+    /// l'anneau de la selection), lisere de la sphere, traits de rappel, noms.
     static let couches: [Couche] = [.plateaux, .blocs, .liensEnfants, .liensRouteurs, .pastilles, .sphere, .traits, .noms]
 
     private static let grand = StylesNoms.grand
@@ -181,7 +181,7 @@ enum RenduCanvas {
         }
     }
 
-    /// Liseré de la sphere : transparent au centre, lumineux au bord de son contour exact.
+    /// Lisere de la sphere : transparent au centre, lumineux au bord de son contour exact.
     private static func dessinerSphere(_ ctx: inout GraphicsContext, _ image: ImagePieces, _ palette: Palette) {
         guard let sp = image.projetee.sphere else { return }
         var g = ctx

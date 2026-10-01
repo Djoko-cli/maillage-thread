@@ -145,8 +145,9 @@ French).
   neither the HomePods nor the Apple TV: such a router goes to the room whose
   name is in its own ("HomePod mini chambre" to "Chambre": whole words,
   ignoring case and accents; the longest room name wins, a tie places
-  nothing). For the others, its card offers "Place in a room…": the choice
-  comes before the name, and is kept under the name of its announcement
+  nothing). The card of any border router that Home doesn't place, even one
+  already placed by its name, offers "Place in a room…": this choice wins over
+  the name, and is kept under the name of its announcement
   (`pieces-routeurs.json` in the app folder, never in the demo). Nodes still
   without a room go to "No room", on the bottom platform. With no Home room at
   all (Passeur Noms never ran), one card per router, with its children.
