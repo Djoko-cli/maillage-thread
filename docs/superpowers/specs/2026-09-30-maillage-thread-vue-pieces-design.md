@@ -220,6 +220,7 @@ On les écarte alors sur l'axe où la pénétration est la plus faible, de moiti
 - Chaque coup est suivi d'un tassement court (200 tours à 0,998, puis 60 de séparation seule, puis recentrage). On garde le meilleur coup qui fait baisser le coût, et on s'arrête quand aucun ne le fait, ou après 25 tours.
 - On retient la meilleure disposition des 6 départs.
 - **Pièces fixées** (section 2.4) : elles restent à leur place et servent d'obstacles. Les coups ne touchent que les autres pièces. Sans pièce libre, il n'y a pas d'optimisation.
+- **Dégagement** (ajout du 01/10, après la relecture de la tâche 4) : si la disposition retenue garde un recouvrement à cause des fixées, une étape finale déplace chaque pièce libre en cause vers la place libre la plus proche, en tours comptés ; les fixées ne bougent jamais. On garde la moins coûteuse de cette disposition dégagée et du meilleur départ sans recouvrement. Sans recouvrement, rien ne change, au bit près. Deux fixées qui se recouvrent entre elles ne sont pas corrigées.
 
 **Budget :** au plus 3 000 coups évalués par calcul, tous départs compris. Au-delà, on garde la meilleure disposition trouvée. Ce budget ne compte pas le temps, donc le résultat reste le même sur toutes les machines.
 
@@ -319,6 +320,8 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
 - **2D :** champ de 2°, vue de dessus. La hauteur de vue est `max(hauteur de boîte·1,1 ; largeur de boîte·1,05 / aspect)`, centrée sur la boîte de cadrage.
 - **3D :** champ de 40°, inclinaison 0,95 rad, orbite −0,75 rad. La hauteur de vue est `2,4·R3·max(1, 1/aspect)`, centrée sur la sphère.
 
+**Aspect** (largeur / hauteur de la fenêtre ; ajout du 01/10) : un aspect non fini, nul ou négatif, celui d'un cadre vide pendant une mise en page, vaut 1,6 ; les autres sont bornés de 0,05 à 20. La caméra reste ainsi toujours finie ; entre 0,05 et 20, rien ne change.
+
 **Envol**, 2,6 s, en cubique entrée-sortie :
 - il interpole le champ (`2 + 38·u^1,6`), l'inclinaison, l'orbite, la cible et la distance ;
 - il part de la vue courante, zoomée ou tournée, sans saut ;
@@ -329,7 +332,7 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
 **Gestes :**
 - **molette ou pincement :** zoom amorti ; en 2D, le point sous le curseur reste immobile. Les bornes vont de 3 unités de hauteur de vue à 3 × la vue d'ensemble en 2D, et de 5 unités de distance à 2,5 × la vue d'ensemble en 3D ;
 - **glisser le fond :** déplace la vue en 2D ; tourne autour de la maison en 3D, avec un amorti de 5 % par image, l'inclinaison bornée de 0,15 à 1,45 rad ;
-- **glisser une pièce :** la déplace dans son étage, bornée à `rayon du plateau − ½ diagonale de la carte`. Les liens suivent, et la place est gardée au relâchement (section 2.4) ;
+- **glisser une pièce :** la déplace dans son étage, bornée à `rayon du plateau − ½ diagonale de la carte`. Les liens suivent, et la place est gardée au relâchement (section 2.4). Un relevé reçu pendant le geste attend le relâchement : la place glissée est gardée d'abord, puis le relevé s'applique ;
 - **clic sur une pièce, sans glisser :** l'**isole** (voir plus bas) ;
 - **clic sur un appareil :** ouvre sa fiche ;
 - **survol d'un appareil :** nom en semi-gras, liens éclairés.
@@ -353,12 +356,12 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
 **Redimensionnement :** la vue d'ensemble se recadre, sauf si Djoko a zoomé ou isolé une pièce.
 
 **« Réduire les animations »** (accessibilité de macOS) :
-- l'envol devient un fondu de 0,3 s entre les deux vues finales ;
+- l'envol devient un fondu de 0,3 s par le fond : la scène s'efface, bascule à mi-chemin, puis revient ;
 - le retour par double-clic aussi ;
 - les autres vols de caméra sont immédiats ;
 - la rotation lente est coupée.
 
-**Pas de travail lourd sur le fil principal pendant un mouvement.** Un relevé qui arrive pendant l'envol ou un vol s'applique à la fin du mouvement.
+**Pas de travail lourd sur le fil principal pendant un mouvement.** Un relevé qui arrive pendant l'envol, un vol, le fondu ou le glisser d'une pièce s'applique à la fin du mouvement.
 
 ## 8. Cas limites
 
@@ -405,7 +408,7 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
   - aucun recouvrement, avec les écarts `GAP` et `LAB` ;
   - déterminisme ;
   - sur la maison de démo, **aucun lien ne traverse une pièce autre que celles de ses bouts** ;
-  - une pièce fixée ne bouge pas, et une nouvelle se place sans recouvrement ;
+  - une pièce fixée ne bouge pas, et une nouvelle se place sans recouvrement, même quand toutes les autres sont fixées (maisons de 8 et de 20 pièces, et des fixées à 10, 30, 50 et 80 %) ;
   - le coût de la disposition retenue est au plus celui du départ.
 - **`CameraScene` :**
   - projection de points connus ;
@@ -438,6 +441,24 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
 - l'ordre des étages ;
 - un relevé du passeur sans dossier ;
 - « Réduire les animations ».
+
+**Vérifié le 01/10 avec Djoko** (plan 4b) : sa maison en 4 étages (ses
+zones) et 13 pièces, dont 10 montrées, celles qui ont un appareil Thread,
+plus la carte « Sans pièce » ; aucun nom ne se chevauche, et la ligne
+de niveau suit le zoom et la taille de la fenêtre (« Vue d'ensemble : les
+pièces » à la vue d'ensemble). Ses
+routeurs de bordure dont le nom contient une pièce y sont placés, à la bonne
+pièce ; les trois autres sont placés par un choix, gardé après un redémarrage, et « D'après son nom » les rend à la
+règle du nom. Il reste dans « Sans pièce » un appareil joignable mais non
+identifié. 2D et 3D, envol et rotation lente ; pièce isolée, retour par un
+clic à côté, Échap et « Maison » ; double-clic sur le fond ; une pièce
+glissée et l'ordre des étages retrouvés après un redémarrage ; fiche et
+courbes ; fenêtre sombre avec le Mac en clair, tout lisible ; relevé du
+passeur ; « Réduire les animations ». Demandes notées pour la suite : une
+zone au même niveau qu'un étage, la 2D en grille selon la
+forme de la fenêtre, ⌃ + glisser pour la verticale, isoler un étage,
+l'animation d'un appareil qui change de pièce, l'apparition animée du
+bandeau, 2D/3D et « Rotation lente » sur une deuxième ligne.
 
 ## 11. Découpage en plans
 
