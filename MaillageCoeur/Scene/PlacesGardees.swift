@@ -7,6 +7,11 @@ import Foundation
 /// perd sa place.
 public struct PlacesGardees: Hashable, Sendable, Codable {
     public static let versionActuelle = 1
+    /// Distance au centre de son plateau au-dela de laquelle une place gardee est ignoree (unites) : elle
+    /// vient d'un fichier abime ou edite a la main, un glisser restant dans le plateau. Un plateau fait
+    /// quelques dizaines d'unites (24 px chacune) ; la borne laisse deux ordres de grandeur de marge, et
+    /// les carres des calculs (1e8) restent loin de tout debordement.
+    public static let borne = 10_000.0
 
     public struct Place: Hashable, Sendable, Codable {
         public var x: Double
@@ -52,8 +57,11 @@ public struct PlacesGardees: Hashable, Sendable, Codable {
 
     public func maison(_ domicile: String) -> Maison { maisons[domicile] ?? Maison() }
 
-    /// Garde la place d'une piece deplacee : elle est desormais fixee.
+    /// Garde la place d'une piece deplacee : elle est desormais fixee. Une place non finie (camera
+    /// degeneree pendant un glisser) est refusee : JSON ne l'ecrit pas, et `ecrire` echouerait ensuite
+    /// a chaque appel.
     public mutating func garder(_ place: SIMD2<Double>, piece: String, etage: String, domicile: String) {
+        guard place.x.isFinite, place.y.isFinite else { return }
         maisons[domicile, default: Maison()].etages[etage, default: [:]][piece] = Place(x: place.x, z: place.y)
     }
 
@@ -68,12 +76,15 @@ public struct PlacesGardees: Hashable, Sendable, Codable {
     }
 
     /// Pieces fixees d'une scene : indice de piece -> place gardee, pour les pieces qui en ont une dans
-    /// leur etage.
+    /// leur etage. Une place non finie, ou a plus de `borne` du centre, est ignoree : la piece est libre.
     public func fixees(_ scene: ScenePieces, domicile: String) -> [Int: SIMD2<Double>] {
         let m = maison(domicile)
         var r: [Int: SIMD2<Double>] = [:]
         for (i, p) in scene.pieces.enumerated() {
-            if let place = m.etages[scene.etages[p.etage].id]?[p.id] { r[i] = SIMD2(place.x, place.z) }
+            if let place = m.etages[scene.etages[p.etage].id]?[p.id], place.x.isFinite, place.z.isFinite,
+               hypot(place.x, place.z) <= Self.borne {
+                r[i] = SIMD2(place.x, place.z)
+            }
         }
         return r
     }

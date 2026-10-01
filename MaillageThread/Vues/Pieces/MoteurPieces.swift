@@ -364,9 +364,10 @@ final class MoteurPieces {
 
     /// Garde la place d'une piece qu'on vient de glisser : elle est desormais fixee. Un calcul en cours
     /// ne la connait pas : il est relance avec elle (sinon, a sa fin, la piece sauterait a la place
-    /// qu'il lui donne).
+    /// qu'il lui donne). Une place non finie (camera degeneree) n'est pas gardee.
     private func garder(_ id: String) {
-        guard let e = entree, let i = e.scene.pieces.firstIndex(where: { $0.id == id }), i < positions.count else { return }
+        guard let e = entree, let i = e.scene.pieces.firstIndex(where: { $0.id == id }), i < positions.count,
+              positions[i].x.isFinite, positions[i].y.isFinite else { return }
         let p = e.scene.pieces[i]
         places.garder(positions[i], piece: p.id, etage: e.scene.etages[p.etage].id, domicile: e.domicile)
         placesCalculees[p.id] = positions[i]

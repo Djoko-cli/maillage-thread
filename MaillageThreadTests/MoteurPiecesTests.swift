@@ -139,6 +139,27 @@ struct MoteurPiecesTests {
         #expect(gardee == PlacesGardees.Place(x: apres.x, z: apres.y))
     }
 
+    /// Une place demesuree dans `positions-pieces.json` (fichier abime ou edite a la main) : elle est
+    /// ignoree, la vue reste finie, et un glisser ecrit de nouveau le fichier.
+    @Test func placeDemesureeDansLeFichier() throws {
+        let url = Self.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (_, _, e) = try NomsSceneTests.demo()
+        var abime = PlacesGardees()
+        abime.garder(SIMD2(1e308, 0), piece: "piece:Salon", etage: "zone:Rez-de-chaussée", domicile: e.domicile)
+        try abime.ecrire(dans: url)
+        let m = Self.moteur(e, fichier: url)
+        #expect(m.geometrie.rayons.allSatisfy(\.isFinite) && m.orbite.distance.isFinite && m.orbite.cible.x.isFinite)
+        let cuisine = try Self.indice(e, "Cuisine")
+        let depart = try Self.pointDePiece(m, cuisine)
+        m.glisser(depart, depart: depart)
+        m.glisser(CGPoint(x: depart.x + 30, y: depart.y), depart: depart)
+        m.relacher(CGPoint(x: depart.x + 30, y: depart.y))
+        let fin = m.positions[cuisine]
+        let gardee = PlacesGardees.lire(url).maison(e.domicile).etages["zone:Rez-de-chaussée"]?["piece:Cuisine"]
+        #expect(gardee == PlacesGardees.Place(x: fin.x, z: fin.y))
+    }
+
     /// Un releve recu pendant le glisser d'une piece (meme structure, un etat change) attend le
     /// relachement : la piece ne saute pas a son ancienne place, et la place gardee est celle du geste ;
     /// la scene s'applique ensuite, avec cette place.
