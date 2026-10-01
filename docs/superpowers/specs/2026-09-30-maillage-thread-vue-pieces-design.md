@@ -415,7 +415,7 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
   - déterminisme ;
   - sur la maison de démo, **aucun lien ne traverse une pièce autre que celles de ses bouts** ;
   - une pièce fixée ne bouge pas, et une nouvelle se place sans recouvrement, même quand toutes les autres sont fixées (maisons de 8 et de 20 pièces, et des fixées à 10, 30, 50 et 80 %) ;
-  - le coût de la disposition retenue est au plus celui du départ.
+  - le coût de la disposition retenue est au plus celui du départ, sauf quand des pièces fixées imposent le dégagement (section 4.3) : la disposition gardée alors, dégagée ou meilleur départ sans recouvrement, peut coûter plus que le départ.
 - **`CameraScene` :**
   - projection de points connus ;
   - début et fin de l'envol : cadrage 2D, puis sphère cadrée ;
