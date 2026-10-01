@@ -993,6 +993,22 @@
         }
       }
     },
+    "Autres" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autres"
+          }
+        }
+      }
+    },
     "Autres changements" : {
       "localizations" : {
         "en" : {
@@ -1809,6 +1825,22 @@
         }
       }
     },
+    "Liens radio (qualité)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Radio links (quality)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liens radio (qualité)"
+          }
+        }
+      }
+    },
     "Liste des routeurs" : {
       "localizations" : {
         "en" : {
@@ -1821,6 +1853,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Liste des routeurs"
+          }
+        }
+      }
+    },
+    "Légende" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legend"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Légende"
           }
         }
       }
@@ -2765,6 +2813,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Relevé de Maison refusé : jeton faux."
+          }
+        }
+      }
+    },
+    "Relevé de la sonde ancien" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Probe survey is old"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relevé de la sonde ancien"
           }
         }
       }
@@ -3761,6 +3825,22 @@
         }
       }
     },
+    "autre partition" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "other partition"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "autre partition"
+          }
+        }
+      }
+    },
     "batterie OK" : {
       "localizations" : {
         "en" : {
@@ -3793,6 +3873,22 @@
         }
       }
     },
+    "bonne" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "good"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "bonne"
+          }
+        }
+      }
+    },
     "canal réseau déjà ouvert" : {
       "localizations" : {
         "en" : {
@@ -3809,6 +3905,22 @@
         }
       }
     },
+    "candidats" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "candidates"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "candidats"
+          }
+        }
+      }
+    },
     "chef" : {
       "localizations" : {
         "en" : {
@@ -3821,6 +3933,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "chef"
+          }
+        }
+      }
+    },
+    "chef du réseau Thread, élu automatiquement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thread network leader, elected automatically"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "chef du réseau Thread, élu automatiquement"
           }
         }
       }
@@ -4097,6 +4225,22 @@
         }
       }
     },
+    "inconnue" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "unknown"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "inconnue"
+          }
+        }
+      }
+    },
     "isolé (partition coupée)" : {
       "localizations" : {
         "en" : {
@@ -4273,22 +4417,6 @@
         }
       }
     },
-    "lien radio (qualité)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "radio link (quality)"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "lien radio (qualité)"
-          }
-        }
-      }
-    },
     "lue" : {
       "localizations" : {
         "en" : {
@@ -4321,6 +4449,22 @@
         }
       }
     },
+    "moyenne" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "medium"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "moyenne"
+          }
+        }
+      }
+    },
     "non autorisé" : {
       "localizations" : {
         "en" : {
@@ -4333,6 +4477,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "non autorisé"
+          }
+        }
+      }
+    },
+    "non identifié" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "unidentified"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "non identifié"
           }
         }
       }
@@ -4369,6 +4529,38 @@
         }
       }
     },
+    "parent dans une autre pièce" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "parent in another room"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "parent dans une autre pièce"
+          }
+        }
+      }
+    },
+    "partition coupée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "split partition"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "partition coupée"
+          }
+        }
+      }
+    },
     "partition inconnue" : {
       "localizations" : {
         "en" : {
@@ -4381,6 +4573,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "partition inconnue"
+          }
+        }
+      }
+    },
+    "pile" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "battery"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pile"
           }
         }
       }
@@ -4477,22 +4685,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "rattachement supposé"
-          }
-        }
-      }
-    },
-    "rattachement, pas un lien radio" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "attachment, not a radio link"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "rattachement, pas un lien radio"
           }
         }
       }
@@ -4625,6 +4817,22 @@
         }
       }
     },
+    "vers son parent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "to its parent"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "vers son parent"
+          }
+        }
+      }
+    },
     "· %@" : {
       "localizations" : {
         "en" : {
@@ -4653,22 +4861,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "· relevé %@"
-          }
-        }
-      }
-    },
-    "· relevé de la sonde ancien" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "· probe survey is old"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "· relevé de la sonde ancien"
           }
         }
       }
@@ -4797,6 +4989,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "—"
+          }
+        }
+      }
+    },
+    "→ Salon" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "→ Living room"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "→ Salon"
           }
         }
       }

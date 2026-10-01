@@ -56,6 +56,11 @@ enum CapturesPieces {
             m.poserTaille(taille)
             let e = EntreeScene(surveillance: s, reseau: r, places: m.places)
             m.installerMaintenant(e)
+            // La vue d'ensemble se cadre au-dessus de la legende ouverte : la hauteur mesuree de la ligne du
+            // bas, comme dans la fenetre.
+            let legende = NSHostingView(rootView: LigneDuBas(moteur: MoteurPieces(), entree: e, legendeForcee: false)
+                .pourCapture(s, sonde, nomsMaison)).fittingSize.height
+            m.marges.bas = FenetrePieces.margeBas(fiche: false, courbes: false, legendeOuverte: legende)
             m.poserTaille(taille)
             preparer(m, e.scene)
             // Deux passages : le premier pose les noms, le second les dessine a leur place.
@@ -82,8 +87,8 @@ enum CapturesPieces {
     }
 }
 
-/// La vue d'une capture : le fond, la scene, le haut de la fenetre (avec ses trois boutons) et la
-/// ligne de niveau, sans horloge ni geste.
+/// La vue d'une capture : le fond, la scene, le haut de la fenetre (avec ses trois boutons), la legende
+/// ouverte et la ligne de niveau, sans horloge ni geste.
 struct VueCapture: View {
     let moteur: MoteurPieces
     let palette: Palette
@@ -96,7 +101,7 @@ struct VueCapture: View {
             FeuxDeCapture()
             VStack(alignment: .leading) {
                 Spacer()
-                LigneNiveauVue(ligne: moteur.ligneNiveau)
+                LigneDuBas(moteur: moteur, entree: moteur.entree, legendeForcee: false)
             }
             .padding(FenetrePieces.bord)
         }

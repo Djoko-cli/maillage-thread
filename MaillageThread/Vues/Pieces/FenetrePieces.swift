@@ -20,6 +20,9 @@ struct FenetrePieces: View {
     @State private var feux = CadreFeux.defaut
     /// Marge du haut de la vue d'ensemble, d'apres la hauteur mesuree du haut de la fenetre.
     @State private var margeHautMesuree = FenetrePieces.margeHautInitiale
+    /// Hauteur mesuree de la ligne du bas, la legende ouverte ; nil, repliee (la derniere mesure reste
+    /// sous une fiche ouverte, qui cache la legende).
+    @State private var hauteurLegende: CGFloat?
 
     /// Preference du mode 2D ou 3D.
     static let cleMode = "vuePieces3D"
@@ -75,12 +78,15 @@ struct FenetrePieces: View {
     /// Avant la premiere mesure : la ligne des capsules, l'espacement et le fil.
     static let margeHautInitiale = margeHaut(bas: 2 * CadreFeux.defaut.milieu + espacement + 16)
 
-    /// Marge du bas de la vue d'ensemble (pt) : la legende et la ligne de niveau (elles debordent un
-    /// peu sur la vue, comme la legende du graphe d'avant), ou la fiche ouverte, plus haute avec les
-    /// courbes de l'historique (plan 3b) : la vue ne bouge pas d'un noeud a l'autre.
-    static func margeBas(fiche: Bool, courbes: Bool) -> CGFloat {
-        guard fiche else { return 30 }
-        return courbes ? 360 : 190
+    /// Marge du bas de la vue d'ensemble (pt) : la fiche ouverte, plus haute avec les courbes de
+    /// l'historique (plan 3b), qui cache la legende : la vue ne bouge pas d'un noeud a l'autre ; la legende
+    /// ouverte (decision de Djoko du 01/10) : comme en haut, la hauteur mesuree de la ligne du bas (la
+    /// legende et la ligne de niveau), le bord et l'espacement, la vue d'ensemble se cadrant au-dessus
+    /// d'elle ; sinon 30 pt : la legende repliee et la ligne de niveau debordent un peu sur la vue.
+    static func margeBas(fiche: Bool, courbes: Bool, legendeOuverte: CGFloat? = nil) -> CGFloat {
+        if fiche { return courbes ? 360 : 190 }
+        guard let h = legendeOuverte else { return 30 }
+        return max(30, bord + ceil(h) + espacement)
     }
 
     var body: some View {
@@ -97,7 +103,8 @@ struct FenetrePieces: View {
                 if let entree {
                     VuePieces(moteur: moteur, entree: entree, palette: palette,
                               marges: (margeHautMesuree, Self.margeBas(fiche: moteur.selection != nil,
-                                                                courbes: FicheNoeud.courbesVisibles(dans: surveillance))))
+                                                                courbes: FicheNoeud.courbesVisibles(dans: surveillance),
+                                                                legendeOuverte: hauteurLegende)))
                     if !moteur.pret {
                         ProgressView().controlSize(.small)
                     }
@@ -112,19 +119,8 @@ struct FenetrePieces: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 VStack(alignment: .leading, spacing: Self.espacement) {
                     Spacer()
-                    if moteur.selection == nil {
-                        HStack(alignment: .center, spacing: 12) {
-                            if let entree {
-                                LegendeLiens(sonde: entree.maillage != nil, ancien: surveillance.maillageAncien)
-                                    .obstacle("legende", moteur)
-                            }
-                            LigneNiveauVue(ligne: moteur.ligneNiveau)
-                                .obstacle("niveau", moteur)
-                        }
-                    } else {
-                        LigneNiveauVue(ligne: moteur.ligneNiveau)
-                            .obstacle("niveau", moteur)
-                    }
+                    LigneDuBas(moteur: moteur, entree: entree, legende: moteur.selection == nil,
+                               ancien: surveillance.maillageAncien) { hauteurLegende = $0 }
                     if let selection = moteur.selection {
                         FicheNoeud(id: selection, entree: entree, instant: surveillance.maintenant(a: contexte.date),
                                    aRenommer: $aRenommer, choisir: { moteur.selection = $0 }) {
@@ -307,6 +303,47 @@ struct FilPieces: View {
         }
         .font(.system(size: 13))
         .foregroundStyle(.primary.opacity(0.9))
+    }
+}
+
+/// Bas a gauche de la fenetre : la legende (cachee sous une fiche ouverte), la ligne de niveau, et la
+/// pastille d'un releve de la sonde ancien. La ligne de niveau s'aligne sur la derniere ligne de la
+/// legende. Elle garde le repli de la legende, d'un lancement a l'autre, et donne sa hauteur quand la
+/// legende est ouverte (nil, repliee) : la marge du bas de la vue d'ensemble (`FenetrePieces.margeBas`).
+struct LigneDuBas: View {
+    let moteur: MoteurPieces
+    let entree: EntreeScene?
+    var legende = true
+    var ancien = false
+    /// Legende repliee ou ouverte, imposee (captures) : la preference n'est alors ni ecrite, ni suivie.
+    var legendeForcee: Bool?
+    /// Hauteur de la ligne, la legende ouverte ; nil, repliee. Rien sous une fiche, qui cache la legende.
+    var surHauteurOuverte: (CGFloat?) -> Void = { _ in }
+    @AppStorage(LegendePieces.cleRepliee) private var repliee = false
+
+    var body: some View {
+        // Des reperes « ailleurs » sont poses dans une piece isolee (lue avec elle : `isolee`).
+        let ailleurs = moteur.isolee != nil && !moteur.textes.ailleurs.isEmpty
+        let rubriques = legende ? entree.map { LegendePieces.rubriques(LegendePieces.Lecture($0, ailleurs: ailleurs)) } ?? [] : []
+        let estRepliee = legendeForcee ?? repliee
+        let ouverte = !rubriques.isEmpty && !estRepliee
+        HStack(alignment: .lastTextBaseline, spacing: 12) {
+            if !rubriques.isEmpty {
+                LegendePieces(rubriques: rubriques, repliee: Binding(get: { estRepliee }, set: { r in
+                    if legendeForcee == nil { repliee = r }
+                }))
+                .obstacle("legende", moteur)
+            }
+            LigneNiveauVue(ligne: moteur.ligneNiveau)
+                .obstacle("niveau", moteur)
+            if ancien {
+                PastilleAncien()
+                    .obstacle("ancien", moteur)
+            }
+        }
+        .onGeometryChange(for: CGFloat?.self) { ouverte ? $0.size.height : nil } action: { h in
+            if legende { surHauteurOuverte(h) }
+        }
     }
 }
 

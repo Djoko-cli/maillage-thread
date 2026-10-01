@@ -34,13 +34,14 @@ struct FenetrePiecesTests {
 
     /// « Ancien » (6 min) et « perime » (15 min) ne dependent que de l'heure, que rien n'observe : la
     /// fenetre est une `TimelineView` qui se redessine chaque minute (`FenetrePieces.horloge`), avec
-    /// dedans tout ce qui lit l'heure (la legende, la scene, la fiche).
+    /// dedans tout ce qui lit l'heure (le bas de la fenetre et sa pastille d'un releve ancien, la scene,
+    /// la fiche).
     @Test func redessinChaqueMinute() throws {
         let horloge = String(reflecting: type(of: FenetrePieces.horloge))
         let corps = String(reflecting: FenetrePieces.Body.self)
         let dedans = try #require(Self.entreChevrons("TimelineView", dans: corps), "le corps est une TimelineView")
         #expect(dedans.hasPrefix(horloge), "sur l'horloge")
-        for vue in ["LegendeLiens", "VuePieces", "FicheNoeud"] {
+        for vue in ["LigneDuBas", "VuePieces", "FicheNoeud"] {
             #expect(dedans.contains(vue), "\(vue) est dans la TimelineView, pas a cote")
         }
         let recu = Date(timeIntervalSince1970: 1_790_000_000)

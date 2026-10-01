@@ -1,0 +1,404 @@
+import MaillageCoeur
+import SwiftUI
+
+/// Legende de la vue par pieces (polissage B, section 2 ; maquette de la legende, colonne de droite) :
+/// en bas a gauche, a cote de la ligne de niveau ; quatre groupes en grille de deux colonnes, qui ne
+/// montrent que ce que la scene affichee contient. Repliee, il ne reste que l'etiquette « Legende » ;
+/// son etat est garde d'un lancement a l'autre, par la ligne du bas (`LigneDuBas`). Une legende sans
+/// entree n'est pas montree.
+struct LegendePieces: View {
+    let rubriques: [Rubrique]
+    /// Repliee ou ouverte : un clic sur l'en-tete bascule.
+    @Binding var repliee: Bool
+
+    /// La preference qui garde le repli.
+    static let cleRepliee = "legendeRepliee"
+
+    var body: some View {
+        if !rubriques.isEmpty {
+            if repliee {
+                etiquette
+            } else {
+                panneau
+            }
+        }
+    }
+
+    /// « Legende ⌄ » : 11,5 pt semi-gras, marges de 6 x 12 pt.
+    private var etiquette: some View {
+        Button {
+            repliee = false
+        } label: {
+            HStack(spacing: 8) {
+                Text("Légende")
+                Text(verbatim: "⌄").accessibilityHidden(true)
+            }
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(Palette.texteLegende)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .fondDeLegende()
+            .contentShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// En-tete « Legende ⌃ » (7 pt dessous), puis la grille ; marges de 9, 12, 11 et 12 pt. La largeur
+    /// est celle de la grille : l'en-tete s'y etend, sans elargir le panneau.
+    private var panneau: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Button {
+                repliee = true
+            } label: {
+                HStack {
+                    Text("Légende")
+                    Spacer(minLength: 8)
+                    Text(verbatim: "⌃").accessibilityHidden(true)
+                }
+                .font(.system(size: 11.5, weight: .semibold))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            GrilleLegende {
+                ForEach(rubriques, id: \.groupe) { r in
+                    groupe(r)
+                }
+            }
+        }
+        .fixedSize()
+        .font(.system(size: 11))
+        .foregroundStyle(Palette.texteLegende)
+        .padding(EdgeInsets(top: 9, leading: 12, bottom: 11, trailing: 12))
+        .fondDeLegende()
+    }
+
+    /// Un groupe : son titre (10 pt semi-gras, gris bleute), 4 pt, puis ses entrees, a 3 pt l'une de
+    /// l'autre, et 3 pt dessous.
+    private func groupe(_ r: Rubrique) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(r.groupe.titre)
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.2)
+                .foregroundStyle(Palette.titreLegende)
+                .padding(.bottom, 1)
+            ForEach(r.entrees, id: \.self) { e in
+                ligne(e)
+            }
+        }
+        .padding(.bottom, 3)
+        .fixedSize()
+    }
+
+    /// Une entree : son signe, 7 pt, son texte ; la couronne et la lune sont dans le texte.
+    @ViewBuilder
+    private func ligne(_ e: Entree) -> some View {
+        let palette = Palette(sombre: true)
+        switch e {
+        case .chef, .endormi:
+            Text(e.texte)
+        default:
+            HStack(spacing: 7) {
+                signe(e, palette)
+                    .accessibilityHidden(true)
+                Text(e.texte)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func signe(_ e: Entree, _ palette: Palette) -> some View {
+        switch e {
+        case .routeur: point(palette.routeur(principale: true))
+        case .nonIdentifie: point(palette.routeurInconnu)
+        case .autrePartition: point(palette.routeur(principale: false))
+        case .joignable: point(palette.appareil(.joignable))
+        case .partitionCoupee: point(palette.appareil(.partitionCoupee))
+        case .sansAdresse: point(palette.appareil(.sansAdresse))
+        case .disparu:
+            Circle().strokeBorder(palette.appareil(.disparu), lineWidth: 1.6).frame(width: 9, height: 9)
+        case .pile:
+            Text(verbatim: LegendePieces.exemplePile)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(palette.texteBatterieFaible)
+                .padding(.horizontal, 4)
+                .background(RoundedRectangle(cornerRadius: 4).fill(palette.batterieFaible))
+        case .bonne: trait(palette.lienSonde(3))
+        case .moyenne: trait(palette.lienSonde(2))
+        case .faible: trait(palette.lienSonde(1))
+        case .inconnue: trait(palette.lienSonde(nil))
+        case .versParent:
+            Rectangle().fill(palette.encre.opacity(0.28)).frame(width: 22, height: 1)
+        case .rattachement:
+            Path { p in
+                p.move(to: CGPoint(x: 0, y: 0.6))
+                p.addLine(to: CGPoint(x: 22, y: 0.6))
+            }
+            .stroke(palette.encre.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [2, 4]))
+            .frame(width: 22, height: 1.2)
+        case .ailleurs:
+            Text(verbatim: LegendePieces.exempleAilleurs)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.white.opacity(0.8))
+                .padding(.horizontal, 5)
+                .background(RoundedRectangle(cornerRadius: 4).fill(palette.fondAilleurs))
+        case .candidats:
+            Text(verbatim: LegendePieces.exempleCandidats)
+                .font(.system(size: 10))
+                .padding(.horizontal, 5)
+                .background(RoundedRectangle(cornerRadius: 4).fill(palette.fondNom))
+        case .chef, .endormi:
+            EmptyView()
+        }
+    }
+
+    /// Point de 9 pt.
+    private func point(_ c: Color) -> some View {
+        Circle().fill(c).frame(width: 9, height: 9)
+    }
+
+    /// Trait de 22 x 2 pt, arrondi : un lien radio, de la couleur de sa qualite.
+    private func trait(_ c: Color) -> some View {
+        RoundedRectangle(cornerRadius: 2).fill(c).frame(width: 22, height: 2)
+    }
+
+    /// Exemples des signes, comme dans la scene : la pastille d'une pile a 12 %, un repere « ailleurs »,
+    /// un routeur et ses deux candidats.
+    static var exemplePile: String { String(localized: "\(12)\u{202F}%") }
+    static var exempleAilleurs: String { String(localized: "→ Salon") }
+    static var exempleCandidats: String {
+        LibellesNoeuds.inconnu(NoeudSonde(id: "rloc:0400", rloc16: 0x0400, genre: .routeur, reconnu: false,
+                                          bordure: true, candidats: ["A", "B"]))
+    }
+}
+
+extension LegendePieces {
+    /// Une entree de la legende : un signe et son texte (spec du polissage B, section 2).
+    enum Entree: Hashable, CaseIterable {
+        case routeur, nonIdentifie, autrePartition, chef
+        case joignable, partitionCoupee, sansAdresse, disparu, endormi, pile
+        case bonne, moyenne, faible, inconnue
+        case versParent, rattachement, ailleurs, candidats
+
+        var texte: String {
+            switch self {
+            case .routeur: String(localized: "routeur")
+            case .nonIdentifie: String(localized: "non identifié")
+            case .autrePartition: String(localized: "autre partition")
+            case .chef: "👑 " + String(localized: "chef du réseau Thread, élu automatiquement")
+            case .joignable: String(localized: "joignable")
+            case .partitionCoupee: String(localized: "partition coupée")
+            case .sansAdresse: String(localized: "sans adresse")
+            case .disparu: String(localized: "disparu")
+            case .endormi: "☾ " + String(localized: "endormi")
+            case .pile: String(localized: "pile")
+            case .bonne: String(localized: "bonne")
+            case .moyenne: String(localized: "moyenne")
+            case .faible: String(localized: "faible")
+            case .inconnue: String(localized: "inconnue")
+            case .versParent: String(localized: "vers son parent")
+            case .rattachement: String(localized: "rattachement supposé")
+            case .ailleurs: String(localized: "parent dans une autre pièce")
+            case .candidats: String(localized: "candidats")
+            }
+        }
+    }
+
+    /// Les quatre groupes, dans l'ordre de la grille, et leurs entrees, dans l'ordre.
+    enum Groupe: Hashable, CaseIterable {
+        case routeurs, appareils, liens, autres
+
+        var entrees: [Entree] {
+            switch self {
+            case .routeurs: [.routeur, .nonIdentifie, .autrePartition, .chef]
+            case .appareils: [.joignable, .partitionCoupee, .sansAdresse, .disparu, .endormi, .pile]
+            case .liens: [.bonne, .moyenne, .faible, .inconnue]
+            case .autres: [.versParent, .rattachement, .ailleurs, .candidats]
+            }
+        }
+
+        var titre: String {
+            switch self {
+            case .routeurs: String(localized: "Routeurs")
+            case .appareils: String(localized: "Appareils")
+            case .liens: String(localized: "Liens radio (qualité)")
+            case .autres: String(localized: "Autres")
+            }
+        }
+    }
+
+    /// Un groupe montre, et ses entrees presentes.
+    struct Rubrique: Equatable {
+        var groupe: Groupe
+        var entrees: [Entree]
+    }
+
+    /// Ce que la legende lit de la scene affichee : la couleur de chaque noeud, ceux que la sonde seule
+    /// connait, les chefs, les endormis, les piles, les noeuds montres avec leurs candidats, les liens, et
+    /// si des reperes « ailleurs » sont poses (piece isolee).
+    struct Lecture {
+        var couleurs: [String: DessinNoeud.Couleur] = [:]
+        var inconnus: Set<String> = []
+        var chefs: Set<String> = []
+        var endormis: Set<String> = []
+        var piles: Set<String> = []
+        var candidats: Set<String> = []
+        var liens: [ScenePieces.Lien] = []
+        var ailleurs = false
+    }
+
+    /// Les entrees que la scene contient (spec du polissage B, section 2) : chaque couleur de noeud ; un
+    /// noeud que la sonde seule connait, routeur ou enfant, en gris (« non identifie ») ; un chef, un
+    /// endormi, une pile ; chaque qualite d'un lien radio trace ; un lien vers un parent, un rattachement
+    /// suppose ; un repere « ailleurs » ; un routeur montre avec ses candidats. Un appareil d'etat
+    /// inconnu, en gris, n'a pas d'entree.
+    static func entrees(_ l: Lecture) -> Set<Entree> {
+        var r = Set<Entree>()
+        for c in l.couleurs.values {
+            switch c {
+            case .routeur(principale: true): r.insert(.routeur)
+            case .routeur(principale: false): r.insert(.autrePartition)
+            case .appareil(.joignable): r.insert(.joignable)
+            case .appareil(.partitionCoupee): r.insert(.partitionCoupee)
+            case .appareil(.sansAdresse): r.insert(.sansAdresse)
+            case .appareil(.disparu): r.insert(.disparu)
+            case .routeurInconnu, .appareil(.inconnu): break
+            }
+        }
+        if !l.inconnus.isEmpty { r.insert(.nonIdentifie) }
+        if !l.chefs.isEmpty { r.insert(.chef) }
+        if !l.endormis.isEmpty { r.insert(.endormi) }
+        if !l.piles.isEmpty { r.insert(.pile) }
+        if !l.candidats.isEmpty { r.insert(.candidats) }
+        for lien in l.liens {
+            switch lien.genre {
+            case .radio:
+                switch Palette.NiveauLien(lien.qualite) {
+                case .bon: r.insert(.bonne)
+                case .moyen: r.insert(.moyenne)
+                case .faible: r.insert(.faible)
+                case .inconnu: r.insert(.inconnue)
+                }
+            case .parent: r.insert(.versParent)
+            case .rattachement: r.insert(.rattachement)
+            }
+        }
+        if l.ailleurs { r.insert(.ailleurs) }
+        return r
+    }
+
+    /// Les groupes a montrer, dans l'ordre, chacun avec ses entrees presentes ; un groupe sans entree
+    /// disparait.
+    static func rubriques(_ l: Lecture) -> [Rubrique] {
+        let presentes = entrees(l)
+        return Groupe.allCases.compactMap { g in
+            let e = g.entrees.filter(presentes.contains)
+            return e.isEmpty ? nil : Rubrique(groupe: g, entrees: e)
+        }
+    }
+}
+
+extension LegendePieces.Lecture {
+    /// Lecture de la scene d'un rendu (`EntreeScene`) ; `ailleurs` : des reperes « ailleurs » sont
+    /// poses.
+    init(_ e: EntreeScene, ailleurs: Bool) {
+        let ids = e.scene.noeuds.map(\.id)
+        couleurs = Dictionary(ids.compactMap { id in e.apparences[id].map { (id, $0.couleur) } },
+                              uniquingKeysWith: { a, _ in a })
+        inconnus = Set(e.scene.noeuds.filter(\.inconnu).map(\.id))
+        chefs = Set(e.scene.noeuds.filter(\.chef).map(\.id))
+        endormis = Set(ids.filter { e.appareils[$0]?.endormi == true })
+        piles = Set(ids.filter { e.libelles[$0]?.pastille != nil })
+        candidats = Set(ids.filter { id in
+            e.maillage?.noeud(id).map { $0.genre == .routeur && !$0.candidats.isEmpty } == true
+        })
+        liens = e.scene.liens
+        self.ailleurs = ailleurs
+    }
+}
+
+/// Grille de la legende (maquette : `grid-template-columns: 1fr 1fr ; gap: 9px 18px`) : deux colonnes
+/// de meme largeur, celle du groupe le plus large, et au moins la moitie d'un panneau de 440 pt ; les
+/// groupes se rangent deux par deux, dans l'ordre. La maquette borne le panneau a 440 pt, et ses
+/// entrees, qui ne passent jamais a la ligne, en debordent quand elles y sont toutes : la grille
+/// s'elargit plutot.
+struct GrilleLegende: Layout {
+    static let largeurPanneau: CGFloat = 440
+    /// Marges du panneau, a gauche et a droite.
+    static let marges: CGFloat = 24
+    static let ecartColonnes: CGFloat = 18
+    static let ecartRangs: CGFloat = 9
+
+    /// Largeur des deux colonnes, d'apres la largeur de chaque groupe.
+    static func largeurColonne(_ largeurs: [CGFloat]) -> CGFloat {
+        max((largeurPanneau - marges - ecartColonnes) / 2, largeurs.max() ?? 0)
+    }
+
+    private struct Mise {
+        var colonne: CGFloat
+        var tailles: [CGSize]
+        var rangs: [CGFloat]
+    }
+
+    private func mise(_ subviews: Subviews) -> Mise {
+        let tailles = subviews.map { $0.sizeThatFits(.unspecified) }
+        let rangs = stride(from: 0, to: tailles.count, by: 2).map { i in
+            max(tailles[i].height, i + 1 < tailles.count ? tailles[i + 1].height : 0)
+        }
+        return Mise(colonne: Self.largeurColonne(tailles.map(\.width)), tailles: tailles, rangs: rangs)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let m = mise(subviews)
+        return CGSize(width: 2 * m.colonne + Self.ecartColonnes,
+                      height: m.rangs.reduce(0, +) + Self.ecartRangs * CGFloat(max(0, m.rangs.count - 1)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let m = mise(subviews)
+        var y = bounds.minY
+        for (k, hauteur) in m.rangs.enumerated() {
+            for c in 0..<2 where 2 * k + c < subviews.count {
+                let i = 2 * k + c
+                subviews[i].place(at: CGPoint(x: bounds.minX + CGFloat(c) * (m.colonne + Self.ecartColonnes), y: y),
+                                  proposal: ProposedViewSize(m.tailles[i]))
+            }
+            y += hauteur + Self.ecartRangs
+        }
+    }
+
+    /// Derniere ligne de base : la plus basse du dernier rang, pour y aligner la ligne de niveau.
+    func explicitAlignment(of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+                           subviews: Subviews, cache: inout ()) -> CGFloat? {
+        guard guide == .lastTextBaseline, !subviews.isEmpty else { return nil }
+        let m = mise(subviews)
+        let haut = m.rangs.dropLast().reduce(bounds.minY) { $0 + $1 + Self.ecartRangs }
+        let dernier = (m.rangs.count - 1) * 2
+        return (dernier..<min(dernier + 2, subviews.count)).map { i in
+            haut + subviews[i].dimensions(in: ProposedViewSize(m.tailles[i]))[VerticalAlignment.lastTextBaseline]
+        }.max()
+    }
+}
+
+/// « Releve de la sonde ancien » : une petite pastille orange, a cote de la ligne de niveau, quand le
+/// releve de la sonde a plus de 6 minutes (polissage B, section 2). Le dessin de la pastille du chef de
+/// la fiche (10,5 pt, marges de 2 x 8 pt, capsule teintee a 0,16 au filet de 0,5 pt a 0,5), en orange.
+struct PastilleAncien: View {
+    var body: some View {
+        Text("Relevé de la sonde ancien")
+            .font(.system(size: 10.5))
+            .foregroundStyle(Palette(sombre: true).appareil(.partitionCoupee))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Palette(sombre: true).appareil(.partitionCoupee).opacity(0.16)))
+            .overlay(Capsule().strokeBorder(Palette(sombre: true).appareil(.partitionCoupee).opacity(0.5), lineWidth: 0.5))
+    }
+}
+
+extension View {
+    /// Fond de la legende (maquette) : le fond de la vue a 0,92, coins de 10 pt, filet de 0,5 pt blanc a
+    /// 0,18.
+    func fondDeLegende() -> some View {
+        background(RoundedRectangle(cornerRadius: 10).fill(Palette.fondLegende))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5))
+    }
+}

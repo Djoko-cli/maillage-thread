@@ -90,6 +90,14 @@ struct Palette {
     var bulle: Color { Color(.sRGB, red: 0.55, green: 0.72, blue: 1.0) }
     var equateur: Color { Color(.sRGB, red: 0xDF / 255, green: 0xE6 / 255, blue: 0xF3 / 255) }
 
+    // MARK: Legende (polissage B, section 2 ; maquette de la legende)
+
+    /// Fond de la legende : le fond de la vue (son deuxieme arret, rgb(15, 23, 41)) a 0,92.
+    static let fondLegende = Color(red: 0.06, green: 0.09, blue: 0.16).opacity(0.92)
+    /// Texte de la legende : blanc a 0,88 ; titres de ses groupes, gris bleute : rgb(148, 163, 190).
+    static let texteLegende = Color(white: 1, opacity: 0.88)
+    static let titreLegende = Color(.sRGB, red: 148 / 255, green: 163 / 255, blue: 190 / 255)
+
     /// Lisere de la sphere : l'alpha de la maquette, force (0,02 + 0,45 (1 - |n.v|)^2,5), ou |n.v| vaut
     /// racine(1 - rho^2) a la distance rho du centre du disque ; echantillonne plus serre vers le bord.
     func degradeBulle(force: Double) -> Gradient {

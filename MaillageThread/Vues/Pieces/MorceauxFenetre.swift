@@ -2,7 +2,7 @@ import MaillageCoeur
 import SwiftUI
 
 // Morceaux de la fenetre de la vue par pieces, repris de celle du graphe : barre d'outils, ligne de
-// la tournee, bandeau de scission, legende des liens, ecran d'attente, appareils IP, « Renommer… ».
+// la tournee, bandeau de scission, ecran d'attente, appareils IP, « Renommer… ».
 
 /// Noeud choisi pour une feuille (surnom).
 struct NoeudChoisi: Identifiable {
@@ -167,46 +167,6 @@ struct BandeauScission: View {
             return String(localized: "Réseau scindé en \(n) partitions, constaté le \(quand) · à part : \(aPart)")
         }
         return String(localized: "Réseau scindé en \(n) partitions depuis le \(quand) · à part : \(aPart)")
-    }
-}
-
-/// Legende des liens (en bas a gauche, cachee sous une fiche) : avec la sonde,
-/// traits pleins (lien radio, colore par la qualite) et pointilles (rattachement
-/// suppose) ; « ancien » si la sonde ne repond plus.
-struct LegendeLiens: View {
-    var sonde = false
-    var ancien = false
-
-    var body: some View {
-        HStack(spacing: 8) {
-            if sonde {
-                Path { p in
-                    p.move(to: CGPoint(x: 0, y: 1))
-                    p.addLine(to: CGPoint(x: 22, y: 1))
-                }
-                .stroke(Palette(sombre: true).lienSonde(3),
-                        style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .frame(width: 22, height: 2)
-                .accessibilityHidden(true)
-                Text("lien radio (qualité)")
-            }
-            Path { p in
-                p.move(to: CGPoint(x: 0, y: 1))
-                p.addLine(to: CGPoint(x: 22, y: 1))
-            }
-            .stroke(style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
-            .frame(width: 22, height: 2)
-            .accessibilityHidden(true)
-            Text(sonde ? "rattachement supposé" : "rattachement, pas un lien radio")
-            if ancien {
-                Text("· relevé de la sonde ancien").foregroundStyle(.orange)
-            }
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .glassEffect(.regular, in: .capsule)
     }
 }
 
