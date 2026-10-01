@@ -5,6 +5,8 @@ import SwiftUI
 struct FicheNoeud: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(\.colorScheme) private var apparence
+    /// Pieces choisies pour les routeurs de bordure : la vue par pieces seule les donne.
+    @Environment(PiecesChoisies.self) private var piecesChoisies: PiecesChoisies?
     let id: String
     /// Heure de la fenetre du graphe (sa `TimelineView`, chaque minute ; la fin de la panne en demo) :
     /// les durees de la fiche (« vu il y a... ») suivent l'heure sans autre evenement.
@@ -38,6 +40,10 @@ struct FicheNoeud: View {
                     if Self.renommable(id, dans: surveillance) {
                         Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
                             .buttonStyle(.glass)
+                    }
+                    if let piecesChoisies, let pieces = PiecesChoisies.pieces(aPlacer: id, dans: surveillance) {
+                        MenuPlacerRouteur(routeur: id, pieces: pieces, domicile: surveillance.noms.maison?.domicile ?? "",
+                                          choisies: piecesChoisies)
                     }
                 }
             }

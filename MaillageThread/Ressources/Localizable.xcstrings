@@ -529,6 +529,22 @@
         }
       }
     },
+    "%lld noms masqués faute de place : rapprochez-vous (molette)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld names hidden for lack of room: zoom in (scroll)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld noms masqués faute de place : rapprochez-vous (molette)"
+          }
+        }
+      }
+    },
     "%lld %%" : {
       "localizations" : {
         "en" : {
@@ -561,6 +577,22 @@
         }
       }
     },
+    "1 nom masqué faute de place : rapprochez-vous (molette)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 name hidden for lack of room: zoom in (scroll)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 nom masqué faute de place : rapprochez-vous (molette)"
+          }
+        }
+      }
+    },
     "24 h" : {
       "localizations" : {
         "en" : {
@@ -577,6 +609,22 @@
         }
       }
     },
+    "2D" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2D"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2D"
+          }
+        }
+      }
+    },
     "30 j" : {
       "localizations" : {
         "en" : {
@@ -589,6 +637,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "30 j"
+          }
+        }
+      }
+    },
+    "3D" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3D"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3D"
           }
         }
       }
@@ -1169,6 +1233,38 @@
         }
       }
     },
+    "Coupée par « Réduire les animations »" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turned off by “Reduce motion”"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coupée par « Réduire les animations »"
+          }
+        }
+      }
+    },
+    "D'après son nom" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From its name"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "D'après son nom"
+          }
+        }
+      }
+    },
     "DTR et RTS à 0 (TIOCMSET)" : {
       "localizations" : {
         "en" : {
@@ -1229,6 +1325,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dernière perte"
+          }
+        }
+      }
+    },
+    "Descendre d'un étage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move down one floor"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descendre d'un étage"
           }
         }
       }
@@ -1809,6 +1921,22 @@
         }
       }
     },
+    "Mi-distance : les pièces et les routeurs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mid-distance: rooms and routers"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mi-distance : les pièces et les routeurs"
+          }
+        }
+      }
+    },
     "Mode démo : panne du 27/09 rejouée" : {
       "localizations" : {
         "en" : {
@@ -1837,6 +1965,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mode démo : pas de sonde."
+          }
+        }
+      }
+    },
+    "Monter d'un étage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move up one floor"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monter d'un étage"
           }
         }
       }
@@ -2177,6 +2321,22 @@
         }
       }
     },
+    "Pas encore de pièces de Maison : lance le passeur" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No rooms from Home yet: run Passeur Noms"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pas encore de pièces de Maison : lance le passeur"
+          }
+        }
+      }
+    },
     "Passeur Noms introuvable : lance outils/passeur.sh." : {
       "localizations" : {
         "en" : {
@@ -2221,6 +2381,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pile et Network Data"
+          }
+        }
+      }
+    },
+    "Pièce isolée : %@ · clic sur une autre pièce pour y aller, clic à côté ou Échap pour revenir" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Isolated room: %@ · click another room to go there, click outside or press Esc to come back"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pièce isolée : %@ · clic sur une autre pièce pour y aller, clic à côté ou Échap pour revenir"
+          }
+        }
+      }
+    },
+    "Placer dans une pièce…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Place in a room…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Placer dans une pièce…"
           }
         }
       }
@@ -2641,6 +2833,22 @@
         }
       }
     },
+    "Replacer les pièces automatiquement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrange rooms automatically"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replacer les pièces automatiquement"
+          }
+        }
+      }
+    },
     "Retirer le surnom" : {
       "localizations" : {
         "en" : {
@@ -2669,6 +2877,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rien de visible sur le réseau local depuis %@"
+          }
+        }
+      }
+    },
+    "Rotation lente" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Slow rotation"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotation lente"
           }
         }
       }
@@ -3297,6 +3521,22 @@
         }
       }
     },
+    "Tous les noms sont lisibles" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All names are readable"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tous les noms sont lisibles"
+          }
+        }
+      }
+    },
     "Tout" : {
       "localizations" : {
         "en" : {
@@ -3405,6 +3645,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vu par la sonde, sans annonce reconnue sur le réseau local."
+          }
+        }
+      }
+    },
+    "Vue" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vue"
+          }
+        }
+      }
+    },
+    "Vue d'ensemble : les pièces" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Overview: rooms"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vue d'ensemble : les pièces"
           }
         }
       }

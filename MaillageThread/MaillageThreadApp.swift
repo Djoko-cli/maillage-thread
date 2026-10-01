@@ -52,6 +52,11 @@ struct MaillageThreadApp: App {
             sm.demarrer()
         }
         s.demarrer()
+        // `--args -demo -captures <dossier>` : images de la vue par pieces, puis l'app quitte.
+        if Self.demo, let dossier = UserDefaults.standard.string(forKey: "captures") {
+            CapturesPieces.ecrire(dans: dossier, surveillance: s)
+            exit(0)
+        }
     }
 
     var body: some Scene {
@@ -76,7 +81,8 @@ struct MaillageThreadApp: App {
         }
 
         Window("Maillage Thread", id: "graphe") {
-            FenetreGraphe()
+            FenetrePieces(fichierPlaces: FenetrePieces.fichierPlaces(demo: Self.demo, sousTests: Surveillance.sousTests),
+                          fichierPieces: PiecesChoisies.fichier(demo: Self.demo, sousTests: Surveillance.sousTests))
                 .environment(surveillance)
                 .environment(nomsMaison)
                 .environment(sonde)
