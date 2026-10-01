@@ -474,6 +474,12 @@ forme de la fenêtre, ⌃ + glisser pour la verticale, isoler un étage,
 l'animation d'un appareil qui change de pièce, l'apparition animée du
 bandeau, 2D/3D et « Rotation lente » sur une deuxième ligne.
 
+**Vérifié aussi le 01/10 avec Djoko** (précision 27, après la relecture
+finale) : un appareil Matter à pile, dont l'annonce avait expiré, placé par
+son ExtMac, puis retrouvé dans sa pièce après un redémarrage, avec les choix
+des routeurs intacts ; glisser une pièce, clic, double-clic sur le fond et
+menu du fond, puis un nouveau glisser.
+
 ## 11. Découpage en plans
 
 - **Plan 4a, passeur sans dossier et zones** (section 3) : il ne dépend pas de la vue. Il peut passer avant ou pendant le 4b.
