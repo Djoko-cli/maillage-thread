@@ -424,7 +424,9 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
 - **Pièce des routeurs** (section 2.3) : mots entiers, casse et accents ignorés, le nom de pièce le plus long, l'égalité, le choix avant le nom, un choix dont la pièce a disparu, aller-retour sur disque.
 - **Temps de calcul**, sur une grande maison inventée (20 pièces, 100 appareils) :
   - la disposition tient **sous 1 s**, en Release ;
-  - le placement de 150 noms tient sous 2 ms, en Release.
+  - le placement de 150 noms tient sous 2 ms, en Release, dans une fenêtre ordinaire : c'est le cas que mesure son premier test ;
+  - au pire cas mesuré, 150 noms très serrés, il tient sous 4 ms : un second test le mesure ;
+  - c'est sans effet visible, puisqu'une image dispose de 16,7 ms. Décidé avec Djoko le 01/10.
 
 **App :**
 - **`NomsInternes`**, face à un faux passeur (un client TCP de test sur 127.0.0.1) :

@@ -125,7 +125,8 @@ struct PlacementNomsTests {
         #expect(e.filter(\.voulu).count == 1 + 1, "l'Apple TV, seul noeud du salon, et le nom de la piece")
     }
 
-    /// Temps de calcul, en Release : le placement de 150 noms tient sous 2 ms (moyenne de 20 images).
+    /// Temps de calcul, en Release, dans une fenetre ordinaire (noms espaces) : le placement de 150 noms
+    /// tient sous 2 ms (moyenne de 20 images).
     @Test(.enabled(if: Compilation.optimisee, "mesure en Release (outils/mesurer.sh)"))
     func tempsDePlacement() {
         var e = (0..<150).map { Self.noeud("n\($0)", largeur: 60 + CGFloat($0 % 7) * 12) }
@@ -138,5 +139,24 @@ struct PlacementNomsTests {
         let ms = Double(DispatchTime.now().uptimeNanoseconds - debut) / 20 / 1e6
         print("mesure : placement de 150 noms en \(ms) ms, \(e.count { $0.vu }) poses")
         #expect(ms < 2, "\(ms) ms")
+    }
+
+    /// Temps de calcul, en Release, au pire cas mesure : 150 noms tres serres (leurs pastilles a 12 px
+    /// les unes des autres, au milieu de la fenetre). La plupart ne trouvent pas de place, et chacun
+    /// essaie alors ses 40 candidats contre tout ce qui est pose. Le placement tient sous 4 ms
+    /// (moyenne de 20 images) : sans effet visible, une image disposant de 16,7 ms (spec, section 10).
+    @Test(.enabled(if: Compilation.optimisee, "mesure en Release (outils/mesurer.sh)"))
+    func tempsDePlacementSerre() {
+        var e = (0..<150).map { Self.noeud("n\($0)", largeur: 60 + CGFloat($0 % 7) * 12) }
+        let ancres: [CGRect?] = (0..<150).map { Self.pastille(620 + CGFloat($0 % 15) * 12, 390 + CGFloat($0 / 15) * 12) }
+        let obstacles = ancres.compactMap { $0 }
+        let cadre = CGSize(width: 1440, height: 900)
+        _ = PlacementNoms.placer(&e, ancres: ancres, obstacles: obstacles, cadre: cadre, dt: 0)
+        let debut = DispatchTime.now().uptimeNanoseconds
+        for _ in 0..<20 { _ = PlacementNoms.placer(&e, ancres: ancres, obstacles: obstacles, cadre: cadre, dt: 1.0 / 60) }
+        let ms = Double(DispatchTime.now().uptimeNanoseconds - debut) / 20 / 1e6
+        print("mesure : placement de 150 noms tres serres en \(ms) ms, \(e.count { $0.vu }) poses")
+        #expect(ms < 4, "\(ms) ms")
+        #expect(Self.chevauchements(e) == 0)
     }
 }
