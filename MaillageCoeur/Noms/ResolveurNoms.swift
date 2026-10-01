@@ -53,17 +53,13 @@ public struct ResolveurNoms: Hashable, Sendable {
 
 /// Surnoms donnes dans l'app ("Renommer..."), gardes dans un fichier JSON.
 public enum Surnoms {
-    /// Vide si le fichier manque ou est illisible.
+    /// Vide si le fichier manque ou est illisible (`FichiersGardes`).
     public static func lire(_ url: URL) -> [String: String] {
-        guard let d = try? Data(contentsOf: url),
-              let s = try? JSONDecoder().decode([String: String].self, from: d) else { return [:] }
-        return s
+        FichiersGardes.lire([String: String].self, url) ?? [:]
     }
 
+    /// Un fichier illisible est d'abord mis de cote (`FichiersGardes`).
     public static func ecrire(_ surnoms: [String: String], dans url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let e = JSONEncoder()
-        e.outputFormatting = [.sortedKeys, .prettyPrinted]
-        try e.encode(surnoms).write(to: url, options: .atomic)
+        try FichiersGardes.ecrire(surnoms, dans: url)
     }
 }

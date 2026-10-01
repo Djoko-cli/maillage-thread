@@ -42,18 +42,15 @@ public struct PiecesRouteurs: Hashable, Sendable, Codable {
         appareils = (try? c.decodeIfPresent([String: [String: String]].self, forKey: .appareils)) ?? [:]
     }
 
-    /// Vide si le fichier manque, est illisible, ou d'une version plus recente.
+    /// Vide si le fichier manque, est illisible, ou d'une version plus recente (`FichiersGardes`).
     public static func lire(_ url: URL) -> PiecesRouteurs {
-        guard let d = try? Data(contentsOf: url), let p = try? JSONDecoder().decode(PiecesRouteurs.self, from: d),
-              p.version <= versionActuelle else { return PiecesRouteurs() }
-        return p
+        FichiersGardes.lire(PiecesRouteurs.self, url, version: versionActuelle) ?? PiecesRouteurs()
     }
 
+    /// Rien n'est ecrit sur un fichier d'une version plus recente ; un fichier illisible est d'abord mis
+    /// de cote (`FichiersGardes`).
     public func ecrire(dans url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let e = JSONEncoder()
-        e.outputFormatting = [.sortedKeys, .prettyPrinted]
-        try e.encode(self).write(to: url, options: .atomic)
+        try FichiersGardes.ecrire(self, dans: url, version: Self.versionActuelle)
     }
 
     /// Piece choisie pour un routeur (son instance) ; nil : la regle du nom.

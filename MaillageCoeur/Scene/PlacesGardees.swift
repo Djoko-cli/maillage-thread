@@ -41,18 +41,15 @@ public struct PlacesGardees: Hashable, Sendable, Codable {
 
     public init() {}
 
-    /// Vide si le fichier manque, est illisible, ou d'une version plus recente.
+    /// Vide si le fichier manque, est illisible, ou d'une version plus recente (`FichiersGardes`).
     public static func lire(_ url: URL) -> PlacesGardees {
-        guard let d = try? Data(contentsOf: url), let p = try? JSONDecoder().decode(PlacesGardees.self, from: d),
-              p.version <= versionActuelle else { return PlacesGardees() }
-        return p
+        FichiersGardes.lire(PlacesGardees.self, url, version: versionActuelle) ?? PlacesGardees()
     }
 
+    /// Rien n'est ecrit sur un fichier d'une version plus recente ; un fichier illisible est d'abord mis
+    /// de cote (`FichiersGardes`).
     public func ecrire(dans url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let e = JSONEncoder()
-        e.outputFormatting = [.sortedKeys, .prettyPrinted]
-        try e.encode(self).write(to: url, options: .atomic)
+        try FichiersGardes.ecrire(self, dans: url, version: Self.versionActuelle)
     }
 
     public func maison(_ domicile: String) -> Maison { maisons[domicile] ?? Maison() }

@@ -19,11 +19,9 @@ public struct IdentitesGardees: Hashable, Sendable {
         var routeurs: [String: String]
     }
 
-    /// nil si le fichier manque ou est illisible ; un RLOC16 illisible est ignore.
+    /// nil si le fichier manque ou est illisible (`FichiersGardes`) ; un RLOC16 illisible est ignore.
     public static func lire(_ url: URL) -> IdentitesGardees? {
-        guard let d = try? Data(contentsOf: url), let f = try? JSONDecoder().decode(Fichier.self, from: d) else {
-            return nil
-        }
+        guard let f = FichiersGardes.lire(Fichier.self, url) else { return nil }
         var identites: [UInt16: String] = [:]
         for (r, ext) in f.routeurs {
             if let rloc = UInt16(r, radix: 16) { identites[rloc] = ext }
@@ -31,12 +29,10 @@ public struct IdentitesGardees: Hashable, Sendable {
         return IdentitesGardees(partition: f.partition, identites: identites)
     }
 
+    /// Un fichier illisible est d'abord mis de cote (`FichiersGardes`).
     public func ecrire(dans url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let e = JSONEncoder()
-        e.outputFormatting = [.sortedKeys, .prettyPrinted]
         let routeurs = Dictionary(uniqueKeysWithValues: identites.map { (String(format: "%04X", $0.key), $0.value) })
-        try e.encode(Fichier(partition: partition, routeurs: routeurs)).write(to: url, options: .atomic)
+        try FichiersGardes.ecrire(Fichier(partition: partition, routeurs: routeurs), dans: url)
     }
 }
 
