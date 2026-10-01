@@ -139,6 +139,20 @@ struct MoteurPiecesTests {
         #expect(gardee == PlacesGardees.Place(x: apres.x, z: apres.y))
     }
 
+    /// Deux zones de Maison du meme nom : un seul etage, et la disposition s'installe sans plantage.
+    @Test func zonesHomonymes() throws {
+        let (s, r, _) = try NomsSceneTests.demo()
+        var maison = try #require(s.noms.maison)
+        maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine"]),
+                        ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis"]),
+                        ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Entrée", "Buanderie"])]
+        s.noms.maison = maison
+        let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        #expect(e.scene.etages.map(\.id) == ["zone:Rez-de-chaussée", "zone:Étage"])
+        let m = Self.moteur(e)
+        #expect(m.geometrie.rayons.count == 2 && m.positions.count == e.scene.pieces.count)
+    }
+
     /// Une place demesuree dans `positions-pieces.json` (fichier abime ou edite a la main) : elle est
     /// ignoree, la vue reste finie, et un glisser ecrit de nouveau le fichier.
     @Test func placeDemesureeDansLeFichier() throws {

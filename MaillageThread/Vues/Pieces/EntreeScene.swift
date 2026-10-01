@@ -35,9 +35,9 @@ struct EntreeScene: Equatable {
         self.scene = scene
         self.libelles = libelles
         self.domicile = domicile
-        apparences = Dictionary(uniqueKeysWithValues: scene.noeuds.map { n in
+        apparences = Dictionary(scene.noeuds.map { n in
             (n.id, DessinNoeud.apparence(n, etat: parId[n.id]?.etat, principale: n.partition == principale))
-        })
+        }, uniquingKeysWith: { a, _ in a })
     }
 
     /// Ce qui oblige a recalculer la disposition (spec, section 4.3) : les etages, leurs pieces, les

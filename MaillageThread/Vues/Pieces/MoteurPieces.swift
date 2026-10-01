@@ -246,7 +246,8 @@ final class MoteurPieces {
                          cle: [String: [String: [String]]]) {
         guard let e = enCalcul, e.cleDisposition == cle else { return }
         placesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { (scene.pieces[$0].id, d.positions[$0]) })
-        rayonsCalcules = Dictionary(uniqueKeysWithValues: scene.etages.indices.map { (scene.etages[$0].id, d.rayons[$0]) })
+        rayonsCalcules = Dictionary(scene.etages.indices.map { (scene.etages[$0].id, d.rayons[$0]) },
+                                    uniquingKeysWith: { a, _ in a })
         cartesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { (scene.pieces[$0].id, cartes[$0]) })
         cleCalculee = cle
         enCalcul = nil

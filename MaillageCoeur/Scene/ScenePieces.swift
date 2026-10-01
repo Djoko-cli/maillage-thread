@@ -4,8 +4,9 @@ import Foundation
 /// etages, les pieces qui ont au moins un noeud, les noeuds et les liens.
 ///
 /// - Etages : les zones de Maison, dans leur ordre (le premier en bas) ; une piece dans plusieurs
-///   zones va dans la premiere ; les pieces hors zone forment « Autres pieces ». Sans zones (ou
-///   fichier d'avant les zones), un seul plateau « Maison ». Un ordre garde passe avant.
+///   zones va dans la premiere ; deux zones du meme nom n'en font qu'une, a la place de la premiere ;
+///   les pieces hors zone forment « Autres pieces ». Sans zones (ou fichier d'avant les zones), un seul
+///   plateau « Maison ». Un ordre garde passe avant.
 /// - Pieces : celles de Maison (le champ `piece` de l'accessoire du noeud) ; un noeud sans piece va
 ///   dans « Sans piece », sur le plateau du bas. Sans aucune piece dans Maison, un seul plateau
 ///   « Maison » et une carte par routeur, avec ses enfants (parents vus par la sonde).
@@ -136,8 +137,17 @@ public struct ScenePieces: Hashable, Sendable {
         var noms: [NomEtage] = []
         var etageDe: [String: Int] = [:]
         if piecesMaison, let zones, !zones.isEmpty {
-            var restantes = montrees
+            // Zones du meme nom (inattendu) : une seule, a la place de la premiere, avec les pieces de toutes.
+            var fusionnees: [ZoneMaison] = []
             for z in zones {
+                if let k = fusionnees.firstIndex(where: { $0.nom == z.nom }) {
+                    fusionnees[k].pieces += z.pieces
+                } else {
+                    fusionnees.append(z)
+                }
+            }
+            var restantes = montrees
+            for z in fusionnees {
                 let dedans = z.pieces.filter { restantes.contains($0) }
                 guard !dedans.isEmpty else { continue }
                 for p in dedans {

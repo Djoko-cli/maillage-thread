@@ -71,6 +71,27 @@ struct ScenePiecesTests {
         #expect(!s.sansPiecesMaison)
     }
 
+    /// Deux zones de Maison du meme nom (inattendu) : un seul etage, a la place de la premiere, avec les
+    /// pieces des deux ; aucune cle d'etage en double. La premiere compte meme sans piece montree.
+    @Test func zonesHomonymes() throws {
+        let g = try Self.graphe(sonde: false)
+        let pieces = ["Apple TV": "Salon", "HomePod": "Chambre", "E000000000000002": "Bureau"]
+        let zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon"]),
+                     ZoneMaison(nom: "Étage", pieces: ["Chambre"]),
+                     ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Bureau", "Salon"])]
+        let s = ScenePieces(graphe: g, libelles: Self.libelles, piecesNoeuds: pieces, zones: zones, chefs: [],
+                            piecesMaison: true)
+        #expect(s.etages.map(\.id) == ["zone:Rez-de-chaussée", "zone:Étage"])
+        #expect(Self.noms(s, etage: 0) == [.maison("Bureau"), .maison("Salon"), .sansPiece])
+        #expect(Self.noms(s, etage: 1) == [.maison("Chambre")])
+        let vide = [ZoneMaison(nom: "Étage", pieces: ["Grenier"]), ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon"]),
+                    ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau"])]
+        let t = ScenePieces(graphe: g, libelles: Self.libelles, piecesNoeuds: pieces, zones: vide, chefs: [],
+                            piecesMaison: true)
+        #expect(t.etages.map(\.id) == ["zone:Étage", "zone:Rez-de-chaussée"])
+        #expect(Self.noms(t, etage: 0) == [.maison("Bureau"), .maison("Chambre"), .sansPiece])
+    }
+
     /// Maison sans zones, ou fichier d'avant les zones (le champ manque : nil) : un seul plateau.
     @Test func sansZones() throws {
         let g = try Self.graphe(sonde: false)
