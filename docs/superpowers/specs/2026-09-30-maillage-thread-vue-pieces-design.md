@@ -115,6 +115,7 @@ Décisions de Djoko pendant la conception, dans l'ordre :
 - Un clic droit sur le fond propose « **Replacer les pièces automatiquement** » : il efface les places gardées de la maison, sauf l'ordre des étages.
 - **Pièces choisies des routeurs** (section 2.3) : `pieces-routeurs.json`, à côté de `positions-pieces.json`. Par maison (`domicile`), la pièce de chaque routeur, sous l'**instance de son annonce** : le nom sous lequel l'app garde déjà ses surnoms, qui ne change ni avec son RLOC16 ni à son redémarrage. Il ne change que si le routeur est renommé dans Maison ; son choix se perd alors, comme son surnom.
 - **Pièces choisies des autres nœuds** (section 2.3, précision 27) : dans le même fichier, sous un champ facultatif `appareils`. Par maison (`domicile`), la pièce de chaque nœud, sous son **ExtMac**, en 16 hexadécimaux majuscules. Un fichier d'avant, qui n'a que les routeurs, se lit sans perte ; la version reste 1, pour qu'une app d'avant lise encore les choix des routeurs d'un fichier d'après. En démo et sous les tests, rien n'est écrit, comme pour les routeurs.
+- **Fichiers gardés illisibles ou plus récents** (polissage A, 01/10) : la même règle vaut pour les places, les pièces choisies, les surnoms et les identités des routeurs. Un fichier d'une version plus récente est lu comme vide et n'est jamais réécrit : l'app travaille en mémoire. Un fichier illisible est mis de côté, renommé `<nom>.illisible-<AAAAMMJJ-HHMMSS>.json` dans le même dossier, avant la première écriture ; il n'est jamais effacé.
 
 ## 3. Passeur : sans dossier, avec les zones (plan 4a)
 
@@ -231,6 +232,8 @@ On les écarte alors sur l'axe où la pénétration est la plus faible, de moiti
 **Budget :** au plus 3 000 coups évalués par calcul, tous départs compris. Au-delà, on garde la meilleure disposition trouvée. Ce budget ne compte pas le temps, donc le résultat reste le même sur toutes les machines.
 
 **Déterminisme :** aucun hasard. Mêmes entrées, même disposition.
+
+**Coût non fini** (polissage A, 01/10) : un départ dont le coût n'est pas fini n'est jamais retenu. Si aucun départ n'a un coût fini, la disposition est celle du départ, avant l'optimisation. Une disposition ordinaire n'en est pas changée.
 
 **Quand on la calcule :** seulement quand l'ensemble des étages, des pièces, des nœuds ou de leurs noms change. Le calcul se fait **hors du fil principal**, et l'ancienne disposition reste affichée pendant ce temps.
 
@@ -479,6 +482,11 @@ finale) : un appareil Matter à pile, dont l'annonce avait expiré, placé par
 son ExtMac, puis retrouvé dans sa pièce après un redémarrage, avec les choix
 des routeurs intacts ; glisser une pièce, clic, double-clic sur le fond et
 menu du fond, puis un nouveau glisser.
+
+**Vérifié le 01/10 avec Djoko** (polissage A) : rien n'a changé à l'écran ;
+les pièces choisies des routeurs et de l'appareil placé par son ExtMac sont
+relues sans perte, la pièce choisie est cochée dans le menu de la fiche, et
+une fiche ouverte suit le relevé suivant.
 
 ## 11. Découpage en plans
 

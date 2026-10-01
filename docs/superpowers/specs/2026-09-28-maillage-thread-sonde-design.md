@@ -507,6 +507,11 @@ jusqu'à la connexion suivante réussie.
   leur parent tant qu'il ne répond pas, sauf celui dont l'ExtMac est celle
   d'un enfant des tables (identifié) ou de la sonde : il a changé de parent
   depuis le balayage, et n'est affiché qu'une fois, sous son nouveau parent.
+- **Enfant devenu routeur** (polissage A, 01/10) : une entrée de balayage dont
+  l'ExtMac est celle d'un routeur actuel est écartée, des nœuds comme de
+  l'historique. Une entrée d'une table ou de la sonde ne l'est jamais.
+- **Historique :** aucun identifiant de routeur hors de 0…62, la plage que la
+  lecture accepte, n'est écrit ; le reste de la ligne l'est.
 - **Balayage refusé :** un balayage dont la sonde a refusé toutes les
   requêtes ne remplace pas le précédent : il est refait à la tournée
   suivante. Tout autre balayage le remplace, même s'il ne trouve rien : un
