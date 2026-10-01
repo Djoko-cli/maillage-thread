@@ -114,6 +114,7 @@ struct FicheNoeud: View {
             lignesSonde(a.id)
         }
         .frame(minWidth: 200, alignment: .leading)
+        .colonneDuChef(Self.couronne(a.id, entree: entree))
         VStack(alignment: .leading, spacing: 4) {
             Text(genre(a)).foregroundStyle(.secondary)
             if !a.fabriques.isEmpty {
@@ -340,6 +341,7 @@ struct FicheNoeud: View {
             }
         }
         .frame(minWidth: 200, alignment: .leading)
+        .colonneDuChef(Self.couronne(r.instance, entree: entree))
         VStack(alignment: .leading, spacing: 4) {
             Text("Routeur de bordure").foregroundStyle(.secondary)
             lignesSonde(r.instance)
@@ -394,6 +396,14 @@ extension View {
     func boutonDeFiche() -> some View {
         modifier(BoutonDeFiche())
     }
+
+    /// Colonne de la fiche qui porte la pastille du chef : elle passe avant les autres. La pastille garde
+    /// sa ligne (`PastilleChef`), mais le `.frame(minWidth:)` de la colonne ne la fait pas plus large que la
+    /// place que la fiche lui propose : quand les colonnes se serrent, la pastille deborderait sur la
+    /// colonne voisine.
+    func colonneDuChef(_ couronne: Bool) -> some View {
+        layoutPriority(couronne ? 1 : 0)
+    }
 }
 
 private struct BoutonDeFiche: ViewModifier {
@@ -426,12 +436,14 @@ private struct FondDeFiche: ViewModifier {
 }
 
 /// « 👑 Chef du reseau Thread, elu automatiquement », sous le nom d'un noeud couronne (polissage B,
-/// section 3 ; maquette de la fiche, `.chef`) : 10,5 pt, marges de 2 x 8 pt, en capsule.
+/// section 3 ; maquette de la fiche, `.chef`) : 10,5 pt, marges de 2 x 8 pt, en capsule, sur une ligne : les
+/// colonnes de la fiche, serrees dans une fenetre etroite, ne la font pas passer a la ligne.
 struct PastilleChef: View {
     var body: some View {
         Text("👑 Chef du réseau Thread, élu automatiquement")
             .font(.system(size: 10.5))
             .foregroundStyle(Palette.texteChef)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(Capsule().fill(Palette.jauneChef.opacity(0.16)))

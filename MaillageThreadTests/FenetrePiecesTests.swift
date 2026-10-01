@@ -175,6 +175,40 @@ struct FenetrePiecesTests {
         #expect(taille("HomePod Avant", thread) == taille("HomePod Avant", sansCouronne))
     }
 
+    /// La pastille du chef tient sur une ligne dans la fiche d'un routeur de bordure couronne, a la largeur
+    /// par defaut de la fenetre (1100 pt, `MaillageThreadApp`) comme a sa largeur minimale : les colonnes de
+    /// la fiche se serrent, et une pastille qui prend la largeur qu'on lui laisse passait a la ligne. Mesure
+    /// sur la fiche d'« Apple TV 4K » avec les courbes de l'historique (comme avec une sonde), ou la colonne
+    /// de la couronne est la plus haute : la couronne y ajoute sa pastille et son espacement, `uneLigne`
+    /// dans une fenetre assez large pour que tout tienne sur une ligne ; une deuxieme ligne en ajouterait
+    /// davantage.
+    @Test func pastilleDuChefSurUneLigne() throws {
+        let s = try CourbesFicheTests.surveillance()
+        let id = "Apple TV 4K"
+        let avec = try #require(Self.entree(s))
+        #expect(s.instantane?.routeur(id) != nil && FicheNoeud.couronne(id, entree: avec), "un routeur de bordure couronne")
+        var sans = avec
+        sans.chefs = []
+        // Ce que la couronne ajoute a la hauteur de la fiche dans une fenetre de `fenetre` pt de large : la fiche
+        // est posee avec le bord de chaque cote (`FenetrePieces`).
+        func ajout(fenetre: CGFloat) -> CGFloat {
+            func hauteur(_ e: EntreeScene) -> CGFloat {
+                let fiche = FicheNoeud(id: id, entree: e, instant: Date(), aRenommer: .constant(nil)) {}
+                return NSHostingView(rootView: fiche.frame(width: fenetre - 2 * FenetrePieces.bord)
+                    .environment(s).environment(PiecesChoisies(fichier: nil))).fittingSize.height
+            }
+            return hauteur(avec) - hauteur(sans)
+        }
+        let pastille = NSHostingView(rootView: PastilleChef()).fittingSize.height
+        let uneLigne = ajout(fenetre: 3000)
+        #expect(uneLigne >= pastille && uneLigne < 2 * pastille, "sur une ligne : \(uneLigne) pt pour une pastille de \(pastille)")
+        for fenetre in [1100, FenetrePieces.tailleMinimale.width] {
+            let plus = ajout(fenetre: fenetre)
+            #expect(plus > 0, "fenetre de \(Int(fenetre)) pt : la couronne agrandit la fiche, dont sa colonne est la plus haute")
+            #expect(plus <= uneLigne + 0.5, "fenetre de \(Int(fenetre)) pt : la couronne ajoute \(plus) pt, plus que \(uneLigne) : la pastille passe a la ligne")
+        }
+    }
+
     /// Ligne de niveau : pieces seules, routeurs, noms masques (un, plusieurs), piece isolee.
     @Test func ligneDeNiveau() {
         #expect(LigneNiveauVue.texte(.pieces) == String(localized: "Vue d'ensemble : les pièces"))

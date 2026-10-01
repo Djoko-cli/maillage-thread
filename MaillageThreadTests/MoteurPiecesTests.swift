@@ -142,21 +142,26 @@ struct MoteurPiecesTests {
     /// tourne jusqu'au bout. Avec « Reduire les animations », par un fondu : la scene s'efface, les marges
     /// sautent a mi-chemin, la scene revient. Tout de suite avant la premiere disposition, et pour une
     /// capture.
-    @Test func margesQuiGlissent() throws {
+    ///
+    /// `t` est l'heure de l'horloge du moteur, le temps d'eveil de la machine (`MoteurPieces.maintenant()`) :
+    /// donnee en argument, de 17 min a 90 jours d'eveil, pour que le test ne depende pas de l'heure. La fin
+    /// d'un glissement est evaluee 0,01 s apres son terme : `(t + 0,3) - t`, arrondi, vaut selon la plage de
+    /// `t` un cran de moins que 0,3, et le glissement ne serait pas fini.
+    @Test(arguments: [1_020.0, 10_800, 200_000, 1_198_161, 2_592_000, 7_776_000])
+    func margesQuiGlissent(eveil t: Double) throws {
         let avant = MoteurPieces()
         avant.marges = (84, 50)
         #expect(avant.margesDuCadre(0).bas == 50)
         avant.marges = (84, 190)
         #expect(avant.margesDuCadre(0).bas == 190 && !avant.margesEnRoute, "avant la premiere disposition")
         let (m, _) = try Self.moteur()
-        let t = MoteurPieces.maintenant()
         #expect(m.margesDuCadre(t).haut == 84 && m.margesDuCadre(t).bas == 50)
         m.marges = (84, 190)
         #expect(m.margesDuCadre(t).bas == 50, "le depart")
         #expect(m.margesEnRoute && m.doitContinuer(t + 0.15))
         let mi = m.margesDuCadre(t + 0.15).bas
         #expect(mi > 50 + 0.9 * 140 && mi < 190, "a mi-temps, presque arrivee : la courbe de la fiche (\(mi))")
-        #expect(m.margesDuCadre(t + 0.3).bas == 190 && !m.margesEnRoute)
+        #expect(m.margesDuCadre(t + 0.31).bas == 190 && !m.margesEnRoute, "fini, 0,01 s apres son terme")
         m.marges = (84, 50)
         _ = m.margesDuCadre(t + 1)
         let enRoute = m.margesDuCadre(t + 1.1).bas
@@ -164,7 +169,7 @@ struct MoteurPiecesTests {
         m.marges = (120, 50)
         let detour = m.margesDuCadre(t + 1.1)
         #expect(detour.haut == 84 && detour.bas == enRoute, "un autre changement repart d'ou il en est")
-        #expect(m.margesDuCadre(t + 1.4).haut == 120 && m.margesDuCadre(t + 1.4).bas == 50)
+        #expect(m.margesDuCadre(t + 1.41).haut == 120 && m.margesDuCadre(t + 1.41).bas == 50)
         m.reduire = true
         m.marges = (84, 190)
         #expect(m.margesDuCadre(t + 2).bas == 50 && m.margesEnRoute && m.opaciteMarges == 1,
@@ -172,7 +177,7 @@ struct MoteurPiecesTests {
         #expect(m.margesDuCadre(t + 2.1).bas == 50 && abs(m.opaciteMarges - 1.0 / 3) < 1e-6, "la scene s'efface")
         #expect(m.margesDuCadre(t + 2.2).bas == 190 && abs(m.opaciteMarges - 1.0 / 3) < 1e-6,
                 "a mi-chemin, les marges sautent ; la scene revient")
-        #expect(m.margesDuCadre(t + 2.3).bas == 190 && m.opaciteMarges == 1 && !m.margesEnRoute)
+        #expect(m.margesDuCadre(t + 2.31).bas == 190 && m.opaciteMarges == 1 && !m.margesEnRoute)
         m.reduire = false
         m.fige = true
         m.marges = (100, 50)
