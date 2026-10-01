@@ -27,6 +27,7 @@ struct CourbesFicheTests {
         let br = try #require(s.instantane?.routeurs.first { $0.adresseEtendue != nil })
         #expect(s.cleHistorique(noeud: br.instance) == br.adresseEtendue)
         #expect(s.cleHistorique(noeud: "instance:inconnue") == nil)
+        #expect(s.cleHistorique(noeud: "ＤＥＡＤＢＥＥＦ00000001") == nil, "hexadecimaux pleine chasse : pas une ExtMac")
         let xa = try #require(br.adresseEtendue)
         let noms = s.nomsHistorique([id, "rloc:1400", xa, "E0000000000000FF"])
         #expect(noms[id] == s.nom(try #require(s.appareil(id))))

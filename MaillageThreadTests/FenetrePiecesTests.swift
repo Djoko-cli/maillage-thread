@@ -27,6 +27,11 @@ struct FenetrePiecesTests {
         return nil
     }
 
+    /// La scene de la fenetre, comme la construit `FenetrePieces` a chaque rendu ; nil sans reseau.
+    static func entree(_ s: Surveillance) -> EntreeScene? {
+        s.reseau.map { EntreeScene(surveillance: s, reseau: $0, places: PlacesGardees()) }
+    }
+
     /// « Ancien » (6 min) et « perime » (15 min) ne dependent que de l'heure, que rien n'observe : la
     /// fenetre est une `TimelineView` qui se redessine chaque minute (`FenetrePieces.horloge`), avec
     /// dedans tout ce qui lit l'heure (la legende, la scene, la fiche).
@@ -80,12 +85,14 @@ struct FenetrePiecesTests {
         let sansRouteurs = Surveillance(mode: .demo, dossier: nil)
         sansRouteurs.demarrer()
         sansRouteurs.noms.maison = NomsSceneTests.maisonSansRouteurs(sansRouteurs)
-        #expect(PiecesChoisies.pieces(aPlacer: "Apple TV 4K", dans: sansRouteurs) != nil, "avec « Placer dans une pièce… »")
+        #expect(PiecesChoisies.placement("Apple TV 4K", dans: sansRouteurs, entree: try #require(Self.entree(sansRouteurs)))
+                != nil, "avec « Placer dans une pièce… »")
         for (s, id) in [(demo, "Apple TV 4K"), (demo, "3A5DFAFCAB581AAF"), (demo, "rloc:041F"), (demo, "7AF0B6D5006CF95F"),
                         (sansRouteurs, "Apple TV 4K")] {
+            let entree = Self.entree(s)
             let v = VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
                 LigneNiveauVue(ligne: .lisibles)
-                FicheNoeud(id: id, instant: Date(), aRenommer: .constant(nil)) {}
+                FicheNoeud(id: id, entree: entree, instant: Date(), aRenommer: .constant(nil)) {}
             }
             let hote = NSHostingView(rootView: v.environment(s).environment(PiecesChoisies(fichier: nil)))
             fiche = max(fiche, hote.fittingSize.height + FenetrePieces.bord)
@@ -93,9 +100,11 @@ struct FenetrePiecesTests {
         #expect(fiche <= FenetrePieces.margeBas(fiche: true, courbes: false), "\(fiche)")
         let historique = try CourbesFicheTests.surveillance()
         #expect(FicheNoeud.courbesVisibles(dans: historique))
+        let entreeHistorique = Self.entree(historique)
         let courbes = VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
             LigneNiveauVue(ligne: .lisibles)
-            FicheNoeud(id: JournalMaillageTests.appareil, instant: Date(), aRenommer: .constant(nil)) {}
+            FicheNoeud(id: JournalMaillageTests.appareil, entree: entreeHistorique, instant: Date(),
+                       aRenommer: .constant(nil)) {}
         }
         let avecCourbes = NSHostingView(rootView: courbes.environment(historique)).fittingSize.height + FenetrePieces.bord
         #expect(avecCourbes <= FenetrePieces.margeBas(fiche: true, courbes: true), "\(avecCourbes)")
@@ -127,19 +136,20 @@ struct FenetrePiecesTests {
     /// « Placer dans une piece… » : pour un routeur de bordure que Maison ne place pas seulement, les
     /// pieces de la maison, par nom ; le choix se garde sur disque, ou en memoire sans fichier (demo).
     @Test func placerUnRouteur() throws {
-        let (s, _, _) = try NomsSceneTests.demo()
-        #expect(PiecesChoisies.pieces(aPlacer: "HomePod Palier", dans: s) == nil, "Maison le place au salon")
+        let (s, _, e) = try NomsSceneTests.demo()
+        #expect(PiecesChoisies.placement("HomePod Palier", dans: s, entree: e) == nil, "Maison le place au salon")
         s.noms.maison = NomsSceneTests.maisonSansRouteurs(s)
-        let pieces = try #require(PiecesChoisies.pieces(aPlacer: "HomePod Palier", dans: s))
+        let entree = try #require(Self.entree(s))
+        let pieces = try #require(PiecesChoisies.placement("HomePod Palier", dans: s, entree: entree)?.pieces)
         #expect(pieces == ["Buanderie", "Bureau", "Chambre", "Chambre d'amis", "Cuisine", "Entrée", "Salle de bain", "Salon"])
-        #expect(PiecesChoisies.pieces(aPlacer: "56B1E064401F74EF", dans: s) == nil, "un appareil")
+        #expect(PiecesChoisies.placement("56B1E064401F74EF", dans: s, entree: entree) == nil, "un appareil")
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("routeurs-\(UUID().uuidString)/pieces-routeurs.json")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let choisies = PiecesChoisies(fichier: url)
-        choisies.choisir("Salon", routeur: "HomePod Palier", domicile: "Maison (démo)")
+        choisies.choisir("Salon", .routeur("HomePod Palier"), domicile: "Maison (démo)")
         #expect(PiecesChoisies(fichier: url).choix.choix(routeur: "HomePod Palier", domicile: "Maison (démo)") == "Salon")
         let memoire = PiecesChoisies(fichier: nil)
-        memoire.choisir("Salon", routeur: "HomePod Palier", domicile: "")
+        memoire.choisir("Salon", .routeur("HomePod Palier"), domicile: "")
         #expect(memoire.choix.choix(routeur: "HomePod Palier", domicile: "") == "Salon")
         #expect(PiecesChoisies.fichier(demo: true, sousTests: false) == nil)
         #expect(PiecesChoisies.fichier(demo: false, sousTests: true) == nil)
@@ -155,14 +165,15 @@ struct FenetrePiecesTests {
     /// piece » l'efface.
     @Test func placerUnAppareil() throws {
         let (s, _) = try NomsSceneTests.demoAvecInconnus()
+        let e = try #require(Self.entree(s))
         let pieces = ["Buanderie", "Bureau", "Chambre", "Chambre d'amis", "Cuisine", "Entrée", "Salle de bain",
                       "Salon"]
-        let appareil = try #require(PiecesChoisies.placement("rloc:041F", dans: s))
+        let appareil = try #require(PiecesChoisies.placement("rloc:041F", dans: s, entree: e))
         #expect(appareil == PiecesChoisies.Placement(cle: .appareil("E0000000000000FF"), pieces: pieces))
-        #expect(PiecesChoisies.placement("1E5019DAC2638F92", dans: s)?.cle == .appareil("1E5019DAC2638F92"))
-        #expect(PiecesChoisies.placement("rloc:0420", dans: s) == nil, "sans ExtMac")
-        #expect(PiecesChoisies.placement("56B1E064401F74EF", dans: s) == nil, "Maison le place au bureau")
-        let routeur = try #require(PiecesChoisies.placement("HomePod Palier", dans: s))
+        #expect(PiecesChoisies.placement("1E5019DAC2638F92", dans: s, entree: e)?.cle == .appareil("1E5019DAC2638F92"))
+        #expect(PiecesChoisies.placement("rloc:0420", dans: s, entree: e) == nil, "sans ExtMac")
+        #expect(PiecesChoisies.placement("56B1E064401F74EF", dans: s, entree: e) == nil, "Maison le place au bureau")
+        let routeur = try #require(PiecesChoisies.placement("HomePod Palier", dans: s, entree: e))
         #expect(routeur == PiecesChoisies.Placement(cle: .routeur("HomePod Palier"), pieces: pieces))
         #expect(MenuPlacer.articles(appareil).first
                 == MenuPlacer.Article(texte: String(localized: "Sans pièce"), piece: nil))
@@ -175,7 +186,7 @@ struct FenetrePiecesTests {
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let domicile = "Maison (démo)"
         let choisies = PiecesChoisies(fichier: url)
-        choisies.choisir("Salon", routeur: "HomePod Palier", domicile: domicile)
+        choisies.choisir("Salon", .routeur("HomePod Palier"), domicile: domicile)
         choisies.choisir("Cuisine", appareil.cle, domicile: domicile)
         let relu = PiecesChoisies(fichier: url)
         #expect(relu.pieceChoisie(.appareil("E0000000000000FF"), domicile: domicile) == "Cuisine")
@@ -186,16 +197,49 @@ struct FenetrePiecesTests {
         #expect(PiecesChoisies(fichier: url).choix.choix(routeur: "HomePod Palier", domicile: domicile) == "Salon")
     }
 
+    /// Un routeur Thread qui n'est pas de bordure, connu de la sonde seule, se place sous son ExtMac
+    /// (precision 27), « Sans piece » en tete du menu. Dans une maison sans pieces (ni d'accessoire, ni
+    /// de zone), aucun noeud n'a de menu, appareil ou routeur.
+    @Test func placerUnRouteurThread() throws {
+        let (s, _) = try NomsSceneTests.demoAvecRouteurThread()
+        let e = try #require(Self.entree(s))
+        let noeud = try #require(e.graphe.noeud("rloc:B400"))
+        #expect(noeud.inconnu && noeud.routeur && !noeud.bordure)
+        let routeur = try #require(PiecesChoisies.placement("rloc:B400", dans: s, entree: e))
+        #expect(routeur.cle == .appareil("E0000000000000F1"))
+        #expect(MenuPlacer.articles(routeur).first == MenuPlacer.Article(texte: String(localized: "Sans pièce"), piece: nil))
+        s.noms.maison?.zones = nil
+        for k in s.noms.maison?.accessoires.indices ?? 0..<0 { s.noms.maison?.accessoires[k].piece = nil }
+        let sansPieces = try #require(Self.entree(s))
+        for id in ["rloc:B400", "rloc:041F", "1E5019DAC2638F92", "HomePod Palier"] {
+            #expect(PiecesChoisies.placement(id, dans: s, entree: sansPieces) == nil, "\(id)")
+        }
+    }
+
+    /// « Placer dans une piece… » lit le graphe de la scene du meme rendu (`EntreeScene`), et n'en
+    /// reconstruit pas : apres l'oubli de la sonde, la scene deja construite garde « rloc:041F », que la
+    /// sonde seule connait, et son menu ; la scene suivante ne l'a plus, ni le menu.
+    @Test func menuDeLaScene() throws {
+        let (s, _) = try NomsSceneTests.demoAvecInconnus()
+        let e = try #require(Self.entree(s))
+        s.oublierMaillage()
+        #expect(PiecesChoisies.placement("rloc:041F", dans: s, entree: e)?.cle == .appareil("E0000000000000FF"))
+        let suivante = try #require(Self.entree(s))
+        #expect(suivante.maillage == nil && suivante.graphe.noeud("rloc:041F") == nil)
+        #expect(PiecesChoisies.placement("rloc:041F", dans: s, entree: suivante) == nil)
+    }
+
     /// Un choix perime (sa piece n'est plus dans Maison) ne compte plus : la scene l'ignore, et la
     /// selection du menu rend nil, le premier article (« Sans piece » pour un appareil, « D'apres son
     /// nom » pour un routeur), au lieu d'une piece que le menu n'a pas et qui ne cocherait rien. Le
     /// choix reste dans le fichier : il compte de nouveau si la piece revient.
     @Test func choixPerimeNonCoche() throws {
         let (s, _) = try NomsSceneTests.demoAvecInconnus()
+        let e = try #require(Self.entree(s))
         let domicile = "Maison (démo)"
         let choisies = PiecesChoisies(fichier: nil)
         for id in ["rloc:041F", "HomePod Palier"] {
-            let placement = try #require(PiecesChoisies.placement(id, dans: s), "\(id)")
+            let placement = try #require(PiecesChoisies.placement(id, dans: s, entree: e), "\(id)")
             let menu = MenuPlacer(placement: placement, domicile: domicile, choisies: choisies)
             #expect(menu.selection.wrappedValue == nil, "\(id) : aucun choix")
             menu.selection.wrappedValue = "Cuisine"

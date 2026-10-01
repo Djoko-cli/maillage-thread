@@ -39,6 +39,18 @@ struct NomsSceneTests {
         return (s, r)
     }
 
+    /// `demoAvecInconnus`, dont le maillage a en plus un routeur Thread qui n'est pas de bordure, connu de
+    /// la sonde seule (« rloc:B400 », E0000000000000F1).
+    static func demoAvecRouteurThread() throws -> (Surveillance, Reseau) {
+        let (s, r) = try demoAvecInconnus()
+        let m = try #require(s.maillage)
+        var thread = RouteurMaillage(id: 45)
+        thread.extMac = "E0000000000000F1"
+        s.recevoir(Maillage(date: m.date, partition: m.partition, routeurs: m.routeurs + [thread], liens: m.liens,
+                            enfants: m.enfants, signaux: m.signaux), a: s.maintenant)
+        return (s, r)
+    }
+
     /// Libelle d'un noeud : le nom coupe a 40 caracteres, la couronne du chef (celui de la partition
     /// et celui de la sonde), ☾ endormi, ⚠︎ sans adresse ou disparu ; la pastille d'une batterie faible.
     @Test func libelles() throws {
@@ -60,7 +72,8 @@ struct NomsSceneTests {
     /// routeur de bordure. Noms des etages, des pieces, compte, repere « ailleurs ».
     @Test func piecesEtNoms() throws {
         let (s, r, e) = try Self.demo()
-        let pieces = LibellesNoeuds.pieces(reseau: r, appareils: s.appareilsAffiches(pour: r), maison: s.noms.maison)
+        let pieces = LibellesNoeuds.pieces(reseau: r, appareils: s.appareilsAffiches(pour: r), maison: s.noms.maison,
+                                           graphe: e.graphe)
         #expect(pieces["Apple TV 4K"] == "Salon" && pieces["HomePod mini chambre"] == "Chambre")
         #expect(pieces["56B1E064401F74EF"] == "Bureau")
         #expect(pieces["1E5019DAC2638F92"] == nil)
@@ -116,22 +129,22 @@ struct NomsSceneTests {
     /// celle qu'on leur a choisie, qui passe avant ; les autres vont dans « Sans piece ». Un routeur que
     /// Maison place garde sa piece.
     @Test func piecesDesRouteurs() throws {
-        let (s, r, _) = try Self.demo()
+        let (s, r, depart) = try Self.demo()
         let maison = try #require(Self.maisonSansRouteurs(s))
         #expect(!maison.accessoires.contains { $0.nom == "Apple TV 4K" })
         let noms = s.nomsRouteurs(pour: r)
         var pieces = LibellesNoeuds.pieces(reseau: r, appareils: s.appareilsAffiches(pour: r), maison: maison,
-                                           nomsRouteurs: noms)
+                                           nomsRouteurs: noms, graphe: depart.graphe)
         #expect(pieces["HomePod mini chambre"] == "Chambre" && pieces["HomePod mini bureau"] == "Bureau")
         #expect(pieces["HomePod Palier"] == nil && pieces["HomePod Avant"] == nil && pieces["Apple TV 4K"] == nil)
         var choix = PiecesRouteurs()
         choix.choisir("Salon", routeur: "HomePod Palier", domicile: maison.domicile ?? "")
         choix.choisir("Bureau", routeur: "HomePod mini chambre", domicile: maison.domicile ?? "")
         pieces = LibellesNoeuds.pieces(reseau: r, appareils: s.appareilsAffiches(pour: r), maison: maison,
-                                       nomsRouteurs: noms, choix: choix)
+                                       nomsRouteurs: noms, choix: choix, graphe: depart.graphe)
         #expect(pieces["HomePod Palier"] == "Salon" && pieces["HomePod mini chambre"] == "Bureau")
         let avecMaison = LibellesNoeuds.pieces(reseau: r, appareils: s.appareilsAffiches(pour: r), maison: s.noms.maison,
-                                               nomsRouteurs: noms, choix: choix)
+                                               nomsRouteurs: noms, choix: choix, graphe: depart.graphe)
         #expect(avecMaison["HomePod mini chambre"] == "Chambre", "Maison passe avant le choix")
         s.noms.maison = maison
         let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees(), choix: choix)
@@ -191,6 +204,27 @@ struct NomsSceneTests {
         #expect(EntreeScene(surveillance: s, reseau: r, places: PlacesGardees()).cleDisposition == e.cleDisposition)
         s.renommer("56B1E064401F74EF", en: "Pont Halo")
         #expect(EntreeScene(surveillance: s, reseau: r, places: PlacesGardees()).cleDisposition != e.cleDisposition)
+    }
+
+    /// La scene porte ce dont elle est faite, construit une fois avec elle : le graphe, le maillage de la
+    /// sonde rapproche, les chefs (ceux des libelles couronnes) et les appareils affiches. Ils n'entrent
+    /// pas dans l'egalite : un maillage recu plus tard, qui ne change rien a la scene, ne la fait pas
+    /// reposer par le moteur.
+    @Test func constructionDeLaScene() throws {
+        let (s, r, e) = try Self.demo()
+        let m = try #require(s.maillageAffiche(pour: r))
+        #expect(e.maillage == m)
+        #expect(e.graphe == GrapheReseau(reseau: r, appareils: s.appareilsAffiches(pour: r), maillage: m))
+        #expect(e.chefs == ["Apple TV 4K"])
+        #expect(Set(e.libelles.filter { $0.value.texte.contains("👑") }.keys) == e.chefs, "la couronne suit les chefs")
+        #expect(e.appareils["56B1E064401F74EF"]?.piece == "Bureau")
+        let maillage = try #require(s.maillage)
+        s.recevoir(Maillage(date: maillage.date.addingTimeInterval(300), partition: maillage.partition,
+                            routeurs: maillage.routeurs, liens: maillage.liens, enfants: maillage.enfants,
+                            signaux: maillage.signaux), a: s.maintenant)
+        let apres = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        #expect(apres.maillage?.date != e.maillage?.date)
+        #expect(apres == e, "la meme scene")
     }
 
     /// Sur la maison de demo, avec les noms mesures par l'app : aucun lien ne passe sur une piece

@@ -8,6 +8,9 @@ struct FicheNoeud: View {
     /// Pieces choisies pour les noeuds que Maison ne place pas : la vue par pieces seule les donne.
     @Environment(PiecesChoisies.self) private var piecesChoisies: PiecesChoisies?
     let id: String
+    /// La scene du meme rendu (`EntreeScene`), avec ce dont elle est faite : la fiche y lit le maillage
+    /// rapproche, et « Placer dans une piece… » le graphe, sans rien reconstruire ; nil sans reseau.
+    let entree: EntreeScene?
     /// Heure de la fenetre du graphe (sa `TimelineView`, chaque minute ; la fin de la panne en demo) :
     /// les durees de la fiche (« vu il y a... ») suivent l'heure sans autre evenement.
     let instant: Date
@@ -41,7 +44,8 @@ struct FicheNoeud: View {
                         Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
                             .buttonStyle(.glass)
                     }
-                    if let piecesChoisies, let placement = PiecesChoisies.placement(id, dans: surveillance) {
+                    if let piecesChoisies, let entree,
+                       let placement = PiecesChoisies.placement(id, dans: surveillance, entree: entree) {
                         MenuPlacer(placement: placement, domicile: surveillance.noms.maison?.domicile ?? "",
                                    choisies: piecesChoisies)
                     }
@@ -212,8 +216,8 @@ struct FicheNoeud: View {
 
     // MARK: Sonde
 
-    /// Maillage de la sonde pour le reseau affiche.
-    private var sonde: MaillageAffiche? { surveillance.reseau.flatMap { surveillance.maillageAffiche(pour: $0) } }
+    /// Maillage de la sonde pour le reseau affiche : celui de la scene.
+    private var sonde: MaillageAffiche? { entree?.maillage }
 
     /// Ce que la sonde sait du noeud : son parent (enfant), ses voisins et ses enfants (routeur).
     @ViewBuilder

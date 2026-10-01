@@ -78,6 +78,10 @@ struct PiecesAppareilsTests {
         #expect(p.piecesNoeuds(g, deMaison: [:], parmi: Self.pieces, domicile: Self.domicile).isEmpty, "sans choix")
         p.choisir("Salon", appareil: "DEADBEEF00000001", domicile: Self.domicile)
         p.choisir("Bureau", appareil: "E0000000000000C3", domicile: Self.domicile)
+        // Un choix sous l'ExtMac d'un routeur de bordure (le drapeau des Network Data peut changer d'une
+        // tournee a l'autre) ne le place pas : il suit les precisions 23 a 25.
+        p.choisir("Cuisine", appareil: "E0000000000000B2", domicile: Self.domicile)
+        p.choisir("Cuisine", appareil: "E0000000000000A1", domicile: Self.domicile)
         #expect(p.choix(appareil: "DEADBEEF00000001", domicile: Self.domicile) == "Salon")
         #expect(p.piecesNoeuds(g, deMaison: [:], parmi: Self.pieces, domicile: Self.domicile)
                 == ["rloc:0401": "Salon", "rloc:0C00": "Bureau"])

@@ -61,19 +61,15 @@ final class PiecesChoisies {
             MoteurPieces.journal.error("pieces choisies non ecrites : \(error.localizedDescription, privacy: .public)")
         }
     }
-
-    /// Place un routeur (son instance) dans une piece de la maison ; nil : d'apres son nom.
-    func choisir(_ piece: String?, routeur: String, domicile: String) {
-        choisir(piece, .routeur(routeur), domicile: domicile)
-    }
 }
 
 extension PiecesChoisies {
     /// « Placer dans une piece… » pour un noeud du reseau affiche, dans une maison qui a des pieces : un
     /// routeur de bordure de l'instantane que Maison ne place pas (precision 24) ; un autre noeud sans
     /// piece de Maison dont l'ExtMac est connue (precision 27). Nil pour un noeud que Maison place, un
-    /// routeur de bordure que la sonde seule connait (precision 25), un noeud sans ExtMac.
-    static func placement(_ id: String, dans surveillance: Surveillance) -> Placement? {
+    /// routeur de bordure que la sonde seule connait (precision 25), un noeud sans ExtMac. `entree` : la
+    /// scene du meme rendu, dont le graphe et les appareils servent tels quels.
+    static func placement(_ id: String, dans surveillance: Surveillance, entree: EntreeScene) -> Placement? {
         let maison = surveillance.noms.maison
         let pieces = PiecesRouteurs.pieces(de: maison).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
         guard !pieces.isEmpty else { return nil }
@@ -81,18 +77,10 @@ extension PiecesChoisies {
             guard LibellesNoeuds.pieceDeMaison(routeur: id, maison: maison) == nil else { return nil }
             return Placement(cle: .routeur(id), pieces: pieces)
         }
-        // Un autre noeud : par le meme graphe que la scene (`EntreeScene`), donc sous la meme cle.
-        guard let r = surveillance.reseau else { return nil }
-        let affiches = surveillance.appareilsAffiches(pour: r)
-        if let p = affiches.first(where: { $0.id == id })?.piece, !p.isEmpty { return nil }
-        let graphe = GrapheReseau(reseau: r, appareils: affiches, maillage: surveillance.maillageAffiche(pour: r))
-        guard let n = graphe.noeud(id), let cle = PiecesRouteurs.cle(n) else { return nil }
+        // Un autre noeud : par le graphe de la scene, donc sous la meme cle.
+        if let p = entree.appareils[id]?.piece, !p.isEmpty { return nil }
+        guard let n = entree.graphe.noeud(id), let cle = PiecesRouteurs.cle(n) else { return nil }
         return Placement(cle: .appareil(cle), pieces: pieces)
-    }
-
-    /// Pieces que propose « Placer dans une piece… » pour un noeud ; nil sans menu (`placement`).
-    static func pieces(aPlacer id: String, dans surveillance: Surveillance) -> [String]? {
-        placement(id, dans: surveillance)?.pieces
     }
 }
 

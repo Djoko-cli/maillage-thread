@@ -384,8 +384,8 @@ final class Surveillance {
 
     /// Cle d'un noeud du graphe dans l'historique : l'ExtMac de son routeur ou de son enfant dans
     /// le dernier maillage ("rloc:XXXX" pour un routeur sans ExtMac), sinon le `xa` de l'annonce
-    /// d'un routeur de bordure, ou l'hote d'un appareil (l'ExtMac d'un appareil Matter) ; nil si
-    /// le noeud n'en a pas.
+    /// d'un routeur de bordure, ou l'hote d'un appareil (l'ExtMac d'un appareil Matter, d'apres
+    /// `GrapheReseau.extMac(hote:)`, comme la piece d'un noeud) ; nil si le noeud n'en a pas.
     func cleHistorique(noeud id: String) -> String? {
         if let m = maillage, let n = rapprochement(m)?.noeud(id) {
             switch n.genre {
@@ -396,8 +396,7 @@ final class Surveillance {
             }
         }
         if let xa = instantane?.routeur(id)?.adresseEtendue { return xa }
-        if id.count == 16, id.allSatisfy(\.isHexDigit) { return id.uppercased() }
-        return nil
+        return GrapheReseau.extMac(hote: id)
     }
 
     /// Noms de noeuds de l'historique, par cle : leur nom dans le graphe, si le dernier maillage

@@ -64,18 +64,18 @@ enum LibellesNoeuds {
     /// Piece de Maison de chaque noeud : celle de son accessoire (appareil), ou, pour un routeur de
     /// bordure, celle de l'accessoire de Maison qui porte le nom de son annonce. Un routeur de bordure
     /// que Maison ne place pas (HomePod, Apple TV) prend la piece choisie pour lui, sinon celle de son
-    /// nom (`nomsRouteurs`, par instance ; `PiecesRouteurs`). Avec le graphe, un autre noeud que Maison
-    /// ne place pas prend la piece choisie pour son ExtMac (precision 27).
+    /// nom (`nomsRouteurs`, par instance ; `PiecesRouteurs`). Un autre noeud du graphe que Maison ne
+    /// place pas prend la piece choisie pour son ExtMac (precision 27).
     static func pieces(reseau: Reseau, appareils: [AppareilAffiche], maison: NomsMaison?,
                        nomsRouteurs: [String: String] = [:], choix: PiecesRouteurs = PiecesRouteurs(),
-                       graphe: GrapheReseau? = nil) -> [String: String] {
+                       graphe: GrapheReseau) -> [String: String] {
         var pieces: [String: String] = [:]
         for a in appareils {
             if let p = a.piece, !p.isEmpty { pieces[a.id] = p }
         }
         let toutes = PiecesRouteurs.pieces(de: maison)
         let domicile = maison?.domicile ?? ""
-        if let graphe { pieces = choix.piecesNoeuds(graphe, deMaison: pieces, parmi: toutes, domicile: domicile) }
+        pieces = choix.piecesNoeuds(graphe, deMaison: pieces, parmi: toutes, domicile: domicile)
         for r in reseau.routeurs {
             if let p = pieceDeMaison(routeur: r.instance, maison: maison) {
                 pieces[r.instance] = p

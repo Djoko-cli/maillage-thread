@@ -68,7 +68,8 @@ struct FenetrePieces: View {
     var body: some View {
         let palette = Palette(sombre: true)
         // Redessin chaque minute (`horloge`) : la scene et la fiche lisent l'heure, que rien n'observe. La
-        // fiche la recoit (`instant`) : sinon SwiftUI la sauterait, ses entrees n'ayant pas change.
+        // fiche la recoit (`instant`) : sinon SwiftUI la sauterait, ses entrees n'ayant pas change. La
+        // scene est construite une fois par rendu : la legende, la fiche et son menu la lisent.
         TimelineView(Self.horloge) { contexte in
             let entree = surveillance.reseau.map {
                 EntreeScene(surveillance: surveillance, reseau: $0, places: moteur.places, choix: piecesChoisies.choix)
@@ -97,9 +98,8 @@ struct FenetrePieces: View {
                     Spacer()
                     if moteur.selection == nil {
                         HStack(alignment: .center, spacing: 12) {
-                            if let r = surveillance.reseau {
-                                LegendeLiens(sonde: surveillance.maillageAffiche(pour: r) != nil,
-                                             ancien: surveillance.maillageAncien)
+                            if let entree {
+                                LegendeLiens(sonde: entree.maillage != nil, ancien: surveillance.maillageAncien)
                                     .obstacle("legende", moteur)
                             }
                             LigneNiveauVue(ligne: moteur.ligneNiveau)
@@ -110,7 +110,7 @@ struct FenetrePieces: View {
                             .obstacle("niveau", moteur)
                     }
                     if let selection = moteur.selection {
-                        FicheNoeud(id: selection, instant: surveillance.maintenant(a: contexte.date),
+                        FicheNoeud(id: selection, entree: entree, instant: surveillance.maintenant(a: contexte.date),
                                    aRenommer: $aRenommer, choisir: { moteur.selection = $0 }) {
                             moteur.selection = nil
                         }
