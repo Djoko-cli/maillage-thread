@@ -26,6 +26,9 @@ struct FenetrePieces: View {
 
     /// Preference du mode 2D ou 3D.
     static let cleMode = "vuePieces3D"
+    /// Taille minimale de la fenetre (polissage B, section 3) : avec la fiche et ses courbes, la scene
+    /// garde environ 230 pt de haut (88 pour 820 x 560, tri du sous-projet A, n° 11).
+    static let tailleMinimale = CGSize(width: 820, height: 680)
     /// Bord des elements poses sur la vue, et ecart entre eux (pt).
     static let bord: CGFloat = 16
     static let espacement: CGFloat = 10
@@ -121,20 +124,24 @@ struct FenetrePieces: View {
                     Spacer()
                     LigneDuBas(moteur: moteur, entree: entree, legende: moteur.selection == nil,
                                ancien: surveillance.maillageAncien) { hauteurLegende = $0 }
+                    // La fiche glisse depuis le bas a l'ouverture et a la fermeture (fondu simple avec
+                    // « Reduire les animations ») ; d'un noeud a l'autre, son contenu change sur place.
                     if let selection = moteur.selection {
                         FicheNoeud(id: selection, entree: entree, instant: surveillance.maintenant(a: contexte.date),
                                    aRenommer: $aRenommer, choisir: { moteur.selection = $0 }) {
                             moteur.selection = nil
                         }
                         .obstacle("fiche", moteur)
+                        .transition(Apparition.pour(.bottom, reduire: reduire).transition)
                     }
                 }
+                .animation(Apparition.pour(.bottom, reduire: reduire).animation, value: moteur.selection == nil)
                 .padding(Self.bord)
             }
             .coordinateSpace(.named(VuePieces.espace))
             .ignoresSafeArea()
         }
-        .frame(minWidth: 820, minHeight: 560)
+        .frame(minWidth: Self.tailleMinimale.width, minHeight: Self.tailleMinimale.height)
         .environment(piecesChoisies)
         .environment(\.colorScheme, .dark)
         .background(SondeFenetre { fenetre in

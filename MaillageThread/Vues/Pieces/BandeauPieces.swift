@@ -127,6 +127,7 @@ struct BandeFenetre: View {
 /// la marge du haut de la vue d'ensemble (`FenetrePieces.margeHaut`).
 struct HautPieces: View {
     @Environment(Surveillance.self) private var surveillance
+    @Environment(\.accessibilityReduceMotion) private var reduire
     let moteur: MoteurPieces
     @Binding var troisD: Bool
     /// Maison n'a encore aucune piece : le bandeau du passeur.
@@ -150,21 +151,29 @@ struct HautPieces: View {
             }
             .frame(height: 2 * feux.milieu)
             .obstacle("ligne", moteur)
+            // Un bandeau qui parait glisse depuis le haut, et repart de meme (fondu simple avec « Reduire
+            // les animations ») ; ce qui est dessous descend avec lui.
             VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
                 LigneTournee()
                 if let r = surveillance.reseau, r.estScinde {
                     BandeauScission(reseau: r)
+                        .transition(apparition.transition)
                 }
                 if sansPieces {
                     BandeauSansPieces()
+                        .transition(apparition.transition)
                 }
                 FilPieces(moteur: moteur)
             }
+            .animation(apparition.animation, value: surveillance.reseau?.estScinde == true)
+            .animation(apparition.animation, value: sansPieces)
             .obstacle("colonne", moteur)
         }
         .padding(.leading, feux.droite + Self.ecartFeux)
         .padding(.trailing, Self.bordDroit)
     }
+
+    private var apparition: Apparition { Apparition.pour(.top, reduire: reduire) }
 }
 
 /// Bouton d'une capsule du haut (maquette du bandeau, `.b`) : texte de 11 pt (10 sous la capsule) blanc

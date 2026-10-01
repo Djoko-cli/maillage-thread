@@ -5024,6 +5024,22 @@
           }
         }
       }
+    },
+    "👑 Chef du réseau Thread, élu automatiquement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "👑 Thread network leader, elected automatically"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "👑 Chef du réseau Thread, élu automatiquement"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

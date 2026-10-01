@@ -60,6 +60,12 @@ struct FicheNoeud: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
     }
 
+    /// Le noeud est couronne : un chef de la scene du meme rendu (`EntreeScene.chefs`), routeur de
+    /// bordure ou noeud que la sonde seule connait ; la fiche couronne les memes noeuds que la scene.
+    static func couronne(_ id: String, entree: EntreeScene?) -> Bool {
+        entree?.chefs.contains(id) == true
+    }
+
     /// Courbes de l'historique sous les colonnes, pour tout noeud, des que l'historique de la
     /// sonde a un releve (jamais en demo) : la fiche garde sa hauteur d'un noeud a l'autre.
     static func courbesVisibles(dans surveillance: Surveillance) -> Bool {
@@ -84,6 +90,9 @@ struct FicheNoeud: View {
             let description = Self.ligneDescription(maison: maison, modeleHomeKit: a.hap?.modele)
             if !description.isEmpty {
                 Text(description).foregroundStyle(.secondary)
+            }
+            if Self.couronne(a.id, entree: entree) {
+                PastilleChef()
             }
             HStack(spacing: 6) {
                 PointEtat(couleur: couleur(a, disparu: disparu), pulse: !disparu && a.etat == .joignable)
@@ -233,6 +242,9 @@ struct FicheNoeud: View {
     private func colonnesSonde(_ n: NoeudSonde, _ m: MaillageAffiche) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(LibellesNoeuds.inconnu(n, noms: nomsRouteurs)).font(.title3.weight(.semibold))
+            if Self.couronne(n.id, entree: entree) {
+                PastilleChef()
+            }
             Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud)).foregroundStyle(.secondary)
             if !n.candidats.isEmpty {
                 // Chaque candidat ouvre la fiche de son annonce, pas dessinee a part.
@@ -318,6 +330,9 @@ struct FicheNoeud: View {
             let description = [r.fabricant, r.modele, r.versionThread.map { "Thread \($0)" }].compactMap { $0 }
                 .joined(separator: " · ")
             Text(description).foregroundStyle(.secondary)
+            if Self.couronne(r.instance, entree: entree) {
+                PastilleChef()
+            }
             HStack(spacing: 6) {
                 Circle().fill(.blue).frame(width: 8, height: 8)
                 Text(role(r))
@@ -371,6 +386,20 @@ struct FicheNoeud: View {
                     .lineLimit(1)
             }
         }
+    }
+}
+
+/// « 👑 Chef du reseau Thread, elu automatiquement », sous le nom d'un noeud couronne (polissage B,
+/// section 3 ; maquette de la fiche, `.chef`) : 10,5 pt, marges de 2 x 8 pt, en capsule.
+struct PastilleChef: View {
+    var body: some View {
+        Text("👑 Chef du réseau Thread, élu automatiquement")
+            .font(.system(size: 10.5))
+            .foregroundStyle(Palette.texteChef)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Palette.jauneChef.opacity(0.16)))
+            .overlay(Capsule().strokeBorder(Palette.jauneChef.opacity(0.5), lineWidth: 0.5))
     }
 }
 

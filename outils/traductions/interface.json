@@ -311,5 +311,6 @@
   "écriture impossible : %@": "cannot write: %@",
   "—": "—",
   "→ Salon": "→ Living room",
-  "⌂ Maison": "⌂ Home"
+  "⌂ Maison": "⌂ Home",
+  "👑 Chef du réseau Thread, élu automatiquement": "👑 Thread network leader, elected automatically"
 }

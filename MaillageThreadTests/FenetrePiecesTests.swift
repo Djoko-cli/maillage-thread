@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import MaillageCoeur
+@testable import MaillageCoeur
 import SwiftUI
 import Testing
 @testable import MaillageThread
@@ -106,6 +106,73 @@ struct FenetrePiecesTests {
         }
         let avecCourbes = NSHostingView(rootView: courbes.environment(historique)).fittingSize.height + FenetrePieces.bord
         #expect(avecCourbes <= FenetrePieces.margeBas(fiche: true, courbes: true), "\(avecCourbes)")
+    }
+
+    /// Taille minimale de la fenetre : 820 x 680 pt.
+    @Test func tailleMinimale() throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let s = Surveillance(mode: .direct, dossier: nil)
+        let vue = FenetrePieces(fichierPlaces: nil)
+            .environment(s)
+            .environment(NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit))
+            .environment(SondeMaillage(preferences: p, actif: false))
+        #expect(FenetrePieces.tailleMinimale == CGSize(width: 820, height: 680))
+        #expect(NSHostingView(rootView: vue).fittingSize == FenetrePieces.tailleMinimale)
+    }
+
+    /// La fiche et les bandeaux du haut glissent avec un fondu, en 0,3 s, sur la courbe de la maquette
+    /// (`cubic-bezier(.2, .8, .2, 1)`) : la fiche depuis le bas, un bandeau depuis le haut ; avec
+    /// « Reduire les animations », un fondu simple.
+    @Test func apparitions() {
+        #expect(Apparition.pour(.bottom, reduire: false) == .glisse(.bottom))
+        #expect(Apparition.pour(.top, reduire: false) == .glisse(.top))
+        #expect(Apparition.pour(.bottom, reduire: true) == .fondu)
+        #expect(Apparition.pour(.top, reduire: true) == .fondu)
+        #expect(Apparition.duree == 0.3)
+        #expect(Apparition.courbe(0) == 0 && Apparition.courbe(1) == 1)
+        #expect(abs(Apparition.courbe(0.5) - 0.946) < 0.002, "\(Apparition.courbe(0.5))")
+        let points = stride(from: 0.0, through: 1, by: 0.05).map(Apparition.courbe)
+        #expect(zip(points, points.dropFirst()).allSatisfy { $0 < $1 }, "croissante")
+    }
+
+    /// La pastille du chef : sur la fiche d'un noeud couronne, et seulement lui, les memes que la scene
+    /// (`EntreeScene.chefs`) : un routeur de bordure (le chef de la demo), un routeur que la sonde seule
+    /// connait (le chef de son maillage). La fiche d'un chef a la pastille en plus : elle est plus haute
+    /// ou plus large que sans couronne ; celle d'un autre noeud ne change pas.
+    @Test func pastilleDuChef() throws {
+        let (_, _, e) = try NomsSceneTests.demo()
+        for n in e.scene.noeuds {
+            #expect(FicheNoeud.couronne(n.id, entree: e) == n.chef, "\(n.id)")
+        }
+        #expect(FicheNoeud.couronne("Apple TV 4K", entree: e))
+        #expect(!FicheNoeud.couronne("Apple TV 4K", entree: nil))
+        let (s, _) = try NomsSceneTests.demoAvecRouteurThread()
+        let m = try #require(s.maillage)
+        let routeurs = m.routeurs.map { r in
+            var r = r
+            r.chef = r.id == 45
+            return r
+        }
+        s.recevoir(Maillage(date: m.date, partition: m.partition, routeurs: routeurs, liens: m.liens, enfants: m.enfants,
+                            signaux: m.signaux), a: s.maintenant)
+        let thread = try #require(Self.entree(s))
+        #expect(thread.chefs == ["Apple TV 4K", "rloc:B400"], "le chef de la partition, et celui du maillage")
+        for n in thread.scene.noeuds {
+            #expect(FicheNoeud.couronne(n.id, entree: thread) == n.chef, "\(n.id)")
+        }
+        func taille(_ id: String, _ e: EntreeScene) -> CGSize {
+            let fiche = FicheNoeud(id: id, entree: e, instant: Date(), aRenommer: .constant(nil)) {}
+            return NSHostingView(rootView: fiche.environment(s).environment(PiecesChoisies(fichier: nil))).fittingSize
+        }
+        var sansCouronne = thread
+        sansCouronne.chefs = []
+        for id in ["Apple TV 4K", "rloc:B400"] {
+            let avec = taille(id, thread)
+            let sans = taille(id, sansCouronne)
+            #expect(avec != sans && avec.width >= sans.width && avec.height >= sans.height, "\(id) : \(avec), \(sans)")
+        }
+        #expect(taille("HomePod Avant", thread) == taille("HomePod Avant", sansCouronne))
     }
 
     /// Ligne de niveau : pieces seules, routeurs, noms masques (un, plusieurs), piece isolee.

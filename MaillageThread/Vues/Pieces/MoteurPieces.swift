@@ -68,8 +68,16 @@ final class MoteurPieces {
     @ObservationIgnored private(set) var geometrie = GeometrieMaison(rayons: [])
     @ObservationIgnored private(set) var orbite = Orbite(cible: .zero, distance: 1000, azimut: 0, inclinaison: 0.0001, champ: 2)
     @ObservationIgnored private var taille = CGSize.zero
-    /// Marges du haut (barre, bandeaux) et du bas (legende, fiche) : la place utile de la vue d'ensemble.
+    /// Marges du haut (le haut de la fenetre, mesure) et du bas (legende ouverte, fiche), posees par la
+    /// vue : la place utile de la vue d'ensemble. Le cadre les rejoint en 0,3 s, sur la courbe de la fiche
+    /// qui glisse (`Apparition`) : la vue se releve avec elle, au-dessus de la legende ouverte, ou descend
+    /// sous un bandeau ; avec « Reduire les animations », par un fondu.
     @ObservationIgnored var marges: (haut: CGFloat, bas: CGFloat) = (0, 0)
+    /// Marges du cadre, et leur glissement en cours vers `marges`.
+    @ObservationIgnored private var margesCadre: (haut: CGFloat, bas: CGFloat)?
+    @ObservationIgnored private var glissement: GlissementMarges?
+    /// Opacite de la scene pendant le fondu des marges (« Reduire les animations ») ; 1 sinon.
+    @ObservationIgnored private(set) var opaciteMarges = 1.0
     @ObservationIgnored private(set) var cadre = CGRect(x: 0, y: 0, width: 1, height: 1)
     /// Bascule adoucie : 0 en 2D, 1 en 3D.
     @ObservationIgnored private(set) var t: Double
@@ -137,6 +145,15 @@ final class MoteurPieces {
         /// Une piece qu'on glisse (son identifiant, jamais un indice qui perimerait), sur le plan
         /// horizontal y = `hauteur`.
         case piece(String, hauteur: Double)
+    }
+
+    /// Glissement des marges du cadre, de `depart` a `arrivee`, depuis `debut` ; `fondu` : avec « Reduire
+    /// les animations », un fondu par le fond, les marges sautant a mi-chemin.
+    private struct GlissementMarges {
+        var depart: (haut: CGFloat, bas: CGFloat)
+        var arrivee: (haut: CGFloat, bas: CGFloat)
+        var debut: Double
+        var fondu: Bool
     }
 
     /// Fondu de 0,3 s par le fond (« Reduire les animations ») : la scene s'efface, la camera saute a
@@ -527,13 +544,13 @@ final class MoteurPieces {
     func image(_ ctx: inout GraphicsContext, taille nouvelle: CGSize, echelle: Double, palette: Palette) {
         // Taille ou marges changees : la vue d'ensemble se recadre, sauf si Djoko a zoome ou isole une piece.
         taille = nouvelle
-        let voulu = CGRect(x: 0, y: marges.haut, width: nouvelle.width,
-                           height: max(1, nouvelle.height - marges.haut - marges.bas))
+        let now = Self.maintenant()
+        let m = margesDuCadre(now)
+        let voulu = CGRect(x: 0, y: m.haut, width: nouvelle.width, height: max(1, nouvelle.height - m.haut - m.bas))
         if voulu != cadre {
             cadre = voulu
             if pret && !enMouvement && !vueTouchee && focus == nil && !fige { recadrer() }
         }
-        let now = Self.maintenant()
         if !fige { avancer(now) }
         guard pret, let scene else { return }
         let etat = EtatAnime(t: t, s: s, fk: fk, focus: focus, survol: survol, selection: selection)
@@ -557,7 +574,7 @@ final class MoteurPieces {
         traits = PlacementNoms.placer(&etiquettes, ancres: ancres, obstacles: obstacles, cadre: taille, dt: dt)
         projetee = p
         var g = ctx
-        g.opacity = opaciteFondu
+        g.opacity = opaciteFondu * opaciteMarges
         RenduCanvas.dessiner(&g, ImagePieces(projetee: p, etiquettes: etiquettes, traits: traits, textes: textes,
                                              apparences: entree?.apparences ?? [:], routeurs: routeurs,
                                              teintesPieces: teintes, selection: selection, echelle: echelle),
@@ -573,6 +590,48 @@ final class MoteurPieces {
         }
         if !fige && !doitContinuer(now) { endormir() }
     }
+
+    /// Marges du cadre a l'instant `now` : les marges visees, ou en route vers elles pendant 0,3 s quand
+    /// elles changent ; avec « Reduire les animations », par un fondu de 0,3 s (la scene s'efface, les
+    /// marges sautent a mi-chemin, la scene revient : `opaciteMarges`) ; tout de suite avant la premiere
+    /// disposition et pour une capture.
+    func margesDuCadre(_ now: Double) -> (haut: CGFloat, bas: CGFloat) {
+        let actuelles = margesCadre ?? marges
+        let visees = glissement?.arrivee ?? actuelles
+        if marges.haut != visees.haut || marges.bas != visees.bas {
+            if pret, !fige, margesCadre != nil {
+                glissement = GlissementMarges(depart: actuelles, arrivee: marges, debut: now, fondu: reduire)
+                // Le glissement demande des images : l'horloge repart, hors du rendu.
+                if !anime { Task { @MainActor [weak self] in self?.reveiller() } }
+            } else {
+                glissement = nil
+            }
+        }
+        guard let g = glissement else {
+            margesCadre = marges
+            opaciteMarges = 1
+            return marges
+        }
+        let q = min(1, max(0, (now - g.debut) / Apparition.duree))
+        let m: (haut: CGFloat, bas: CGFloat)
+        if g.fondu {
+            m = q < 0.5 ? g.depart : g.arrivee
+            opaciteMarges = abs(1 - 2 * q)
+        } else {
+            let e = CGFloat(Apparition.courbe(q))
+            m = (haut: g.depart.haut + (g.arrivee.haut - g.depart.haut) * e,
+                 bas: g.depart.bas + (g.arrivee.bas - g.depart.bas) * e)
+        }
+        if q >= 1 {
+            glissement = nil
+            opaciteMarges = 1
+        }
+        margesCadre = m
+        return m
+    }
+
+    /// Les marges du cadre sont en route.
+    var margesEnRoute: Bool { glissement != nil }
 
     private func ligne(_ niveau: NiveauZoom, ancres: [CGRect?]) -> LigneNiveau {
         if estIsolee, let nom = isolee { return .isolee(nom) }
@@ -658,7 +717,7 @@ final class MoteurPieces {
 
     func doitContinuer(_ now: Double) -> Bool {
         // Une scene qui attend la fin d'un glisser s'applique au relachement : pas d'image pour elle.
-        if enMouvement || s != sCible || (attente != nil && geste == nil) { return true }
+        if enMouvement || s != sCible || margesEnRoute || (attente != nil && geste == nil) { return true }
         if fk.contains(where: { $0 != 0 && $0 != 1 }) { return true }
         if troisD && t == 1 && rotation && !reduire && focus == nil { return true }
         if zoomEnAttente != 0 || rotationEnAttente != .zero || (geste != nil && bouge) { return true }
@@ -923,6 +982,8 @@ final class MoteurPieces {
     /// Pose le cadre sans image (captures, tests).
     func poserTaille(_ nouvelle: CGSize) {
         taille = nouvelle
+        margesCadre = marges
+        glissement = nil
         cadre = CGRect(x: 0, y: marges.haut, width: nouvelle.width,
                        height: max(1, nouvelle.height - marges.haut - marges.bas))
         if pret { recadrer() }

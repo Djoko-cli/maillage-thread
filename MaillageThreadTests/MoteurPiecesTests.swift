@@ -103,10 +103,10 @@ struct MoteurPiecesTests {
     }
 
     /// Noms de la demo, avec leurs vrais textes mesures et leurs vraies ancres, places par le moteur dans
-    /// une fenetre de 820 x 560 ou de 1400 x 900, en 2D et en 3D, a k = 0,5, 1 et 2,5 vers le salon (la
+    /// une fenetre de 820 x 680 (la plus petite) ou de 1400 x 900, en 2D et en 3D, a k = 0,5, 1 et 2,5 vers le salon (la
     /// piece la plus chargee) : aucun nom pose ne chevauche un autre (hors noms d'etage, poses meme s'ils
     /// chevauchent), tous restent dans le cadre, et aucun ne touche une pastille opaque.
-    @Test(arguments: [CGSize(width: 820, height: 560), CGSize(width: 1400, height: 900)], [false, true])
+    @Test(arguments: [CGSize(width: 820, height: 680), CGSize(width: 1400, height: 900)], [false, true])
     func demoSansChevauchement(_ taille: CGSize, troisD: Bool) throws {
         let (_, _, e) = try NomsSceneTests.demo()
         let salon = try Self.indice(e, "Salon")
@@ -135,6 +135,48 @@ struct MoteurPiecesTests {
                 #expect(!pastilles.contains { PlacementNoms.chevauche(l.rect, $0) }, "\(l.genre) sur une pastille, \(cas)")
             }
         }
+    }
+
+    /// La vue se releve avec la fiche, au-dessus de la legende ouverte, et descend sous un bandeau : quand
+    /// les marges changent, le cadre les rejoint en 0,3 s, sur la courbe de la fiche qui glisse ; l'horloge
+    /// tourne jusqu'au bout. Avec « Reduire les animations », par un fondu : la scene s'efface, les marges
+    /// sautent a mi-chemin, la scene revient. Tout de suite avant la premiere disposition, et pour une
+    /// capture.
+    @Test func margesQuiGlissent() throws {
+        let avant = MoteurPieces()
+        avant.marges = (84, 50)
+        #expect(avant.margesDuCadre(0).bas == 50)
+        avant.marges = (84, 190)
+        #expect(avant.margesDuCadre(0).bas == 190 && !avant.margesEnRoute, "avant la premiere disposition")
+        let (m, _) = try Self.moteur()
+        let t = MoteurPieces.maintenant()
+        #expect(m.margesDuCadre(t).haut == 84 && m.margesDuCadre(t).bas == 50)
+        m.marges = (84, 190)
+        #expect(m.margesDuCadre(t).bas == 50, "le depart")
+        #expect(m.margesEnRoute && m.doitContinuer(t + 0.15))
+        let mi = m.margesDuCadre(t + 0.15).bas
+        #expect(mi > 50 + 0.9 * 140 && mi < 190, "a mi-temps, presque arrivee : la courbe de la fiche (\(mi))")
+        #expect(m.margesDuCadre(t + 0.3).bas == 190 && !m.margesEnRoute)
+        m.marges = (84, 50)
+        _ = m.margesDuCadre(t + 1)
+        let enRoute = m.margesDuCadre(t + 1.1).bas
+        #expect(enRoute > 50 && enRoute < 190)
+        m.marges = (120, 50)
+        let detour = m.margesDuCadre(t + 1.1)
+        #expect(detour.haut == 84 && detour.bas == enRoute, "un autre changement repart d'ou il en est")
+        #expect(m.margesDuCadre(t + 1.4).haut == 120 && m.margesDuCadre(t + 1.4).bas == 50)
+        m.reduire = true
+        m.marges = (84, 190)
+        #expect(m.margesDuCadre(t + 2).bas == 50 && m.margesEnRoute && m.opaciteMarges == 1,
+                "« Reduire les animations » : un fondu")
+        #expect(m.margesDuCadre(t + 2.1).bas == 50 && abs(m.opaciteMarges - 1.0 / 3) < 1e-6, "la scene s'efface")
+        #expect(m.margesDuCadre(t + 2.2).bas == 190 && abs(m.opaciteMarges - 1.0 / 3) < 1e-6,
+                "a mi-chemin, les marges sautent ; la scene revient")
+        #expect(m.margesDuCadre(t + 2.3).bas == 190 && m.opaciteMarges == 1 && !m.margesEnRoute)
+        m.reduire = false
+        m.fige = true
+        m.marges = (100, 50)
+        #expect(m.margesDuCadre(t + 3).haut == 100 && !m.margesEnRoute, "une capture : tout de suite")
     }
 
     /// Clic sur une piece : elle s'isole (le fil la nomme) ; sur un appareil : sa fiche ; a cote : la

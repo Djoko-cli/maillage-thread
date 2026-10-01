@@ -98,6 +98,11 @@ struct Palette {
     static let texteLegende = Color(white: 1, opacity: 0.88)
     static let titreLegende = Color(.sRGB, red: 148 / 255, green: 163 / 255, blue: 190 / 255)
 
+    /// Pastille du chef dans la fiche (maquette de la fiche) : capsule jaune a 0,16, filet jaune a 0,5 (le
+    /// jaune des liens moyens, rgb(250, 204, 51)), texte rgb(253, 224, 120).
+    static let jauneChef = Color(red: 0.98, green: 0.8, blue: 0.2)
+    static let texteChef = Color(.sRGB, red: 253 / 255, green: 224 / 255, blue: 120 / 255)
+
     /// Lisere de la sphere : l'alpha de la maquette, force (0,02 + 0,45 (1 - |n.v|)^2,5), ou |n.v| vaut
     /// racine(1 - rho^2) a la distance rho du centre du disque ; echantillonne plus serre vers le bord.
     func degradeBulle(force: Double) -> Gradient {
