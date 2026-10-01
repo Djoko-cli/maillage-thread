@@ -84,6 +84,22 @@ struct HistoriqueTests {
         #expect(ReleveMaillage(m).enfants.map(\.extMac) == ["E0000000000000B3"])
     }
 
+    /// Seule l'entree du balayage est ecartee : une entree de la table d'un routeur ou de la sonde, que
+    /// l'on vient de lire, garde son enfant, meme si son ExtMac est celle d'un routeur du maillage.
+    @Test func entreeFraicheDunRouteurGardee() {
+        var c = ConstructionMaillage(date: Self.date("2026-09-30T10:00:00Z"), partition: "0000000A")
+        c.routeurs(Route64(sequence: 1, routes: [0, 1, 2].map {
+            RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1)
+        }), chef: 0)
+        c.identite("E0000000000000B2", routeur: 2)
+        c.identite("E0000000000000B4", routeur: 1)
+        c.enfant(EnfantMaillage(rloc16: 0x0402, extMac: "E0000000000000B2", source: .tableEnfants))
+        c.enfant(EnfantMaillage(rloc16: 0x0404, extMac: "E0000000000000B4", source: .sonde))
+        let m = c.maillage()
+        #expect(m.enfantsIdentifies["E0000000000000B2"]?.rloc16 == 0x0402, "table d'un routeur")
+        #expect(m.enfantsIdentifies["E0000000000000B4"]?.rloc16 == 0x0404, "sonde")
+    }
+
     /// Un releve qui cite le routeur 63 (hors de 0...62 : des donnees non conformes) s'ecrit sans lui :
     /// ni ce routeur, ni ses liens, ni ses enfants, ni son signal, ni la sonde sous lui. Le reste de la
     /// ligne se relit, au lieu d'etre perdu avec elle.
