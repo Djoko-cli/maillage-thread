@@ -3,10 +3,11 @@ import MaillageCoeur
 import SwiftUI
 
 /// Fenetre de la vue par pieces (spec de la vue par pieces, sections 1 et 7 ; polissage B, section 1) :
-/// sans barre de titre, la scene occupe toute la fenetre, jusque sous ses trois boutons ; en haut, les
-/// deux capsules du bandeau, la bande qui deplace la fenetre, la ligne de la tournee, les bandeaux et
-/// le fil (`HautPieces`) ; en bas, la ligne de niveau, la legende et la fiche. Elle reste sombre, comme
-/// la maquette, meme quand le Mac est en clair (precision 15 du plan 4b).
+/// sans barre de titre (le style de sa scene, `.hiddenTitleBar`, dans `MaillageThreadApp`), la scene occupe
+/// toute la fenetre, jusque sous ses trois boutons ; en haut, les deux capsules du bandeau, la bande qui
+/// deplace la fenetre, la ligne de la tournee, les bandeaux et le fil (`HautPieces`) ; en bas, la ligne de
+/// niveau, la legende et la fiche. Elle reste sombre, comme la maquette, meme quand le Mac est en clair
+/// (precision 15 du plan 4b).
 struct FenetrePieces: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(NomsInternes.self) private var nomsMaison
@@ -47,16 +48,6 @@ struct FenetrePieces: View {
     /// celle du Mac.
     static func assombrir(_ fenetre: NSWindow?) {
         fenetre?.appearance = NSAppearance(named: .darkAqua)
-    }
-
-    /// Sans barre de titre (polissage B, section 1) : le contenu couvre toute la fenetre, sous la barre
-    /// de titre devenue transparente, dont les trois boutons restent poses sur la scene. Le titre
-    /// « Maillage Thread » reste celui de la fenetre (Mission Control, menu Fenetre), sans etre affiche.
-    static func sansBarreDeTitre(_ fenetre: NSWindow?) {
-        guard let fenetre else { return }
-        fenetre.styleMask.insert(.fullSizeContentView)
-        fenetre.titlebarAppearsTransparent = true
-        fenetre.titleVisibility = .hidden
     }
 
     /// Places des pieces, a cote des identites des routeurs ; ni en demo ni sous les tests.
@@ -150,7 +141,6 @@ struct FenetrePieces: View {
         .environment(\.colorScheme, .dark)
         .background(SondeFenetre { fenetre in
             Self.assombrir(fenetre)
-            Self.sansBarreDeTitre(fenetre)
             // Hors de la mise a jour de la vue en cours.
             if let fenetre, let c = CadreFeux(fenetre: fenetre) {
                 Task { @MainActor in feux = c }

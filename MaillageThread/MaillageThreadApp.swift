@@ -80,6 +80,9 @@ struct MaillageThreadApp: App {
             }
         }
 
+        // Sans barre de titre (polissage B, section 1) : SwiftUI pose la barre de titre transparente et le titre
+        // masque, et les garde a chaque mise a jour de la fenetre ; les trois boutons restent, et le titre reste
+        // celui de la fenetre (Mission Control, menu Fenetre).
         Window("Maillage Thread", id: "graphe") {
             FenetrePieces(fichierPlaces: FenetrePieces.fichierPlaces(demo: Self.demo, sousTests: Surveillance.sousTests),
                           fichierPieces: PiecesChoisies.fichier(demo: Self.demo, sousTests: Surveillance.sousTests))
@@ -87,6 +90,7 @@ struct MaillageThreadApp: App {
                 .environment(nomsMaison)
                 .environment(sonde)
         }
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1100, height: 760)
         .defaultLaunchBehavior(.suppressed)
 

@@ -353,25 +353,39 @@ struct FenetrePiecesTests {
         #expect(LigneNiveauVue.texte(.lisibles) == String(localized: "Tous les noms sont lisibles"))
     }
 
-    /// Sans barre de titre : le contenu couvre toute la fenetre, la barre de titre est transparente et le
-    /// titre masque ; il reste celui de la fenetre. Les trois boutons restent : la capsule de gauche
-    /// commence apres eux, centree sur eux ; sous macOS 27, a leur place de `CadreFeux.defaut`.
+    /// Une fenetre faite comme celle que pose `.windowStyle(.hiddenTitleBar)` (releve dans l'app, en demo, le
+    /// 02/10) : le contenu sous la barre de titre, la barre transparente, le titre masque. Les tests montent
+    /// leur fenetre a la main, sans la scene de l'app.
+    static func sansBarreDeTitre(_ fenetre: NSWindow) {
+        fenetre.styleMask.insert(.fullSizeContentView)
+        fenetre.titlebarAppearsTransparent = true
+        fenetre.titleVisibility = .hidden
+    }
+
+    /// Sans barre de titre (polissage B, section 1) : la scene du graphe, et elle seule, porte le style
+    /// `.hiddenTitleBar`. SwiftUI pose alors lui-meme la barre de titre transparente et le titre masque, et les
+    /// garde a chaque mise a jour de la fenetre ; le crochet d'AppKit d'avant, pose une fois, etait defait par
+    /// SwiftUI (diagnostic du 02/10 : barre opaque des 0,285 s). Le titre « Maillage Thread » reste celui de la
+    /// fenetre (Mission Control, menu Fenetre). Les trois boutons restent : la capsule de gauche commence apres
+    /// eux, centree sur eux ; dans une fenetre ainsi faite, sous macOS 27, a leur place de `CadreFeux.defaut`.
     @Test func fenetreSansBarreDeTitre() throws {
+        let scenes = String(reflecting: MaillageThreadApp.Body.self)
+        let graphe = try #require(scenes.range(of: "FenetrePieces"), "la scene du graphe")
+        let journal = try #require(scenes.range(of: "FenetreJournal"), "la scene du journal")
+        #expect(scenes[graphe.upperBound..<journal.lowerBound].contains("HiddenTitleBarWindowStyle"),
+                "le graphe sans barre de titre")
+        #expect(!scenes[journal.upperBound...].contains("HiddenTitleBarWindowStyle"), "le journal garde la sienne")
         let fenetre = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
                                styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
                                defer: false)
         fenetre.isReleasedWhenClosed = false
         fenetre.title = "Maillage Thread"
-        FenetrePieces.sansBarreDeTitre(fenetre)
-        #expect(fenetre.styleMask.contains(.fullSizeContentView))
-        #expect(fenetre.titlebarAppearsTransparent)
-        #expect(fenetre.titleVisibility == .hidden)
+        Self.sansBarreDeTitre(fenetre)
         #expect(fenetre.title == "Maillage Thread")
         let feux = try #require(CadreFeux(fenetre: fenetre))
         let agrandir = try #require(fenetre.standardWindowButton(.zoomButton))
         #expect(feux.droite == agrandir.convert(agrandir.bounds, to: nil).maxX)
         #expect(feux == CadreFeux.defaut)
-        FenetrePieces.sansBarreDeTitre(nil)
     }
 
     /// La bande du haut : un clic, glisse, deplace la fenetre ; un double-clic fait ce que dit le reglage
@@ -425,7 +439,7 @@ struct FenetrePiecesTests {
         }
         let hote = NSHostingView(rootView: vue.ignoresSafeArea().environment(s).environment(sonde).environment(noms))
         fenetre.contentView = hote
-        FenetrePieces.sansBarreDeTitre(fenetre)
+        Self.sansBarreDeTitre(fenetre)
         hote.layoutSubtreeIfNeeded()
         fenetre.layoutIfNeeded()
         let cadre = try #require(hote.superview)
@@ -478,7 +492,7 @@ struct FenetrePiecesTests {
         let haut = hote(HautPieces(moteur: moteur, troisD: .constant(troisD))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
         fenetre.contentView = haut
-        FenetrePieces.sansBarreDeTitre(fenetre)
+        Self.sansBarreDeTitre(fenetre)
         haut.layoutSubtreeIfNeeded()
         fenetre.layoutIfNeeded()
         let bande = try #require(Self.sousVue(BandeFenetre.Vue.self, dans: haut), "la bande")
