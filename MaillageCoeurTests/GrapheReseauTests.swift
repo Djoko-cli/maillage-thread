@@ -96,6 +96,28 @@ struct GrapheReseauTests {
         #expect(g.parent(de: "E000000000000004") == attendu)
     }
 
+    /// Un enfant devenu routeur garde jusqu'a 30 minutes son entree du balayage d'un routeur muet, sous
+    /// son ancien RLOC16 : elle est ecartee, son ExtMac etant celle d'un routeur du maillage. Pas de
+    /// noeud « Non identifie » en double, ni de lien, ni d'ExtMac a son nom (la cle d'un choix de piece).
+    @Test func enfantDevenuRouteur() throws {
+        let i = RapprochementTests.instantane()
+        let r = try #require(i.reseaux.first)
+        var c = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
+        c.routeurs(Route64(sequence: 1, routes: [0, 1, 2].map {
+            RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1)
+        }), chef: 0)
+        c.identite("E000000000000004", routeur: 1)
+        c.muet(2)
+        c.enfant(EnfantMaillage(rloc16: 0x0802, extMac: "E000000000000004", source: .balayage))
+        let m = MaillageAffiche(maillage: c.maillage(), reseau: r, appareils: i.appareils)
+        let g = GrapheReseau(reseau: r, appareils: RapprochementTests.affiches(i), maillage: m)
+        #expect(g.noeud("rloc:0802") == nil, "pas de noeud en double")
+        #expect(!g.noeuds.contains { $0.inconnu && $0.genre == .appareil })
+        #expect(g.noeud("E000000000000004")?.routeur == true, "l'appareil est le routeur 1")
+        #expect(!g.liens.contains { $0.de == "rloc:0802" })
+        #expect(m.extMacs["rloc:0802"] == nil)
+    }
+
     /// Elimination : le HomePod palier, reconnu par elimination, est un seul noeud.
     @Test func elimination() async throws {
         let i = RapprochementTests.instantane(autres: [("HomePod bureau", "E000000000000007"),

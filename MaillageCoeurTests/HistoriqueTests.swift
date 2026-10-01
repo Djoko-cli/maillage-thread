@@ -66,6 +66,47 @@ struct HistoriqueTests {
         #expect(ReleveMaillage(m).enfants.map(\.parent) == [attendu])
     }
 
+    /// Un enfant devenu routeur garde jusqu'a 30 minutes son entree du balayage d'un routeur muet : elle
+    /// est ecartee, son ExtMac etant celle d'un routeur du maillage. L'historique n'a pas d'enfant de
+    /// trop ; un autre enfant du meme balayage reste.
+    @Test func enfantDevenuRouteur() {
+        var c = ConstructionMaillage(date: Self.date("2026-09-30T10:00:00Z"), partition: "0000000A")
+        c.routeurs(Route64(sequence: 1, routes: [0, 1, 2].map {
+            RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1)
+        }), chef: 0)
+        c.identite("E0000000000000B2", routeur: 2)
+        c.muet(1)
+        c.enfant(EnfantMaillage(rloc16: 0x0402, extMac: "E0000000000000B2", source: .balayage))
+        c.enfant(EnfantMaillage(rloc16: 0x0403, extMac: "E0000000000000B3", source: .balayage))
+        let m = c.maillage()
+        #expect(m.enfantsIdentifies["E0000000000000B2"] == nil, "devenu routeur")
+        #expect(m.enfantsIdentifies["E0000000000000B3"]?.rloc16 == 0x0403)
+        #expect(ReleveMaillage(m).enfants.map(\.extMac) == ["E0000000000000B3"])
+    }
+
+    /// Un releve qui cite le routeur 63 (hors de 0...62 : des donnees non conformes) s'ecrit sans lui :
+    /// ni ce routeur, ni ses liens, ni ses enfants, ni son signal, ni la sonde sous lui. Le reste de la
+    /// ligne se relit, au lieu d'etre perdu avec elle.
+    @Test func routeurHorsPlageNonEcrit() throws {
+        let d = Self.dossier()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let h = HistoriqueFichiers(dossier: d, calendrier: JournalTests.calendrier)
+        let date = Self.date("2026-09-30T10:00:00Z")
+        typealias R = ReleveMaillage
+        try h.ajouter(R(date: date, partition: "0000000A",
+                        routeurs: [R.Routeur(id: 0, extMac: "E0000000000000A0"), R.Routeur(id: 63, extMac: "E0000000000000A3")],
+                        liens: [LienRadio(a: 0, b: 1, qualiteAB: 3, qualiteBA: 2), LienRadio(a: 0, b: 63, qualiteAB: 1, qualiteBA: 1)],
+                        enfants: [R.Enfant(extMac: "E0000000000000B1", parent: 0, qualite: 3),
+                                  R.Enfant(extMac: "E0000000000000B3", parent: 63, qualite: 2)],
+                        signaux: [SignalSonde(routeur: 0, rssi: -60), SignalSonde(routeur: 63, rssi: -70)],
+                        parentSonde: 63))
+        let reste = R(date: date, partition: "0000000A", routeurs: [R.Routeur(id: 0, extMac: "E0000000000000A0")],
+                      liens: [LienRadio(a: 0, b: 1, qualiteAB: 3, qualiteBA: 2)],
+                      enfants: [R.Enfant(extMac: "E0000000000000B1", parent: 0, qualite: 3)],
+                      signaux: [SignalSonde(routeur: 0, rssi: -60)], parentSonde: nil)
+        #expect(try h.lire(depuis: .distantPast) == [reste])
+    }
+
     /// Un octet non UTF-8 (0xC3 isole : un caractere accentue coupe) abime sa ligne seulement : les
     /// autres lignes du fichier sont lues, pour l'historique comme pour le journal.
     @Test func octetNonUTF8() throws {

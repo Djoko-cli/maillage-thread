@@ -124,6 +124,30 @@ struct DispositionPiecesTests {
         #expect(d.cout <= d.coutDepart)
     }
 
+    /// Un cout non fini, venu d'une carte de largeur infinie (une entree que l'app ne donne pas : elle
+    /// mesure ses noms) : aucun depart n'est retenu, et la disposition garde son depart, celui d'avant
+    /// l'optimisation (la spirale du premier essai), sans arret du programme.
+    @Test func coutNonFini() {
+        let (s, cartes) = MaisonInventee.scene(pieces: 6, appareils: 20, routeurs: 3)
+        var c = cartes
+        c[0].largeur = .infinity
+        let d = DispositionPieces(scene: s, cartes: c)
+        #expect(d.positions == DispositionPieces.Calcul(scene: s, cartes: c, fixees: [:]).depart(0, fixees: [:]))
+        #expect(d.rayons.count == s.etages.count)
+        #expect(!d.cout.isFinite && !d.coutDepart.isFinite)
+    }
+
+    /// Une place fixee demesuree (1e308 : `PlacesGardees.fixees` l'ignore, un autre appelant pourrait la
+    /// donner) rend le rayon de son etage infini : le meme repli sur le depart, la fixee a sa place.
+    @Test func placeFixeeDemesuree() {
+        let (s, c) = MaisonInventee.scene(pieces: 6, appareils: 20, routeurs: 3)
+        let fixees = [0: SIMD2(1e308, 0.0)]
+        let d = DispositionPieces(scene: s, cartes: c, fixees: fixees)
+        #expect(d.positions == DispositionPieces.Calcul(scene: s, cartes: c, fixees: fixees).depart(0, fixees: fixees))
+        #expect(d.positions[0] == fixees[0])
+        #expect(!d.cout.isFinite)
+    }
+
     /// Plateaux cote a cote en 2D : `esp` entre les bords de deux voisins, la rangee centree sur x = 0.
     @Test func centres2D() {
         let x = DispositionPieces.centres2D(rayons: [10, 4, 6])

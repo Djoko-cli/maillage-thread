@@ -28,7 +28,8 @@ public struct DispositionPieces: Hashable, Sendable {
     public var coups: Int
 
     /// `fixees` : places gardees des pieces deplacees (indice de piece -> position) ; elles ne bougent
-    /// pas et servent d'obstacles.
+    /// pas et servent d'obstacles. Un depart d'un cout non fini (une entree demesuree) n'est pas
+    /// retenu ; sans depart d'un cout fini, la disposition est celle du depart, sans arret du programme.
     public init(scene: ScenePieces, cartes: [CartesPieces.Carte], fixees: [Int: SIMD2<Double>] = [:],
                 budget: Int = DispositionPieces.budget) {
         let calcul = Calcul(scene: scene, cartes: cartes, fixees: fixees)
@@ -82,6 +83,8 @@ public struct DispositionPieces: Hashable, Sendable {
                 }
                 if epuise || mieux == nil { break }
             }
+            // Un cout non fini (une entree demesuree) ne se compare pas : ce depart n'est pas retenu.
+            guard c.isFinite else { continue }
             if c < coutRetenu {
                 coutRetenu = c
                 retenu = courant
@@ -90,6 +93,17 @@ public struct DispositionPieces: Hashable, Sendable {
                 coutSain = c
                 sain = courant
             }
+        }
+        // Aucun depart d'un cout fini : la disposition de depart, celle d'avant l'optimisation (la
+        // spirale du premier essai, les fixees a leur place), sans degagement.
+        guard !retenu.isEmpty else {
+            let pos = calcul.depart(0, fixees: fixees)
+            positions = pos
+            rayons = (0..<calcul.nbEtages).map { calcul.rayon(pos, $0) }
+            coutDepart = depart
+            cout = calcul.cout(pos)
+            coups = joues
+            return
         }
         // Avec des pieces fixees, une carte libre peut finir sur une autre carte : le tassement
         // l'attire vers le centre, parmi les fixees, et la separation s'arrete sur un point fixe ou

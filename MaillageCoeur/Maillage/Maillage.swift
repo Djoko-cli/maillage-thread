@@ -114,7 +114,9 @@ public struct Maillage: Hashable, Sendable {
     /// Enfants identifies (ExtMac connue), un par ExtMac. Vu deux fois (il a change de parent),
     /// l'entree la plus fraiche l'emporte : la sonde (elle sait son parent), puis la table d'un
     /// routeur qui repond (l'ancien parent garde l'enfant jusqu'a son echeance), puis le balayage
-    /// d'un routeur muet, qui peut dater de 30 minutes ; a egalite, la premiere par RLOC16.
+    /// d'un routeur muet, qui peut dater de 30 minutes ; a egalite, la premiere par RLOC16. Une entree
+    /// du balayage dont l'ExtMac est celle d'un routeur du maillage est ecartee : l'enfant est devenu
+    /// routeur depuis le balayage.
     public var enfantsIdentifies: [String: EnfantMaillage] {
         func rang(_ s: SourceEnfant) -> Int {
             switch s {
@@ -123,9 +125,10 @@ public struct Maillage: Hashable, Sendable {
             case .balayage: 2
             }
         }
+        let routeursExt = Set(routeurs.compactMap(\.extMac))
         var parExtMac: [String: EnfantMaillage] = [:]
         for e in enfants {
-            guard let x = e.extMac else { continue }
+            guard let x = e.extMac, !(e.source == .balayage && routeursExt.contains(x)) else { continue }
             if let deja = parExtMac[x], rang(deja.source) <= rang(e.source) { continue }
             parExtMac[x] = e
         }

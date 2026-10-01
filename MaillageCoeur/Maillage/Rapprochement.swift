@@ -86,7 +86,8 @@ public struct MaillageAffiche: Hashable, Sendable {
     /// Ces quatre dernieres regles ecartent une annonce dont le `xa` et l'ExtMac du routeur sont
     /// connus tous deux et differents, ou dont le `xa` est l'ExtMac connue d'un autre routeur.
     /// Un enfant vu deux fois (meme ExtMac, precision 26 du plan 4b) ne donne qu'un noeud et un
-    /// lien : ceux de l'entree que retient `Maillage.enfantsIdentifies` ; l'autre est ecartee.
+    /// lien : ceux de l'entree que retient `Maillage.enfantsIdentifies` ; l'autre est ecartee. L'entree
+    /// du balayage d'un enfant devenu routeur (l'ExtMac d'un routeur du maillage) n'en donne aucun.
     /// Chaque noeud garde l'ExtMac que la sonde lui connait (`extMacs`).
     public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil]) {
         partition = maillage.partition
@@ -115,10 +116,10 @@ public struct MaillageAffiche: Hashable, Sendable {
         // Une annonce peut etre celle d'un routeur si l'ExtMac de l'un ou le `xa` de l'autre manque
         // (connus tous deux, ils sont differents : la regle du `xa` les aurait rapproches), et si son
         // `xa` n'est pas l'ExtMac connue d'un autre routeur (une annonce en double de celui-ci).
-        let extMacs = Set(maillage.routeurs.compactMap(\.extMac))
+        let extMacsRouteurs = Set(maillage.routeurs.compactMap(\.extMac))
         func possible(_ r: RouteurMaillage, _ a: RouteurBordure) -> Bool {
             guard let xa = a.adresseEtendue else { return true }
-            return r.extMac == nil && !extMacs.contains(xa)
+            return r.extMac == nil && !extMacsRouteurs.contains(xa)
         }
         // Routeur d'un role (BBR principal, chef), encore non identifie : l'annonce de ce role dans
         // la partition, seulement s'il n'en reste qu'une (un cache perime peut en garder une autre,
@@ -155,7 +156,8 @@ public struct MaillageAffiche: Hashable, Sendable {
         // Un enfant vu deux fois (il a change de parent, et l'ancienne entree du balayage d'un routeur
         // muet peut rester 30 minutes) n'est qu'un noeud : l'entree que retient
         // `Maillage.enfantsIdentifies` (la sonde, puis une table, puis le balayage) ; l'autre est
-        // ecartee, sans noeud ni lien.
+        // ecartee, sans noeud ni lien. De meme pour l'entree du balayage d'un enfant devenu routeur,
+        // qu'elle ne retient pas.
         let retenus = maillage.enfantsIdentifies
         var enfants: [UInt16: NoeudSonde] = [:]
         for e in maillage.enfants {

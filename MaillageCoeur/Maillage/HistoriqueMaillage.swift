@@ -129,18 +129,22 @@ extension ReleveMaillage: Codable {
                   routeurs: routeurs, liens: liens, enfants: enfants, signaux: signaux, parentSonde: parentSonde)
     }
 
+    /// N'ecrit jamais un identifiant de routeur hors de 0...62 (donnees non conformes) : la lecture
+    /// refuserait toute la ligne. Les routeurs, liens, enfants et signaux qui en citent un sont retires,
+    /// et le parent de la sonde s'il en est un ; le reste de la ligne est garde.
     public func encode(to encoder: any Encoder) throws {
+        let ids = Self.identifiantsRouteur
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(date, forKey: .date)
         try c.encode(partition, forKey: .partition)
         var r = c.nestedUnkeyedContainer(forKey: .routeurs)
-        for x in routeurs {
+        for x in routeurs where ids.contains(x.id) {
             var l = r.nestedUnkeyedContainer()
             try l.encode(x.id)
             try l.encodeOuNul(x.extMac)
         }
         var li = c.nestedUnkeyedContainer(forKey: .liens)
-        for x in liens {
+        for x in liens where ids.contains(x.a) && ids.contains(x.b) {
             var l = li.nestedUnkeyedContainer()
             try l.encode(x.a)
             try l.encode(x.b)
@@ -148,19 +152,19 @@ extension ReleveMaillage: Codable {
             try l.encodeOuNul(x.qualiteBA)
         }
         var e = c.nestedUnkeyedContainer(forKey: .enfants)
-        for x in enfants {
+        for x in enfants where ids.contains(x.parent) {
             var l = e.nestedUnkeyedContainer()
             try l.encode(x.extMac)
             try l.encode(x.parent)
             try l.encodeOuNul(x.qualite)
         }
         var s = c.nestedUnkeyedContainer(forKey: .signaux)
-        for x in signaux {
+        for x in signaux where ids.contains(x.routeur) {
             var l = s.nestedUnkeyedContainer()
             try l.encode(x.routeur)
             try l.encode(x.rssi)
         }
-        try c.encodeIfPresent(parentSonde, forKey: .parentSonde)
+        try c.encodeIfPresent(parentSonde.flatMap { ids.contains($0) ? $0 : nil }, forKey: .parentSonde)
     }
 }
 
