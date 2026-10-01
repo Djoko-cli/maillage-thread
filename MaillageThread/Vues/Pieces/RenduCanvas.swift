@@ -190,13 +190,14 @@ enum RenduCanvas {
                with: .radialGradient(palette.degradeBulle(force: sp.force), center: .zero, startRadius: 0, endRadius: 1))
     }
 
+    /// Traits de rappel des noms ecartes de leur objet : un pixel.
     private static func dessinerTraits(_ ctx: inout GraphicsContext, _ image: ImagePieces, _ palette: Palette) {
         var traits = Path()
         for t in image.traits {
             traits.move(to: t.depart)
             traits.addLine(to: t.arrivee)
         }
-        ctx.stroke(traits, with: .color(palette.trait), lineWidth: 1)
+        ctx.stroke(traits, with: .color(palette.trait), lineWidth: 1 / image.echelle)
     }
 
     /// Aligne sur les pixels de l'ecran : un texte net.
