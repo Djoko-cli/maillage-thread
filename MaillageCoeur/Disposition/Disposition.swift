@@ -13,34 +13,6 @@ public struct Point2D: Hashable, Sendable {
     public func distance(_ p: Point2D) -> Double { hypot(x - p.x, y - p.y) }
 }
 
-/// Etat d'un appareil tel que le graphe le montre.
-public enum EtatAffiche: String, Hashable, Sendable {
-    case joignable, partitionCoupee, sansAdresse, disparu, inconnu
-}
-
-/// Appareil a dessiner : nom deja choisi, partition courante ou derniere connue.
-public struct AppareilAffiche: Hashable, Sendable, Identifiable {
-    public var id: String
-    public var nom: String
-    public var piece: String?
-    public var partition: String?
-    public var etat: EtatAffiche
-    public var endormi: Bool
-    /// Batterie selon Maison, pour un appareil qui en a une.
-    public var batterie: BatterieMaison?
-
-    public init(id: String, nom: String, piece: String? = nil, partition: String?, etat: EtatAffiche,
-                endormi: Bool = false, batterie: BatterieMaison? = nil) {
-        self.id = id
-        self.nom = nom
-        self.piece = piece
-        self.partition = partition
-        self.etat = etat
-        self.endormi = endormi
-        self.batterie = batterie
-    }
-}
-
 /// Disposition stable du graphe d'un reseau : memes noeuds, memes positions.
 /// Une zone par partition (la principale au centre, les autres en colonne a sa
 /// droite) ; dans une zone : le centre (chef, sinon BBR primaire), les autres

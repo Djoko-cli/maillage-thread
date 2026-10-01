@@ -145,8 +145,14 @@ public struct MaillageAffiche: Hashable, Sendable {
                                         bordure: r.bordure, candidats: candidats, deduit: deduit == r.id)
         }
 
+        // Un enfant vu deux fois (il a change de parent, et l'ancienne entree du balayage d'un routeur
+        // muet peut rester 30 minutes) n'est qu'un noeud : l'entree que retient
+        // `Maillage.enfantsIdentifies` (la sonde, puis une table, puis le balayage) ; l'autre est
+        // ecartee, sans noeud ni lien.
+        let retenus = maillage.enfantsIdentifies
         var enfants: [UInt16: NoeudSonde] = [:]
         for e in maillage.enfants {
+            if let x = e.extMac, retenus[x] != e { continue }
             var id = e.extMac.flatMap { parId[$0]?.id }
             if id == nil, !e.adresses.isEmpty {
                 let adresses = Set(e.adresses)
