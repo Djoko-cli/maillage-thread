@@ -3,7 +3,7 @@ import SwiftUI
 /// Apparition d'un element pose sur la vue (polissage B ; maquette de la fiche, carte A) : la fiche
 /// glisse depuis le bas, un bandeau du haut depuis le haut, avec un fondu, en 0,3 s, sur la courbe de
 /// la maquette (`cubic-bezier(.2, .8, .2, 1)`) ; ils repartent de meme. Avec « Reduire les
-/// animations », un fondu simple.
+/// animations », un fondu simple, et rien d'autre ne glisse (`animationDuConteneur`).
 enum Apparition: Equatable {
     /// Glisse depuis ce bord, de 110 % de sa hauteur, avec un fondu.
     case glisse(Edge)
@@ -27,6 +27,18 @@ enum Apparition: Equatable {
         case .glisse: .timingCurve(0.2, 0.8, 0.2, 1, duration: Self.duree)
         case .fondu: .easeInOut(duration: Self.duree)
         }
+    }
+
+    /// La transition, avec son animation : elle se joue meme quand le conteneur n'en a pas (voir
+    /// `animationDuConteneur`).
+    var transitionAnimee: AnyTransition { transition.animation(animation) }
+
+    /// L'animation de ce qui se decale autour d'un element qui parait ou repart (la ligne de niveau et la
+    /// pastille d'un releve ancien quand la legende se retire, le fil sous un bandeau) : cela glisse avec
+    /// lui, sur sa courbe. Avec « Reduire les animations », aucune : cela prend sa place d'un coup, et seul
+    /// l'element se fond (`transitionAnimee`).
+    static func animationDuConteneur(_ bord: Edge, reduire: Bool) -> Animation? {
+        reduire ? nil : Apparition.glisse(bord).animation
     }
 
     /// La courbe de la maquette, `cubic-bezier(.2, .8, .2, 1)` : l'avancement en fonction du temps, de 0

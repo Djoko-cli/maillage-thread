@@ -151,22 +151,23 @@ struct HautPieces: View {
             }
             .frame(height: 2 * feux.milieu)
             .obstacle("ligne", moteur)
-            // Un bandeau qui parait glisse depuis le haut, et repart de meme (fondu simple avec « Reduire
-            // les animations ») ; ce qui est dessous descend avec lui.
+            // Un bandeau qui parait glisse depuis le haut, et repart de meme ; ce qui est dessous descend
+            // avec lui. Avec « Reduire les animations », le bandeau se fond (sa transition porte son fondu)
+            // et le fil prend sa place d'un coup : aucune animation de conteneur.
             VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
                 LigneTournee()
                 if let r = surveillance.reseau, r.estScinde {
                     BandeauScission(reseau: r)
-                        .transition(apparition.transition)
+                        .transition(apparition.transitionAnimee)
                 }
                 if sansPieces {
                     BandeauSansPieces()
-                        .transition(apparition.transition)
+                        .transition(apparition.transitionAnimee)
                 }
                 FilPieces(moteur: moteur)
             }
-            .animation(apparition.animation, value: surveillance.reseau?.estScinde == true)
-            .animation(apparition.animation, value: sansPieces)
+            .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: surveillance.reseau?.estScinde == true)
+            .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: sansPieces)
             .obstacle("colonne", moteur)
         }
         .padding(.leading, feux.droite + Self.ecartFeux)

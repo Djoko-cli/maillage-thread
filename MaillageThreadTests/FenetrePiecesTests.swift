@@ -206,6 +206,69 @@ struct FenetrePiecesTests {
         #expect(zip(points, points.dropFirst()).allSatisfy { $0 < $1 }, "croissante")
     }
 
+    /// Avec « Reduire les animations », rien ne glisse (spec de B, sections 1 et 3 : « un simple fondu ») : la fiche
+    /// et les bandeaux se fondent, chacun par sa transition, qui porte son propre fondu (`transitionAnimee`) ; ce
+    /// qui se decale autour d'eux (la ligne de niveau et la pastille d'un releve ancien quand la legende se
+    /// retire, le fil sous un bandeau) prend sa place sans animation : celle du conteneur est nulle. Sans le
+    /// reglage, rien ne change : cela glisse avec l'element, sur la courbe de la maquette.
+    @Test func reduireLesAnimationsSansGlissement() {
+        let courbe = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.3)
+        let fondu = Animation.easeInOut(duration: 0.3)
+        #expect(courbe != fondu, "les deux se distinguent")
+        for bord in [Edge.bottom, .top] {
+            #expect(Apparition.animationDuConteneur(bord, reduire: false) == courbe, "\(bord) : sans le reglage, la courbe de la maquette")
+            #expect(Apparition.pour(bord, reduire: false).animation == courbe, "\(bord) : l'element glisse sur la meme courbe")
+            #expect(Apparition.animationDuConteneur(bord, reduire: true) == nil, "\(bord) : avec le reglage, rien ne se decale en glissant")
+            #expect(Apparition.pour(bord, reduire: true).animation == fondu, "\(bord) : l'element se fond")
+        }
+    }
+
+    /// Dans la vraie fenetre, avec « Reduire les animations », la rangee du bas prend sa place d'un coup quand la
+    /// fiche parait : la legende, qui se retire alors, est partie des que la fiche est la, et non apres un fondu de
+    /// 0,3 s, pendant lequel la ligne de niveau et la pastille glissaient avec la pile (l'animation du conteneur
+    /// valait alors `easeInOut`). Les positions de la ligne de niveau ne le disent pas (SwiftUI en donne d'emblee
+    /// la valeur finale) ; le retrait de la legende, si.
+    @Test(.timeLimit(.minutes(1)))
+    func rangeeDuBasPrendSaPlaceAvecReduire() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set(false, forKey: LegendePieces.cleRepliee)
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        demo.recevoir(try #require(demo.maillage), a: demo.maintenant.addingTimeInterval(-7 * 60))
+        let vue = FenetrePieces(fichierPlaces: nil)
+        let etat = try #require(Mirror(reflecting: vue).children.first { $0.label == "_moteur" }?.value)
+        let moteur = try #require(Mirror(reflecting: etat).descendant("_value") as? MoteurPieces)
+        let fenetre = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: 1100, height: 760),
+                               styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered,
+                               defer: false)
+        fenetre.isReleasedWhenClosed = false
+        defer {
+            fenetre.orderOut(nil)
+            fenetre.contentView = nil
+        }
+        fenetre.contentView = NSHostingView(rootView: vue
+            .environment(demo)
+            .environment(NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit))
+            .environment(SondeMaillage(preferences: p, actif: false))
+            .environment(\._accessibilityReduceMotion, true)
+            .defaultAppStorage(p))
+        fenetre.setContentSize(CGSize(width: 1100, height: 760))
+        fenetre.orderFrontRegardless()
+        try await MoteurPiecesTests.attendre { ["legende", "niveau", "ancien"].allSatisfy { moteur.cadresInterface[$0] != nil } }
+        #expect(moteur.reduire, "le reglage atteint la fenetre")
+        #expect(moteur.cadresInterface["legende"] != nil, "la legende est ouverte")
+
+        // La fiche parait : la legende est partie sans attendre un fondu (0,15 s au plus, contre 0,3 s).
+        moteur.selection = "Apple TV 4K"
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["fiche"] != nil }
+        let debut = ProcessInfo.processInfo.systemUptime
+        try await MoteurPiecesTests.attendre {
+            moteur.cadresInterface["legende"] == nil || ProcessInfo.processInfo.systemUptime - debut > 0.15
+        }
+        #expect(moteur.cadresInterface["legende"] == nil, "la legende se retire d'un coup, sans fondu")
+    }
+
     /// La pastille du chef : sur la fiche d'un noeud couronne, et seulement lui, les memes que la scene
     /// (`EntreeScene.chefs`) : un routeur de bordure (le chef de la demo), un routeur que la sonde seule
     /// connait (le chef de son maillage). La fiche d'un chef a la pastille en plus : elle est plus haute

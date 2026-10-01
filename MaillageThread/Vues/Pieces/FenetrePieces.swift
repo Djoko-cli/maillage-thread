@@ -124,18 +124,20 @@ struct FenetrePieces: View {
                     Spacer()
                     LigneDuBas(moteur: moteur, entree: entree, legende: moteur.selection == nil,
                                ancien: surveillance.maillageAncien) { hauteurLegende = $0 }
-                    // La fiche glisse depuis le bas a l'ouverture et a la fermeture (fondu simple avec
-                    // « Reduire les animations ») ; d'un noeud a l'autre, son contenu change sur place.
+                    // La fiche glisse depuis le bas a l'ouverture et a la fermeture, et ce qui est a cote
+                    // glisse avec elle (la ligne de niveau, la pastille). Avec « Reduire les animations »,
+                    // la fiche se fond (sa transition porte son fondu) et le reste prend sa place d'un coup :
+                    // aucune animation de conteneur. D'un noeud a l'autre, son contenu change sur place.
                     if let selection = moteur.selection {
                         FicheNoeud(id: selection, entree: entree, instant: surveillance.maintenant(a: contexte.date),
                                    aRenommer: $aRenommer, choisir: { moteur.selection = $0 }) {
                             moteur.selection = nil
                         }
                         .obstacle("fiche", moteur)
-                        .transition(Apparition.pour(.bottom, reduire: reduire).transition)
+                        .transition(Apparition.pour(.bottom, reduire: reduire).transitionAnimee)
                     }
                 }
-                .animation(Apparition.pour(.bottom, reduire: reduire).animation, value: moteur.selection == nil)
+                .animation(Apparition.animationDuConteneur(.bottom, reduire: reduire), value: moteur.selection == nil)
                 // En bas a gauche : la pile prend toute la largeur, sinon le `ZStack` centre la rangee du bas.
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Self.bord)
