@@ -193,8 +193,15 @@ final class MoteurPieces {
             enCalcul = e
             return
         }
+        calculer(e)
+    }
+
+    /// Lance le calcul de la disposition d'une scene, hors du fil principal, avec les places gardees
+    /// du moment ; un calcul en cours est abandonne.
+    private func calculer(_ e: EntreeScene) {
         calcul?.cancel()
         enCalcul = e
+        let cle = e.cleDisposition
         let cartes = cartesPour(e)
         let fixees = places.fixees(e.scene, domicile: e.domicile)
         let scene = e.scene
@@ -203,7 +210,7 @@ final class MoteurPieces {
                 DispositionPieces(scene: scene, cartes: cartes, fixees: fixees)
             }.value
             guard !Task.isCancelled, let self else { return }
-            self.retenir(d, cartes: cartes, cle: cle)
+            self.retenir(d, scene: scene, cartes: cartes, cle: cle)
         }
     }
 
@@ -213,7 +220,7 @@ final class MoteurPieces {
         let cartes = cartesPour(e)
         let d = DispositionPieces(scene: e.scene, cartes: cartes, fixees: places.fixees(e.scene, domicile: e.domicile))
         enCalcul = e
-        retenir(d, cartes: cartes, cle: e.cleDisposition)
+        retenir(d, scene: e.scene, cartes: cartes, cle: e.cleDisposition)
     }
 
     /// Cartes des pieces d'une scene, d'apres les noms mesures des noeuds.
@@ -226,12 +233,14 @@ final class MoteurPieces {
         return CartesPieces.cartes(e.scene, largeurs: largeurs)
     }
 
-    /// Une disposition calculee : gardee par cles (piece, etage), puis posee avec sa scene, si une
-    /// scene plus recente ne l'a pas depassee ; a la fin du mouvement ou du glisser en cours, s'il y en
-    /// a un.
-    private func retenir(_ d: DispositionPieces, cartes: [CartesPieces.Carte], cle: [String: [String: [String]]]) {
+    /// Une disposition calculee pour `scene` : gardee par cles (piece, etage), d'apres cette scene, dont
+    /// elle suit les indices (une scene plus recente de meme structure peut ranger ses etages, donc ses
+    /// pieces, dans un autre ordre) ; puis posee avec la derniere scene de cette structure, si une scene
+    /// d'une autre structure ne l'a pas depassee ; a la fin du mouvement ou du glisser en cours, s'il y
+    /// en a un.
+    private func retenir(_ d: DispositionPieces, scene: ScenePieces, cartes: [CartesPieces.Carte],
+                         cle: [String: [String: [String]]]) {
         guard let e = enCalcul, e.cleDisposition == cle else { return }
-        let scene = e.scene
         placesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { (scene.pieces[$0].id, d.positions[$0]) })
         rayonsCalcules = Dictionary(uniqueKeysWithValues: scene.etages.indices.map { (scene.etages[$0].id, d.rayons[$0]) })
         cartesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { (scene.pieces[$0].id, cartes[$0]) })
@@ -349,13 +358,16 @@ final class MoteurPieces {
         }
     }
 
-    /// Garde la place d'une piece qu'on vient de glisser : elle est desormais fixee.
+    /// Garde la place d'une piece qu'on vient de glisser : elle est desormais fixee. Un calcul en cours
+    /// ne la connait pas : il est relance avec elle (sinon, a sa fin, la piece sauterait a la place
+    /// qu'il lui donne).
     private func garder(_ id: String) {
         guard let e = entree, let i = e.scene.pieces.firstIndex(where: { $0.id == id }), i < positions.count else { return }
         let p = e.scene.pieces[i]
         places.garder(positions[i], piece: p.id, etage: e.scene.etages[p.etage].id, domicile: e.domicile)
         placesCalculees[p.id] = positions[i]
         enregistrer()
+        if let c = enCalcul { calculer(c) }
     }
 
     /// « Monter d'un etage » (+1) ou « Descendre d'un etage » (-1) : echange l'etage avec son voisin,

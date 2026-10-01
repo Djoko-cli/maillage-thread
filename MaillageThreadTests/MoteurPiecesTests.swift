@@ -14,12 +14,17 @@ struct MoteurPiecesTests {
     /// Un moteur sur la demo, dispose, et une premiere image dessinee (hors fenetre).
     static func moteur(fichier: URL? = nil) throws -> (MoteurPieces, EntreeScene) {
         let (_, _, e) = try NomsSceneTests.demo()
+        return (moteur(e, fichier: fichier), e)
+    }
+
+    /// Un moteur sur la scene `e`, dispose, et une premiere image dessinee (hors fenetre).
+    static func moteur(_ e: EntreeScene, fichier: URL? = nil) -> MoteurPieces {
         let m = MoteurPieces(fichierPlaces: fichier)
         m.marges = (84, 50)
         m.poserTaille(taille)
         m.installerMaintenant(e)
         dessiner(m)
-        return (m, e)
+        return m
     }
 
     static func dessiner(_ m: MoteurPieces) {
@@ -259,6 +264,65 @@ struct MoteurPiecesTests {
         while m.entree != autre { try await Task.sleep(for: .milliseconds(10)) }
         let bureau = try Self.indice(autre, "Bureau")
         #expect(m.cartes[bureau].largeur > 0 && m.positions.count == autre.scene.pieces.count)
+    }
+
+    /// L'ordre des etages change pendant le calcul d'une disposition (la cle de la disposition l'ignore,
+    /// la scene suivante range autrement ses pieces) : la disposition, gardee par cles d'apres la scene
+    /// pour laquelle elle a ete calculee, ne prete a aucune piece la place ou la carte d'une autre, ni
+    /// a un etage le rayon d'un autre. Trois etages : « Sans piece » reste sur celui du bas.
+    @Test(.timeLimit(.minutes(1))) func ordreDesEtagesPendantUnCalcul() async throws {
+        let (s, r, _) = try NomsSceneTests.demo()
+        var maison = try #require(s.noms.maison)
+        maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Entrée", "Buanderie"]),
+                        ZoneMaison(nom: "Étage", pieces: ["Chambre", "Chambre d'amis"]),
+                        ZoneMaison(nom: "Combles", pieces: ["Bureau", "Salle de bain"])]
+        s.noms.maison = maison
+        let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        let m = Self.moteur(e)
+        s.renommer("56B1E064401F74EF", en: "Pont du bureau, sous la lampe de l'écran")
+        let autre = EntreeScene(surveillance: s, reseau: r, places: m.places)
+        #expect(autre.cleDisposition != e.cleDisposition)
+        m.recevoir(autre)
+        m.deplacerEtage(1, de: 1)
+        let inverse = EntreeScene(surveillance: s, reseau: r, places: m.places)
+        #expect(inverse.cleDisposition == autre.cleDisposition)
+        #expect(inverse.scene.etages.map(\.id) == ["zone:Rez-de-chaussée", "zone:Combles", "zone:Étage"])
+        m.recevoir(inverse)
+        #expect(m.entree == e, "l'ancienne disposition reste affichee pendant le calcul")
+        while m.entree != inverse { try await Task.sleep(for: .milliseconds(10)) }
+        // La meme disposition, calculee sur le fil principal pour la scene du calcul.
+        let ref = Self.moteur(autre)
+        for (i, p) in inverse.scene.pieces.enumerated() {
+            let j = try #require(autre.scene.pieces.firstIndex { $0.id == p.id })
+            #expect(m.positions[i] == ref.positions[j] && m.cartes[i] == ref.cartes[j], "\(p.id)")
+        }
+        for (k, et) in inverse.scene.etages.enumerated() {
+            let l = try #require(autre.scene.etages.firstIndex { $0.id == et.id })
+            #expect(m.geometrie.rayons[k] == ref.geometrie.rayons[l], "\(et.id)")
+        }
+    }
+
+    /// Une piece lachee pendant le calcul d'une disposition garde la place du geste : le calcul est
+    /// relance avec elle, et elle ne saute pas, a sa fin, a la place qu'il lui donnait.
+    @Test(.timeLimit(.minutes(1))) func pieceLacheePendantUnCalcul() async throws {
+        let url = Self.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (s, r, e) = try NomsSceneTests.demo()
+        let m = Self.moteur(e, fichier: url)
+        s.renommer("56B1E064401F74EF", en: "Pont du bureau, sous la lampe de l'écran")
+        let autre = EntreeScene(surveillance: s, reseau: r, places: m.places)
+        m.recevoir(autre)
+        let cuisine = try Self.indice(e, "Cuisine")
+        let depart = try Self.pointDePiece(m, cuisine)
+        m.glisser(depart, depart: depart)
+        m.glisser(CGPoint(x: depart.x + 40, y: depart.y), depart: depart)
+        m.relacher(CGPoint(x: depart.x + 40, y: depart.y))
+        let fin = m.positions[cuisine]
+        #expect(m.entree == e, "le calcul n'est pas fini")
+        while m.entree != autre { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(m.positions[try Self.indice(autre, "Cuisine")] == fin, "la piece garde la place du geste")
+        let gardee = PlacesGardees.lire(url).maison(e.domicile).etages["zone:Rez-de-chaussée"]?["piece:Cuisine"]
+        #expect(gardee == PlacesGardees.Place(x: fin.x, z: fin.y))
     }
 
     /// Zoom : la vue est touchee, un redimensionnement ne la recadre plus ; Echap y ramene.
