@@ -10,7 +10,8 @@ import Foundation
 ///   dans « Sans piece », sur le plateau du bas. Sans aucune piece dans Maison, un seul plateau
 ///   « Maison » et une carte par routeur, avec ses enfants (parents vus par la sonde).
 /// - Teinte d'une piece : dans chaque etage, les pieces rangees par nom prennent chacune la teinte
-///   d'indice FNV-1a 32 bits de leur nom, modulo 8, ou la suivante libre dans l'etage.
+///   d'indice FNV-1a 32 bits de leur nom, modulo 8, ou la suivante libre dans l'etage. La carte d'un
+///   routeur est rangee et teintee d'apres l'id du routeur, qui ne change pas avec son libelle.
 /// - Noeuds d'une carte : le chef, les routeurs de bordure, les autres routeurs, les autres
 ///   noeuds ; par libelle dans chaque groupe. Rayon naturel : 15 px pour le centre d'une
 ///   partition, 13 pour un autre routeur de bordure, 8 pour un autre routeur, 7 sinon.
@@ -162,10 +163,11 @@ public struct ScenePieces: Hashable, Sendable {
             if case .maison(let n) = p, let e = etageDe[n] { return nouveau[e] ?? 0 }
             return 0
         }
+        // Carte d'un routeur : son id, stable, et non son libelle, que changent la couronne, ☾ et ⚠︎.
         func nomTri(_ p: NomPiece) -> String {
             switch p {
             case .maison(let n): n
-            case .routeur(let id): libelle(id)
+            case .routeur(let id): id
             case .sansPiece: Self.nomSansPiece
             }
         }

@@ -163,4 +163,26 @@ struct ScenePiecesTests {
         #expect(try Self.piece(s, .maison("Salon")).teinte == 2)
         #expect(ScenePieces.teintes.count == 8 && ScenePieces.teintes[0] == 0x3B82F5)
     }
+
+    /// Maison sans pieces : la teinte et le rang de la carte d'un routeur viennent de son id, pas de son
+    /// libelle decore ; ils ne changent ni quand la couronne passe a un autre routeur, ni quand ☾ ou ⚠︎
+    /// apparait.
+    @Test func cartesDeRouteurStables() throws {
+        let g = try Self.graphe(sonde: true)
+        func cartes(_ libelles: [String: String], chef: String) -> [String] {
+            let s = ScenePieces(graphe: g, libelles: libelles, piecesNoeuds: [:], zones: nil, chefs: [chef],
+                                piecesMaison: false)
+            return s.etages[0].pieces.map { "\(s.pieces[$0].id) #\(s.pieces[$0].teinte)" }
+        }
+        var libelles = Self.libelles
+        libelles["Apple TV"] = "Salon 👑"
+        libelles["HomePod"] = "Salon bas"
+        let avant = cartes(libelles, chef: "Apple TV")
+        #expect(avant.count == 4)
+        libelles["Apple TV"] = "Salon"
+        libelles["HomePod"] = "Salon bas 👑"
+        #expect(cartes(libelles, chef: "HomePod") == avant, "la couronne passe a l'autre routeur")
+        libelles["E000000000000004"] = "Prise ☾ ⚠︎"
+        #expect(cartes(libelles, chef: "HomePod") == avant, "l'appareil qui route s'endort et n'a plus d'adresse")
+    }
 }
