@@ -136,6 +136,8 @@ struct FenetrePieces: View {
                     }
                 }
                 .animation(Apparition.pour(.bottom, reduire: reduire).animation, value: moteur.selection == nil)
+                // En bas a gauche : la pile prend toute la largeur, sinon le `ZStack` centre la rangee du bas.
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Self.bord)
             }
             .coordinateSpace(.named(VuePieces.espace))

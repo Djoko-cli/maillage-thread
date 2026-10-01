@@ -121,6 +121,76 @@ struct FenetrePiecesTests {
         #expect(NSHostingView(rootView: vue).fittingSize == FenetrePieces.tailleMinimale)
     }
 
+    /// La rangee du bas (la legende, la ligne de niveau, la pastille d'un releve ancien) est en bas a gauche
+    /// de la vraie fenetre, au bord (polissage B, section 2), et non au milieu : a la taille par defaut
+    /// (1100 pt de large) comme a la taille minimale. Sous une fiche, la legende est cachee et la ligne de
+    /// niveau est au bord ; la fiche fermee, la rangee revient a sa place. Les marges de la vue restent celles
+    /// de la legende ouverte (sa hauteur mesuree, le bord et l'espacement), puis celles de la fiche. Les
+    /// images de demo ne le montrent pas : `VueCapture` refait sa mise en page, alignee a gauche.
+    @Test(.timeLimit(.minutes(1)), arguments: [CGSize(width: 1100, height: 760), CGSize(width: 820, height: 680)])
+    func rangeeDuBasAGauche(_ taille: CGSize) async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set(false, forKey: LegendePieces.cleRepliee)
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        // Un releve de la sonde ancien (plus de 6 min) : sa pastille est dans la rangee.
+        demo.recevoir(try #require(demo.maillage), a: demo.maintenant.addingTimeInterval(-7 * 60))
+        #expect(demo.maillageAncien)
+        // La vraie fenetre, hors ecran, avec son moteur (l'etat `moteur` de la vue) et des preferences a part.
+        let vue = FenetrePieces(fichierPlaces: nil)
+        let etat = try #require(Mirror(reflecting: vue).children.first { $0.label == "_moteur" }?.value)
+        let moteur = try #require(Mirror(reflecting: etat).descendant("_value") as? MoteurPieces)
+        let fenetre = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: taille.width, height: taille.height),
+                               styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered,
+                               defer: false)
+        fenetre.isReleasedWhenClosed = false
+        defer {
+            fenetre.orderOut(nil)
+            fenetre.contentView = nil
+        }
+        fenetre.contentView = NSHostingView(rootView: vue
+            .environment(demo)
+            .environment(NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit))
+            .environment(SondeMaillage(preferences: p, actif: false))
+            .defaultAppStorage(p))
+        fenetre.setContentSize(taille)
+        fenetre.orderFrontRegardless()
+        func cadre(_ cle: String) throws -> CGRect { try #require(moteur.cadresInterface[cle], "le cadre « \(cle) »") }
+        let cas = "fenetre de \(Int(taille.width)) pt"
+
+        // Fiche fermee : la legende au bord, puis la ligne de niveau, puis la pastille.
+        try await MoteurPiecesTests.attendre { ["legende", "niveau", "ancien"].allSatisfy { moteur.cadresInterface[$0] != nil } }
+        let legende = try cadre("legende")
+        let niveau = try cadre("niveau")
+        let ancien = try cadre("ancien")
+        #expect(legende.minX == FenetrePieces.bord, "\(cas) : la legende est au bord gauche (x = \(legende.minX))")
+        #expect(niveau.minX >= legende.maxX && ancien.minX >= niveau.maxX, "\(cas) : la ligne de niveau, puis la pastille, a droite de la legende")
+        let ouverte = FenetrePieces.margeBas(fiche: false, courbes: false, legendeOuverte: legende.height)
+        try await MoteurPiecesTests.attendre { moteur.marges.bas == ouverte }
+        #expect(moteur.marges.bas == ouverte, "\(cas) : la marge du bas suit la legende ouverte")
+
+        // Fiche ouverte : la legende est cachee, la ligne de niveau est au bord, sous la fiche.
+        moteur.selection = "Apple TV 4K"
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["fiche"] != nil && moteur.cadresInterface["legende"] == nil }
+        let fiche = try cadre("fiche")
+        let niveauSousFiche = try cadre("niveau")
+        #expect(moteur.cadresInterface["legende"] == nil, "\(cas) : la legende est cachee sous la fiche")
+        #expect(niveauSousFiche.minX == FenetrePieces.bord, "\(cas) : la ligne de niveau est au bord (x = \(niveauSousFiche.minX))")
+        #expect(fiche.minX == FenetrePieces.bord && fiche.width == taille.width - 2 * FenetrePieces.bord, "\(cas) : la fiche, \(fiche)")
+        let sousFiche = FenetrePieces.margeBas(fiche: true, courbes: false)
+        try await MoteurPiecesTests.attendre { moteur.marges.bas == sousFiche }
+        #expect(moteur.marges.bas == sousFiche, "\(cas) : la marge du bas suit la fiche")
+
+        // Fiche fermee : la rangee revient a sa place, et la marge.
+        moteur.selection = nil
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["legende"] != nil && moteur.cadresInterface["fiche"] == nil }
+        let legendeRevenue = try cadre("legende")
+        #expect(legendeRevenue.minX == FenetrePieces.bord, "\(cas) : la legende est revenue au bord gauche (x = \(legendeRevenue.minX))")
+        try await MoteurPiecesTests.attendre { moteur.marges.bas == ouverte }
+        #expect(moteur.marges.bas == ouverte, "\(cas) : la marge du bas est revenue a celle de la legende ouverte")
+    }
+
     /// La fiche et les bandeaux du haut glissent avec un fondu, en 0,3 s, sur la courbe de la maquette
     /// (`cubic-bezier(.2, .8, .2, 1)`) : la fiche depuis le bas, un bandeau depuis le haut ; avec
     /// « Reduire les animations », un fondu simple.
