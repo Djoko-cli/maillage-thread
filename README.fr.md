@@ -150,10 +150,13 @@ clair. Conception :
   La fiche de tout routeur de bordure que Maison ne place pas, même s'il est
   déjà placé par son nom, propose « Placer dans une pièce… » : ce choix
   l'emporte sur le nom, et il est gardé sous le nom de son annonce
-  (`pieces-routeurs.json` dans le dossier de l'app, jamais en démo). Les
-  nœuds qui restent sans pièce vont dans « Sans pièce », sur le plateau du
-  bas. Sans aucune pièce de Maison (Passeur Noms jamais passé), une carte par
-  routeur, avec ses enfants.
+  (`pieces-routeurs.json` dans le dossier de l'app, jamais en démo).
+  « Placer dans une pièce… » sert aussi aux appareils que la sonde connaît
+  mais que Maison ne reconnaît pas, par exemple un appareil Matter à pile
+  dont l'annonce a expiré : le choix est gardé sous l'ExtMac de l'appareil,
+  et « Sans pièce » l'efface. Les nœuds qui restent sans pièce vont dans
+  « Sans pièce », sur le plateau du bas. Sans aucune pièce de Maison (Passeur
+  Noms jamais passé), une carte par routeur, avec ses enfants.
 - **2D et 3D** (barre d'outils ; le mode est gardé d'un lancement à l'autre) :
   la 2D est une vue de dessus, les étages côte à côte ; la 3D les empile dans
   la sphère de la maison, avec une rotation lente qu'on peut couper. La

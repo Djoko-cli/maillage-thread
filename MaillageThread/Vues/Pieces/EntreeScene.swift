@@ -12,7 +12,8 @@ struct EntreeScene: Equatable {
     var domicile: String
 
     /// `places` : les places gardees, dont l'ordre des etages de la maison ; `choix` : les pieces
-    /// choisies pour les routeurs de bordure que Maison ne place pas.
+    /// choisies pour les noeuds que Maison ne place pas, routeurs de bordure (sous leur instance) et
+    /// autres noeuds (sous leur ExtMac, precision 27).
     @MainActor
     init(surveillance: Surveillance, reseau r: Reseau, places: PlacesGardees, choix: PiecesRouteurs = PiecesRouteurs()) {
         let affiches = surveillance.appareilsAffiches(pour: r)
@@ -26,7 +27,8 @@ struct EntreeScene: Equatable {
         let maison = surveillance.noms.maison
         let domicile = maison?.domicile ?? ""
         let pieces = LibellesNoeuds.pieces(reseau: r, appareils: affiches, maison: maison,
-                                           nomsRouteurs: surveillance.nomsRouteurs(pour: r), choix: choix)
+                                           nomsRouteurs: surveillance.nomsRouteurs(pour: r), choix: choix,
+                                           graphe: graphe)
         let scene = ScenePieces(graphe: graphe, libelles: libelles.mapValues(\.texte), piecesNoeuds: pieces,
                                 zones: maison?.zones, chefs: chefs,
                                 piecesMaison: maison?.accessoires.contains { $0.piece?.isEmpty == false } == true,

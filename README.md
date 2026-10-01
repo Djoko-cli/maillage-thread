@@ -148,9 +148,12 @@ French).
   nothing). The card of any border router that Home doesn't place, even one
   already placed by its name, offers "Place in a room…": this choice wins over
   the name, and is kept under the name of its announcement
-  (`pieces-routeurs.json` in the app folder, never in the demo). Nodes still
-  without a room go to "No room", on the bottom platform. With no Home room at
-  all (Passeur Noms never ran), one card per router, with its children.
+  (`pieces-routeurs.json` in the app folder, never in the demo). "Place in a
+  room…" also serves devices that the probe knows but Home doesn't recognize,
+  for example a battery-powered Matter device whose announcement has expired:
+  the choice is kept under the device's ExtMac, and "No room" clears it. Nodes
+  still without a room go to "No room", on the bottom platform. With no Home
+  room at all (Passeur Noms never ran), one card per router, with its children.
 - **2D and 3D** (toolbar; the mode is kept from one launch to the next): 2D is
   a top view, floors side by side; 3D stacks them inside the house sphere,
   with a slow rotation you can turn off. Switching is a 2.6 s flight.

@@ -2,13 +2,28 @@ import Foundation
 import MaillageCoeur
 import SwiftUI
 
-/// Pieces choisies pour les routeurs de bordure que Maison ne place pas (« Placer dans une piece… »,
-/// dans la fiche du routeur ; precision 24 du plan 4b) : sous l'instance de l'annonce, par maison,
-/// dans `pieces-routeurs.json`, a cote des places des pieces ; en memoire seulement en demo et sous
-/// les tests. Le calcul est dans le coeur (`PiecesRouteurs`).
+/// Pieces choisies pour les noeuds que Maison ne place pas (« Placer dans une piece… », dans leur
+/// fiche) : un routeur de bordure sous l'instance de son annonce (precision 24 du plan 4b), un autre
+/// noeud sous son ExtMac (precision 27, spec de la vue par pieces, section 2.3) ; par maison, dans
+/// `pieces-routeurs.json`, a cote des places des pieces ; en memoire seulement en demo et sous les
+/// tests. Le calcul est dans le coeur (`PiecesRouteurs`).
 @MainActor
 @Observable
 final class PiecesChoisies {
+    /// Ce sous quoi le choix d'un noeud est garde.
+    enum Cle: Hashable {
+        /// Routeur de bordure : l'instance de son annonce.
+        case routeur(String)
+        /// Autre noeud : son ExtMac, en 16 hexa majuscules.
+        case appareil(String)
+    }
+
+    /// « Placer dans une piece… » d'un noeud : la cle de son choix, et les pieces de la maison, par nom.
+    struct Placement: Equatable {
+        var cle: Cle
+        var pieces: [String]
+    }
+
     private(set) var choix: PiecesRouteurs
     @ObservationIgnored private let fichier: URL?
 
@@ -23,46 +38,93 @@ final class PiecesChoisies {
         demo || sousTests ? nil : Surveillance.dossierParDefaut.appendingPathComponent("pieces-routeurs.json")
     }
 
-    /// Place un routeur (son instance) dans une piece de la maison ; nil : d'apres son nom.
-    func choisir(_ piece: String?, routeur: String, domicile: String) {
-        choix.choisir(piece, routeur: routeur, domicile: domicile)
+    /// Piece choisie pour un noeud (sa cle) ; nil : « D'apres son nom » pour un routeur de bordure,
+    /// « Sans piece » pour un autre noeud.
+    func pieceChoisie(_ cle: Cle, domicile: String) -> String? {
+        switch cle {
+        case .routeur(let instance): choix.choix(routeur: instance, domicile: domicile)
+        case .appareil(let extMac): choix.choix(appareil: extMac, domicile: domicile)
+        }
+    }
+
+    /// Place un noeud (sa cle) dans une piece de la maison ; nil : d'apres son nom pour un routeur de
+    /// bordure, « Sans piece » pour un autre noeud (son choix s'efface).
+    func choisir(_ piece: String?, _ cle: Cle, domicile: String) {
+        switch cle {
+        case .routeur(let instance): choix.choisir(piece, routeur: instance, domicile: domicile)
+        case .appareil(let extMac): choix.choisir(piece, appareil: extMac, domicile: domicile)
+        }
         guard let fichier else { return }
         do {
             try choix.ecrire(dans: fichier)
         } catch {
-            MoteurPieces.journal.error("pieces des routeurs non ecrites : \(error.localizedDescription, privacy: .public)")
+            MoteurPieces.journal.error("pieces choisies non ecrites : \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Place un routeur (son instance) dans une piece de la maison ; nil : d'apres son nom.
+    func choisir(_ piece: String?, routeur: String, domicile: String) {
+        choisir(piece, .routeur(routeur), domicile: domicile)
     }
 }
 
 extension PiecesChoisies {
-    /// Pieces proposees par « Placer dans une piece… » pour un noeud : celles de la maison, par nom,
-    /// pour un routeur de bordure que Maison ne place pas ; nil pour un autre noeud, ou si Maison n'a
-    /// encore aucune piece.
-    static func pieces(aPlacer id: String, dans surveillance: Surveillance) -> [String]? {
-        guard surveillance.instantane?.routeur(id) != nil else { return nil }
+    /// « Placer dans une piece… » pour un noeud du reseau affiche, dans une maison qui a des pieces : un
+    /// routeur de bordure de l'instantane que Maison ne place pas (precision 24) ; un autre noeud sans
+    /// piece de Maison dont l'ExtMac est connue (precision 27). Nil pour un noeud que Maison place, un
+    /// routeur de bordure que la sonde seule connait (precision 25), un noeud sans ExtMac.
+    static func placement(_ id: String, dans surveillance: Surveillance) -> Placement? {
         let maison = surveillance.noms.maison
-        guard LibellesNoeuds.pieceDeMaison(routeur: id, maison: maison) == nil else { return nil }
         let pieces = PiecesRouteurs.pieces(de: maison).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-        return pieces.isEmpty ? nil : pieces
+        guard !pieces.isEmpty else { return nil }
+        if surveillance.instantane?.routeur(id) != nil {
+            guard LibellesNoeuds.pieceDeMaison(routeur: id, maison: maison) == nil else { return nil }
+            return Placement(cle: .routeur(id), pieces: pieces)
+        }
+        // Un autre noeud : par le meme graphe que la scene (`EntreeScene`), donc sous la meme cle.
+        guard let r = surveillance.reseau else { return nil }
+        let affiches = surveillance.appareilsAffiches(pour: r)
+        if let p = affiches.first(where: { $0.id == id })?.piece, !p.isEmpty { return nil }
+        let graphe = GrapheReseau(reseau: r, appareils: affiches, maillage: surveillance.maillageAffiche(pour: r))
+        guard let n = graphe.noeud(id), let cle = PiecesRouteurs.cle(n) else { return nil }
+        return Placement(cle: .appareil(cle), pieces: pieces)
+    }
+
+    /// Pieces que propose « Placer dans une piece… » pour un noeud ; nil sans menu (`placement`).
+    static func pieces(aPlacer id: String, dans surveillance: Surveillance) -> [String]? {
+        placement(id, dans: surveillance)?.pieces
     }
 }
 
-/// « Placer dans une piece… », dans la fiche d'un routeur de bordure que Maison ne place pas : « D'apres
-/// son nom » (la regle du nom), puis les pieces de la maison ; le choix en cours est coche.
-struct MenuPlacerRouteur: View {
-    let routeur: String
-    let pieces: [String]
+/// « Placer dans une piece… », dans la fiche d'un noeud que Maison ne place pas : un premier article,
+/// puis les pieces de la maison ; le choix en cours est coche.
+struct MenuPlacer: View {
+    /// Un article du menu : son texte, et la piece qu'il choisit (nil : le premier article).
+    struct Article: Hashable {
+        var texte: String
+        var piece: String?
+    }
+
+    let placement: PiecesChoisies.Placement
     let domicile: String
     let choisies: PiecesChoisies
+
+    /// Les articles, dans l'ordre : « D'apres son nom » (la regle du nom) pour un routeur de bordure,
+    /// « Sans piece » (le choix efface) pour un autre noeud ; puis les pieces.
+    static func articles(_ p: PiecesChoisies.Placement) -> [Article] {
+        let premier = switch p.cle {
+        case .routeur: String(localized: "D'après son nom")
+        case .appareil: String(localized: "Sans pièce")
+        }
+        return [Article(texte: premier, piece: nil)] + p.pieces.map { Article(texte: $0, piece: $0) }
+    }
 
     var body: some View {
         Menu("Placer dans une pièce…") {
             Picker("Placer dans une pièce…", selection: Binding(
-                get: { choisies.choix.choix(routeur: routeur, domicile: domicile) },
-                set: { choisies.choisir($0, routeur: routeur, domicile: domicile) })) {
-                Text("D'après son nom").tag(String?.none)
-                ForEach(pieces, id: \.self) { Text(verbatim: $0).tag(String?.some($0)) }
+                get: { choisies.pieceChoisie(placement.cle, domicile: domicile) },
+                set: { choisies.choisir($0, placement.cle, domicile: domicile) })) {
+                ForEach(Self.articles(placement), id: \.piece) { Text(verbatim: $0.texte).tag($0.piece) }
             }
             .pickerStyle(.inline)
             .labelsHidden()

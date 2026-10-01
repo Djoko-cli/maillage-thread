@@ -9,14 +9,37 @@ import Foundation
 /// - **le nom** du routeur, celui qu'affiche l'app (son surnom, sinon son annonce) : la piece de
 ///   Maison dont le nom y figure, en mots entiers, sans egard a la casse ni aux accents ; le nom de
 ///   piece le plus long gagne ; si deux pieces ont cette longueur, aucune.
+///
+/// Piece d'un autre noeud que Maison ne place pas (precision 27, spec de la vue par pieces, section
+/// 2.3) : un appareil Matter dont l'annonce a expire, que la sonde seule connait, ou une annonce
+/// sans accessoire de Maison ; un routeur Thread qui n'est pas de bordure. La piece de Maison, sinon
+/// le choix, garde par maison sous son ExtMac dans le meme fichier, sinon « Sans piece » ; pas de
+/// regle du nom. Un noeud sans ExtMac connue n'a pas de choix.
 public struct PiecesRouteurs: Hashable, Sendable, Codable {
+    /// Version 1 : les routeurs (`maisons`), puis, depuis la precision 27, les autres noeuds
+    /// (`appareils`), un champ facultatif. Un fichier d'avant se lit sans perte ; une app d'avant lit
+    /// encore les routeurs d'un fichier d'apres, et ignore les autres noeuds.
     public static let versionActuelle = 1
 
     public var version = PiecesRouteurs.versionActuelle
     /// Par domicile ("" : maison sans nom) : instance de l'annonce -> piece choisie.
     public var maisons: [String: [String: String]] = [:]
+    /// Par domicile : ExtMac d'un autre noeud (16 hexa majuscules) -> piece choisie (precision 27).
+    public var appareils: [String: [String: String]] = [:]
 
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case version, maisons, appareils
+    }
+
+    /// `appareils` manque aux fichiers d'avant la precision 27 : aucun choix d'appareil.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        maisons = try c.decode([String: [String: String]].self, forKey: .maisons)
+        appareils = try c.decodeIfPresent([String: [String: String]].self, forKey: .appareils) ?? [:]
+    }
 
     /// Vide si le fichier manque, est illisible, ou d'une version plus recente.
     public static func lire(_ url: URL) -> PiecesRouteurs {
@@ -41,6 +64,39 @@ public struct PiecesRouteurs: Hashable, Sendable, Codable {
     public mutating func choisir(_ piece: String?, routeur: String, domicile: String) {
         maisons[domicile, default: [:]][routeur] = piece
         if maisons[domicile]?.isEmpty == true { maisons[domicile] = nil }
+    }
+
+    /// Piece choisie pour un autre noeud (son ExtMac) ; nil : aucune, il est « Sans piece ».
+    public func choix(appareil extMac: String, domicile: String) -> String? {
+        appareils[domicile]?[extMac.uppercased()]
+    }
+
+    /// Garde le choix d'une piece pour un autre noeud (son ExtMac) ; nil, « Sans piece », l'efface.
+    public mutating func choisir(_ piece: String?, appareil extMac: String, domicile: String) {
+        appareils[domicile, default: [:]][extMac.uppercased()] = piece
+        if appareils[domicile]?.isEmpty == true { appareils[domicile] = nil }
+    }
+
+    /// Cle du choix d'un noeud qui n'est pas un routeur de bordure (precision 27) : son ExtMac. Nil pour
+    /// un routeur de bordure, qui suit les precisions 23 a 25, et pour un noeud sans ExtMac connue :
+    /// ni choix ni menu.
+    public static func cle(_ n: GrapheReseau.Noeud) -> String? {
+        n.bordure ? nil : n.extMac?.uppercased()
+    }
+
+    /// Piece de chaque noeud du graphe : celle de Maison (`deMaison`, par id de noeud) ; sinon, pour un
+    /// noeud qui a une cle (`cle(_:)`), la piece choisie sous cette cle, si elle est encore une piece de
+    /// la maison (`pieces`). Un noeud qui n'y est pas va dans « Sans piece ». La piece d'un routeur de
+    /// bordure se calcule a part (`piece(routeur:nom:parmi:domicile:)`).
+    public func piecesNoeuds(_ graphe: GrapheReseau, deMaison: [String: String], parmi pieces: [String],
+                             domicile: String) -> [String: String] {
+        var resultat = deMaison.filter { !$0.value.isEmpty }
+        for n in graphe.noeuds where resultat[n.id] == nil {
+            if let x = Self.cle(n), let c = choix(appareil: x, domicile: domicile), pieces.contains(c) {
+                resultat[n.id] = c
+            }
+        }
+        return resultat
     }
 
     /// Piece d'un routeur que Maison ne place pas : son choix, s'il est encore une piece de la maison,

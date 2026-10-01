@@ -147,6 +147,45 @@ struct FenetrePiecesTests {
                 == Surveillance.dossierParDefaut.appendingPathComponent("pieces-routeurs.json"))
     }
 
+    /// « Placer dans une piece… » pour un noeud que Maison ne place pas et dont l'ExtMac est connue
+    /// (precision 27) : propose pour l'appareil que la sonde seule connait et pour l'annonce sans
+    /// accessoire, pas pour un noeud sans ExtMac ni pour un appareil que Maison place. Premier article :
+    /// « Sans piece » pour un appareil, « D'apres son nom » pour un routeur de bordure ; puis les pieces.
+    /// Le choix se garde sous l'ExtMac, dans le fichier des routeurs, sans perdre les leurs ; « Sans
+    /// piece » l'efface.
+    @Test func placerUnAppareil() throws {
+        let (s, _) = try NomsSceneTests.demoAvecInconnus()
+        let pieces = ["Buanderie", "Bureau", "Chambre", "Chambre d'amis", "Cuisine", "Entrée", "Salle de bain",
+                      "Salon"]
+        let appareil = try #require(PiecesChoisies.placement("rloc:041F", dans: s))
+        #expect(appareil == PiecesChoisies.Placement(cle: .appareil("E0000000000000FF"), pieces: pieces))
+        #expect(PiecesChoisies.placement("1E5019DAC2638F92", dans: s)?.cle == .appareil("1E5019DAC2638F92"))
+        #expect(PiecesChoisies.placement("rloc:0420", dans: s) == nil, "sans ExtMac")
+        #expect(PiecesChoisies.placement("56B1E064401F74EF", dans: s) == nil, "Maison le place au bureau")
+        let routeur = try #require(PiecesChoisies.placement("HomePod Palier", dans: s))
+        #expect(routeur == PiecesChoisies.Placement(cle: .routeur("HomePod Palier"), pieces: pieces))
+        #expect(MenuPlacer.articles(appareil).first
+                == MenuPlacer.Article(texte: String(localized: "Sans pièce"), piece: nil))
+        #expect(MenuPlacer.articles(routeur).first
+                == MenuPlacer.Article(texte: String(localized: "D'après son nom"), piece: nil))
+        #expect(Array(MenuPlacer.articles(appareil).dropFirst())
+                == pieces.map { MenuPlacer.Article(texte: $0, piece: $0) })
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("appareils-\(UUID().uuidString)/pieces-routeurs.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let domicile = "Maison (démo)"
+        let choisies = PiecesChoisies(fichier: url)
+        choisies.choisir("Salon", routeur: "HomePod Palier", domicile: domicile)
+        choisies.choisir("Cuisine", appareil.cle, domicile: domicile)
+        let relu = PiecesChoisies(fichier: url)
+        #expect(relu.pieceChoisie(.appareil("E0000000000000FF"), domicile: domicile) == "Cuisine")
+        #expect(relu.choix.choix(appareil: "E0000000000000FF", domicile: domicile) == "Cuisine")
+        #expect(relu.pieceChoisie(.routeur("HomePod Palier"), domicile: domicile) == "Salon")
+        relu.choisir(nil, appareil.cle, domicile: domicile)
+        #expect(PiecesChoisies(fichier: url).pieceChoisie(appareil.cle, domicile: domicile) == nil, "Sans piece")
+        #expect(PiecesChoisies(fichier: url).choix.choix(routeur: "HomePod Palier", domicile: domicile) == "Salon")
+    }
+
     /// Places des pieces : a cote des identites des routeurs, ni en demo ni sous les tests.
     @Test func fichierDesPlaces() {
         #expect(FenetrePieces.fichierPlaces(demo: true, sousTests: false) == nil)

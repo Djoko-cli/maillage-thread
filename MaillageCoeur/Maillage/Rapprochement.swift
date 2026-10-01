@@ -66,6 +66,10 @@ public struct MaillageAffiche: Hashable, Sendable {
     /// Annonces candidates d'au moins un routeur de bordure non identifie : ce routeur les porte,
     /// elles ne sont pas des noeuds a part (le centre de la partition excepte, voir `GrapheReseau`).
     public let annoncesCandidates: Set<String>
+    /// ExtMac connue de la sonde pour ses noeuds (16 hexa majuscules), par id de noeud : routeurs
+    /// et enfants retenus, reconnus ou non. C'est la cle du choix de piece d'un noeud que Maison ne
+    /// place pas (precision 27, spec de la vue par pieces, section 2.3).
+    public let extMacs: [String: String]
 
     /// Rapproche le maillage des routeurs de bordure de sa partition et des appareils :
     /// - routeur de bordure : son ExtMac est le `xa` de son annonce ;
@@ -83,6 +87,7 @@ public struct MaillageAffiche: Hashable, Sendable {
     /// connus tous deux et differents, ou dont le `xa` est l'ExtMac connue d'un autre routeur.
     /// Un enfant vu deux fois (meme ExtMac, precision 26 du plan 4b) ne donne qu'un noeud et un
     /// lien : ceux de l'entree que retient `Maillage.enfantsIdentifies` ; l'autre est ecartee.
+    /// Chaque noeud garde l'ExtMac que la sonde lui connait (`extMacs`).
     public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil]) {
         partition = maillage.partition
         date = maillage.date
@@ -178,6 +183,14 @@ public struct MaillageAffiche: Hashable, Sendable {
         self.enfants = enfants
         self.liens = liens
         annoncesCandidates = Set(routeurs.values.flatMap(\.candidats))
+        var connues: [String: String] = [:]
+        for r in maillage.routeurs {
+            if let x = r.extMac, let n = routeurs[r.id] { connues[n.id] = x.uppercased() }
+        }
+        for e in maillage.enfants {
+            if let x = e.extMac, let n = enfants[e.rloc16] { connues[n.id] = x.uppercased() }
+        }
+        self.extMacs = connues
     }
 
     /// Noeud du graphe, routeur ou enfant.

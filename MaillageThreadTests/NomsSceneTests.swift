@@ -26,6 +26,19 @@ struct NomsSceneTests {
         return m
     }
 
+    /// La demo sans les accessoires de ses routeurs (`maisonSansRouteurs`), dont le maillage a en plus,
+    /// sous le chef, un enfant sans ExtMac (« rloc:0420 »). Celui qu'elle a deja, « rloc:041F »
+    /// (E0000000000000FF), est un appareil que la sonde seule connait.
+    static func demoAvecInconnus() throws -> (Surveillance, Reseau) {
+        let (s, r, _) = try demo()
+        s.noms.maison = maisonSansRouteurs(s)
+        let m = try #require(s.maillage)
+        let enfants = m.enfants + [EnfantMaillage(rloc16: 0x0420, qualite: 2, source: .tableEnfants)]
+        s.recevoir(Maillage(date: m.date, partition: m.partition, routeurs: m.routeurs, liens: m.liens,
+                            enfants: enfants.sorted { $0.rloc16 < $1.rloc16 }, signaux: m.signaux), a: s.maintenant)
+        return (s, r)
+    }
+
     /// Libelle d'un noeud : le nom coupe a 40 caracteres, la couronne du chef (celui de la partition
     /// et celui de la sonde), ☾ endormi, ⚠︎ sans adresse ou disparu ; la pastille d'une batterie faible.
     @Test func libelles() throws {
@@ -126,6 +139,30 @@ struct NomsSceneTests {
         #expect(e.scene.pieces[gauche.piece].nom == .maison("Salon"))
         let atv = try #require(e.scene.noeud("Apple TV 4K"))
         #expect(e.scene.pieces[atv.piece].nom == .sansPiece)
+    }
+
+    /// Un noeud que Maison ne place pas et dont l'ExtMac est connue passe dans la piece choisie pour son
+    /// ExtMac (precision 27) : l'appareil que la sonde seule connait, l'annonce sans accessoire (son nom
+    /// d'hote) ; la piece de Maison passe avant le choix ; un noeud sans ExtMac reste sans piece. La
+    /// disposition suit.
+    @Test func piecesDesAppareils() throws {
+        let (s, r) = try Self.demoAvecInconnus()
+        let domicile = try #require(s.noms.maison?.domicile)
+        var choix = PiecesRouteurs()
+        choix.choisir("Cuisine", appareil: "E0000000000000FF", domicile: domicile)
+        choix.choisir("Bureau", appareil: "1E5019DAC2638F92", domicile: domicile)
+        choix.choisir("Salon", appareil: "56B1E064401F74EF", domicile: domicile)
+        let avant = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees(), choix: choix)
+        func piece(_ e: EntreeScene, _ id: String) throws -> ScenePieces.NomPiece {
+            e.scene.pieces[try #require(e.scene.noeud(id)).piece].nom
+        }
+        #expect(try piece(avant, "rloc:041F") == .sansPiece && piece(avant, "1E5019DAC2638F92") == .sansPiece)
+        #expect(try piece(e, "rloc:041F") == .maison("Cuisine"), "connu de la sonde seule")
+        #expect(try piece(e, "1E5019DAC2638F92") == .maison("Bureau"), "annonce sans accessoire de Maison")
+        #expect(try piece(e, "56B1E064401F74EF") == .maison("Bureau"), "Maison passe avant le choix")
+        #expect(try piece(e, "rloc:0420") == .sansPiece, "sans ExtMac")
+        #expect(e.cleDisposition != avant.cleDisposition)
     }
 
     /// La maison de demo : les deux etages et les huit pieces de la maquette, « Sans piece » sur le

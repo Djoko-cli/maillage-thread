@@ -78,7 +78,7 @@ Décisions de Djoko pendant la conception, dans l'ordre :
   - chacune prend la teinte d'indice (FNV-1a sur 32 bits de son nom en UTF-8) modulo 8 ;
   - si cette teinte est déjà prise dans l'étage, elle prend la suivante libre.
 
-  Les teintes restent donc stables d'un lancement à l'autre, et différentes dans un même étage jusqu'à 8 pièces.
+  Les teintes restent donc stables d'un lancement à l'autre, et différentes dans un même étage jusqu'à 8 pièces. Dans une maison sans pièces (section 2.3), la carte d'un routeur est rangée et teintée d'après l'identifiant du routeur, et non d'après son nom affiché, que la couronne, la lune ou l'alerte changent (ajout du 01/10).
 
 ### 2.3 Nœuds et liens
 
@@ -90,7 +90,12 @@ Décisions de Djoko pendant la conception, dans l'ordre :
 - **Pièce d'un routeur de bordure** (ajout du 01/10, choix de Djoko du 30/09) : celle de l'accessoire de Maison qui porte le nom de son annonce. HomeKit ne donne à une app tierce ni les HomePod ni l'Apple TV ; pour un routeur sans pièce de Maison, dans cet ordre :
   - **le choix** : sa fiche propose « Placer dans une pièce… », un menu des pièces de la maison, avec « D'après son nom » pour revenir à la règle du nom. Le choix est gardé (section 2.4) ; il passe avant le nom ; une pièce qui n'est plus dans Maison ne compte plus ;
   - **le nom** du routeur, celui qu'affiche l'app (son surnom, sinon son annonce) : il va dans la pièce de Maison dont le nom y figure. La comparaison ignore la casse et les accents, et porte sur des mots entiers, qui doivent se suivre (« HomePod mini chambre » → « Chambre », mais « HomePod salons » → rien). Le nom de pièce le plus long gagne (« Chambre d'amis » avant « Chambre ») ; si deux pièces ont cette longueur, le routeur n'est placé nulle part.
-- **Nœud sans pièce :** un appareil que Maison ne connaît pas, ou un routeur connu seulement par son RLOC16. Il va dans une carte « **Sans pièce** », sur le plateau du bas.
+- **Pièce d'un autre nœud que Maison ne place pas** (ajout du 01/10, précision 27, demande de Djoko) : un appareil Matter à pile dont l'annonce `_matter._tcp` a expiré marche encore, car le concentrateur garde une session avec lui ; mais l'app, qui ne le relie à son accessoire de Maison que par cette annonce, ne sait plus qui il est. Sa fiche propose alors « Placer dans une pièce… » :
+  - **pour qui** : tout nœud sans pièce de Maison, dans une maison qui a des pièces, dont l'ExtMac est connue, par la sonde ou par son nom d'hôte Matter. Ce sont les appareils que la sonde seule connaît, les appareils annoncés que Maison ne reconnaît pas, et les routeurs Thread qui ne sont pas des routeurs de bordure. Les routeurs de bordure gardent les règles ci-dessus : celui que la sonde seule connaît, sans annonce reconnue, n'a pas de choix (précision 25). Un nœud sans ExtMac connue n'en a pas non plus ;
+  - **le menu** : « Sans pièce » d'abord, qui efface le choix, puis les pièces de la maison, triées comme pour les routeurs ; le choix en cours est coché ;
+  - **la priorité** : la pièce de Maison, puis le choix, puis « Sans pièce » ; il n'y a pas de règle du nom. Quand l'annonce revient et que Maison donne une pièce, Maison l'emporte, et le choix reste dans le fichier, sans effet. Une pièce choisie qui n'est plus dans Maison ne compte plus ;
+  - **la clé** : l'ExtMac, par maison (section 2.4). Elle ne change ni avec le parent, ni avec le RLOC16, ni au redémarrage, ni quand l'appareil passe de « connu de la sonde seule » à « annoncé ».
+- **Nœud sans pièce :** un appareil que Maison ne connaît pas et qu'aucun choix ne place, ou un routeur connu seulement par son RLOC16. Il va dans une carte « **Sans pièce** », sur le plateau du bas.
 - **Liens :** les mêmes que le graphe actuel.
   - liens radio entre routeurs : couleur de qualité, 2 pt ;
   - rattachements enfant → parent : trait fin ;
@@ -109,6 +114,7 @@ Décisions de Djoko pendant la conception, dans l'ordre :
 - Une pièce **renommée**, ou passée dans un autre étage dans Maison, ne retrouve plus sa place gardée. Elle est replacée automatiquement ; les autres ne bougent pas.
 - Un clic droit sur le fond propose « **Replacer les pièces automatiquement** » : il efface les places gardées de la maison, sauf l'ordre des étages.
 - **Pièces choisies des routeurs** (section 2.3) : `pieces-routeurs.json`, à côté de `positions-pieces.json`. Par maison (`domicile`), la pièce de chaque routeur, sous l'**instance de son annonce** : le nom sous lequel l'app garde déjà ses surnoms, qui ne change ni avec son RLOC16 ni à son redémarrage. Il ne change que si le routeur est renommé dans Maison ; son choix se perd alors, comme son surnom.
+- **Pièces choisies des autres nœuds** (section 2.3, précision 27) : dans le même fichier, sous un champ facultatif `appareils`. Par maison (`domicile`), la pièce de chaque nœud, sous son **ExtMac**, en 16 hexadécimaux majuscules. Un fichier d'avant, qui n'a que les routeurs, se lit sans perte ; la version reste 1, pour qu'une app d'avant lise encore les choix des routeurs d'un fichier d'après. En démo et sous les tests, rien n'est écrit, comme pour les routeurs.
 
 ## 3. Passeur : sans dossier, avec les zones (plan 4a)
 
