@@ -481,6 +481,22 @@
         }
       }
     },
+    "%lld appareils" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld devices"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld appareils"
+          }
+        }
+      }
+    },
     "%lld appareils Thread perdus" : {
       "localizations" : {
         "en" : {
@@ -525,6 +541,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld %%"
+          }
+        }
+      }
+    },
+    "1 appareil" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 device"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 appareil"
           }
         }
       }
@@ -925,6 +957,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Autres changements"
+          }
+        }
+      }
+    },
+    "Autres pièces" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other rooms"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autres pièces"
           }
         }
       }
@@ -3021,6 +3069,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sans partition connue"
+          }
+        }
+      }
+    },
+    "Sans pièce" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No room"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sans pièce"
           }
         }
       }
