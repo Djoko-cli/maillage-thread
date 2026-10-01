@@ -8,9 +8,22 @@ struct NomsTests {
 
     @Test func fabriqueDApple() {
         let n = ResolveurNoms(maison: NomsDemo.maison)
-        #expect(NomsDemo.maison.accessoires.count == 24)
+        #expect(NomsDemo.maison.accessoires.count == 30, "24 appareils et 6 routeurs de bordure")
         #expect(n.fabriqueApple(appareils: instantane.appareils + instantane.appareilsIP) == "30FC8F95E0E1A385")
         #expect(ResolveurNoms().fabriqueApple(appareils: instantane.appareils) == nil, "sans Maison")
+    }
+
+    /// Maison de demo : les zones et les pieces de la maquette de la vue par pieces ; chaque piece a un
+    /// accessoire ; les routeurs de bordure y sont des accessoires du nom de leur annonce, sans noeud Matter.
+    @Test func maisonDeDemo() {
+        let m = NomsDemo.maison
+        #expect(m.zones == [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Entrée", "Buanderie"]),
+                            ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis"])])
+        let pieces = Set(m.accessoires.compactMap(\.piece))
+        #expect(pieces == Set((m.zones ?? []).flatMap(\.pieces)))
+        let routeurs = Set(instantane.routeurs.map(\.instance))
+        let accessoiresRouteurs = m.accessoires.filter { routeurs.contains($0.nom) }
+        #expect(accessoiresRouteurs.count == 6 && accessoiresRouteurs.allSatisfy { $0.noeudMatter == nil && $0.piece != nil })
     }
 
     @Test func noeudMatter() {
