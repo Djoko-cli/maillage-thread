@@ -195,10 +195,18 @@ struct NomsSceneTests {
     }
 
     /// La taille mesuree hors du `Canvas` couvre le texte dessine, a toute echelle : un nom ne deborde
-    /// pas de la place que le placement lui donne (moins d'un point pres).
+    /// pas de la place que le placement lui donne (moins d'un point pres). Noms nus ou coupes a 40
+    /// caracteres, en ecriture latine, chinoise ou japonaise ; pastille d'une batterie faible ; nom
+    /// d'etage, de piece avec son compte, de la maison ; repere « ailleurs ». Les marges sont celles du
+    /// dessin (`RenduCanvas.dessinerNoms`).
     @Test func tailleMesureeCommeDessinee() {
         let mesure = MesureNoms()
-        let noms = ["Détecteur de passage lingerie sud ☾", "HomePod mini chambre", "Apple TV 4K 👑", "Salon"]
+        let long = CartesPieces.couper("Serrure connectée de la porte arrière, garage")
+        #expect(long.count == 40)
+        let noms = ["Détecteur de passage lingerie sud ☾", "HomePod mini chambre", "Apple TV 4K 👑", "Salon", long,
+                    long + " 👑 ☾ ⚠︎", "客厅吸顶灯 ☾", "寝室のスマートプラグ ⚠︎"]
+        let pastilles = [String(localized: "\(12)\u{202F}%"), String(localized: "faible")]
+        let comptes = [LibellesNoeuds.compte(1), LibellesNoeuds.compte(12)]
         for echelle in [1.0, 2.0, 3.0] {
             for n in noms {
                 for routeur in [false, true] {
@@ -207,11 +215,38 @@ struct NomsSceneTests {
                     let place = mesure.noeud(LibellesNoeuds.Libelle(texte: n), routeur: routeur)
                     #expect(dessinee.width + 10 <= place.width + 1 && dessinee.height <= place.height + 1,
                             "\(n) a \(echelle) : \(dessinee) dans \(place)")
+                    // Pastille : 5 points, le texte, 5 points, la capsule, 5 points.
+                    for v in pastilles {
+                        let t = Self.taillesDessinees([DessinNoeud.iconePastille, DessinNoeud.textePastille(v)],
+                                                      echelle: echelle)
+                        let capsule = DessinNoeud.taillePastille(icone: t[0], valeur: t[1])
+                        let avec = mesure.noeud(LibellesNoeuds.Libelle(texte: n, pastille: v), routeur: routeur)
+                        #expect(5 + ceil(dessinee.width) + 5 + capsule.width + 5 <= avec.width + 1
+                                && capsule.height <= avec.height + 1 && dessinee.height <= avec.height + 1,
+                                "\(n) et \(v) a \(echelle) : \(dessinee) et \(capsule) dans \(avec)")
+                    }
                 }
                 let t = Self.taillesDessinees([StylesNoms.etage(n)], echelle: echelle)[0]
                 let e = mesure.etage(n)
                 #expect(t.width <= e.width + 1 && t.height <= e.height + 1)
+                // Piece : bordure 1, marge 7, point 8, 6, nom, 6, compte, marge 7, bordure 1 ; 20 de haut.
+                for c in comptes {
+                    let d = Self.taillesDessinees([StylesNoms.nomPiece(n), StylesNoms.comptePiece(c)], echelle: echelle)
+                    let piece = mesure.piece(nom: n, compte: c)
+                    #expect(28 + ceil(d[0].width) + d[1].width + 8 <= piece.width + 1
+                            && max(d[0].height, d[1].height) <= piece.height + 1,
+                            "\(n), \(c) a \(echelle) : \(d) dans \(piece)")
+                }
+                // Repere « ailleurs » : bordure 1, marge 5, texte, marge 5, bordure 1 ; 1 dessus et dessous.
+                let ailleurs = "↓ " + n + " · Chambre d'amis, Rez-de-chaussée"
+                let a = Self.taillesDessinees([StylesNoms.ailleurs(ailleurs)], echelle: echelle)[0]
+                let place = mesure.ailleurs(ailleurs)
+                #expect(a.width + 12 <= place.width + 1 && a.height + 2 <= place.height + 1,
+                        "\(ailleurs) a \(echelle) : \(a) dans \(place)")
             }
+            let maison = String(localized: "⌂ Maison")
+            let m = Self.taillesDessinees([StylesNoms.maison(maison)], echelle: echelle)[0]
+            #expect(m.width <= mesure.maison(maison).width + 1 && m.height <= mesure.maison(maison).height + 1)
         }
     }
 }

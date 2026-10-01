@@ -27,7 +27,7 @@ struct MoteurPiecesTests {
         return m
     }
 
-    static func dessiner(_ m: MoteurPieces) {
+    static func dessiner(_ m: MoteurPieces, taille: CGSize = MoteurPiecesTests.taille) {
         let rendu = ImageRenderer(content: Canvas { ctx, t in
             m.image(&ctx, taille: t, echelle: 1, palette: Palette(sombre: true))
         }.frame(width: taille.width, height: taille.height))
@@ -100,6 +100,41 @@ struct MoteurPiecesTests {
         Self.dessiner(m)
         let isolee = String(localized: "Pièce isolée : \("Salon") · clic sur une autre pièce pour y aller, clic à côté ou Échap pour revenir")
         #expect(LigneNiveauVue.texte(m.ligneNiveau) == isolee)
+    }
+
+    /// Noms de la demo, avec leurs vrais textes mesures et leurs vraies ancres, places par le moteur dans
+    /// une fenetre de 820 x 560 ou de 1400 x 900, en 2D et en 3D, a k = 0,5, 1 et 2,5 vers le salon (la
+    /// piece la plus chargee) : aucun nom pose ne chevauche un autre (hors noms d'etage, poses meme s'ils
+    /// chevauchent), tous restent dans le cadre, et aucun ne touche une pastille opaque.
+    @Test(arguments: [CGSize(width: 820, height: 560), CGSize(width: 1400, height: 900)], [false, true])
+    func demoSansChevauchement(_ taille: CGSize, troisD: Bool) throws {
+        let (_, r, e) = try NomsSceneTests.demo()
+        let salon = try Self.indice(e, "Salon")
+        for k in [0.5, 1, 2.5] {
+            let m = MoteurPieces(troisD: troisD)
+            m.fige = true
+            m.marges = (FenetrePieces.margeHaut(scinde: r.estScinde, sondeRetenue: false, sansPieces: false),
+                        FenetrePieces.margeBas(fiche: false, courbes: false))
+            m.poserTaille(taille)
+            m.installerMaintenant(e)
+            m.poserZoom(echelle: k, vers: m.centrePiece(salon))
+            // Deux images : la premiere pose les noms, la seconde les garde a leur place.
+            for _ in 0..<2 { Self.dessiner(m, taille: taille) }
+            let p = try #require(m.projetee)
+            let poses = m.etiquettes.filter { $0.vu && !$0.fixe }
+            let cas = "k = \(k), \(Int(taille.width)) x \(Int(taille.height)), 3D : \(troisD)"
+            #expect(poses.contains { if case .noeud = $0.genre { true } else { false } }, "\(cas)")
+            let pastilles = p.disques.filter { $0.opacite > 0.5 }.map { d in
+                CGRect(x: Double(d.centre.x) - d.rayon, y: Double(d.centre.y) - d.rayon, width: 2 * d.rayon, height: 2 * d.rayon)
+            }
+            for (a, l) in poses.enumerated() {
+                #expect(PlacementNoms.dansCadre(l.rect, taille), "\(l.genre) hors du cadre, \(cas)")
+                for q in poses[(a + 1)...] {
+                    #expect(!PlacementNoms.chevauche(l.rect, q.rect), "\(l.genre) sur \(q.genre), \(cas)")
+                }
+                #expect(!pastilles.contains { PlacementNoms.chevauche(l.rect, $0) }, "\(l.genre) sur une pastille, \(cas)")
+            }
+        }
     }
 
     /// Clic sur une piece : elle s'isole (le fil la nomme) ; sur un appareil : sa fiche ; a cote : la
