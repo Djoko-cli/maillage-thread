@@ -168,7 +168,8 @@ public struct SceneProjetee: Sendable {
 
     /// Pose la scene a l'etat `etat` et la projette par `orbite` dans `cadre` (la place utile de la
     /// vue). `positions` : centre de chaque piece dans son plateau (celles de la disposition, ou la
-    /// piece qu'on glisse).
+    /// piece qu'on glisse). Invariant, tenu par le moteur : `cartes` et `positions` suivent les pieces
+    /// de `scene`, et `g.rayons` ses etages, memes effectifs et meme ordre.
     public init(scene: ScenePieces, cartes: [CartesPieces.Carte], positions: [SIMD2<Double>], geometrie g: GeometrieMaison,
                 etat: EtatAnime, orbite: Orbite, cadre: CGRect) {
         let proj = ProjectionScene(orbite, cadre: cadre)

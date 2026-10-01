@@ -81,6 +81,8 @@ public struct MaillageAffiche: Hashable, Sendable {
     ///   candidats, les annonces non reprises qui peuvent etre la sienne.
     /// Ces quatre dernieres regles ecartent une annonce dont le `xa` et l'ExtMac du routeur sont
     /// connus tous deux et differents, ou dont le `xa` est l'ExtMac connue d'un autre routeur.
+    /// Un enfant vu deux fois (meme ExtMac, precision 26 du plan 4b) ne donne qu'un noeud et un
+    /// lien : ceux de l'entree que retient `Maillage.enfantsIdentifies` ; l'autre est ecartee.
     public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil]) {
         partition = maillage.partition
         date = maillage.date

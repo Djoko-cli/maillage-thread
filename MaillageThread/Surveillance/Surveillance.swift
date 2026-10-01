@@ -401,17 +401,19 @@ final class Surveillance {
     }
 
     /// Noms de noeuds de l'historique, par cle : leur nom dans le graphe, si le dernier maillage
-    /// ou l'instantane les connait ; la cle sinon. Le rapprochement n'est fait qu'une fois.
+    /// ou l'instantane les connait ; la cle sinon. Un enfant vu deux fois prend l'entree que retient
+    /// le rapprochement (`Maillage.enfantsIdentifies`, precision 26 du plan 4b). Le rapprochement
+    /// n'est fait qu'une fois.
     func nomsHistorique(_ cles: Set<String>) -> [String: String] {
         let affiche = maillage.flatMap(rapprochement)
+        let enfants = maillage?.enfantsIdentifies ?? [:]
         func nomDe(_ cle: String) -> String {
             if let m = maillage, let affiche {
                 if let r = m.routeurs.first(where: { ($0.extMac ?? String(format: "rloc:%04X", $0.rloc16)) == cle }),
                    let n = affiche.routeurs[r.id], let x = nomNoeud(n.id, maillage: affiche) {
                     return x
                 }
-                if let e = m.enfants.first(where: { $0.extMac == cle }), let n = affiche.enfants[e.rloc16],
-                   let x = nomNoeud(n.id, maillage: affiche) {
+                if let e = enfants[cle], let n = affiche.enfants[e.rloc16], let x = nomNoeud(n.id, maillage: affiche) {
                     return x
                 }
             }
