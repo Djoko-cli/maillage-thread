@@ -418,8 +418,11 @@ private struct BoutonDeFiche: ViewModifier {
     }
 }
 
-/// Fond de la fiche : du verre aux coins de 22 pt ; dans une capture, celui de la maquette de la fiche
-/// (rgba(40, 48, 72, 0,40), filet de 0,5 pt blanc a 0,22, ombre noire a 0,4).
+/// Fond de la fiche : du verre aux coins de 22 pt (le Liquid Glass de macOS). Une capture, qui ne rend pas
+/// le verre, dessine a sa place un fond proche de celui de la maquette de la fiche (rgba(40, 48, 72, 0,40),
+/// filet de 0,5 pt blanc a 0,22, ombre noire a 0,4), avec deux ecarts : l'ombre est posee sur ce fond
+/// translucide, donc multipliee par son opacite (0,4) ; et l'ombre interne de la maquette (un lisere clair
+/// d'un point en haut) n'y est pas. Ce dessin ne sert qu'aux captures.
 private struct FondDeFiche: ViewModifier {
     @Environment(\.capturePieces) private var capture
 

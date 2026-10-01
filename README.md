@@ -236,8 +236,9 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
 - Refreshing: the room view window launches Passeur Noms when it opens (if
   the last reading and the last request are older than 15 min), then every
   hour; "Refresh from Home" (menu or settings) and the refresh button of its
-  toolbar do it on demand. One reading at a time: a request during a reading
-  is ignored. The window of Passeur Noms only flashes behind the others.
+  network capsule do it on demand. One reading at a time: a request during a
+  reading is ignored. The window of Passeur Noms only flashes behind the
+  others.
 - Zones: Home's zones (usually floors) and their rooms, in Home's order;
   Settings › Home lists the zone names. A reading from before zones has none.
 - The `noms.json` written in a chosen folder by an older Passeur Noms (at the

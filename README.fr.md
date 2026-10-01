@@ -244,9 +244,9 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
 - Rafraîchissement : la fenêtre de la vue par pièces lance Passeur Noms à son
   ouverture (si le relevé et la dernière demande ont plus de 15 min), puis
   toutes les heures ; « Rafraîchir depuis Maison » (menu ou réglages) et le
-  bouton rafraîchir de sa barre le font à la demande. Un relevé à la fois :
-  une demande pendant un relevé est ignorée. La fenêtre de Passeur Noms ne
-  fait que passer derrière les autres.
+  bouton rafraîchir de sa capsule du réseau le font à la demande. Un relevé à
+  la fois : une demande pendant un relevé est ignorée. La fenêtre de Passeur
+  Noms ne fait que passer derrière les autres.
 - Zones : les zones de Maison (en général les étages) et leurs pièces, dans
   l'ordre de Maison ; Réglages › Maison en liste les noms. Un relevé d'avant
   les zones n'en a pas.

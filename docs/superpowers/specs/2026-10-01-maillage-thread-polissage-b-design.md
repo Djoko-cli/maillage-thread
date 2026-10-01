@@ -108,7 +108,7 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 
 **« Relevé de la sonde ancien »**, que la petite légende d'aujourd'hui montrait en orange, sort de la légende. Il devient une petite pastille orange, à côté de la ligne de niveau, quand le relevé de la sonde est ancien.
 
-**Spec de la vue par pièces, section 8.** La phrase « sans partition en gris » est corrigée : un appareil sans partition prend la couleur de son état, comme le dit la légende.
+**Spec de la vue par pièces, section 8.** La phrase « sans partition en gris » est corrigée : couleur des routeurs (principale en bleu, les autres en ambre, un routeur que la sonde seule connaît en gris). Un appareil prend la couleur de son état, comme le dit la légende.
 
 ## 3. La fiche
 
@@ -132,17 +132,19 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 - le repli gardé ;
 - la pastille du chef, sur un routeur de bordure et sur un routeur de la sonde, mêmes chefs que la scène ;
 - la marge du haut mesurée ; celle du bas, sous la légende ouverte ;
-- la taille minimale de la fenêtre.
+- la taille minimale de la fenêtre ;
+- les capsules du haut : chacune à la largeur de son contenu, même à la taille minimale de la fenêtre, en 2D et en 3D (la bande vide prend la place qui reste).
 
-**Captures de démo.** Elles changent toutes, puisque la fenêtre change. Les nouvelles sont montrées à Djoko à côté des maquettes.
+**Captures de démo.** Elles changent toutes, puisque la fenêtre change, et deux images s'y ajoutent : la fiche du chef, avec sa pastille, et la légende repliée (quatorze en tout). Les nouvelles sont montrées à Djoko à côté des maquettes.
 
 **Avec Djoko, à la fin :**
 - déplacer la fenêtre par la bande du haut ;
+- les capsules, centrées sur les trois boutons, à 1,5 pt du bord ;
 - les gestes de la scène ;
 - la fiche qui glisse ;
 - la légende contextuelle et son repli gardé, la vue cadrée au-dessus d'elle ;
 - la pastille du chef ;
 - le Mac en clair ;
 - « Réduire les animations » ;
-- la petite fenêtre ;
+- la petite fenêtre, avec ses capsules entières ;
 - l'annotation des courbes.
