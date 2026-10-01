@@ -36,7 +36,8 @@ Devices are placed by the OMR prefix of their address. When two partitions
 announce the same OMR prefix (seen on September 28: an isolated hub had
 picked up the main partition's prefix), the Mac cannot tell which side a
 device is on: the app gives the prefix to the partition with the most border
-routers and marks it "shared" in the graph and on the device card.
+routers, and the device card says its partition is "uncertain: shared
+prefix".
 
 ## Build, test, run
 
@@ -48,6 +49,7 @@ is tracked.
 ```sh
 outils/tester.sh                                   # generate, build, all tests
 outils/tester.sh MaillageCoeurTests/SuiviTests     # one suite
+outils/mesurer.sh                                  # timings of the room view, in Release
 ```
 
 Build products go to `~/Library/Developer/Xcode/DerivedData/maillage`
@@ -55,8 +57,8 @@ Build products go to `~/Library/Developer/Xcode/DerivedData/maillage`
 errors.
 
 Run: `Maillage Thread.app` in `…/DerivedData/maillage/Build/Products/Debug/`.
-The app lives in the menu bar; the graph opens from its menu (and by itself on
-the very first launch).
+The app lives in the menu bar; the room view opens from its menu ("Open
+Graph", and by itself on the very first launch).
 A menu bar manager (Bartender, Pelmet…) may hide its icon: new icons land on
 the hidden side.
 
@@ -65,7 +67,12 @@ the hidden side.
 ```sh
 open "…/Maillage Thread.app" --args -demo
 open "…/Maillage Thread.app" --args -demo -selection 86E7BD1A75F28E6D   # card open
+open "…/Maillage Thread.app" --args -demo -captures ~/Library/Containers/fr.djoko.maillage/Data/tmp/captures
 ```
+
+With `-captures <folder>`, the app writes twelve PNG images of the room view
+(2D, flight, 3D, zooms, isolated rooms, hover), then quits, with no window.
+The app is sandboxed: the folder must be inside its container.
 
 The demo replays the September 27 outage, rebuilt from the real survey of
 September 28 (`docs/releves/2026-09-28/`): nothing is written, nothing is
@@ -107,18 +114,64 @@ catalog match.
 
 | Folder or file | Role |
 |---|---|
-| `MaillageCoeur/` | framework without UI: TXT decoding, snapshot (networks, partitions, prefixes, devices), tracking and log events, file log, names, graph layout, routing table; tested on the real survey and on the replayed outage |
+| `MaillageCoeur/` | framework without UI: TXT decoding, snapshot (networks, partitions, prefixes, devices), tracking and log events, file log, names, routing table; tested on the real survey and on the replayed outage |
+| `MaillageCoeur/Scene/` | room view without UI: nodes and links, floors and rooms, cards, layout (deterministic, with a budget), kept places, camera and flight, label placement and semantic zoom, projection for the `Canvas` engine; optimized even in Debug |
 | `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, scan of silent routers), kept router identities, matching with the snapshot (elimination, candidates), log of parents and Thread routers, tour history and curves; tested on an anonymized capture |
 | `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, access over the Thread network (`Reseau/`: UDP transport and H1 envelope from the Halo bridge, key in the keychain, rid and resends), `SondeUSB` (requests matched by id and target, each with its own deadline), app model (probe remembered by its USB serial number, USB or network link, a tour every 5 minutes) |
 | `MaillageThread/Noms/` | Home names: launching Passeur Noms, receiving its reading over the loopback (TCP listener on 127.0.0.1, one-time token), last valid names kept in the app's container |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | app model: surveys → tracking → log and notifications; sleep of the Mac; login item |
-| `MaillageThread/Vues/` | menu bar, graph window (Canvas, glass overlays), log window, settings (AppKit window with tabs: General, Notifications, Home, Probe, Diagnostics; ⌘,) |
+| `MaillageThread/Vues/` | menu bar, room view window (`Pieces/`: `Canvas` engine, glass overlays, captures), log window, settings (AppKit window with tabs: General, Notifications, Home, Probe, Diagnostics; ⌘,) |
 | `Passeur/` | Passeur Noms: iOS app run on the Mac (Designed for iPad) that reads Home and sends its names, rooms and zones to the app over the loopback |
 | `sonde/` | probe firmware (ESP32-C6, PlatformIO) and trial tools |
 | `outils/anonymiser-sonde.py` | anonymizes a probe capture before it becomes test data |
+| `outils/mesurer.sh` | timings of the room view (layout, label placement), in Release |
 | `docs/releves/` | real surveys (the fixture of the tests and the demo) |
 | `docs/superpowers/` | design (spec) and implementation plans |
+
+## Room view (2D and 3D)
+
+The window shows the network in the house: a round platform per floor, a glass
+card per room with one line per device, and the real radio links on top. It
+stays dark, like its mockup, even when the Mac is in light mode. Design:
+`docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md` (in
+French).
+
+- **Floors and rooms.** Floors are the Home zones, in their order (the first
+  at the bottom); a room in several zones goes to the first one, rooms outside
+  any zone make "Other rooms", and a house without zones has a single "Home"
+  platform. A device takes the room of its Home accessory; a border router,
+  the room of the Home accessory named like its announcement. Home gives
+  neither the HomePods nor the Apple TV: such a router goes to the room whose
+  name is in its own ("HomePod mini chambre" to "Chambre": whole words,
+  ignoring case and accents; the longest room name wins, a tie places
+  nothing). For the others, its card offers "Place in a room…": the choice
+  comes before the name, and is kept under the name of its announcement
+  (`pieces-routeurs.json` in the app folder, never in the demo). Nodes still
+  without a room go to "No room", on the bottom platform. With no Home room at
+  all (Passeur Noms never ran), one card per router, with its children.
+- **2D and 3D** (toolbar; the mode is kept from one launch to the next): 2D is
+  a top view, floors side by side; 3D stacks them inside the house sphere,
+  with a slow rotation you can turn off. Switching is a 2.6 s flight.
+- **Gestures.** Scroll wheel or pinch: zoom, towards the pointer in 2D. Drag
+  the background: pan in 2D, orbit around the house in 3D. Drag a room: move
+  it within its floor; its place is kept (`positions-pieces.json` in the app
+  folder, never in the demo). Click a room: isolate it (the others fade, a tag
+  points to a parent elsewhere); click outside, Esc or "Home" in the path:
+  come back. Double-click the background: back to the overview, zoom and pan
+  undone. Click a device or its name: its card.
+- **Right clicks**: on a floor name, "Move up one floor" and "Move down one
+  floor"; on the background, "Arrange rooms automatically" (kept places go,
+  not the floor order).
+- **Semantic zoom**: from afar, rooms only; then routers; up close, every name
+  that fits. The line at the bottom left gives the level, or how many names
+  are hidden for lack of room.
+- "Reduce motion" (macOS accessibility): the flight and the double-click
+  return become a fade, other camera flights are immediate, the slow rotation
+  is off.
+- The room layout is computed off the main thread: a few hundredths of a
+  second for the demo, under a second for 20 rooms and 100 devices
+  (`outils/mesurer.sh`).
 
 ## Home names (Passeur Noms)
 
@@ -158,11 +211,11 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   or JSON, Home access denied) keeps it and shows in Settings › Home and in
   the menu; after 7 days, Settings says to run `outils/passeur.sh` again. Passeur Noms logs why it quit:
   `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
-- Refreshing: the graph window launches Passeur Noms when it opens (if the
-  last reading and the last request are older than 15 min), then every hour;
-  "Refresh from Home" (menu or settings) and the refresh button of the graph
-  do it on demand. One reading at a time: a request during a reading is
-  ignored. The window of Passeur Noms only flashes behind the others.
+- Refreshing: the room view window launches Passeur Noms when it opens (if
+  the last reading and the last request are older than 15 min), then every
+  hour; "Refresh from Home" (menu or settings) and the refresh button of its
+  toolbar do it on demand. One reading at a time: a request during a reading
+  is ignored. The window of Passeur Noms only flashes behind the others.
 - Zones: Home's zones (usually floors) and their rooms, in Home's order;
   Settings › Home lists the zone names. A reading from before zones has none.
 - The `noms.json` written in a chosen folder by an older Passeur Noms (at the
@@ -170,8 +223,9 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   ignores it).
 - Batteries: level, charging state and the accessory's own low-battery alert,
   for every Home accessory with a battery. The device card shows them with the
-  age of the reading; in the graph, a glowing orange badge marks a low battery
-  (the accessory says so, or its level is 20 % or less).
+  age of the reading; in the view, a glowing orange badge at the end of the
+  name marks a low battery (the accessory says so, or its level is 20 % or
+  less).
 
 ## Probe (real mesh)
 
@@ -220,19 +274,19 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   encrypting them: the topology travels in clear on the local network. The
   Mac needs an IPv6 route to the OMR prefix (see "Route to the Thread
   network" below). "Forget the probe" removes this Mac's key, the probe's
-  survey in Settings and its mesh: the graph goes straight back to dotted
+  survey in Settings and its mesh: the view goes straight back to dotted
   lines. Limits: no end of session (a place on the board stays taken 30 s,
   the automatic retry fixes it); the board's receive queue has only 4 places
   (a batch of 8 `diag` may see some of them wait for the 2 s resend); a lost
   `routeurs` line gives a partial table, or none if the last one
   (`"suite":false`) is lost; details in the spec (section 3 bis).
-- A tour every 5 minutes, and on refresh: the refresh button of the graph
+- A tour every 5 minutes, and on refresh: the refresh button of the toolbar
   rereads the network, starts a tour (unless one is running) and launches
   Passeur Noms; its help tag says which of these it will actually start. While
-  a tour runs, a line under the graph's toolbar (and under the split-network
-  banner) shows its step, a counter of requests and its duration ("Scan of
-  silent routers · 24/48 · 0:42"); its place stays reserved above the graph
-  while a probe is remembered, so nothing moves when a tour starts or ends.
+  a tour runs, a line under the toolbar (and under the split-network banner)
+  shows its step, a counter of requests and its duration ("Scan of silent
+  routers · 24/48 · 0:42"); its place stays reserved above the view while a
+  probe is remembered, so nothing moves when a tour starts or ends.
   Settings › Probe and the menu line show the step and the counter too.
 - The list of routers comes from the leader; if it is silent, from a router
   that has already answered; otherwise from the other routers in the probe's
@@ -268,16 +322,15 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   single one), and those announcements are no longer drawn apart: one node per
   router. Its card lists the candidates; each one opens its announcement's
   card. Without a probe, every announcement stays drawn.
-- In the graph, solid lines are radio links, colored and thickened by quality
-  (green 3, yellow 2, orange 1, grey unknown); a child's line to its parent
-  stays thin. Dotted lines stay for what the probe does not see. Devices that
-  route move to the inner ring, and children sit near their parent. The card
-  gives the parent and the quality, or a router's number of neighbors and
-  children. If the probe stops answering, the last mesh is marked old 6
-  minutes after it was received (never during a tour); after 15 minutes the
-  graph goes back to dotted lines. The graph redraws every minute: both
-  changes show up within a minute, with no other event needed, and so do the
-  open card's "seen … ago" and curves.
+- In the room view, solid lines between routers are radio links (2 points,
+  colored by quality: green 3, yellow 2, orange 1, grey unknown); a child's
+  line to its parent stays thin. Dotted lines stay for what the probe does not
+  see. The mesh leader wears the crown. The card gives the parent and the
+  quality, or a router's number of neighbors and children. If the probe stops
+  answering, the last mesh is marked old 6 minutes after it was received
+  (never during a tour); after 15 minutes the view goes back to dotted lines.
+  The view redraws every minute: both changes show up within a minute, with
+  no other event needed, and so do the open card's "seen … ago" and curves.
 - Switching "Sonde maillage" off in Home suspends the probe: no tour, even
   after the probe restarts. The board's LED then gives a short orange flash
   every 5 s (firmware 1.0.3). After `oubli`, the USB command that unpairs

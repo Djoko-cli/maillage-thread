@@ -10,7 +10,7 @@
 >
 > **Deux plans d'implémentation (section 11) :**
 > - **4a** : le passeur sans dossier, et les zones de Maison (`docs/superpowers/plans/2026-09-30-maillage-thread-plan4a-passeur-interne.md`) ;
-> - **4b** : la vue par pièces.
+> - **4b** : la vue par pièces ; plan : `docs/superpowers/plans/2026-10-01-maillage-thread-plan4b-vue-pieces.md`.
 
 ## 0. Contexte, but, décisions
 
@@ -56,6 +56,7 @@ Décisions de Djoko pendant la conception, dans l'ordre :
   - la pastille de batterie faible au bout du nom.
 - **La légende** actuelle des liens reste jusqu'au polissage. La légende A, contextuelle, choisie par Djoko le 30/09, sera alors adaptée à cette vue.
 - **Le mode 2D ou 3D** est gardé d'un lancement à l'autre.
+- **La fenêtre reste sombre**, comme la maquette, même quand le Mac est en clair : la barre, les menus, la fiche et les feuilles aussi (ajout du 01/10, choix de Djoko du 30/09).
 - **Maillage de démo :** il reçoit des pièces et des étages inventés, ceux de la maquette, pour les captures et les tests.
 
 ## 2. Données
@@ -86,6 +87,9 @@ Décisions de Djoko pendant la conception, dans l'ordre :
   - chacun avec son **état** et ses couleurs actuelles : joignable, disparu, sans adresse, partition coupée ;
   - batterie faible, endormi (☾), chef (👑).
 - **Pièce d'un nœud :** celle de l'accessoire de Maison qui lui correspond, par la correspondance du plan 2 (fabrique d'Apple, nœud Matter, pont).
+- **Pièce d'un routeur de bordure** (ajout du 01/10, choix de Djoko du 30/09) : celle de l'accessoire de Maison qui porte le nom de son annonce. HomeKit ne donne à une app tierce ni les HomePod ni l'Apple TV ; pour un routeur sans pièce de Maison, dans cet ordre :
+  - **le choix** : sa fiche propose « Placer dans une pièce… », un menu des pièces de la maison, avec « D'après son nom » pour revenir à la règle du nom. Le choix est gardé (section 2.4) ; il passe avant le nom ; une pièce qui n'est plus dans Maison ne compte plus ;
+  - **le nom** du routeur, celui qu'affiche l'app (son surnom, sinon son annonce) : il va dans la pièce de Maison dont le nom y figure. La comparaison ignore la casse et les accents, et porte sur des mots entiers, qui doivent se suivre (« HomePod mini chambre » → « Chambre », mais « HomePod salons » → rien). Le nom de pièce le plus long gagne (« Chambre d'amis » avant « Chambre ») ; si deux pièces ont cette longueur, le routeur n'est placé nulle part.
 - **Nœud sans pièce :** un appareil que Maison ne connaît pas, ou un routeur connu seulement par son RLOC16. Il va dans une carte « **Sans pièce** », sur le plateau du bas.
 - **Liens :** les mêmes que le graphe actuel.
   - liens radio entre routeurs : couleur de qualité, 2 pt ;
@@ -104,6 +108,7 @@ Décisions de Djoko pendant la conception, dans l'ordre :
 - Une pièce déplacée est **fixée** : le placement automatique ne la bouge plus.
 - Une pièce **renommée**, ou passée dans un autre étage dans Maison, ne retrouve plus sa place gardée. Elle est replacée automatiquement ; les autres ne bougent pas.
 - Un clic droit sur le fond propose « **Replacer les pièces automatiquement** » : il efface les places gardées de la maison, sauf l'ordre des étages.
+- **Pièces choisies des routeurs** (section 2.3) : `pieces-routeurs.json`, à côté de `positions-pieces.json`. Par maison (`domicile`), la pièce de chaque routeur, sous l'**instance de son annonce** : le nom sous lequel l'app garde déjà ses surnoms, qui ne change ni avec son RLOC16 ni à son redémarrage. Il ne change que si le routeur est renommé dans Maison ; son choix se perd alors, comme son surnom.
 
 ## 3. Passeur : sans dossier, avec les zones (plan 4a)
 
@@ -339,6 +344,8 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
 - **clic à côté des pièces, Échap, ou « Maison » dans le fil :** retour à la vue d'ensemble ;
 - le fil en haut à gauche dit « Maison › Salon ».
 
+**Double-clic sur le fond** (ajout du 01/10, choix de Djoko du 30/09) : retour d'un geste à la vue d'ensemble, pièce isolée relâchée, zoom et déplacement annulés, par le vol de 1,3 s. Le premier clic agit seul, comme un clic à côté : il ferme la fiche et la pièce isolée.
+
 **Clics droits :**
 - sur un nom d'étage : « Monter d'un étage », « Descendre d'un étage » ;
 - sur le fond : « Replacer les pièces automatiquement ».
@@ -347,7 +354,8 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
 
 **« Réduire les animations »** (accessibilité de macOS) :
 - l'envol devient un fondu de 0,3 s entre les deux vues finales ;
-- les vols de caméra sont immédiats ;
+- le retour par double-clic aussi ;
+- les autres vols de caméra sont immédiats ;
 - la rotation lente est coupée.
 
 **Pas de travail lourd sur le fil principal pendant un mouvement.** Un relevé qui arrive pendant l'envol ou un vol s'applique à la fin du mouvement.
@@ -410,6 +418,7 @@ Le survol montre toujours le nom de l'appareil survolé. En pièce isolée, tous
   - stabilité (un nom ne change pas de place avant 0,5 s) ;
   - seuils du zoom sémantique.
 - **`PlacesGardees` :** aller-retour sur disque, une pièce renommée, l'ordre des étages.
+- **Pièce des routeurs** (section 2.3) : mots entiers, casse et accents ignorés, le nom de pièce le plus long, l'égalité, le choix avant le nom, un choix dont la pièce a disparu, aller-retour sur disque.
 - **Temps de calcul**, sur une grande maison inventée (20 pièces, 100 appareils) :
   - la disposition tient **sous 1 s**, en Release ;
   - le placement de 150 noms tient sous 2 ms, en Release.

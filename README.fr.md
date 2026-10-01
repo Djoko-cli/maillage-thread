@@ -37,8 +37,8 @@ Les appareils sont placés d'après le préfixe OMR de leur adresse. Quand deux
 partitions annoncent le même préfixe OMR (vu le 28 septembre : un hub isolé
 avait repris le préfixe de la partition principale), le Mac ne peut pas
 savoir de quel côté est un appareil : l'app donne le préfixe à la partition
-qui a le plus de routeurs de bordure et le marque « partagé » dans le graphe
-et sur la fiche de l'appareil.
+qui a le plus de routeurs de bordure, et la fiche de l'appareil dit sa
+partition « incertaine : préfixe partagé ».
 
 ## Construire, tester, lancer
 
@@ -50,6 +50,7 @@ suivi.
 ```sh
 outils/tester.sh                                   # génère, compile, tous les tests
 outils/tester.sh MaillageCoeurTests/SuiviTests     # une suite
+outils/mesurer.sh                                  # temps de calcul de la vue par pièces, en Release
 ```
 
 Les produits de compilation vont dans `~/Library/Developer/Xcode/DerivedData/maillage`
@@ -57,8 +58,8 @@ Les produits de compilation vont dans `~/Library/Developer/Xcode/DerivedData/mai
 traités comme des erreurs.
 
 Lancer : `Maillage Thread.app` dans `…/DerivedData/maillage/Build/Products/Debug/`.
-L'app vit dans la barre des menus ; le graphe s'ouvre depuis son menu (et de
-lui-même au tout premier lancement).
+L'app vit dans la barre des menus ; la vue par pièces s'ouvre depuis son menu
+(« Ouvrir le graphe », et d'elle-même au tout premier lancement).
 Un gestionnaire de barre des menus (Bartender, Pelmet…) peut masquer son
 icône : les nouvelles icônes arrivent du côté masqué.
 
@@ -67,7 +68,12 @@ icône : les nouvelles icônes arrivent du côté masqué.
 ```sh
 open "…/Maillage Thread.app" --args -demo
 open "…/Maillage Thread.app" --args -demo -selection 86E7BD1A75F28E6D   # fiche ouverte
+open "…/Maillage Thread.app" --args -demo -captures ~/Library/Containers/fr.djoko.maillage/Data/tmp/captures
 ```
+
+Avec `-captures <dossier>`, l'app écrit douze images PNG de la vue par pièces
+(2D, envol, 3D, zooms, pièces isolées, survol), puis quitte, sans fenêtre.
+L'app vit dans un bac à sable : le dossier doit être dans son conteneur.
 
 La démo rejoue la panne du 27 septembre, reconstituée à partir du relevé réel
 du 28 septembre (`docs/releves/2026-09-28/`) : rien n'est écrit, rien n'est
@@ -109,18 +115,68 @@ catalogue vont ensemble.
 
 | Dossier ou fichier | Rôle |
 |---|---|
-| `MaillageCoeur/` | framework sans interface : décodage des TXT, instantané (réseaux, partitions, préfixes, appareils), suivi et événements du journal, journal en fichiers, noms, disposition du graphe, table de routage ; testé sur le relevé réel et sur la panne rejouée |
+| `MaillageCoeur/` | framework sans interface : décodage des TXT, instantané (réseaux, partitions, préfixes, appareils), suivi et événements du journal, journal en fichiers, noms, table de routage ; testé sur le relevé réel et sur la panne rejouée |
+| `MaillageCoeur/Scene/` | vue par pièces, sans interface : nœuds et liens, étages et pièces, cartes, disposition (déterministe, avec budget), places gardées, caméra et envol, placement des noms et zoom sémantique, projection vers le moteur `Canvas` ; optimisé même en Debug |
 | `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, balayage des routeurs muets), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats), journal des parents et des routeurs Thread, historique des tournées et courbes ; testé sur une capture anonymisée |
 | `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, accès par le réseau Thread (`Reseau/` : transport UDP et enveloppe H1 du pont Halo, clé dans le trousseau, rid et renvois), `SondeUSB` (requêtes appariées par id et par cible, chacune avec son échéance), modèle de l'app (sonde retenue par son numéro de série USB, liaison USB ou réseau, une tournée toutes les 5 minutes) |
 | `MaillageThread/Noms/` | noms de Maison : lancement de Passeur Noms, réception de son relevé par la boucle locale (écoute TCP sur 127.0.0.1, jeton à usage unique), derniers noms valides gardés dans le conteneur de l'app |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | modèle de l'app : relevés → suivi → journal et notifications ; veille du Mac ; ouverture à la connexion |
-| `MaillageThread/Vues/` | barre des menus, fenêtre du graphe (Canvas, surcouches en verre), journal, réglages (fenêtre AppKit à onglets : Général, Notifications, Maison, Sonde, Diagnostic ; ⌘,) |
+| `MaillageThread/Vues/` | barre des menus, fenêtre de la vue par pièces (`Pieces/` : moteur `Canvas`, surcouches en verre, captures), journal, réglages (fenêtre AppKit à onglets : Général, Notifications, Maison, Sonde, Diagnostic ; ⌘,) |
 | `Passeur/` | Passeur Noms : app iOS lancée sur le Mac (« conçue pour iPad ») qui lit Maison et envoie ses noms, pièces et zones à l'app par la boucle locale |
 | `sonde/` | firmware de la sonde (ESP32-C6, PlatformIO) et outils d'essai |
 | `outils/anonymiser-sonde.py` | anonymise une capture de la sonde avant d'en faire des données de test |
+| `outils/mesurer.sh` | temps de calcul de la vue par pièces (disposition, placement des noms), en Release |
 | `docs/releves/` | relevés réels (les données des tests et de la démo) |
 | `docs/superpowers/` | conception (spec) et plans d'implémentation |
+
+## Vue par pièces (2D et 3D)
+
+La fenêtre montre le réseau dans la maison : un plateau rond par étage, une
+carte de verre par pièce avec une ligne par appareil, et les vrais liens radio
+par-dessus. Elle reste sombre, comme sa maquette, même quand le Mac est en
+clair. Conception :
+`docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md`.
+
+- **Étages et pièces.** Les étages sont les zones de Maison, dans leur ordre
+  (le premier en bas) ; une pièce dans plusieurs zones va dans la première,
+  les pièces hors zone forment « Autres pièces », et une maison sans zones n'a
+  qu'un plateau « Maison ». Un appareil prend la pièce de son accessoire de
+  Maison ; un routeur de bordure, celle de l'accessoire de Maison qui porte le
+  nom de son annonce. Maison ne donne ni les HomePod ni l'Apple TV : un tel
+  routeur va dans la pièce dont le nom figure dans le sien (« HomePod mini
+  chambre » dans « Chambre » : en mots entiers, sans égard à la casse ni aux
+  accents ; le nom de pièce le plus long gagne, une égalité ne place rien).
+  Pour les autres, sa fiche propose « Placer dans une pièce… » : le choix passe
+  avant le nom, et il est gardé sous le nom de son annonce
+  (`pieces-routeurs.json` dans le dossier de l'app, jamais en démo). Les
+  nœuds qui restent sans pièce vont dans « Sans pièce », sur le plateau du
+  bas. Sans aucune pièce de Maison (Passeur Noms jamais passé), une carte par
+  routeur, avec ses enfants.
+- **2D et 3D** (barre d'outils ; le mode est gardé d'un lancement à l'autre) :
+  la 2D est une vue de dessus, les étages côte à côte ; la 3D les empile dans
+  la sphère de la maison, avec une rotation lente qu'on peut couper. La
+  bascule est un envol de 2,6 s.
+- **Gestes.** Molette ou pincement : zoom, vers le curseur en 2D. Glisser le
+  fond : déplacer la vue en 2D, tourner autour de la maison en 3D. Glisser une
+  pièce : la déplacer dans son étage ; sa place est gardée
+  (`positions-pieces.json` dans le dossier de l'app, jamais en démo). Clic sur
+  une pièce : l'isoler (les autres s'estompent, un repère montre un parent
+  situé ailleurs) ; clic à côté, Échap ou « Maison » dans le fil : revenir.
+  Double-clic sur le fond : retour à la vue d'ensemble, zoom et déplacement
+  annulés. Clic sur un appareil ou sur son nom : sa fiche.
+- **Clics droits** : sur un nom d'étage, « Monter d'un étage » et « Descendre
+  d'un étage » ; sur le fond, « Replacer les pièces automatiquement » (les
+  places gardées partent, pas l'ordre des étages).
+- **Zoom sémantique** : de loin, les pièces seules ; puis les routeurs ; de
+  près, tous les noms qui tiennent. La ligne en bas à gauche dit le niveau, ou
+  combien de noms sont masqués faute de place.
+- « Réduire les animations » (accessibilité de macOS) : l'envol et le retour
+  par double-clic deviennent un fondu, les autres vols de caméra sont
+  immédiats, la rotation lente est coupée.
+- La disposition des pièces est calculée hors du fil principal : quelques
+  centièmes de seconde pour la démo, moins d'une seconde pour 20 pièces et 100
+  appareils (`outils/mesurer.sh`).
 
 ## Noms de Maison (Passeur Noms)
 
@@ -163,12 +219,12 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
   `outils/passeur.sh`. Passeur Noms note au journal pourquoi il
   s'est fermé :
   `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
-- Rafraîchissement : la fenêtre du graphe lance Passeur Noms à son ouverture
-  (si le relevé et la dernière demande ont plus de 15 min), puis toutes les
-  heures ; « Rafraîchir depuis Maison » (menu ou réglages) et le bouton
-  rafraîchir du graphe le font à la demande. Un relevé à la fois : une
-  demande pendant un relevé est ignorée. La fenêtre de Passeur Noms ne fait
-  que passer derrière les autres.
+- Rafraîchissement : la fenêtre de la vue par pièces lance Passeur Noms à son
+  ouverture (si le relevé et la dernière demande ont plus de 15 min), puis
+  toutes les heures ; « Rafraîchir depuis Maison » (menu ou réglages) et le
+  bouton rafraîchir de sa barre le font à la demande. Un relevé à la fois :
+  une demande pendant un relevé est ignorée. La fenêtre de Passeur Noms ne
+  fait que passer derrière les autres.
 - Zones : les zones de Maison (en général les étages) et leurs pièces, dans
   l'ordre de Maison ; Réglages › Maison en liste les noms. Un relevé d'avant
   les zones n'en a pas.
@@ -176,9 +232,9 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
   racine de ce dépôt, par exemple) n'est plus lu : l'effacer (git l'ignore).
 - Batteries : niveau, état de charge et alerte de l'accessoire lui-même, pour
   chaque accessoire de Maison qui a une batterie. La fiche de l'appareil les
-  montre avec l'âge du relevé ; dans le graphe, une pastille orange en
-  surbrillance signale une batterie faible (l'accessoire le dit, ou son niveau
-  est de 20 % ou moins).
+  montre avec l'âge du relevé ; dans la vue, une pastille orange en
+  surbrillance, au bout du nom, signale une batterie faible (l'accessoire le
+  dit, ou son niveau est de 20 % ou moins).
 
 ## Sonde (le vrai maillage)
 
@@ -229,8 +285,8 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   messages sans les chiffrer : la topologie circule en clair sur le réseau
   local. Le Mac doit avoir une route IPv6 vers le préfixe OMR (voir
   « Route vers le réseau Thread » plus bas). « Oublier la sonde » retire la
-  clé de ce Mac, le relevé de la sonde dans les Réglages et son maillage : le
-  graphe revient aussitôt aux pointillés.
+  clé de ce Mac, le relevé de la sonde dans les Réglages et son maillage : la
+  vue revient aussitôt aux pointillés.
   Limites : pas de fin de session (une place de la carte reste prise 30 s,
   la reprise automatique le répare) ; la file de réception de la carte n'a
   que 4 places (un envoi groupé de 8 `diag` peut en voir attendre le renvoi à
@@ -238,12 +294,12 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   la dernière (`"suite":false`) se perd ; détails dans la spec (section
   3 bis).
 - Une tournée toutes les 5 minutes, et au rafraîchissement : le bouton
-  rafraîchir du graphe relit le réseau, lance une tournée (sauf s'il y en a
-  déjà une) et Passeur Noms ; son aide dit lesquels il lancera vraiment.
-  Pendant une tournée, une ligne sous la barre d'outils du graphe (et sous le
+  rafraîchir de la barre d'outils relit le réseau, lance une tournée (sauf
+  s'il y en a déjà une) et Passeur Noms ; son aide dit lesquels il lancera
+  vraiment. Pendant une tournée, une ligne sous la barre d'outils (et sous le
   bandeau d'un réseau scindé) montre son étape, un compteur de requêtes et sa
   durée (« Balayage des routeurs muets · 24/48 · 0:42 ») ; sa place reste
-  gardée au-dessus du graphe tant qu'une sonde est retenue : rien ne bouge au
+  gardée au-dessus de la vue tant qu'une sonde est retenue : rien ne bouge au
   début ni à la fin d'une tournée. Réglages › Sonde et la ligne du menu
   montrent aussi l'étape et le compteur.
 - La liste des routeurs vient du chef ; s'il se tait, d'un routeur qui a déjà
@@ -280,17 +336,17 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   pour un seul), et ces annonces ne sont plus dessinées à part : un seul nœud
   par routeur. Sa fiche liste les candidats ; chacun ouvre la fiche de son
   annonce. Sans sonde, toutes les annonces restent dessinées.
-- Dans le graphe, les traits pleins sont les liens radio, colorés et épaissis
-  par la qualité (vert 3, jaune 2, orange 1, gris inconnue) ; le trait d'un
-  enfant vers son parent reste fin. Les pointillés restent pour ce que la
-  sonde ne voit pas. Les appareils qui routent passent sur l'anneau
-  intérieur, les enfants se rangent près de leur parent. La fiche donne le
-  parent et la qualité, ou le nombre de voisins et d'enfants d'un routeur. Si
-  la sonde ne répond plus, le dernier maillage est marqué ancien 6 minutes
-  après sa réception (jamais pendant une tournée) ; après 15 minutes, le
-  graphe revient aux pointillés. Le graphe se redessine chaque minute : ces
-  deux changements y paraissent avec une minute de retard au plus, sans autre
-  événement, comme le « vu il y a … » et les courbes de la fiche ouverte.
+- Dans la vue par pièces, les traits pleins entre routeurs sont les liens
+  radio (2 points, colorés par la qualité : vert 3, jaune 2, orange 1, gris
+  inconnue) ; le trait d'un enfant vers son parent reste fin. Les pointillés
+  restent pour ce que la sonde ne voit pas. Le chef du maillage porte la
+  couronne. La fiche donne le parent et la qualité, ou le nombre de voisins et
+  d'enfants d'un routeur. Si la sonde ne répond plus, le dernier maillage est
+  marqué ancien 6 minutes après sa réception (jamais pendant une tournée) ;
+  après 15 minutes, la vue revient aux pointillés. La vue se redessine chaque
+  minute : ces deux changements y paraissent avec une minute de retard au
+  plus, sans autre événement, comme le « vu il y a … » et les courbes de la
+  fiche ouverte.
 - Éteindre « Sonde maillage » dans Maison suspend la sonde : pas de tournée,
   même après un redémarrage de la sonde. Sa LED donne alors un bref éclair
   orange toutes les 5 s (firmware 1.0.3). Après un `oubli`, la commande USB
