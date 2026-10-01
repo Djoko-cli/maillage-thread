@@ -1,0 +1,119 @@
+<style>
+  .fen { position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden;
+         background: radial-gradient(circle at 30% 35%, rgb(31,59,138) 0%, rgb(15,23,41) 45%, rgb(3,5,23) 100%);
+         box-shadow: 0 10px 30px rgba(0,0,0,.35); font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+  .feux { position: absolute; top: 11px; left: 12px; display: flex; gap: 7px; z-index: 3; }
+  .feux i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .feux i:nth-child(1) { background: #ff5f57; } .feux i:nth-child(2) { background: #febc2e; } .feux i:nth-child(3) { background: #28c840; }
+  .verre { position: absolute; z-index: 2; background: rgba(40,48,72,.38); backdrop-filter: blur(14px) saturate(160%);
+           -webkit-backdrop-filter: blur(14px) saturate(160%); border: .5px solid rgba(255,255,255,.22);
+           box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 6px 18px rgba(0,0,0,.35); border-radius: 16px; padding: 6px; }
+  .ligne { display: flex; gap: 5px; align-items: center; }
+  .ligne + .ligne { margin-top: 5px; }
+  .b { color: rgba(255,255,255,.92); font-size: 11px; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.10);
+       border: .5px solid rgba(255,255,255,.16); white-space: nowrap; }
+  .seg { display: inline-flex; border-radius: 999px; background: rgba(255,255,255,.08); border: .5px solid rgba(255,255,255,.16); }
+  .seg span { font-size: 11px; color: rgba(255,255,255,.8); padding: 3px 10px; border-radius: 999px; }
+  .seg span.on { background: rgba(255,255,255,.28); color: #fff; }
+  .pilule { position: absolute; z-index: 2; font-size: 10px; color: rgba(255,255,255,.75); padding: 3px 10px; border-radius: 999px;
+            background: rgba(40,48,72,.32); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: .5px solid rgba(255,255,255,.16); }
+  .plateau { position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(59,130,246,.26), rgba(59,130,246,.08));
+             border: 1px solid rgba(59,130,246,.45); }
+  .carte { position: absolute; border-radius: 6px; background: rgba(14,22,48,.78); border: 1px solid rgba(255,255,255,.18); }
+  .point { position: absolute; width: 7px; height: 7px; border-radius: 50%; }
+  .vert { background: rgb(74,222,128); } .bleu { background: rgb(97,166,250); width: 10px; height: 10px; }
+  .legende { position: absolute; left: 12px; bottom: 12px; z-index: 2; font-size: 10px; color: rgba(255,255,255,.85);
+             padding: 4px 10px; border-radius: 10px; background: rgba(5,8,22,.82); border: .5px solid rgba(255,255,255,.18); }
+  .niveau { position: absolute; left: 108px; bottom: 16px; z-index: 2; font-size: 10px; color: rgba(255,255,255,.65); }
+  .note { font-size: 12px; color: var(--text-secondary, #666); margin-top: 6px; }
+</style>
+
+<h2>Où poser le bandeau Liquid Glass ?</h2>
+<p class="subtitle">La fenêtre perd sa barre de titre classique : la scène monte jusqu'en haut, les trois boutons rouge, jaune et vert restent posés dessus. Le bandeau en verre prend juste la place de ses deux lignes. Noms inventés.</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="fen">
+        <div class="feux"><i></i><i></i><i></i></div>
+        <div class="verre" style="top: 10px; left: 50%; transform: translateX(-50%);">
+          <div class="ligne"><span class="b">Réseau démo ▾</span><span class="b">Appareils IP · 12</span><span class="b">Journal</span><span class="b">⟳</span></div>
+          <div class="ligne" style="justify-content: center;"><span class="seg"><span>2D</span><span class="on">3D</span></span><span class="b">Rotation lente</span></div>
+        </div>
+        <div class="pilule" style="top: 84px; left: 50%; transform: translateX(-50%);">Tournée de la sonde : il y a 2 min</div>
+        <div class="plateau" style="left: 14%; top: 42%; width: 32%; height: 34%;"></div>
+        <div class="plateau" style="left: 54%; top: 40%; width: 34%; height: 36%;"></div>
+        <div class="carte" style="left: 20%; top: 50%; width: 9%; height: 11%;"></div>
+        <div class="carte" style="left: 32%; top: 55%; width: 8%; height: 10%;"></div>
+        <div class="carte" style="left: 61%; top: 48%; width: 10%; height: 12%;"></div>
+        <div class="carte" style="left: 74%; top: 56%; width: 8%; height: 10%;"></div>
+        <div class="point bleu" style="left: 24%; top: 54%;"></div><div class="point vert" style="left: 35%; top: 58%;"></div>
+        <div class="point bleu" style="left: 65%; top: 52%;"></div><div class="point vert" style="left: 77%; top: 59%;"></div>
+        <div class="legende">Légende ⌄</div>
+        <div class="niveau">Vue d'ensemble : les pièces</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Une capsule, au centre en haut</h3>
+      <p>Les deux lignes sont centrées. Il reste un dégagement symétrique de chaque côté, et les feux restent seuls à gauche.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="fen">
+        <div class="feux"><i></i><i></i><i></i></div>
+        <div class="verre" style="top: 8px; left: 72px;">
+          <div class="ligne"><span class="b">Réseau démo ▾</span><span class="b">Appareils IP · 12</span><span class="b">Journal</span><span class="b">⟳</span></div>
+          <div class="ligne"><span class="seg"><span>2D</span><span class="on">3D</span></span><span class="b">Rotation lente</span></div>
+        </div>
+        <div class="pilule" style="top: 84px; left: 72px;">Tournée de la sonde : il y a 2 min</div>
+        <div class="plateau" style="left: 14%; top: 42%; width: 32%; height: 34%;"></div>
+        <div class="plateau" style="left: 54%; top: 40%; width: 34%; height: 36%;"></div>
+        <div class="carte" style="left: 20%; top: 50%; width: 9%; height: 11%;"></div>
+        <div class="carte" style="left: 32%; top: 55%; width: 8%; height: 10%;"></div>
+        <div class="carte" style="left: 61%; top: 48%; width: 10%; height: 12%;"></div>
+        <div class="carte" style="left: 74%; top: 56%; width: 8%; height: 10%;"></div>
+        <div class="point bleu" style="left: 24%; top: 54%;"></div><div class="point vert" style="left: 35%; top: 58%;"></div>
+        <div class="point bleu" style="left: 65%; top: 52%;"></div><div class="point vert" style="left: 77%; top: 59%;"></div>
+        <div class="legende">Légende ⌄</div>
+        <div class="niveau">Vue d'ensemble : les pièces</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Une capsule, en haut à gauche, à côté des feux</h3>
+      <p>Comme une barre d'outils de Plans ou de Freeform. Tout se lit en partant du coin, et la droite de la fenêtre reste libre pour la scène.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="fen">
+        <div class="feux"><i></i><i></i><i></i></div>
+        <div class="verre" style="top: 8px; left: 72px; border-radius: 999px; padding: 5px;">
+          <div class="ligne"><span class="b">Réseau démo ▾</span><span class="b">Appareils IP · 12</span><span class="b">Journal</span><span class="b">⟳</span></div>
+        </div>
+        <div class="verre" style="top: 8px; right: 12px; border-radius: 999px; padding: 5px;">
+          <div class="ligne"><span class="seg"><span>2D</span><span class="on">3D</span></span><span class="b">Rotation lente</span></div>
+        </div>
+        <div class="pilule" style="top: 48px; left: 72px;">Tournée de la sonde : il y a 2 min</div>
+        <div class="plateau" style="left: 14%; top: 38%; width: 32%; height: 36%;"></div>
+        <div class="plateau" style="left: 54%; top: 36%; width: 34%; height: 38%;"></div>
+        <div class="carte" style="left: 20%; top: 47%; width: 9%; height: 11%;"></div>
+        <div class="carte" style="left: 32%; top: 52%; width: 8%; height: 10%;"></div>
+        <div class="carte" style="left: 61%; top: 45%; width: 10%; height: 12%;"></div>
+        <div class="carte" style="left: 74%; top: 53%; width: 8%; height: 10%;"></div>
+        <div class="point bleu" style="left: 24%; top: 51%;"></div><div class="point vert" style="left: 35%; top: 55%;"></div>
+        <div class="point bleu" style="left: 65%; top: 49%;"></div><div class="point vert" style="left: 77%; top: 56%;"></div>
+        <div class="legende">Légende ⌄</div>
+        <div class="niveau">Vue d'ensemble : les pièces</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Deux capsules sur une seule ligne</h3>
+      <p>Le réseau à gauche, la vue (2D/3D, rotation) à droite. La scène gagne une ligne de hauteur, mais ce sont deux bandeaux au lieu d'un.</p>
+    </div>
+  </div>
+</div>
+
+<p class="note">Dans les trois cas, la ligne de la tournée (et le bandeau de scission s'il y a deux partitions) se pose juste sous le bandeau, en plus petit. La scène est un croquis : seule la place du bandeau compte ici.</p>

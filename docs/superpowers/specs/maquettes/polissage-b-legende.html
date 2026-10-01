@@ -1,0 +1,119 @@
+<style>
+  .scene { border-radius: 12px; padding: 18px; min-height: 360px; position: relative;
+           background: radial-gradient(circle at 30% 35%, rgb(31,59,138) 0%, rgb(15,23,41) 45%, rgb(3,5,23) 100%);
+           font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; display: flex; align-items: flex-end; }
+  .leg { background: rgba(15,23,41,.92); border: .5px solid rgba(255,255,255,.18); border-radius: 10px; padding: 9px 12px 11px;
+         color: rgba(255,255,255,.88); font-size: 11px; width: 100%; max-width: 440px; }
+  .tete { display: flex; justify-content: space-between; font-weight: 600; font-size: 11.5px; margin-bottom: 7px; }
+  .grille { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 18px; }
+  .groupe h5 { margin: 0 0 4px; font-size: 10px; font-weight: 600; color: rgb(148,163,190); letter-spacing: .02em; }
+  .e { display: flex; align-items: center; gap: 7px; margin: 3px 0; white-space: nowrap; }
+  .p { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .anneau { width: 9px; height: 9px; border-radius: 50%; border: 1.6px solid rgb(247,112,112); box-sizing: border-box; flex: none; }
+  .trait { width: 22px; flex: none; border-radius: 2px; }
+  .pile { font-size: 9px; font-weight: 700; padding: 0 4px; border-radius: 4px; background: rgb(255,158,26); color: rgb(64,31,0); }
+  .zone { width: 14px; height: 9px; border-radius: 50%; border: 1px solid rgba(59,130,246,.8); background: rgba(59,130,246,.15); flex: none; }
+  .cand { font-size: 10px; padding: 0 5px; border-radius: 4px; background: rgba(6,10,26,.72); }
+  .ailleurs { font-size: 10px; padding: 0 5px; border-radius: 4px; background: rgba(6,10,26,.78); color: rgba(255,255,255,.8); }
+  .tag { font-size: 8.5px; font-weight: 700; padding: 0 4px; border-radius: 3px; margin-left: 4px; }
+  .chg { background: rgb(250,204,51); color: #2a2000; } .new { background: rgb(74,222,128); color: #032; } .del { background: rgb(247,112,112); color: #300; }
+  .barre { text-decoration: line-through; opacity: .55; }
+  .replie { display: inline-flex; gap: 8px; align-items: center; background: rgba(15,23,41,.92); border: .5px solid rgba(255,255,255,.18);
+            border-radius: 10px; padding: 6px 12px; color: rgba(255,255,255,.88); font-size: 11.5px; font-weight: 600; }
+  .note { font-size: 12px; color: var(--text-secondary, #666); margin-top: 8px; }
+</style>
+
+<h2>La légende A, adaptée à la vue par pièces</h2>
+<p class="subtitle">À gauche, la maquette A que tu as choisie le 30/09, pour l'ancien graphe. À droite, la même, avec seulement ce que la vue par pièces dessine autrement. Les étiquettes disent ce qui change. Elle reste en bas à gauche, repliable, et ne montre que ce qui est à l'écran.</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Original (30/09) : ancien graphe</div>
+    <div class="mockup-body" style="padding:0">
+      <div class="scene">
+        <div class="leg">
+          <div class="tete"><span>Légende</span><span>⌃</span></div>
+          <div class="grille">
+            <div class="groupe"><h5>Routeurs</h5>
+              <div class="e"><span class="p" style="background:rgb(97,166,250)"></span>routeur</div>
+              <div class="e"><span class="p" style="background:rgb(158,158,158)"></span>non identifié</div>
+              <div class="e"><span class="p" style="background:rgb(250,191,36)"></span>autre partition</div>
+              <div class="e">👑 chef</div>
+            </div>
+            <div class="groupe"><h5>Appareils</h5>
+              <div class="e"><span class="p" style="background:rgb(74,222,128)"></span>joignable</div>
+              <div class="e"><span class="p" style="background:rgb(255,159,10)"></span>partition coupée</div>
+              <div class="e"><span class="p" style="background:rgb(247,112,112)"></span>sans adresse</div>
+              <div class="e"><span class="anneau"></span>disparu</div>
+              <div class="e">☾ endormi</div>
+              <div class="e"><span class="pile">12 %</span>pile</div>
+            </div>
+            <div class="groupe"><h5>Liens (qualité)</h5>
+              <div class="e"><span class="trait" style="height:3px;background:rgb(74,222,128)"></span>3</div>
+              <div class="e"><span class="trait" style="height:2.2px;background:rgb(250,204,51)"></span>2</div>
+              <div class="e"><span class="trait" style="height:1.4px;background:rgb(255,159,10)"></span>1</div>
+              <div class="e"><span class="trait" style="height:1.4px;background:rgb(153,153,153)"></span>inconnue</div>
+            </div>
+            <div class="groupe"><h5>Autres</h5>
+              <div class="e"><span class="trait" style="height:0;border-top:1.2px dashed rgba(255,255,255,.7)"></span>rattachement supposé</div>
+              <div class="e"><span class="zone"></span>partition</div>
+              <div class="e"><span class="cand">A ou B · 0400</span>candidats</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Adaptée : vue par pièces</div>
+    <div class="mockup-body" style="padding:0">
+      <div class="scene">
+        <div class="leg">
+          <div class="tete"><span>Légende</span><span>⌃</span></div>
+          <div class="grille">
+            <div class="groupe"><h5>Routeurs</h5>
+              <div class="e"><span class="p" style="background:rgb(97,166,250)"></span>routeur</div>
+              <div class="e"><span class="p" style="background:rgb(158,158,158)"></span>non identifié</div>
+              <div class="e"><span class="p" style="background:rgb(250,191,36)"></span>autre partition</div>
+              <div class="e">👑 chef du réseau Thread, élu automatiquement<span class="tag chg">texte</span></div>
+            </div>
+            <div class="groupe"><h5>Appareils</h5>
+              <div class="e"><span class="p" style="background:rgb(74,222,128)"></span>joignable</div>
+              <div class="e"><span class="p" style="background:rgb(255,159,10)"></span>partition coupée</div>
+              <div class="e"><span class="p" style="background:rgb(247,112,112)"></span>sans adresse</div>
+              <div class="e"><span class="anneau"></span>disparu</div>
+              <div class="e">☾ endormi</div>
+              <div class="e"><span class="pile">12 %</span>pile</div>
+            </div>
+            <div class="groupe"><h5>Liens radio (qualité)</h5>
+              <div class="e"><span class="trait" style="height:2px;background:rgb(74,222,128)"></span>bonne<span class="tag chg">2 pt</span></div>
+              <div class="e"><span class="trait" style="height:2px;background:rgb(250,204,51)"></span>moyenne</div>
+              <div class="e"><span class="trait" style="height:2px;background:rgb(255,159,10)"></span>faible</div>
+              <div class="e"><span class="trait" style="height:2px;background:rgb(153,153,153)"></span>inconnue</div>
+            </div>
+            <div class="groupe"><h5>Autres</h5>
+              <div class="e"><span class="trait" style="height:1px;background:rgba(255,255,255,.28)"></span>vers son parent<span class="tag new">nouveau</span></div>
+              <div class="e"><span class="trait" style="height:0;border-top:1.2px dashed rgba(255,255,255,.7)"></span>rattachement supposé</div>
+              <div class="e"><span class="ailleurs">→ Salon</span>parent dans une autre pièce<span class="tag new">nouveau</span></div>
+              <div class="e"><span class="cand">A ou B · 0400</span>candidats</div>
+              <div class="e barre"><span class="zone"></span>partition<span class="tag del">retiré</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:14px; display:flex; gap:14px; align-items:center;">
+  <span class="replie">Légende <span>⌄</span></span>
+  <span class="note" style="margin:0">Repliée : il ne reste que l'étiquette. Son état est gardé.</span>
+</div>
+
+<p class="note">Ce qui change, et pourquoi :<br>
+• <b>liens radio</b> : la vue par pièces les trace tous en 2 pt (choix du 30/09), seule la couleur dit la qualité. Je mets des mots (bonne, moyenne, faible) au lieu des chiffres 3, 2, 1 : dis-moi si tu préfères les chiffres ;<br>
+• <b>partition</b> (cercle de zone) : retiré, la vue par pièces ne dessine plus de cercles de partition ; l'ambre des routeurs dit déjà « autre partition » ;<br>
+• <b>vers son parent</b> et <b>parent dans une autre pièce</b> : deux choses que la vue par pièces dessine et que l'ancien graphe n'avait pas ;<br>
+• <b>couronne</b> : le texte validé le 01/10.<br>
+Le reste est identique : couleurs, groupes, place, repli, entrées contextuelles.</p>

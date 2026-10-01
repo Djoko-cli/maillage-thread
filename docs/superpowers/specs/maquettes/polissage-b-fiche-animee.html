@@ -1,0 +1,105 @@
+<style>
+  .fen { position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden;
+         background: radial-gradient(circle at 30% 35%, rgb(31,59,138) 0%, rgb(15,23,41) 45%, rgb(3,5,23) 100%);
+         font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+  .scene { position: absolute; left: 0; right: 0; top: 0; height: 100%; }
+  .plateau { position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(59,130,246,.26), rgba(59,130,246,.08)); border: 1px solid rgba(59,130,246,.45); }
+  .carte { position: absolute; border-radius: 6px; background: rgba(14,22,48,.78); border: 1px solid rgba(255,255,255,.18); }
+  .point { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: rgb(97,166,250); }
+  .sel { box-shadow: 0 0 0 3px rgba(255,255,255,.85); }
+  .fiche { position: absolute; left: 4%; right: 4%; bottom: 4%; height: 38%; border-radius: 18px; z-index: 2;
+           background: rgba(40,48,72,.40); backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%);
+           border: .5px solid rgba(255,255,255,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 8px 24px rgba(0,0,0,.4);
+           color: rgba(255,255,255,.92); font-size: 11px; padding: 12px 14px; box-sizing: border-box; }
+  .fiche h4 { margin: 0 0 3px; font-size: 13.5px; font-weight: 600; }
+  .gris { color: rgba(255,255,255,.6); }
+  .chef { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(250,204,51,.16);
+          border: .5px solid rgba(250,204,51,.5); color: rgb(253,224,120); font-size: 10.5px; }
+  .x { position: absolute; top: 10px; right: 12px; font-size: 10px; padding: 2px 7px; border-radius: 999px; background: rgba(255,255,255,.12); }
+  /* A : glisse depuis le bas, avec fondu ; la scene se releve */
+  @keyframes ficheA { 0%, 12% { transform: translateY(110%); opacity: 0; } 32%, 82% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(110%); opacity: 0; } }
+  @keyframes sceneA { 0%, 12% { transform: translateY(0); } 32%, 82% { transform: translateY(-14%); } 100% { transform: translateY(0); } }
+  .a .fiche { animation: ficheA 4s cubic-bezier(.2,.8,.2,1) infinite; }
+  .a .scene { animation: sceneA 4s cubic-bezier(.2,.8,.2,1) infinite; }
+  /* B : fondu et leger agrandissement */
+  @keyframes ficheB { 0%, 12% { transform: scale(.94); opacity: 0; } 26%, 82% { transform: scale(1); opacity: 1; } 96%, 100% { transform: scale(.94); opacity: 0; } }
+  @keyframes sceneB { 0%, 12% { transform: translateY(0); } 26%, 82% { transform: translateY(-14%); } 96%, 100% { transform: translateY(0); } }
+  .b .fiche { animation: ficheB 4s ease-out infinite; transform-origin: 50% 100%; }
+  .b .scene { animation: sceneB 4s ease-out infinite; }
+  /* C : sort du noeud clique */
+  @keyframes ficheC { 0%, 12% { clip-path: circle(0% at 27% -60%); opacity: .6; } 34%, 82% { clip-path: circle(150% at 27% -60%); opacity: 1; } 100% { clip-path: circle(0% at 27% -60%); opacity: .6; } }
+  @keyframes sceneC { 0%, 12% { transform: translateY(0); } 34%, 82% { transform: translateY(-14%); } 100% { transform: translateY(0); } }
+  .c .fiche { animation: ficheC 4s cubic-bezier(.2,.8,.2,1) infinite; }
+  .c .scene { animation: sceneC 4s cubic-bezier(.2,.8,.2,1) infinite; }
+  .note { font-size: 12px; color: var(--text-secondary, #666); margin-top: 8px; }
+</style>
+
+<h2>Comment la fiche apparaît-elle ?</h2>
+<p class="subtitle">Aujourd'hui elle apparaît d'un coup. Trois façons de l'animer (environ 0,3 s ; ici ralenties et rejouées en boucle). La vue se relève en même temps pour lui laisser la place, comme aujourd'hui. La fiche montre aussi la nouvelle ligne du chef. Noms inventés.</p>
+
+<div class="cards">
+  <div class="card a" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="fen">
+        <div class="scene">
+          <div class="plateau" style="left: 10%; top: 18%; width: 36%; height: 44%;"></div>
+          <div class="plateau" style="left: 54%; top: 16%; width: 36%; height: 46%;"></div>
+          <div class="carte" style="left: 17%; top: 28%; width: 11%; height: 13%;"></div>
+          <div class="carte" style="left: 62%; top: 27%; width: 12%; height: 14%;"></div>
+          <div class="point sel" style="left: 26%; top: 34%;"></div>
+          <div class="point" style="left: 70%; top: 33%;"></div>
+        </div>
+        <div class="fiche"><span class="x">✕</span>
+          <h4>Prise du salon</h4><div class="gris">Fabricant · Modèle · Thread 1.4</div>
+          <div class="chef">👑 Chef du réseau Thread, élu automatiquement</div>
+          <div class="gris" style="margin-top:6px">RLOC16 6000 · voisins : 6 · enfants : 3</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>A · Elle glisse depuis le bas</h3><p>Avec un fondu, comme une feuille qui monte. Elle repart vers le bas en se fermant. (Ma préférence : on comprend d'où elle vient.)</p></div>
+  </div>
+
+  <div class="card b" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="fen">
+        <div class="scene">
+          <div class="plateau" style="left: 10%; top: 18%; width: 36%; height: 44%;"></div>
+          <div class="plateau" style="left: 54%; top: 16%; width: 36%; height: 46%;"></div>
+          <div class="carte" style="left: 17%; top: 28%; width: 11%; height: 13%;"></div>
+          <div class="carte" style="left: 62%; top: 27%; width: 12%; height: 14%;"></div>
+          <div class="point sel" style="left: 26%; top: 34%;"></div>
+          <div class="point" style="left: 70%; top: 33%;"></div>
+        </div>
+        <div class="fiche"><span class="x">✕</span>
+          <h4>Prise du salon</h4><div class="gris">Fabricant · Modèle · Thread 1.4</div>
+          <div class="chef">👑 Chef du réseau Thread, élu automatiquement</div>
+          <div class="gris" style="margin-top:6px">RLOC16 6000 · voisins : 6 · enfants : 3</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>B · Elle apparaît en fondu</h3><p>Avec un léger agrandissement depuis le bas. Plus discret, sans mouvement de feuille.</p></div>
+  </div>
+
+  <div class="card c" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="fen">
+        <div class="scene">
+          <div class="plateau" style="left: 10%; top: 18%; width: 36%; height: 44%;"></div>
+          <div class="plateau" style="left: 54%; top: 16%; width: 36%; height: 46%;"></div>
+          <div class="carte" style="left: 17%; top: 28%; width: 11%; height: 13%;"></div>
+          <div class="carte" style="left: 62%; top: 27%; width: 12%; height: 14%;"></div>
+          <div class="point sel" style="left: 26%; top: 34%;"></div>
+          <div class="point" style="left: 70%; top: 33%;"></div>
+        </div>
+        <div class="fiche"><span class="x">✕</span>
+          <h4>Prise du salon</h4><div class="gris">Fabricant · Modèle · Thread 1.4</div>
+          <div class="chef">👑 Chef du réseau Thread, élu automatiquement</div>
+          <div class="gris" style="margin-top:6px">RLOC16 6000 · voisins : 6 · enfants : 3</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>C · Elle sort du nœud cliqué</h3><p>Elle se déploie depuis l'appareil choisi. Le lien est très visible, mais l'effet est plus démonstratif à chaque clic.</p></div>
+  </div>
+</div>
+
+<p class="note">Avec « Réduire les animations », la fiche apparaît par un simple fondu, dans les trois cas. La même animation servirait aux bandeaux du haut qui apparaissent (scission, « pas encore de pièces »). La ligne du chef est une pastille sous le nom, sur la fiche du routeur couronné, qu'il soit routeur de bordure ou routeur vu par la sonde.</p>
