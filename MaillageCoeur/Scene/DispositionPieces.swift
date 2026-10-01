@@ -1,0 +1,381 @@
+import Foundation
+
+/// Disposition des pieces dans leurs etages (spec de la vue par pieces, section 4.3) : cartes
+/// espacees, tassees de facon organique, puis placees pour que les liens evitent les autres pieces
+/// et se croisent peu. Deterministe : memes entrees, meme disposition, sur toutes les machines (le
+/// budget compte des coups, pas du temps). Calcul hors du fil principal : il peut prendre une
+/// fraction de seconde.
+public struct DispositionPieces: Hashable, Sendable {
+    /// Ecart entre cartes, bande du nom au-dessus d'une carte, marge du plateau, ecart entre plateaux
+    /// en 2D (unites).
+    public static let gap = 80 / CartesPieces.px
+    public static let lab = 28 / CartesPieces.px
+    public static let marge = 56 / CartesPieces.px
+    public static let esp = 140 / CartesPieces.px
+    /// Coups evalues au plus par calcul, tous departs compris.
+    public static let budget = 3000
+    public static let departs = 6
+    public static let toursMax = 25
+
+    /// Centre de chaque piece (x, z) par rapport au centre de son plateau, en unites.
+    public var positions: [SIMD2<Double>]
+    /// Rayon de chaque plateau, dans l'ordre des etages.
+    public var rayons: [Double]
+    /// Cout du premier depart, apres son tassement ; cout de la disposition retenue.
+    public var coutDepart: Double
+    public var cout: Double
+    /// Coups evalues.
+    public var coups: Int
+
+    /// `fixees` : places gardees des pieces deplacees (indice de piece -> position) ; elles ne bougent
+    /// pas et servent d'obstacles.
+    public init(scene: ScenePieces, cartes: [CartesPieces.Carte], fixees: [Int: SIMD2<Double>] = [:],
+                budget: Int = DispositionPieces.budget) {
+        let calcul = Calcul(scene: scene, cartes: cartes, fixees: fixees)
+        let n = scene.pieces.count
+        guard n > 0, calcul.fixe.contains(false) else {
+            let pos = (0..<n).map { fixees[$0] ?? .zero }
+            positions = pos
+            rayons = (0..<calcul.nbEtages).map { calcul.rayon(pos, $0) }
+            coutDepart = calcul.cout(pos)
+            cout = coutDepart
+            coups = 0
+            return
+        }
+        var joues = 0
+        var retenu: [SIMD2<Double>] = []
+        var coutRetenu = Double.infinity
+        var depart = 0.0
+        var epuise = false
+        for essai in 0..<Self.departs where !epuise {
+            var pos = calcul.depart(essai, fixees: fixees)
+            for e in 0..<calcul.nbEtages { calcul.tasser(&pos, e, tours: 900, facteur: 0.996) }
+            var courant = pos
+            var c = calcul.cout(courant)
+            if essai == 0 { depart = c }
+            for _ in 0..<Self.toursMax {
+                var mieux: [SIMD2<Double>]?
+                var cm = c
+                for e in 0..<calcul.nbEtages where !epuise {
+                    for coup in calcul.coups(e) {
+                        guard joues < budget else {
+                            epuise = true
+                            break
+                        }
+                        joues += 1
+                        var p = courant
+                        calcul.jouer(coup, &p, etage: e)
+                        calcul.tasser(&p, e, tours: 200, facteur: 0.998)
+                        let cc = calcul.cout(p)
+                        if cc < cm - 1e-6 {
+                            cm = cc
+                            mieux = p
+                        }
+                    }
+                }
+                if let m = mieux {
+                    courant = m
+                    c = cm
+                }
+                if epuise || mieux == nil { break }
+            }
+            if c < coutRetenu {
+                coutRetenu = c
+                retenu = courant
+            }
+        }
+        positions = retenu
+        rayons = (0..<calcul.nbEtages).map { calcul.rayon(retenu, $0) }
+        coutDepart = depart
+        cout = coutRetenu
+        coups = joues
+    }
+
+    /// Centre x de chaque plateau en 2D : cote a cote, `esp` entre les bords de deux voisins, la
+    /// rangee centree sur x = 0.
+    public static func centres2D(rayons: [Double]) -> [Double] {
+        guard let r0 = rayons.first, let rn = rayons.last else { return [] }
+        var x = [0.0]
+        for i in rayons.indices.dropFirst() { x.append(x[i - 1] + rayons[i - 1] + esp + rayons[i]) }
+        let milieu = ((x[0] - r0) + (x[x.count - 1] + rn)) / 2
+        return x.map { $0 - milieu }
+    }
+
+    /// Longueur d'un segment a l'interieur d'un rectangle (decoupage de Liang et Barsky).
+    static func dedans(_ p: SIMD2<Double>, _ q: SIMD2<Double>, _ r: Rect) -> Double {
+        if max(p.x, q.x) <= r.x0 || min(p.x, q.x) >= r.x1 || max(p.y, q.y) <= r.z0 || min(p.y, q.y) >= r.z1 { return 0 }
+        var t0 = 0.0
+        var t1 = 1.0
+        let d = q - p
+        // Une borne du rectangle : faux si le segment est tout entier dehors.
+        func borne(_ pp: Double, _ qq: Double) -> Bool {
+            if pp == 0 { return qq >= 0 }
+            let u = qq / pp
+            if pp < 0 {
+                if u > t1 { return false }
+                if u > t0 { t0 = u }
+            } else {
+                if u < t0 { return false }
+                if u < t1 { t1 = u }
+            }
+            return true
+        }
+        guard borne(-d.x, p.x - r.x0), borne(d.x, r.x1 - p.x), borne(-d.y, p.y - r.z0), borne(d.y, r.z1 - p.y) else {
+            return 0
+        }
+        return t1 > t0 ? (t1 - t0) * (d.x * d.x + d.y * d.y).squareRoot() : 0
+    }
+
+    static func sens(_ a: SIMD2<Double>, _ b: SIMD2<Double>, _ c: SIMD2<Double>) -> Double {
+        let v = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+        return v > 0 ? 1 : v < 0 ? -1 : 0
+    }
+
+    /// Deux segments se coupent (strictement).
+    static func croise(_ p: SIMD2<Double>, _ q: SIMD2<Double>, _ r: SIMD2<Double>, _ w: SIMD2<Double>) -> Bool {
+        sens(p, q, r) * sens(p, q, w) < 0 && sens(r, w, p) * sens(r, w, q) < 0
+    }
+
+    /// Rectangle d'une carte en 2D, bande du nom comprise (au-dessus : vers -z).
+    struct Rect {
+        var x0, x1, z0, z1: Double
+    }
+
+    /// Donnees du calcul : tailles des cartes, etages, liens entre noeuds places dans leurs cartes.
+    struct Calcul {
+        enum Coup {
+            case symetrie(Int)
+            case echange(Int, Int)
+        }
+
+        struct Lien {
+            var pa, pb: Int
+            var la, lb: SIMD2<Double>
+            var na, nb: Int
+        }
+
+        let w: [Double]
+        let d: [Double]
+        let etage: [Int]
+        let nbEtages: Int
+        /// Pieces de chaque etage, par aire decroissante.
+        let parEtage: [[Int]]
+        let fixe: [Bool]
+        let lie: [[Bool]]
+        let liens: [Lien]
+
+        init(scene: ScenePieces, cartes: [CartesPieces.Carte], fixees: [Int: SIMD2<Double>]) {
+            let n = scene.pieces.count
+            let largeurs = cartes.map(\.largeur), profondeurs = cartes.map(\.profondeur)
+            let aire = (0..<n).map { largeurs[$0] * profondeurs[$0] }
+            w = largeurs
+            d = profondeurs
+            etage = scene.pieces.map(\.etage)
+            nbEtages = scene.etages.count
+            fixe = (0..<n).map { fixees[$0] != nil }
+            parEtage = scene.etages.map { e in e.pieces.sorted { (-aire[$0], $0) < (-aire[$1], $1) } }
+            // Place de chaque noeud dans sa carte.
+            var place: [String: (piece: Int, local: SIMD2<Double>, indice: Int)] = [:]
+            for (i, p) in scene.pieces.enumerated() {
+                for (k, id) in p.noeuds.enumerated() {
+                    place[id] = (i, k < cartes[i].places.count ? cartes[i].places[k] : .zero, scene.indice(id) ?? 0)
+                }
+            }
+            var liens: [Lien] = []
+            var lie = [[Bool]](repeating: [Bool](repeating: false, count: n), count: n)
+            for l in scene.liens {
+                guard let a = place[l.de], let b = place[l.vers] else { continue }
+                liens.append(Lien(pa: a.piece, pb: b.piece, la: a.local, lb: b.local, na: a.indice, nb: b.indice))
+                if a.piece != b.piece {
+                    lie[a.piece][b.piece] = true
+                    lie[b.piece][a.piece] = true
+                }
+            }
+            self.liens = liens
+            self.lie = lie
+        }
+
+        /// Depart `essai` : les cartes libres de chaque etage, par aire decroissante, sur une spirale
+        /// (angle phase + i 2,39996, rayon racine(i + 0,5) 6, phase = essai 1,047) ; les fixees a leur place.
+        func depart(_ essai: Int, fixees: [Int: SIMD2<Double>]) -> [SIMD2<Double>] {
+            var pos = [SIMD2<Double>](repeating: .zero, count: w.count)
+            for liste in parEtage {
+                var i = 0
+                for p in liste {
+                    if let f = fixees[p] {
+                        pos[p] = f
+                        continue
+                    }
+                    let a = Double(essai) * 1.047 + Double(i) * 2.39996
+                    let r = (Double(i) + 0.5).squareRoot() * 6
+                    pos[p] = SIMD2(cos(a) * r, sin(a) * r)
+                    i += 1
+                }
+            }
+            return pos
+        }
+
+        /// Ecarte deux cartes qui se recouvrent (ecarts `gap` et `lab` compris) sur l'axe ou la
+        /// penetration est la plus faible, de moitie chacune (toute pour une carte libre face a une
+        /// fixee) ; rapproche de 0,3 % de leur ecart deux cartes reliees par un lien.
+        func separer(_ pos: inout [SIMD2<Double>], _ e: Int, attirer: Bool) {
+            let liste = parEtage[e]
+            for i in liste.indices {
+                for j in liste.indices where j > i {
+                    let a = liste[i], b = liste[j]
+                    if fixe[a] && fixe[b] { continue }
+                    let dx = pos[b].x - pos[a].x, dz = pos[b].y - pos[a].y
+                    let px = (w[a] + w[b]) / 2 + gap - abs(dx)
+                    let pz = (d[a] + d[b]) / 2 + gap + lab - abs(dz)
+                    let fa = fixe[a] ? 0.0 : fixe[b] ? 1.0 : 0.5
+                    let fb = 1 - fa
+                    if px > 0 && pz > 0 {
+                        if px < pz {
+                            let m = (dx < 0 ? -1.0 : 1.0) * px
+                            pos[a].x -= m * fa
+                            pos[b].x += m * fb
+                        } else {
+                            let m = (dz < 0 ? -1.0 : 1.0) * pz
+                            pos[a].y -= m * fa
+                            pos[b].y += m * fb
+                        }
+                    } else if attirer && lie[a][b] {
+                        let v = SIMD2(dx, dz) * 0.003
+                        if !fixe[a] { pos[a] += v }
+                        if !fixe[b] { pos[b] -= v }
+                    }
+                }
+            }
+        }
+
+        /// Recentre les cartes d'un etage sur leur boite, bande des noms comprise.
+        func recentrer(_ pos: inout [SIMD2<Double>], _ e: Int) {
+            var x0 = Double.infinity, x1 = -Double.infinity, z0 = Double.infinity, z1 = -Double.infinity
+            for p in parEtage[e] {
+                x0 = min(x0, pos[p].x - w[p] / 2)
+                x1 = max(x1, pos[p].x + w[p] / 2)
+                z0 = min(z0, pos[p].y - d[p] / 2 - lab)
+                z1 = max(z1, pos[p].y + d[p] / 2)
+            }
+            let c = SIMD2((x0 + x1) / 2, (z0 + z1) / 2)
+            for p in parEtage[e] { pos[p] -= c }
+        }
+
+        /// `tours` de separation, chacun suivi d'une homothetie de `facteur` vers le centre ; puis 60
+        /// de separation seule ; puis le recentrage (sauf si l'etage a une carte fixee).
+        func tasser(_ pos: inout [SIMD2<Double>], _ e: Int, tours: Int, facteur: Double) {
+            let libres = parEtage[e].filter { !fixe[$0] }
+            for _ in 0..<tours {
+                separer(&pos, e, attirer: true)
+                for p in libres { pos[p] *= facteur }
+            }
+            for _ in 0..<60 { separer(&pos, e, attirer: false) }
+            if libres.count == parEtage[e].count { recentrer(&pos, e) }
+        }
+
+        /// Plus grande distance du centre a un coin de carte (bande du nom comprise), plus la marge.
+        func rayon(_ pos: [SIMD2<Double>], _ e: Int) -> Double {
+            var r = 0.0
+            for p in parEtage[e] {
+                let x = abs(pos[p].x) + w[p] / 2
+                let z = max(abs(pos[p].y - d[p] / 2 - lab), abs(pos[p].y + d[p] / 2))
+                r = max(r, (x * x + z * z).squareRoot())
+            }
+            return r + marge
+        }
+
+        /// Coups d'un etage : les 7 symetries du carre appliquees aux cartes libres, puis l'echange
+        /// de chaque paire de cartes libres.
+        func coups(_ e: Int) -> [Coup] {
+            let libres = parEtage[e].filter { !fixe[$0] }
+            guard !libres.isEmpty else { return [] }
+            var c = (1...7).map { Coup.symetrie($0) }
+            for i in libres.indices {
+                for j in libres.indices where j > i { c.append(.echange(libres[i], libres[j])) }
+            }
+            return c
+        }
+
+        func jouer(_ coup: Coup, _ pos: inout [SIMD2<Double>], etage e: Int) {
+            switch coup {
+            case .symetrie(let o):
+                for p in parEtage[e] where !fixe[p] {
+                    let v = pos[p]
+                    switch o {
+                    case 1: pos[p] = SIMD2(-v.y, v.x)
+                    case 2: pos[p] = SIMD2(-v.x, -v.y)
+                    case 3: pos[p] = SIMD2(v.y, -v.x)
+                    case 4: pos[p] = SIMD2(-v.x, v.y)
+                    case 5: pos[p] = SIMD2(v.y, v.x)
+                    case 6: pos[p] = SIMD2(v.x, -v.y)
+                    default: pos[p] = SIMD2(-v.y, -v.x)
+                    }
+                }
+            case .echange(let a, let b):
+                pos.swapAt(a, b)
+            }
+        }
+
+        /// Rectangles des cartes et extremites des liens dans la vue 2D des etages cote a cote.
+        func vue2D(_ pos: [SIMD2<Double>]) -> (rayons: [Double], rects: [Rect], segments: [(SIMD2<Double>, SIMD2<Double>)]) {
+            let rayons = (0..<nbEtages).map { rayon(pos, $0) }
+            let cx = DispositionPieces.centres2D(rayons: rayons)
+            let rects = pos.indices.map { i in
+                let x = cx[etage[i]] + pos[i].x, z = pos[i].y
+                return Rect(x0: x - w[i] / 2, x1: x + w[i] / 2, z0: z - d[i] / 2 - lab, z1: z + d[i] / 2)
+            }
+            let segments = liens.map { l in
+                (SIMD2(cx[etage[l.pa]], 0) + pos[l.pa] + l.la, SIMD2(cx[etage[l.pb]], 0) + pos[l.pb] + l.lb)
+            }
+            return (rayons, rects, segments)
+        }
+
+        /// Cout d'une disposition, vue en 2D : la somme des rayons des plateaux ; 0,3 fois la longueur
+        /// de chaque lien ; 6 + 4 fois la longueur traversee pour chaque lien qui passe sur une carte
+        /// autre que celles de ses bouts ; 5 par croisement de deux liens sans bout commun ; 0,1 fois
+        /// l'ecart horizontal de chaque lien entre etages, une fois les etages empiles.
+        func cout(_ pos: [SIMD2<Double>]) -> Double {
+            let v = vue2D(pos)
+            var c = v.rayons.reduce(0, +)
+            for (k, l) in liens.enumerated() {
+                let (p, q) = v.segments[k]
+                let dl = q - p
+                c += 0.3 * (dl.x * dl.x + dl.y * dl.y).squareRoot()
+                for (r, rect) in v.rects.enumerated() where r != l.pa && r != l.pb {
+                    let t = DispositionPieces.dedans(p, q, rect)
+                    if t > 0 { c += 6 + 4 * t }
+                }
+                if etage[l.pa] != etage[l.pb] {
+                    let h = (pos[l.pa] + l.la) - (pos[l.pb] + l.lb)
+                    c += 0.1 * (h.x * h.x + h.y * h.y).squareRoot()
+                }
+            }
+            for i in liens.indices {
+                let s = liens[i], (p, q) = v.segments[i]
+                for j in liens.indices where j > i {
+                    let t = liens[j]
+                    if s.na == t.na || s.na == t.nb || s.nb == t.na || s.nb == t.nb { continue }
+                    let (r, u) = v.segments[j]
+                    if max(p.x, q.x) < min(r.x, u.x) || max(r.x, u.x) < min(p.x, q.x)
+                        || max(p.y, q.y) < min(r.y, u.y) || max(r.y, u.y) < min(p.y, q.y) { continue }
+                    if DispositionPieces.croise(p, q, r, u) { c += 5 }
+                }
+            }
+            return c
+        }
+
+        /// Liens qui passent sur une carte autre que celles de leurs bouts (tests).
+        func traversees(_ pos: [SIMD2<Double>]) -> Int {
+            let v = vue2D(pos)
+            var n = 0
+            for (k, l) in liens.enumerated() {
+                let (p, q) = v.segments[k]
+                for (r, rect) in v.rects.enumerated() where r != l.pa && r != l.pb
+                    && DispositionPieces.dedans(p, q, rect) > 0 {
+                    n += 1
+                }
+            }
+            return n
+        }
+    }
+}

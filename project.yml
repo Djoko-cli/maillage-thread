@@ -36,6 +36,11 @@ targets:
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         SKIP_INSTALL: YES
         DEFINES_MODULE: YES
+      configs:
+        # Le coeur est optimise aussi en Debug : non optimisee, la disposition des pieces prend
+        # quelques secondes (80 a 100 fois plus). Il n'a ni assert ni code propre au Debug.
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
   MaillageThread:
     type: application
     platform: macOS
@@ -158,3 +163,13 @@ schemes:
         Passeur: all
     run:
       config: Debug
+  # Le coeur seul : les temps de calcul de la vue par pieces, en Release (outils/mesurer.sh).
+  MaillageCoeur:
+    build:
+      targets:
+        MaillageCoeur: all
+        MaillageCoeurTests: [test]
+    test:
+      config: Release
+      targets:
+        - MaillageCoeurTests
