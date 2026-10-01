@@ -476,11 +476,21 @@ final class MoteurPieces {
             sCible = 0
             sDebut = Self.maintenant()
             isolee = nil
+            // Retour lance avant la premiere image de l'isolement : `s` est deja a 0, et l'horloge ne
+            // finirait jamais ce retour.
+            if s == 0 { finirRetour() }
         } else if !vueTouchee {
             return
         }
         vueTouchee = false
         voler(CameraScene.volVersEnsemble(orbite, geometrie, aspect: aspect, u: t, troisD: t == 1), enFondu: enFondu)
+    }
+
+    /// Fin du retour d'un isolement : plus de piece isolee, ni de reperes « ailleurs ».
+    private func finirRetour() {
+        focus = nil
+        if let e = entree { textes = Self.textes(e, focus: nil) }
+        construireEtiquettes()
     }
 
     /// Double-clic sur le fond (precision 17 du plan 4b) : retour a la vue d'ensemble d'un geste. Le
@@ -604,11 +614,7 @@ final class MoteurPieces {
             s = sDepart + (sCible - sDepart) * r
             if r >= 1 {
                 s = sCible
-                if s == 0 {
-                    focus = nil
-                    if let e = entree { textes = Self.textes(e, focus: nil) }
-                    construireEtiquettes()
-                }
+                if s == 0 { finirRetour() }
             }
         }
         for i in fk.indices {

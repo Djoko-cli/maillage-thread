@@ -113,7 +113,25 @@ struct MoteurPiecesTests {
         m.cliquer(disque.centre)
         #expect(m.selection == "Apple TV 4K")
         m.cliquer(CGPoint(x: 5, y: Self.taille.height / 2))
-        #expect(m.selection == nil && !m.estIsolee && m.isolee == nil)
+        #expect(m.selection == nil && !m.estIsolee && m.isolee == nil && m.focus == nil)
+    }
+
+    /// Retour lance avant la premiere image de l'isolement (isoler puis sortir, sans image entre les
+    /// deux) : rien a defaire, la piece est relachee tout de suite, ses reperes « ailleurs » partent, et
+    /// les noms des appareils sont de nouveau voulus.
+    @Test func retourAvantLaPremiereImage() throws {
+        let (m, e) = try Self.moteur()
+        m.poserZoom(echelle: 1, vers: nil)
+        let salon = try Self.indice(e, "Salon")
+        m.isoler(salon)
+        #expect(m.focus == salon && !m.textes.ailleurs.isEmpty)
+        m.sortir()
+        #expect(m.focus == nil && m.textes.ailleurs.isEmpty && !m.estIsolee && m.isolee == nil)
+        Self.dessiner(m)
+        #expect(m.etiquettes.contains { l in
+            if case .noeud = l.genre { return l.voulu }
+            return false
+        })
     }
 
     /// Glisser une piece la deplace dans son etage, sans sortir du plateau ; au relachement, sa place
@@ -497,7 +515,7 @@ struct MoteurPiecesTests {
         n.cliquer(try Self.pointDePiece(n, try Self.indice(e, "Salon")))
         n.selection = "Apple TV 4K"
         n.relacher(fond, a: 200)
-        #expect(n.selection == nil && !n.estIsolee && n.isolee == nil)
+        #expect(n.selection == nil && !n.estIsolee && n.isolee == nil && n.focus == nil)
         n.relacher(fond, a: 200.1)
         #expect(!n.vueTouchee && !n.estIsolee)
         // « Reduire les animations » : un fondu depuis la vue courante.
