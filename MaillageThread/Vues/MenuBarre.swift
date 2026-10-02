@@ -40,7 +40,7 @@ struct MenuBarre: View {
     @Environment(SondeMaillage.self) private var sonde
     @Environment(\.openWindow) private var openWindow
     @Environment(ControleurReglages.self) private var reglages
-    /// Fenetre du menu, pour le fermer apres « Reglages… ».
+    /// Fenetre du menu, pour le fermer apres « Ouvrir le graphe », « Journal… » et « Reglages… ».
     @State private var fenetreMenu = RefFenetre()
 
     var body: some View {
@@ -141,8 +141,15 @@ struct MenuBarre: View {
     }
 
     private func ouvrir(_ id: String) {
-        openWindow(id: id)
-        NSApp.activate()
+        Self.ouvrir(id, par: { openWindow(id: $0); NSApp.activate() }, menu: fenetreMenu.fenetre)
+    }
+
+    /// Ouvre la fenetre `id` de l'app (« graphe », « journal ») par `ouvrirFenetre`, puis ferme le menu `menu`, comme
+    /// apres « Reglages… » : la fenetre ouverte ne prend pas toujours la main (l'app inactive, l'activation est
+    /// cooperative), et le menu restait ouvert (vu par Djoko le 02/10, apres « Ouvrir le graphe »).
+    static func ouvrir(_ id: String, par ouvrirFenetre: (String) -> Void, menu: NSWindow?) {
+        ouvrirFenetre(id)
+        menu?.close()
     }
 
     /// Le menu se ferme quand une autre fenetre de l'app prend la main. La fenetre des reglages ne
