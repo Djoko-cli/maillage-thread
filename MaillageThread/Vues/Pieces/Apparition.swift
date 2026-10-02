@@ -62,7 +62,8 @@ enum Apparition: Equatable {
         return t.animation(animationLegende(reduire: reduire))
     }
 
-    /// Ce qui se decale quand la legende s'ouvre ou se replie : cela glisse avec elle ; avec « Reduire les animations », rien : cela prend sa place d'un coup.
+    /// La rangee du bas, qui ne garde que la legende : son contenu glisse avec elle quand elle s'ouvre ou se replie ;
+    /// avec « Reduire les animations », rien : il prend sa place d'un coup.
     static func animationDuConteneurLegende(reduire: Bool) -> Animation? {
         reduire ? nil : animationLegende(reduire: false)
     }

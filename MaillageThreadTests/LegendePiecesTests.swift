@@ -135,9 +135,9 @@ struct LegendePiecesTests {
     /// La marge du bas suit la hauteur mesuree de tout ce qui est pose en bas (decision de Djoko du 01/10 pour la
     /// legende ouverte, du 02/10 pour la fiche, comme la marge du haut suit le bandeau) : la pile, de haut en bas la
     /// legende, puis la fiche ; le bord et l'espacement en plus. La ligne de niveau, montee en haut le 02/10, n'y est
-    /// plus : la rangee du bas a la hauteur de la legende seule. La legende
-    /// repliee sans fiche : la marge d'avant, 30 pt. Les valeurs fixes de la fiche (190 et 360 pt) ne sont plus : la
-    /// pile d'une fiche est mesuree, legende ouverte ou repliee au-dessus d'elle.
+    /// plus : la rangee du bas a la hauteur de la legende seule. La legende repliee sans fiche : la marge d'avant,
+    /// 30 pt. Les valeurs fixes de la fiche (190 et 360 pt) ne sont plus : la pile d'une fiche est mesuree, legende
+    /// ouverte ou repliee au-dessus d'elle.
     @Test func margeDuBas() throws {
         let (s, _, e) = try NomsSceneTests.demo()
         func hauteur(_ v: some View) -> CGFloat {

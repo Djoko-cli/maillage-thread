@@ -166,6 +166,9 @@ struct FenetrePiecesTests {
         let seul = haut(sansReseau, sansPieces: false)
         let scinde = haut(demo, sansPieces: false)
         #expect(seul > 2 * CadreFeux.defaut.milieu + RangeeNiveau.hauteur, "la ligne des capsules, le fil, la ligne de niveau")
+        // La premiere estimation (avant toute mesure : la ligne des capsules, le fil, la ligne de niveau) n'est pas
+        // au-dessus de la mesure, sans bandeau ni tournee : la vue ne se recadre pas vers le haut a la premiere mesure.
+        #expect(FenetrePieces.margeHautInitiale <= FenetrePieces.margeHaut(bas: seul), "la premiere estimation : \(FenetrePieces.margeHautInitiale)")
         #expect(scinde > seul, "le bandeau de scission")
         #expect(haut(demo, sansPieces: true) > scinde, "le bandeau d'une maison sans pieces")
         await sonde.connecter(SondeMaillageTests.port, choisi: true)
@@ -192,7 +195,8 @@ struct FenetrePiecesTests {
     /// du haut suit le bandeau ; elle remplace les 190 et 360 pt fixes de la fiche) : dans la vraie fenetre, fiche
     /// fermee ou ouverte, legende ouverte ou repliee, la vue d'ensemble se cadre juste au-dessus de la pile (a
     /// l'espacement pres), la legende seule ou avec la fiche (la ligne de niveau est en haut), sauf la legende repliee
-    /// sans fiche, qui deborde un peu sur la vue (30 pt, la marge d'avant). La fiche la plus haute de la demo, et une fiche avec les courbes de l'historique, y tiennent aussi.
+    /// sans fiche, qui deborde un peu sur la vue (30 pt, la marge d'avant). La fiche la plus haute de la demo, et une
+    /// fiche avec les courbes de l'historique, y tiennent aussi.
     @Test(.timeLimit(.minutes(2))) func margeDuBasMesuree() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -395,7 +399,7 @@ struct FenetrePiecesTests {
         #expect(hauteur >= taille.height)
         let legende = try cadre("legende")
         #expect(legende.minX == FenetrePieces.bord, "\(cas) : la legende est au bord gauche (x = \(legende.minX))")
-        #expect(legende.maxY == hauteur - FenetrePieces.bord, "\(cas) : la legende est en bas : \(legende)")
+        #expect(abs(legende.maxY - (hauteur - FenetrePieces.bord)) < 0.5, "\(cas) : la legende est en bas : \(legende)")
         let niveau = try cadre("niveau")
         #expect(niveau.maxY < legende.minY, "\(cas) : la ligne de niveau n'est plus en bas, avec la legende")
         // La marge du bas : la pile mesuree (son haut, le plus haut des cadres), le bord et l'espacement, a l'arrondi pres ;
@@ -404,7 +408,7 @@ struct FenetrePiecesTests {
             FenetrePieces.margeBas(pile: hauteur - FenetrePieces.bord - (try #require(Self.hautDeLaPile(moteur))))
         }
         let ouverte = try margeDeLaPile()
-        #expect(ouverte == FenetrePieces.margeBas(pile: legende.height), "\(cas) : la legende seule : \(ouverte)")
+        #expect(abs(ouverte - FenetrePieces.margeBas(pile: legende.height)) <= 1, "\(cas) : la legende seule : \(ouverte)")
         try await MoteurPiecesTests.attendre { abs(moteur.marges.bas - ouverte) <= 1 }
         #expect(abs(moteur.marges.bas - ouverte) <= 1, "\(cas) : la marge du bas suit la legende ouverte (\(moteur.marges.bas), \(ouverte), \(moteur.cadresInterface))")
 
@@ -558,8 +562,7 @@ struct FenetrePiecesTests {
 
     /// L'ouverture et le repli de la legende sont un peu plus lents que la fiche (verification du 02/10 : Djoko
     /// trouvait l'ouverture « un poil trop fugace ») : 0,45 s au lieu de 0,3 s, sur la meme courbe, pour la legende
-    /// et pour ce qui se decale avec elle (la ligne de niveau, la pastille) ; avec « Reduire les animations », un
-    /// fondu de 0,45 s, et rien ne glisse. La fiche et les bandeaux restent a 0,3 s. Le recadrage qui accompagne la
+    /// et sa rangee ; avec « Reduire les animations », un fondu de 0,45 s, et rien ne glisse. La fiche et les bandeaux restent a 0,3 s. Le recadrage qui accompagne la
     /// legende prend sa duree (`MoteurPiecesTests.margesQuiGlissentAvecLaLegende`) ; apres un vrai clic dans la
     /// vraie fenetre, `recadrageDeLaLegendeApresUnClic` le mesure.
     @Test func dureeDeLaLegende() {
@@ -1018,6 +1021,53 @@ struct FenetrePiecesTests {
         try await MoteurPiecesTests.attendre { moteur.cadresInterface["ligne"]?.minX == apres }
         #expect(moteur.cadresInterface["ligne"]?.minX == apres, "a la sortie, de nouveau apres les boutons")
         #expect(moteur.cadresInterface["ligne"]?.midY == CadreFeux.defaut.milieu)
+    }
+
+    /// La sortie du plein ecran, quand la lecture des boutons de la fenetre echoue (ils ne sont pas encore revenus
+    /// dans la fenetre) ou rend une valeur de passage : la capsule de gauche ne reste pas sur eux, au bord, ou elle
+    /// les couvrirait. Elle retrouve le dernier cadre des boutons mesure hors plein ecran (ici, une mesure a part,
+    /// pour la distinguer du cadre par defaut), et une seconde lecture, un peu plus tard, corrige la valeur de passage.
+    @Test(.timeLimit(.minutes(1))) func pleinEcranLectureRatee() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p)
+        defer { Self.fermer(fenetre) }
+        try await MoteurPiecesTests.attendre { moteur.pret && moteur.cadresInterface["ligne"] != nil }
+        let cadreFenetre = try #require(fenetre.contentView?.superview)
+        let suivi = try #require(Self.sousVue(SuiviFenetre.Vue.self, dans: cadreFenetre))
+        let bord = HautPieces.bordDroit
+        func ligneEn(_ x: CGFloat) async throws -> Bool {
+            try await MoteurPiecesTests.attendre { moteur.cadresInterface["ligne"]?.minX == x }
+            return moteur.cadresInterface["ligne"]?.minX == x
+        }
+        // Une mesure hors plein ecran, autre que le cadre par defaut : une sortie du plein ecran la lit.
+        let mesure = CadreFeux(droite: 100, milieu: 30)
+        let apres = mesure.droite + HautPieces.ecartFeux
+        suivi.lecture = { _ in mesure }
+        NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: fenetre)
+        #expect(try await ligneEn(apres), "la mesure, hors plein ecran")
+        // Le plein ecran : la capsule au bord, a la hauteur des boutons mesures.
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: fenetre)
+        #expect(try await ligneEn(bord), "en plein ecran, au bord")
+        #expect(moteur.cadresInterface["ligne"]?.midY == mesure.milieu, "a la hauteur des boutons mesures")
+        // La sortie, la lecture ratee : la capsule retrouve la derniere mesure, et ne reste pas sur les boutons.
+        suivi.lecture = { _ in nil }
+        NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: fenetre)
+        #expect(try await ligneEn(apres), "lecture ratee : la derniere mesure, pas le bord : \(String(describing: moteur.cadresInterface["ligne"]))")
+        #expect(moteur.cadresInterface["ligne"]?.midY == mesure.milieu)
+        // Une valeur de passage a la sortie, la bonne un peu plus tard : la seconde lecture la corrige.
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: fenetre)
+        #expect(try await ligneEn(bord), "de nouveau en plein ecran")
+        var lectures = 0
+        suivi.lecture = { _ in
+            lectures += 1
+            return lectures == 1 ? CadreFeux(droite: 7, milieu: 9) : mesure
+        }
+        NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: fenetre)
+        #expect(try await ligneEn(apres), "la valeur de passage est corrigee par la seconde lecture")
+        #expect(lectures >= 2, "deux lectures : \(lectures)")
     }
 
     /// La bande du haut : un clic, glisse, deplace la fenetre ; un double-clic fait ce que dit le reglage

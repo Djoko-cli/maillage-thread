@@ -40,8 +40,9 @@ struct FenetrePieces: View {
     /// Preference du mode 2D ou 3D.
     static let cleMode = "vuePieces3D"
     /// Taille minimale de la fenetre (polissage B, section 3) : avec la fiche et ses courbes, la scene
-    /// garde environ 230 pt de haut (88 pour 820 x 560, tri du sous-projet A, n° 11). 820 x 680 pt sous la barre de
-    /// titre cachee, de 52 pt avec la barre d'outils invisible : la fenetre ne descend pas sous 820 x 732 pt.
+    /// garde environ 230 pt de haut (88 pour 820 x 560, tri du sous-projet A, n° 11 ; 234 mesures, ligne de niveau
+    /// comprise, sur le jeu de l'historique). 820 x 680 pt sous la barre de titre cachee, de 52 pt avec la barre d'outils
+    /// invisible : la fenetre ne descend pas sous 820 x 732 pt.
     static let tailleMinimale = CGSize(width: 820, height: 680)
     /// Bord des elements poses sur la vue, et ecart entre eux (pt).
     static let bord: CGFloat = 16
@@ -82,11 +83,11 @@ struct FenetrePieces: View {
     static let margeHautInitiale = margeHaut(bas: 2 * CadreFeux.defaut.milieu + espacement + 16 + espacementNiveau
                                                 + RangeeNiveau.hauteur)
 
-    /// Marge du bas de la vue d'ensemble (pt), comme celle du haut : la hauteur mesuree de ce qui est pose en bas,
-    /// la pile (de haut en bas, la legende, puis la fiche), le bord et l'espacement ; la vue d'ensemble se cadre au-dessus de tout cela (decisions de Djoko du 01/10 pour la legende
-    /// ouverte, du 02/10 pour la fiche, qui remplacent les 190 et 360 pt fixes de la fiche). Sans rien a garder
-    /// (nil : la legende repliee, ou sans entree, et pas de fiche), 30 pt : la legende repliee et la ligne de
-    /// niveau debordent un peu sur la vue.
+    /// Marge du bas de la vue d'ensemble (pt), comme celle du haut : la hauteur mesuree de ce qui est pose en bas, la
+    /// pile (de haut en bas, la legende, puis la fiche), le bord et l'espacement ; la vue d'ensemble se cadre
+    /// au-dessus de tout cela (decisions de Djoko du 01/10 pour la legende ouverte, du 02/10 pour la fiche, qui
+    /// remplacent les 190 et 360 pt fixes de la fiche). Sans rien a garder (nil : la legende repliee, ou sans entree, et
+    /// pas de fiche), 30 pt : la legende repliee deborde un peu sur la vue.
     static func margeBas(pile: CGFloat?) -> CGFloat {
         guard let pile else { return 30 }
         return max(30, bord + ceil(pile) + espacement)
@@ -94,12 +95,14 @@ struct FenetrePieces: View {
 
     /// Hauteur de scene en dessous de laquelle la legende ouverte se replie d'elle-meme sous une fiche (pt) : les
     /// 230 pt environ que la spec de B garde a la scene dans la plus petite fenetre, avec la fiche et ses courbes
-    /// (section 3) ; la legende ne la fait pas descendre plus bas. Mesure sur la demo, avec de l'air en haut (marge du
-    /// haut de 118 pt) : dans la fenetre par defaut (1100 x 760), la legende ouverte laisse 271 pt a la scene sous la
-    /// fiche de l'Apple TV 4K, et reste ouverte, comme sous 28 des 31 fiches de la demo (236 pt au moins) ; sous les
-    /// trois plus hautes (163 et 179 pt), elle n'en laisserait que 220 et 204 : elle se replie, et la scene retrouve
-    /// 417 et 401 pt. Dans la plus petite fenetre (820 x 732 pt, soit 680 pt sous la barre de titre cachee), elle
-    /// laisserait 205 pt sous la fiche de l'Apple TV 4K et 176 sous la plus haute : elle se replie.
+    /// (section 3) ; la legende ne la fait pas descendre plus bas. Mesure sur la demo (reverification du 02/10, apres la
+    /// ligne de niveau montee sous le fil), dont la marge du haut est de 139 pt : dans la fenetre par defaut (1100 x 760),
+    /// la legende ouverte laisse 250 pt a la scene sous la fiche de l'Apple TV 4K, et reste ouverte, comme sous 20 des 31
+    /// fiches de la demo (235 pt au moins) ; sous les 11 autres (de 143 a 179 pt), elle n'en laisserait que 183 a 219 :
+    /// elle se replie, et la scene retrouve 380 a 416 pt. Dans la plus petite fenetre (820 x 732 pt, soit 680 pt sous la
+    /// barre de titre cachee), elle laisserait 184 pt sous la fiche de l'Apple TV 4K et 155 sous la plus haute : elle se
+    /// replie, comme sous 30 des 31 fiches, et la scene garde 381 et 352 pt ; sans fiche, elle en garde 344, la legende
+    /// ouverte (563, repliee).
     static let sceneMinimale: CGFloat = 230
 
     /// La legende se replie d'elle-meme sous une fiche ouverte (verification du 02/10) si, ouverte au-dessus d'elle,
@@ -401,8 +404,7 @@ struct LigneDuBas: View {
                 .obstacle("legende", moteur)
             }
         }
-        // Ce qui se decale avec la legende qui s'ouvre ou se replie glisse avec elle ; avec « Reduire les animations »,
-        // cela prend sa place d'un coup.
+        // La legende qui s'ouvre ou se replie glisse ; avec « Reduire les animations », elle prend sa place d'un coup.
         .animation(Apparition.animationDuConteneurLegende(reduire: reduire), value: estRepliee)
         .onGeometryChange(for: CGFloat?.self) { ouverte ? $0.size.height : nil } action: { surHauteurOuverte($0) }
     }

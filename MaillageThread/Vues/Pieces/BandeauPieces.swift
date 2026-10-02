@@ -63,9 +63,14 @@ struct CadreFeux: Equatable {
 ///   `fullScreenPrimary`, et le garde : SwiftUI le defait au lancement, puis a l'entree et a la sortie du plein
 ///   ecran (releve dans l'app), et la sonde le remet aussitot, en observant `collectionBehavior`.
 /// - En plein ecran, la barre d'outils invisible se retire (ronde finale du 02/10) : elle ne sert qu'a abaisser les
-///   boutons hors plein ecran, et le survol du haut la faisait descendre en bande claire sur les capsules. Elle
-///   revient a la sortie. La barre de titre que le survol fait paraitre, elle, est sombre, comme la fenetre
-///   (`FenetrePieces`, `.preferredColorScheme(.dark)`).
+///   boutons hors plein ecran, et le survol du haut la faisait descendre en bande claire sur les capsules. SwiftUI la
+///   rend visible a chaque mise a jour de la fenetre, quand la capsule change de place par exemple : un observateur
+///   (`toolbar.isVisible`) la retire de nouveau tant que la fenetre est en plein ecran. Elle revient a la sortie. La
+///   barre de titre que le survol fait paraitre, elle, est sombre, comme la fenetre (`FenetrePieces`,
+///   `.preferredColorScheme(.dark)`).
+/// - Les boutons lus a la sortie du plein ecran peuvent ne pas etre revenus : la capsule retrouve alors le dernier
+///   cadre mesure hors plein ecran (`dernierHorsPleinEcran`), au lieu de rester au bord, sur eux, et une seconde
+///   lecture, un peu plus tard, corrige une valeur de passage.
 struct SuiviFenetre: NSViewRepresentable {
     let rapporter: (CadreFeux) -> Void
 
@@ -83,11 +88,18 @@ struct SuiviFenetre: NSViewRepresentable {
 
     final class Vue: NSView {
         let rapporter: (CadreFeux) -> Void
+        /// Le cadre dont la capsule de gauche est a jour (celui du plein ecran, une fois dedans).
         private var feux = CadreFeux.defaut
+        /// Le dernier cadre des boutons lu hors plein ecran : celui que la sortie du plein ecran rend a la capsule quand
+        /// elle ne peut pas relire les boutons, et dont le milieu sert au plein ecran.
+        private var dernierHorsPleinEcran = CadreFeux.defaut
+        /// La lecture des boutons de la fenetre ; remplacee par les tests, pour simuler une lecture ratee.
+        var lecture: @MainActor (NSWindow) -> CadreFeux? = { CadreFeux(fenetre: $0) }
         private var observation: NSKeyValueObservation?
         private var observationBarre: NSKeyValueObservation?
         /// La fenetre est en plein ecran, ou y entre : sa barre d'outils invisible reste retiree.
         private var enPleinEcran = false
+        private weak var derniereFenetre: NSWindow?
 
         init(_ rapporter: @escaping (CadreFeux) -> Void) {
             self.rapporter = rapporter
@@ -102,6 +114,9 @@ struct SuiviFenetre: NSViewRepresentable {
             centre.removeObserver(self)
             observation = nil
             observationBarre = nil
+            // Une autre fenetre : son etat de plein ecran n'est pas celui de la precedente.
+            if window !== derniereFenetre { enPleinEcran = false }
+            derniereFenetre = window
             guard let window else { return }
             SuiviFenetre.permettrePleinEcran(window)
             observation = window.observe(\.collectionBehavior) { fenetre, _ in
@@ -121,26 +136,43 @@ struct SuiviFenetre: NSViewRepresentable {
             // Une fenetre deja en plein ecran (rouverte ainsi) : la barre d'outils se retire, et la capsule va au bord.
             if window.styleMask.contains(.fullScreen) {
                 entreEnPleinEcran()
+            } else {
+                lireOuRetrouver()
             }
-            lireLesBoutons()
         }
 
         @objc private func entreEnPleinEcran() {
             enPleinEcran = true
             window?.toolbar?.isVisible = false
-            signaler(.pleinEcran(milieu: feux.milieu))
+            signaler(.pleinEcran(milieu: dernierHorsPleinEcran.milieu))
         }
 
         @objc private func sortDuPleinEcran() {
             enPleinEcran = false
             window?.toolbar?.isVisible = true
             window?.contentView?.superview?.layoutSubtreeIfNeeded()
-            lireLesBoutons()
+            // Les boutons ne sont pas toujours revenus dans la fenetre : une seconde lecture, un peu plus tard,
+            // corrige une valeur de passage.
+            lireOuRetrouver()
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(250))
+                self?.lireLesBoutons()
+            }
         }
 
-        private func lireLesBoutons() {
-            guard let window, let c = CadreFeux(fenetre: window), c != feux else { return }
-            signaler(c)
+        /// Une lecture qui rate laisserait la capsule sur les boutons, au bord (`feux` est encore celui du plein
+        /// ecran, ou celui d'une autre fenetre) : elle retrouve alors le dernier cadre mesure hors plein ecran.
+        private func lireOuRetrouver() {
+            if !lireLesBoutons(), feux != dernierHorsPleinEcran { signaler(dernierHorsPleinEcran) }
+        }
+
+        /// Lit les boutons, hors plein ecran seulement (dedans, ils sont ailleurs) ; faux si la lecture rate.
+        @discardableResult
+        private func lireLesBoutons() -> Bool {
+            guard !enPleinEcran, let window, let c = lecture(window) else { return false }
+            dernierHorsPleinEcran = c
+            if c != feux { signaler(c) }
+            return true
         }
 
         private func signaler(_ c: CadreFeux) {
