@@ -35,6 +35,13 @@ final class MesureNoms {
         return taille
     }
 
+    /// Place du glyphe d'un nom (la couronne, la lune), dessine seul dans la legende : la boite de son nom, sans ses
+    /// 5 points de chaque cote.
+    func glyphe(_ texte: String, routeur: Bool) -> CGSize {
+        let n = noeud(LibellesNoeuds.Libelle(texte: texte), routeur: routeur)
+        return CGSize(width: n.width - 10, height: n.height)
+    }
+
     /// Capsule de la pastille d'une batterie faible.
     func pastille(_ valeur: String) -> CGSize {
         DessinNoeud.taillePastille(icone: mesurer(Cle(texte: "", nature: .icone)) { DessinNoeud.iconePastille },

@@ -31,14 +31,15 @@ struct LegendePieces: View {
         }
     }
 
-    /// « Legende ⌄ » : 11,5 pt semi-gras, marges de 6 x 12 pt.
+    /// « Legende ⌃ » : 11,5 pt semi-gras, marges de 6 x 12 pt ; le chevron vers le haut, qui ouvre la legende, centre
+    /// sur la ligne de l'etiquette (`chevron`).
     private var etiquette: some View {
         Button {
             repliee = false
         } label: {
             HStack(spacing: 8) {
                 Text("Légende")
-                Text(verbatim: "⌄").accessibilityHidden(true)
+                Self.chevron(repliee: true)
             }
             .font(.system(size: 11.5, weight: .semibold))
             .foregroundStyle(Palette.texteLegende)
@@ -50,8 +51,8 @@ struct LegendePieces: View {
         .buttonStyle(.plain)
     }
 
-    /// En-tete « Legende ⌃ » (7 pt dessous), puis la grille ; marges de 9, 12, 11 et 12 pt. La largeur
-    /// est celle de la grille : l'en-tete s'y etend, sans elargir le panneau.
+    /// En-tete « Legende ⌄ » (7 pt dessous ; le chevron vers le bas, qui replie la legende), puis la grille ; marges de
+    /// 9, 12, 11 et 12 pt. La largeur est celle de la grille : l'en-tete s'y etend, sans elargir le panneau.
     private var panneau: some View {
         VStack(alignment: .leading, spacing: 7) {
             Button {
@@ -60,7 +61,7 @@ struct LegendePieces: View {
                 HStack {
                     Text("Légende")
                     Spacer(minLength: 8)
-                    Text(verbatim: "⌃").accessibilityHidden(true)
+                    Self.chevron(repliee: false)
                 }
                 .font(.system(size: 11.5, weight: .semibold))
                 .contentShape(Rectangle())
@@ -77,6 +78,16 @@ struct LegendePieces: View {
         .foregroundStyle(Palette.texteLegende)
         .padding(EdgeInsets(top: 9, leading: 12, bottom: 11, trailing: 12))
         .verreDeLegende()
+    }
+
+    /// Le chevron de l'en-tete ou de l'etiquette : il montre ce que fait un clic (choix de Djoko, 02/10, a l'inverse de
+    /// la maquette A) : vers le bas, la legende ouverte, pour la replier ; vers le haut, repliee, pour l'ouvrir. Un
+    /// symbole, et non les caracteres ⌄ et ⌃ de la maquette : centre sur la ligne de l'etiquette (le caractere ⌄ y
+    /// tombait 3,5 pt trop bas, sur la ligne de base), a la taille de ces caracteres.
+    static func chevron(repliee: Bool) -> some View {
+        Image(systemName: repliee ? "chevron.up" : "chevron.down")
+            .font(.system(size: 8.5, weight: .bold))
+            .accessibilityHidden(true)
     }
 
     /// Un groupe : son titre (10 pt semi-gras, gris bleute), 4 pt, puis ses entrees, a 3 pt l'une de

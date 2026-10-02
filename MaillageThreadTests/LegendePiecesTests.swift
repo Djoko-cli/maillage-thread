@@ -197,10 +197,11 @@ struct LegendePiecesTests {
     /// Les signes de la legende sont dessines comme dans la scene, par les memes fonctions que le rendu (verification
     /// du 02/10) : un routeur en sphere brillante, avec halo et reflet, bleue, ambre dans une autre partition, grise
     /// non identifie ; un appareil en pastille de la couleur de son etat, en anneau s'il a disparu : les apparences
-    /// de `DessinNoeud` que portent les noeuds de la scene. Le chef porte sa couronne et l'endormi sa lune, dans un nom
-    /// de noeud comme ceux de la scene ; la pile, sa pastille ; les liens, leur epaisseur, leur couleur et leur trait,
-    /// avec l'opacite d'un lien au repos dans la scene. La legende les pose par `SigneLegende`, qui dessine par
-    /// `DessinNoeud` et `RenduCanvas` : ses images sont celles de ces fonctions, avec ces parametres.
+    /// de `DessinNoeud` que portent les noeuds de la scene. Le chef porte sa couronne et l'endormi sa lune, celles des
+    /// noms de la scene (sans leur pastille : `couronneEtLuneSansPastille`) ; la pile, sa pastille ; les liens, leur
+    /// epaisseur, leur couleur et leur trait, avec l'opacite d'un lien au repos dans la scene. La legende les pose par
+    /// `SigneLegende`, qui dessine par `DessinNoeud` et `RenduCanvas` : ses images sont celles de ces fonctions, avec
+    /// ces parametres.
     @Test func signesCommeLaScene() throws {
         let (_, _, e) = try NomsSceneTests.demo()
         let (sThread, _) = try NomsSceneTests.demoAvecRouteurThread()
@@ -234,11 +235,11 @@ struct LegendePiecesTests {
         for (entree, etat) in [(Entree.partitionCoupee, EtatAffiche.partitionCoupee)] {
             #expect(LegendePieces.signe(entree) == .noeud(DessinNoeud.apparenceAppareil(etat), rayon: LegendePieces.rayonAppareil))
         }
-        // La couronne et la lune : celles des noms de la scene.
+        // La couronne et la lune : celles des noms de la scene, seules (`couronneEtLuneSansPastille`).
         let chef = try #require(e.chefs.first)
-        #expect(LegendePieces.signe(.chef) == .nom("👑", routeur: true))
+        #expect(LegendePieces.signe(.chef) == .glyphe("👑", routeur: true))
         #expect(try #require(e.libelles[chef]).texte.contains(" 👑"))
-        #expect(LegendePieces.signe(.endormi) == .nom("☾", routeur: false))
+        #expect(LegendePieces.signe(.endormi) == .glyphe("☾", routeur: false))
         #expect(e.libelles.values.contains { $0.texte.contains(" ☾") })
         #expect(LegendePieces.signe(.candidats) == .nom(LegendePieces.exempleCandidats, routeur: true))
         #expect(LegendePieces.signe(.pile) == .pastille(LegendePieces.exemplePile))
@@ -332,5 +333,108 @@ struct LegendePiecesTests {
         #expect(abs(LegendePieces.rayonRouteur - min(routeur, LegendePieces.hauteurLigne / 2)) < 0.15, "\(routeur)")
         #expect(abs(LegendePieces.rayonAppareil - min(appareil, LegendePieces.hauteurLigne / 2)) < 0.15, "\(appareil)")
         #expect(2 * LegendePieces.rayonRouteur <= LegendePieces.hauteurLigne && LegendePieces.rayonAppareil >= 3)
+    }
+
+    // MARK: Le chevron, la couronne et la lune (reverification en vrai du 02/10)
+
+    /// Les pixels d'une vue, rendue a l'echelle 2 comme dans une capture (sans verre : le fond des captures), en RVBA
+    /// de 8 bits ; sa largeur et sa hauteur en pixels.
+    static func pixels(_ vue: some View) throws -> (largeur: Int, hauteur: Int, octets: [UInt8]) {
+        let rendu = ImageRenderer(content: vue.environment(\.capturePieces, true))
+        rendu.scale = 2
+        let image = try #require(rendu.cgImage)
+        var octets = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        let espace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let ctx = try #require(CGContext(data: &octets, width: image.width, height: image.height, bitsPerComponent: 8,
+                                         bytesPerRow: image.width * 4, space: espace,
+                                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return (image.width, image.height, octets)
+    }
+
+    /// Le chevron d'une legende rendue (`pixels`) : l'encre claire du texte (blanc a 0,88 sur le fond sombre), dans les
+    /// rangs `rangs` ; le chevron est son dernier amas de colonnes, a droite. Son cadre en pixels (rangs du haut en bas),
+    /// et l'etendue de son encre dans son rang du haut et dans celui du bas.
+    static func chevron(_ p: (largeur: Int, hauteur: Int, octets: [UInt8]), rangs: Range<Int>? = nil) throws
+        -> (cadre: (x: ClosedRange<Int>, y: ClosedRange<Int>), haut: Int, bas: Int) {
+        let rangs = rangs ?? 0..<p.hauteur
+        func encre(_ x: Int, _ y: Int) -> Bool {
+            let i = (y * p.largeur + x) * 4
+            return p.octets[i] > 140 && p.octets[i + 1] > 140 && p.octets[i + 2] > 140
+        }
+        let colonnes = (0..<p.largeur).filter { x in rangs.contains { encre(x, $0) } }
+        let derniere = try #require(colonnes.last, "de l'encre")
+        var premiere = derniere
+        while colonnes.contains(premiere - 1) { premiere -= 1 }
+        let xs = premiere...derniere
+        let ys = rangs.filter { y in xs.contains { encre($0, y) } }
+        let cadreY = try #require(ys.first)...(try #require(ys.last))
+        func etendue(_ y: Int) -> Int {
+            let encrees = xs.filter { encre($0, y) }
+            return (encrees.last ?? 0) - (encrees.first ?? 0)
+        }
+        return ((xs, cadreY), max(etendue(cadreY.lowerBound), etendue(cadreY.lowerBound + 1)),
+                max(etendue(cadreY.upperBound), etendue(cadreY.upperBound - 1)))
+    }
+
+    /// Le chevron montre ce que fait un clic (choix de Djoko, 02/10, a l'inverse de la maquette A) : vers le bas (⌄)
+    /// quand la legende est ouverte, pour la replier ; vers le haut (⌃) quand elle est repliee, pour l'ouvrir. Lu sur
+    /// l'encre du rendu : un chevron vers le haut est etroit en haut (sa pointe) et large en bas, l'inverse vers le bas.
+    @Test func chevronSelonLEtat() throws {
+        let tout = LegendePieces.Groupe.allCases.map { LegendePieces.Rubrique(groupe: $0, entrees: $0.entrees) }
+        let repliee = try Self.chevron(try Self.pixels(LegendePieces(rubriques: tout, repliee: .constant(true))))
+        #expect(repliee.bas > repliee.haut + 2, "repliee : vers le haut (haut \(repliee.haut) px, bas \(repliee.bas) px)")
+        // Ouverte : le chevron de l'en-tete, dans la bande de la premiere ligne d'encre (l'en-tete), au-dessus de la grille.
+        let panneau = try Self.pixels(LegendePieces(rubriques: tout, repliee: .constant(false)))
+        func ligneVide(_ y: Int) -> Bool {
+            (0..<panneau.largeur).allSatisfy { x in
+                let i = (y * panneau.largeur + x) * 4
+                return !(panneau.octets[i] > 140 && panneau.octets[i + 1] > 140 && panneau.octets[i + 2] > 140)
+            }
+        }
+        let debut = try #require((0..<panneau.hauteur).first { !ligneVide($0) })
+        let fin = try #require((debut..<panneau.hauteur).first { ligneVide($0) })
+        let ouverte = try Self.chevron(panneau, rangs: debut..<fin)
+        #expect(ouverte.haut > ouverte.bas + 2, "ouverte : vers le bas (haut \(ouverte.haut) px, bas \(ouverte.bas) px)")
+    }
+
+    /// Repliee, le chevron est centre verticalement sur la ligne de l'etiquette « Legende » (reverification du 02/10 :
+    /// il etait trop bas) : le milieu de son encre est celui de l'etiquette, dont les marges du haut et du bas sont
+    /// egales, a un demi-point pres.
+    @Test func chevronCentreSurLEtiquette() throws {
+        let tout = LegendePieces.Groupe.allCases.map { LegendePieces.Rubrique(groupe: $0, entrees: $0.entrees) }
+        let p = try Self.pixels(LegendePieces(rubriques: tout, repliee: .constant(true)))
+        let c = try Self.chevron(p)
+        let milieu = Double(c.cadre.y.lowerBound + c.cadre.y.upperBound + 1) / 2
+        #expect(abs(milieu - Double(p.hauteur) / 2) <= 1, "milieu du chevron \(milieu) px, de l'etiquette \(Double(p.hauteur) / 2) px")
+    }
+
+    /// La couronne du chef et la lune d'un endormi, dans la legende, sans la pastille sombre d'un nom (reverification
+    /// du 02/10 : « une ombre disgracieuse et inutile ») : le glyphe seul, dans le texte des noms de la scene, a la
+    /// place du glyphe (le nom sans ses 5 pt de chaque cote). Dans la scene, les noms gardent leur pastille.
+    @Test func couronneEtLuneSansPastille() throws {
+        let p = Palette(sombre: true)
+        func image(_ dessin: @escaping (inout GraphicsContext) -> Void) throws -> [UInt8] {
+            try Self.pixels(Canvas { ctx, _ in dessin(&ctx) }.frame(width: 60, height: 34)).octets
+        }
+        // La couronne se charge au premier rendu : un rendu a blanc d'abord.
+        _ = try image { ctx in
+            ctx.draw(ctx.resolve(RenduCanvas.texteNom(LibellesNoeuds.couronne, routeur: true, fort: false, palette: p)),
+                     at: CGPoint(x: 20, y: 17), anchor: .leading)
+        }
+        for (entree, glyphe, routeur) in [(Entree.chef, LibellesNoeuds.couronne, true), (.endormi, LibellesNoeuds.lune, false)] {
+            let signe = LegendePieces.signe(entree)
+            let nom = MesureNoms().noeud(LibellesNoeuds.Libelle(texte: glyphe), routeur: routeur)
+            let taille = SigneLegende.taille(signe)
+            #expect(taille == CGSize(width: nom.width - 10, height: nom.height), "\(glyphe) : la place du glyphe seul (\(taille))")
+            let cadre = CGRect(origin: CGPoint(x: 20, y: 17 - taille.height / 2), size: taille)
+            let legende = try image { SigneLegende.dessiner(signe, &$0, dans: cadre, echelle: 2, palette: p) }
+            let seul = try image { ctx in
+                ctx.draw(ctx.resolve(RenduCanvas.texteNom(glyphe, routeur: routeur, fort: false, palette: p)),
+                         at: CGPoint(x: cadre.minX, y: cadre.midY), anchor: .leading)
+            }
+            let ecarts = zip(legende, seul).filter { $0 != $1 }.count
+            #expect(ecarts <= 8, "\(glyphe) : le glyphe seul, sans pastille (\(ecarts) octets differents)")
+        }
     }
 }
