@@ -143,18 +143,23 @@ clair. Conception :
 `docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md`.
 
 - **La fenêtre** n'a pas de barre de titre : la vue monte jusqu'en haut, sous
-  les trois boutons de la fenêtre. Deux capsules de verre sont posées sur leur
-  ligne : celle du réseau (menu du réseau, appareils IP, journal, rafraîchir)
-  juste après les boutons, celle de la vue (2D / 3D, rotation lente) contre le
-  bord droit. Glisser la bande vide entre elles déplace la fenêtre ; un
-  double-clic y fait ce que fait un double-clic sur une barre de titre sur ce
-  Mac (réglages Bureau et Dock). 820 × 712 points au moins, soit 680 sous la
+  les trois boutons de la fenêtre. Une barre d'outils vide et invisible, comme
+  dans Plans, abaisse ces boutons et laisse de l'air au-dessus des deux
+  capsules de verre, posées sur leur ligne : celle du réseau (menu du réseau,
+  appareils IP, journal, rafraîchir) juste après les boutons, celle de la vue
+  (2D / 3D, rotation lente) contre le bord droit. Glisser la bande vide entre
+  elles déplace la fenêtre ; un double-clic y fait ce que fait un double-clic
+  sur une barre de titre sur ce Mac (réglages Bureau et Dock). Le bouton vert
+  passe en plein écran : les boutons s'y cachent jusqu'au survol du haut, et la
+  capsule du réseau va au bord. 820 × 732 points au moins, soit 680 sous la
   barre de titre cachée.
 - **Légende** en bas à gauche, en verre : routeurs, appareils, liens radio
   par qualité et autres signes, seulement ceux que la vue montre, dessinés
-  comme dans la scène. Ouverte, la vue d'ensemble se cadre au-dessus d'elle ;
-  elle se replie sur son étiquette, qui rend la place, et reste comme on l'a
-  laissée. Une fiche ouverte la laisse visible, au-dessus d'elle ; si la
+  comme dans la scène ; la couronne du chef et la lune d'un endormi y sont
+  seules, sans la pastille sombre des noms. Ouverte, la vue d'ensemble se
+  cadre au-dessus d'elle ; son chevron (⌄) la replie sur son étiquette, qui
+  rend la place, et le chevron de l'étiquette (⌃) la rouvre ; elle reste comme
+  on l'a laissée. Une fiche ouverte la laisse visible, au-dessus d'elle ; si la
   fenêtre est trop basse pour les deux, elle se replie d'elle-même jusqu'à la
   fermeture de la fiche. Quand le relevé de la sonde est ancien, une pastille
   orange le dit, à côté de la ligne de niveau.

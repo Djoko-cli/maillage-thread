@@ -41,7 +41,7 @@ struct FenetrePieces: View {
     static let cleMode = "vuePieces3D"
     /// Taille minimale de la fenetre (polissage B, section 3) : avec la fiche et ses courbes, la scene
     /// garde environ 230 pt de haut (88 pour 820 x 560, tri du sous-projet A, n° 11). 820 x 680 pt sous la barre de
-    /// titre cachee : la fenetre ne descend pas sous 820 x 712 pt.
+    /// titre cachee, de 52 pt avec la barre d'outils invisible : la fenetre ne descend pas sous 820 x 732 pt.
     static let tailleMinimale = CGSize(width: 820, height: 680)
     /// Bord des elements poses sur la vue, et ecart entre eux (pt).
     static let bord: CGFloat = 16
@@ -98,12 +98,12 @@ struct FenetrePieces: View {
 
     /// Hauteur de scene en dessous de laquelle la legende ouverte se replie d'elle-meme sous une fiche (pt) : les
     /// 230 pt environ que la spec de B garde a la scene dans la plus petite fenetre, avec la fiche et ses courbes
-    /// (section 3) ; la legende ne la fait pas descendre plus bas. Mesure sur la demo, sous la fiche de l'Apple TV 4K
-    /// et sous la plus haute : dans la fenetre par defaut (1100 x 760), la legende ouverte laisse 291 pt a la scene
-    /// sous la premiere, et reste ouverte, comme sous la plupart des fiches de la demo (30 sur 31, 240 pt au moins) ;
-    /// sous la plus haute (179 pt), elle n'en laisserait que 224 : elle se replie, et la scene retrouve 421 pt. Dans la
-    /// plus petite fenetre (820 x 712 pt, soit 680 pt sous la barre de titre cachee), elle laisserait 205 et 176 pt :
-    /// repliee, la scene y retrouve 402 et 373 pt.
+    /// (section 3) ; la legende ne la fait pas descendre plus bas. Mesure sur la demo, avec de l'air en haut (marge du
+    /// haut de 118 pt) : dans la fenetre par defaut (1100 x 760), la legende ouverte laisse 271 pt a la scene sous la
+    /// fiche de l'Apple TV 4K, et reste ouverte, comme sous 28 des 31 fiches de la demo (236 pt au moins) ; sous les
+    /// trois plus hautes (163 et 179 pt), elle n'en laisserait que 220 et 204 : elle se replie, et la scene retrouve
+    /// 417 et 401 pt. Dans la plus petite fenetre (820 x 732 pt, soit 680 pt sous la barre de titre cachee), elle
+    /// laisserait 205 pt sous la fiche de l'Apple TV 4K et 176 sous la plus haute : elle se replie.
     static let sceneMinimale: CGFloat = 230
 
     /// La legende se replie d'elle-meme sous une fiche ouverte (verification du 02/10) si, ouverte au-dessus d'elle,

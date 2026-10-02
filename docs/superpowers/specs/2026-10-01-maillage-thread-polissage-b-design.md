@@ -1,6 +1,6 @@
 # Maillage Thread, polissage B : la fenêtre et la légende
 
-Spec du 01/10/2026, validée par Djoko section par section le même jour. Mise à jour le 02/10 avec ses décisions de la vérification en vrai (section 6).
+Spec du 01/10/2026, validée par Djoko section par section le même jour. Mise à jour le 02/10 avec ses décisions de la vérification en vrai, puis de la revérification (section 6).
 
 ## 0. Contexte et décisions
 
@@ -35,7 +35,12 @@ La scène de la fenêtre porte le style `.windowStyle(.hiddenTitleBar)` : SwiftU
 
 Chaque capsule prend la taille de son contenu. Entre les deux, la scène reste visible.
 
-**Les capsules se centrent sur les trois boutons**, et restent donc collées en haut de la fenêtre : centrées sur des boutons à 16 pt du haut, elles commencent à 1,5 pt du bord (choix de Djoko du 01/10, sur les premières images ; la maquette les pose plus bas, sous des boutons plus petits).
+**De l'air en haut** (revérification du 02/10). Une barre d'outils vide et invisible, en style unifié, comme dans Plans, porte la barre de titre à 52 pt et abaisse les trois boutons : 14 pt, en x = 19, 42 et 65, de 19 à 33 pt du haut. **Les capsules se centrent sur eux**, à 26 pt du haut : leur haut est à 11 pt du bord. Ce sont des vues de l'app, posées sur la scène, et non des éléments de la barre. La barre ne contient qu'un espace souple, sans fond (`.toolbar { ToolbarSpacer(.flexible) }` et `.toolbarBackgroundVisibility(.hidden, for: .windowToolbar)`) : SwiftUI la garde à chaque mise à jour de la fenêtre, et la bande entre les capsules reçoit toujours ses clics. **Ce qui change :** centrées sur des boutons à 16 pt du haut, les capsules commençaient à 1,5 pt du bord. Djoko avait d'abord choisi de les garder ainsi (01/10, sur les premières images), puis il a annulé ce choix à la revérification.
+
+**Le vrai plein écran** (revérification du 02/10). Le bouton vert passe la fenêtre en plein écran. **Ce qui change :** il ne faisait qu'agrandir la fenêtre, car SwiftUI pose `fullScreenAuxiliary` ou `fullScreenNone` à la fenêtre d'une app de la barre des menus, et `.windowFullScreenBehavior(.enabled)` n'y change rien. La fenêtre reçoit donc `fullScreenPrimary`, et la vue le remet chaque fois que SwiftUI le défait : au lancement, puis à l'entrée et à la sortie du plein écran. En plein écran :
+- les trois boutons se cachent, et ne paraissent qu'au survol du haut, avec la barre des menus ;
+- la capsule de gauche va au bord, à 12 pt comme celle de droite, à la même hauteur, et revient après les boutons à la sortie ;
+- la barre d'outils ne paraît qu'au survol du haut. Sinon, sa fenêtre couvrirait les capsules et prendrait leurs clics (relevé dans l'app, en démo).
 
 **Sous la capsule de gauche**, en plus petit et alignés sur elle :
 - la ligne de la tournée de la sonde ;
@@ -48,7 +53,7 @@ Un bandeau qui apparaît glisse depuis le haut avec un fondu, en 0,3 s. Il repar
 - **le premier clic agit aussi dans une fenêtre inactive** (choix de Djoko) : il active la fenêtre et isole la pièce, ouvre la fiche ou commence un glisser. Avant, macOS gardait ce clic pour activer la fenêtre, et la pièce ne s'isolait qu'au second clic ;
 - **un clic sur le nom d'une pièce l'isole** (son étiquette : son nom et le compte de ses appareils), comme un clic sur sa carte ou sa boîte : en 3D, les boîtes sont petites, et l'on clique volontiers sur le nom. Le nom l'emporte sur la boîte d'une autre pièce qu'il recouvre. Un clic sur le nom d'un appareil ouvre toujours sa fiche. Un clic droit sur le nom d'une pièce n'ouvre aucun menu, comme sur sa boîte (avant, il ouvrait celui du fond, « Replacer les pièces automatiquement »). C'est une proposition de la ronde, à confirmer avec Djoko.
 
-**Marge du haut.** La place laissée en haut de la vue d'ensemble suit la hauteur **mesurée** de ce qui est posé en haut : la ligne des capsules, puis la tournée et les bandeaux présents. Elle remplace les valeurs fixes d'aujourd'hui (72 pt, plus 40 pour la scission, 40 pour la tournée et 44 sans pièces ; précision 21 du plan 4b). Une marge qui change recadre la vue d'ensemble comme aujourd'hui, sauf si Djoko a zoomé ou isolé une pièce.
+**Marge du haut.** La place laissée en haut de la vue d'ensemble suit la hauteur **mesurée** de ce qui est posé en haut : la ligne des capsules, puis la tournée et les bandeaux présents. Avec de l'air en haut, elle grandit de 20 pt : 118 pt dans la démo, au lieu de 98. Elle remplace les valeurs fixes d'aujourd'hui (72 pt, plus 40 pour la scission, 40 pour la tournée et 44 sans pièces ; précision 21 du plan 4b). Une marge qui change recadre la vue d'ensemble comme aujourd'hui, sauf si Djoko a zoomé ou isolé une pièce.
 
 ## 2. La légende A, adaptée
 
@@ -62,13 +67,13 @@ Un bandeau qui apparaît glisse depuis le haut avec un fondu, en 0,3 s. Il repar
 - **le repli et l'ouverture de la légende durent 0,45 s** (02/10 : Djoko trouvait l'ouverture « un poil trop fugace » à 0,3 s) : le panneau paraît depuis l'étiquette, en bas à gauche, avec un fondu et un léger grossissement, sur la courbe de la fiche, et le recadrage qui l'accompagne prend la même durée. La fiche et les bandeaux restent à 0,3 s. Avec « Réduire les animations », la règle ne change pas : un fondu pour ce qui paraît ou disparaît, la vue recadrée par un fondu, et rien ne glisse.
 
 **Petite fenêtre** (02/10). Sous une fiche ouverte, si la légende ouverte ne laissait à la scène que moins de **230 pt**, elle se replie d'elle-même, tant que la fiche est ouverte, et se rouvre à sa fermeture. Elle ne se replie que si c'est nécessaire, et son repli gardé ne change pas ; un clic sur son étiquette la rouvre pour cette fiche. Le seuil est la hauteur que la section 3 garde à la scène dans la plus petite fenêtre, avec la fiche et ses courbes : environ 230 pt. Mesuré sur la démo :
-- fenêtre par défaut (1100 × 760) : sous la fiche de l'Apple TV 4K, la légende ouverte laisse 291 pt à la scène, et reste ouverte, comme sous la plupart des fiches de la démo (30 sur 31, 240 pt de scène au moins) ; sous la plus haute (179 pt), elle n'en laisserait que 224 : elle se replie, et la scène retrouve 421 pt. Avec les courbes de l'historique, elle se replie aussi ;
-- plus petite fenêtre (820 × 712 pt, soit 680 pt sous la barre de titre cachée) : sous la fiche de l'Apple TV 4K et sous la plus haute, elle laisserait 205 et 176 pt ; elle se replie, et la scène retrouve 402 et 373 pt. Sous une fiche courte, elle reste ouverte.
+- fenêtre par défaut (1100 × 760), avec de l'air en haut (revérification du 02/10) : sous la fiche de l'Apple TV 4K, la légende ouverte laisse 271 pt à la scène, et reste ouverte, comme sous 28 des 31 fiches de la démo (236 pt de scène au moins) ; sous les trois plus hautes (163 et 179 pt), elle n'en laisserait que 220 et 204 : elle se replie, et la scène retrouve 417 et 401 pt. Avec les courbes de l'historique, elle se replie aussi. Avant l'air en haut, 20 pt de scène de plus : elle ne se repliait que sous la plus haute ;
+- plus petite fenêtre (820 × 732 pt, soit 680 pt sous la barre de titre cachée) : sous la fiche de l'Apple TV 4K et sous la plus haute, elle laisserait 205 et 176 pt ; elle se replie. Ces deux chiffres ne changent pas avec l'air en haut, car la fenêtre minimale grandit des mêmes 20 pt que la marge du haut. Sous une fiche courte, elle reste ouverte (11 fiches sur 31).
 
 **Aspect**, comme la maquette A, sauf le fond :
 - **en Liquid Glass** (02/10), le verre des capsules du haut, en rectangle aux coins de 10 pt. Ce qui change : la maquette A dessine un panneau sombre (le fond de la vue à environ 92 %, filet de 0,5 px blanc à environ 18 %). Djoko choisit cet écart à la maquette en connaissance de cause. Le texte, clair, reste lisible sur la scène sombre. Les images de démo, qui ne rendent pas le verre, le dessinent comme celui des capsules ;
 - texte d'environ 11 pt ;
-- en-tête « Légende » avec un chevron.
+- en-tête « Légende » avec un chevron, qui montre ce que fait un clic (revérification du 02/10, choix de Djoko) : vers le bas (⌄) quand la légende est ouverte, pour la replier ; vers le haut (⌃) quand elle est repliée, pour l'ouvrir. C'est l'inverse de la maquette A. Le chevron est un symbole, centré sur la ligne de l'étiquette : le caractère ⌄ de la maquette tombait 3,5 pt trop bas.
 
 La disposition, les groupes, les entrées, l'en-tête, le repli gardé et le contexte ne changent pas.
 
@@ -85,12 +90,12 @@ Repliée, il ne reste que l'étiquette « Légende ». Son état, replié ou ouv
 | Routeurs | routeur | sphère brillante bleue, avec halo et reflet |
 | | non identifié | la même sphère, grise |
 | | autre partition | la même sphère, ambre |
-| | chef du réseau Thread, élu automatiquement | 👑, dans un nom de nœud comme ceux de la scène |
+| | chef du réseau Thread, élu automatiquement | 👑, le glyphe des noms de la scène, sans leur pastille sombre |
 | Appareils | joignable | pastille verte, avec son halo |
 | | partition coupée | pastille orange |
 | | sans adresse | pastille rouge |
 | | disparu | anneau rouge |
-| | endormi | ☾, dans un nom de nœud |
+| | endormi | ☾, de même, sans pastille |
 | | pile | pastille orange « ⚠ 12 % », lumineuse, comme dans la scène |
 | Liens radio (qualité) | bonne | trait vert de 2 pt, bouts ronds |
 | | moyenne | trait jaune de 2 pt |
@@ -107,7 +112,9 @@ Repliée, il ne reste que l'étiquette « Légende ». Son état, replié ou ouv
 - « vers son parent » et « parent dans une autre pièce » sont ajoutés ;
 - le texte du chef est celui validé le 01/10 ;
 - le fond en verre, au lieu du panneau sombre (02/10) ;
-- les signes dessinés comme dans la scène (02/10).
+- les signes dessinés comme dans la scène (02/10) ;
+- le chevron inversé, ⌄ ouverte et ⌃ repliée (revérification du 02/10) ;
+- 👑 et ☾ sans la pastille sombre des noms (revérification du 02/10). Dans la scène, les noms la gardent.
 
 **Contextuelle.** Une entrée n'est montrée que si la scène affichée la contient :
 - « autre partition » s'il y a plus d'une partition ;
@@ -129,7 +136,7 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 
 **Le chef.** Sur la fiche d'un routeur couronné, une pastille « 👑 Chef du réseau Thread, élu automatiquement » se pose sous le nom. Cela vaut pour un routeur de bordure comme pour un routeur que seule la sonde connaît. La fiche lit les chefs de la scène (`EntreeScene.chefs`, polissage A) : elle couronne exactement les mêmes nœuds que la scène.
 
-**Taille minimale.** La fenêtre ne descend pas sous **820 × 712 pt**, soit 680 pt sous la barre de titre cachée (avant : 820 × 560 pt sous la barre de titre, alors visible). Avec la fiche et ses courbes, la scène garde ainsi environ 230 pt de haut, contre 88 aujourd'hui (tri A, n° 11).
+**Taille minimale.** La fenêtre ne descend pas sous **820 × 732 pt**, soit 680 pt sous la barre de titre cachée, de 52 pt avec la barre d'outils invisible (avant : 820 × 560 pt sous la barre de titre, alors visible ; 820 × 712 pt avant l'air en haut). Avec la fiche et ses courbes, la scène garde ainsi environ 230 pt de haut, contre 88 aujourd'hui (tri A, n° 11).
 
 **À vérifier avec Djoko** (tri A, n° 12). L'annotation « → Nom » d'un changement de parent, au-dessus des courbes, peut chevaucher le titre du graphique. Si c'est le cas à l'écran, elle descend sous le titre.
 
@@ -147,13 +154,14 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 - la marge du haut mesurée ; celle du bas, mesurée elle aussi, fiche ouverte ou fermée, légende ouverte ou repliée ;
 - la taille minimale de la fenêtre ;
 - les capsules du haut : chacune à la largeur de son contenu, même à la taille minimale de la fenêtre, en 2D et en 3D (la bande vide prend la place qui reste) ;
+- ajoutés à la revérification du 02/10 : la barre d'outils invisible, les boutons abaissés et la marge du haut qui suit (`deLAirEnHaut`) ; le plein écran gardé, et la capsule de gauche au bord en plein écran (`pleinEcran`) ; le chevron selon l'état, et son centrage, lus sur l'encre du rendu ; 👑 et ☾ sans pastille ; le menu de la barre qui se referme après « Ouvrir le graphe » et « Journal… » ;
 - ajoutés le 02/10 : la scène du graphe sans barre de titre (son style) ; le premier clic dans une fenêtre inactive ; le clic sur le nom d'une pièce, en 2D et en 3D ; la légende au-dessus de la fiche ; son repli faute de place, le repli gardé intact ; ses signes dessinés par les fonctions de la scène, et leur taille ; la durée de 0,45 s, de la légende et de son recadrage.
 
 **Captures de démo.** Elles changent toutes, puisque la fenêtre change, et deux images s'y ajoutent : la fiche du chef, avec sa pastille, et la légende repliée (quatorze en tout). Les nouvelles sont montrées à Djoko à côté des maquettes.
 
 **Avec Djoko, à la fin :**
 - déplacer la fenêtre par la bande du haut ;
-- les capsules, centrées sur les trois boutons, à 1,5 pt du bord ;
+- les capsules, centrées sur les trois boutons abaissés, à 11 pt du bord ;
 - les gestes de la scène ;
 - la fiche qui glisse ;
 - la légende contextuelle et son repli gardé, la vue cadrée au-dessus d'elle ;
@@ -175,3 +183,20 @@ La vérification en vrai a trouvé deux défauts, et Djoko a demandé quatre ret
 - **Ses signes comme dans la scène** (section 2) : la sphère brillante du routeur, les pastilles, l'anneau, la couronne, la lune, la pastille de pile et les liens de la scène, par les mêmes fonctions.
 - **Son ouverture et son repli** (section 2) : 0,45 s au lieu de 0,3 s, avec le recadrage qui les accompagne.
 - **La légende au-dessus de la fiche** (sections 2 et 3) : elle reste visible, la marge du bas suit la pile mesurée au lieu des 190 et 360 pt fixes, et elle se replie d'elle-même dans une fenêtre trop basse (seuil de 230 pt).
+
+### Revérification du 02/10
+
+Djoko a revérifié la fenêtre en vrai et demandé cinq retouches. Chaque point dit ce qui change ; le détail est dans les sections 1 et 2.
+- **De l'air en haut** (section 1) : une barre d'outils vide et invisible abaisse les trois boutons, et les capsules, centrées sur eux, ont leur haut à 11 pt du bord, au lieu de 1,5 pt. Djoko annule son choix du 01/10 de les garder collées en haut. La marge du haut, mesurée, grandit de 20 pt, et la fenêtre minimale passe à 820 × 732 pt.
+- **Le vrai plein écran** (section 1) : le bouton vert passe en plein écran, au lieu d'agrandir la fenêtre. En plein écran, la capsule de gauche va au bord, et la barre d'outils ne paraît qu'au survol du haut.
+- **Le chevron de la légende** (section 2) : vers le bas ouverte, vers le haut repliée, à l'inverse de la maquette A ; centré sur la ligne de l'étiquette repliée.
+- **👑 et ☾ dans la légende** (section 2) : sans la pastille sombre des noms, « une ombre disgracieuse et inutile ». Dans la scène, les noms la gardent.
+- **Le menu de la barre** : « Ouvrir le graphe » et « Journal… » le referment, comme « Réglages… » depuis le 30/09. L'app inactive, il restait ouvert.
+
+La vérification dans l'app, en démo et en instance à part, avec des relevés de la fenêtre à 0,2, 1, 3 et 6 s, puis après une activation et un passage en plein écran, a montré :
+- la barre transparente et la barre d'outils, toujours en place ;
+- les boutons abaissés et les capsules alignées sur eux ;
+- la bande entre les capsules qui reçoit ses clics ;
+- le plein écran gardé, et la fenêtre de la barre d'outils qui ne couvre plus les capsules.
+
+Le verre et le survol du haut en plein écran restent à juger à l'écran.

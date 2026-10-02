@@ -141,16 +141,21 @@ stays dark, like its mockup, even when the Mac is in light mode. Design:
 French).
 
 - **The window** has no title bar: the view goes up to the top, under the
-  window's three buttons. Two glass capsules sit on their line: the network
-  one (network menu, IP devices, Log, refresh) right after the buttons, the
-  view one (2D / 3D, slow rotation) against the right edge. Drag the empty
-  band between them to move the window; a double-click there does what a
-  double-click on a title bar does on your Mac (Desktop & Dock settings). At
-  least 820 × 712 points, that is 680 below the hidden title bar.
+  window's three buttons. An empty, invisible toolbar, as in Maps, lowers
+  these buttons and leaves some room above the two glass capsules, which sit
+  on their line: the network one (network menu, IP devices, Log, refresh)
+  right after the buttons, the view one (2D / 3D, slow rotation) against the
+  right edge. Drag the empty band between them to move the window; a
+  double-click there does what a double-click on a title bar does on your Mac
+  (Desktop & Dock settings). The green button goes full screen: the buttons
+  hide there until you hover over the top, and the network capsule moves to
+  the edge. At least 820 × 732 points, that is 680 below the hidden title bar.
 - **Legend** at the bottom left, in glass: routers, devices, radio links by
   quality and the other signs, only those the view shows, drawn as in the
-  view. Open, the overview is framed above it; it folds to its label, giving
-  the room back, and stays as you left it. An open card keeps it visible,
+  view; the leader's crown and a sleepy device's moon stand alone there,
+  without the dark tag of the names. Open, the overview is framed above it;
+  its chevron (⌄) folds it to its label, giving the room back, and the label's
+  chevron (⌃) opens it again; it stays as you left it. An open card keeps it visible,
   above the card; if the window is too short for both, it folds by itself
   until the card closes. When the probe's survey is old, an orange tag says so
   next to the level line.

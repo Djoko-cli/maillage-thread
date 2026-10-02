@@ -272,7 +272,7 @@ struct FenetrePiecesTests {
     /// laissait a la scene que moins de 230 pt (`FenetrePieces.sceneMinimale`) ; elle se rouvre a la fermeture de la
     /// fiche. Elle ne se replie que si c'est necessaire : pas dans la fenetre par defaut avec une fiche de la demo.
     /// Son repli garde (la preference) ne change pas, et une legende repliee par Djoko reste repliee. La plus petite
-    /// fenetre (`tailleMinimale`) : la vue y fait 712 pt de haut, barre de titre comprise.
+    /// fenetre (`tailleMinimale`) : la vue y fait 732 pt de haut, barre de titre de 52 pt comprise.
     @Test(.timeLimit(.minutes(2))) func repliDeLaLegendeFauteDePlace() async throws {
         // Le seuil.
         let m = FenetrePieces.sceneMinimale
@@ -346,7 +346,7 @@ struct FenetrePiecesTests {
     }
 
     /// Taille minimale du contenu de la fenetre : 820 x 680 pt, sous la barre de titre cachee (la fenetre, elle, fait
-    /// 712 pt de haut au moins).
+    /// 732 pt de haut au moins, avec la barre d'outils invisible).
     @Test func tailleMinimale() throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -384,7 +384,7 @@ struct FenetrePiecesTests {
         // Fiche fermee : la legende au bord, puis la ligne de niveau, puis la pastille.
         try await MoteurPiecesTests.attendre { ["legende", "niveau", "ancien"].allSatisfy { moteur.cadresInterface[$0] != nil } }
         // La hauteur de la vue, mise en page : la fenetre ne descend pas sous sa taille minimale, 680 pt sous la barre
-        // de titre, soit 712 pt en tout.
+        // de titre, soit 732 pt en tout.
         let hauteur = fenetre.frame.height
         #expect(hauteur >= taille.height)
         let legende = try cadre("legende")
