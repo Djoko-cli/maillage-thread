@@ -149,10 +149,13 @@ clair. Conception :
   appareils IP, journal, rafraîchir) juste après les boutons, celle de la vue
   (2D / 3D, rotation lente) contre le bord droit. Glisser la bande vide entre
   elles déplace la fenêtre ; un double-clic y fait ce que fait un double-clic
-  sur une barre de titre sur ce Mac (réglages Bureau et Dock). Le bouton vert
-  passe en plein écran : les boutons s'y cachent jusqu'au survol du haut, et la
-  capsule du réseau va au bord. 820 × 732 points au moins, soit 680 sous la
-  barre de titre cachée.
+  sur une barre de titre sur ce Mac (réglages Bureau et Dock). Dessous, contre
+  le bord gauche, comme la légende : la ligne de la tournée, le bandeau d'un
+  réseau scindé et le fil « Maison ». Le bouton vert passe en plein écran : la
+  barre d'outils invisible s'y retire, les boutons s'y cachent jusqu'au survol
+  du haut, qui les montre dans une barre de titre sombre, et la capsule du
+  réseau garde sa place, après eux. 820 × 732 points au moins, soit 680 sous
+  la barre de titre cachée.
 - **Légende** en bas à gauche, en verre : routeurs, appareils, liens radio
   par qualité et autres signes, seulement ceux que la vue montre, dessinés
   comme dans la scène ; la couronne du chef et la lune d'un endormi y sont
@@ -331,12 +334,14 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
 - Une tournée toutes les 5 minutes, et au rafraîchissement : le bouton
   rafraîchir de la capsule du réseau relit le réseau, lance une tournée (sauf
   s'il y en a déjà une) et Passeur Noms ; son aide dit lesquels il lancera
-  vraiment. Pendant une tournée, une ligne sous cette capsule (au-dessus du
-  bandeau d'un réseau scindé) montre son étape, un compteur de requêtes et sa
-  durée (« Balayage des routeurs muets · 24/48 · 0:42 ») ; sa place reste
-  gardée tant qu'une sonde est retenue : rien ne bouge au début ni à la fin
-  d'une tournée. Réglages › Sonde et la ligne du menu
-  montrent aussi l'étape et le compteur.
+  vraiment. Pendant une tournée, une ligne en haut à gauche, sous les capsules
+  (au-dessus du bandeau d'un réseau scindé), montre son étape, un compteur de
+  requêtes et sa durée (« Balayage des routeurs muets · 24/48 · 0:42 »). Elle
+  n'est là que pendant la tournée : le bandeau et le fil remontent quand elle
+  disparaît, et redescendent quand elle paraît. La vue, elle, ne bouge pas :
+  sa marge du haut garde la place de la ligne tant qu'une sonde est retenue,
+  pour ne pas se recadrer toutes les 5 minutes. Réglages › Sonde et la ligne
+  du menu montrent aussi l'étape et le compteur.
 - La liste des routeurs vient du chef ; s'il se tait, d'un routeur qui a déjà
   répondu ; sinon des autres routeurs de la table de la sonde, puis d'une
   recherche sur tous les identifiants de routeur (pas de nouveau dans les 30

@@ -22,7 +22,7 @@ struct CadreFeux: Equatable {
     /// Milieu des boutons (pt, depuis le haut).
     var milieu: CGFloat
 
-    /// Celui de la fenetre de la vue, mesure sous macOS 27 : sa barre d'outils vide, en style unifie
+    /// Celui de la fenetre de la vue, mesure sous macOS 27 : sa barre d'outils vide, du style automatique de SwiftUI
     /// (`FenetrePieces`, reverification du 02/10), fait la barre de titre de 52 pt et abaisse les trois boutons de
     /// 14 pt, en x = 19, 42 et 65, de 19 a 33 pt du haut (sans elle : 32 pt, en x = 9, 32 et 55, de 9 a 23 pt).
     /// Avant que la fenetre soit connue, et pour les captures, qui ne rendent pas la fenetre.

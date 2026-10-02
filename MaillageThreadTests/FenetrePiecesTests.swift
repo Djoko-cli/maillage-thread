@@ -677,14 +677,15 @@ struct FenetrePiecesTests {
 
     /// Une fenetre faite comme celle de l'app (releves dans l'app, en demo, les 02/10) : le contenu sous la barre de
     /// titre, la barre transparente, le titre masque (`.windowStyle(.hiddenTitleBar)`) ; et une barre d'outils vide,
-    /// en style unifie, sans fond (`FenetrePieces.barreDOutilsInvisible`), qui abaisse les trois boutons. Les tests
-    /// montent leur fenetre a la main, sans la scene de l'app : SwiftUI n'y pose pas la barre d'outils.
+    /// du style automatique que choisit SwiftUI (releve : `toolbarStyle` 0), sans fond (le `.toolbar` de
+    /// `FenetrePieces`), qui abaisse les trois boutons. Les tests montent leur fenetre a la main, sans la scene de
+    /// l'app : SwiftUI n'y pose pas la barre d'outils.
     static func sansBarreDeTitre(_ fenetre: NSWindow) {
         fenetre.styleMask.insert(.fullSizeContentView)
         fenetre.titlebarAppearsTransparent = true
         fenetre.titleVisibility = .hidden
         fenetre.toolbar = NSToolbar(identifier: "graphe-test")
-        fenetre.toolbarStyle = .unified
+        fenetre.toolbarStyle = .automatic
     }
 
     /// Sans barre de titre (polissage B, section 1) : la scene du graphe, et elle seule, porte le style

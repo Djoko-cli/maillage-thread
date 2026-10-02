@@ -147,9 +147,12 @@ French).
   right after the buttons, the view one (2D / 3D, slow rotation) against the
   right edge. Drag the empty band between them to move the window; a
   double-click there does what a double-click on a title bar does on your Mac
-  (Desktop & Dock settings). The green button goes full screen: the buttons
-  hide there until you hover over the top, and the network capsule moves to
-  the edge. At least 820 × 732 points, that is 680 below the hidden title bar.
+  (Desktop & Dock settings). Below, against the left edge, like the legend:
+  the tour line, the split-network banner and the "Home" path. The green
+  button goes full screen: the invisible toolbar goes away there, the buttons
+  hide until you hover over the top, which shows them in a dark title bar, and
+  the network capsule keeps its place, after them. At least 820 × 732 points,
+  that is 680 below the hidden title bar.
 - **Legend** at the bottom left, in glass: routers, devices, radio links by
   quality and the other signs, only those the view shows, drawn as in the
   view; the leader's crown and a sleepy device's moon stand alone there,
@@ -314,11 +317,14 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
 - A tour every 5 minutes, and on refresh: the refresh button of the network
   capsule rereads the network, starts a tour (unless one is running) and
   launches Passeur Noms; its help tag says which of these it will actually
-  start. While a tour runs, a line under that capsule (above the split-network
-  banner) shows its step, a counter of requests and its duration ("Scan of
-  silent routers · 24/48 · 0:42"); its place stays reserved while a probe is
-  remembered, so nothing moves when a tour starts or ends.
-  Settings › Probe and the menu line show the step and the counter too.
+  start. While a tour runs, a line at the top left, under the capsules (above
+  the split-network banner), shows its step, a counter of requests and its
+  duration ("Scan of silent routers · 24/48 · 0:42"). It is only there during
+  the tour: the banner and the path move up when it goes, and back down
+  when it comes. The view itself does not move: its top margin keeps the
+  line's room while a probe is remembered, so as not to reframe every 5
+  minutes. Settings › Probe and the menu line show the step and the counter
+  too.
 - The list of routers comes from the leader; if it is silent, from a router
   that has already answered; otherwise from the other routers in the probe's
   router table, then from a search over every router id (not again for 30

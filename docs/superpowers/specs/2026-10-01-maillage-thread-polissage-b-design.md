@@ -27,7 +27,7 @@ Les maquettes sont des fragments affichés dans le cadre du compagnon visuel. Le
 - les trois boutons de la fenêtre restent posés sur la scène, en haut à gauche ;
 - le titre « Maillage Thread » reste celui de la fenêtre, pour Mission Control et le menu Fenêtre, mais il n'est plus affiché.
 
-La scène de la fenêtre porte le style `.windowStyle(.hiddenTitleBar)` : SwiftUI pose lui-même la barre de titre transparente, le titre masqué et `fullSizeContentView`, et les garde à chaque mise à jour de la fenêtre. **Ce qui change (02/10) :** le crochet AppKit d'abord prévu (`SondeFenetre`) posait ces réglages une fois, et SwiftUI les défaisait aussitôt, puis à chaque mise à jour : la barre restait opaque, une bande gris foncé de 32 pt sur les capsules. Le crochet ne garde que la fenêtre sombre (`assombrir`). Les autres fenêtres de l'app ne changent pas.
+La scène de la fenêtre porte le style `.windowStyle(.hiddenTitleBar)` : SwiftUI pose lui-même la barre de titre transparente, le titre masqué et `fullSizeContentView`, et les garde à chaque mise à jour de la fenêtre. **Ce qui change (02/10) :** le crochet AppKit d'abord prévu (`SondeFenetre`) posait ces réglages une fois, et SwiftUI les défaisait aussitôt, puis à chaque mise à jour : la barre restait opaque, une bande gris foncé de 32 pt sur les capsules. Le crochet ne gardait que la fenêtre sombre (`assombrir`). **Ce qui change (ronde finale du 02/10) :** SwiftUI défaisait aussi cette apparence sombre, à chaque mise à jour de la fenêtre (relevé dans l'app, en démo) : la fenêtre suivait l'apparence du Mac, et seule la vue était sombre. La vue demande donc l'apparence sombre à SwiftUI (`.preferredColorScheme(.dark)`), qui la pose et la garde ; le crochet est retiré. Les autres fenêtres de l'app ne changent pas.
 
 **Deux capsules de verre, sur une seule ligne**, en haut, au niveau des trois boutons :
 - **à gauche**, juste après les trois boutons : le menu du réseau, « Appareils IP · N », « Journal », puis ⟳ (rafraîchir). Ce sont les commandes d'aujourd'hui (`BarreOutils`), sans changement de comportement ;
@@ -35,25 +35,33 @@ La scène de la fenêtre porte le style `.windowStyle(.hiddenTitleBar)` : SwiftU
 
 Chaque capsule prend la taille de son contenu. Entre les deux, la scène reste visible.
 
-**De l'air en haut** (revérification du 02/10). Une barre d'outils vide et invisible, en style unifié, comme dans Plans, porte la barre de titre à 52 pt et abaisse les trois boutons : 14 pt, en x = 19, 42 et 65, de 19 à 33 pt du haut. **Les capsules se centrent sur eux**, à 26 pt du haut : leur haut est à 11 pt du bord. Ce sont des vues de l'app, posées sur la scène, et non des éléments de la barre. La barre ne contient qu'un espace souple, sans fond (`.toolbar { ToolbarSpacer(.flexible) }` et `.toolbarBackgroundVisibility(.hidden, for: .windowToolbar)`) : SwiftUI la garde à chaque mise à jour de la fenêtre, et la bande entre les capsules reçoit toujours ses clics. **Ce qui change :** centrées sur des boutons à 16 pt du haut, les capsules commençaient à 1,5 pt du bord. Djoko avait d'abord choisi de les garder ainsi (01/10, sur les premières images), puis il a annulé ce choix à la revérification.
+**De l'air en haut** (revérification du 02/10). Une barre d'outils vide et invisible, du style automatique que choisit SwiftUI, comme dans Plans, porte la barre de titre à 52 pt et abaisse les trois boutons : 14 pt, en x = 19, 42 et 65, de 19 à 33 pt du haut. **Les capsules se centrent sur eux**, à 26 pt du haut : leur haut est à 11 pt du bord. Ce sont des vues de l'app, posées sur la scène, et non des éléments de la barre. La barre ne contient qu'un espace souple, sans fond (`.toolbar { ToolbarSpacer(.flexible) }` et `.toolbarBackgroundVisibility(.hidden, for: .windowToolbar)`) : SwiftUI la garde à chaque mise à jour de la fenêtre, et la bande entre les capsules reçoit toujours ses clics. **Ce qui change :** centrées sur des boutons à 16 pt du haut, les capsules commençaient à 1,5 pt du bord. Djoko avait d'abord choisi de les garder ainsi (01/10, sur les premières images), puis il a annulé ce choix à la revérification.
 
-**Le vrai plein écran** (revérification du 02/10). Le bouton vert passe la fenêtre en plein écran. **Ce qui change :** il ne faisait qu'agrandir la fenêtre, car SwiftUI pose `fullScreenAuxiliary` ou `fullScreenNone` à la fenêtre d'une app de la barre des menus, et `.windowFullScreenBehavior(.enabled)` n'y change rien. La fenêtre reçoit donc `fullScreenPrimary`, et la vue le remet chaque fois que SwiftUI le défait : au lancement, puis à l'entrée et à la sortie du plein écran. En plein écran :
-- les trois boutons se cachent, et ne paraissent qu'au survol du haut, avec la barre des menus ;
-- la capsule de gauche va au bord, à 12 pt comme celle de droite, à la même hauteur, et revient après les boutons à la sortie ;
-- la barre d'outils ne paraît qu'au survol du haut. Sinon, sa fenêtre couvrirait les capsules et prendrait leurs clics (relevé dans l'app, en démo).
+**Le vrai plein écran** (revérification du 02/10). Le bouton vert passe la fenêtre en plein écran. **Ce qui change :** il ne faisait qu'agrandir la fenêtre, car SwiftUI pose `fullScreenAuxiliary` ou `fullScreenNone` à la fenêtre d'une app de la barre des menus, et `.windowFullScreenBehavior(.enabled)` n'y change rien. La fenêtre reçoit donc `fullScreenPrimary`, et la vue le remet chaque fois que SwiftUI le défait : au lancement, puis à l'entrée et à la sortie du plein écran. En plein écran (ronde finale du 02/10) :
+- la barre d'outils invisible se retire, et revient à la sortie. Elle ne sert qu'à abaisser les boutons hors plein écran ;
+- les trois boutons se cachent, et ne paraissent qu'au survol du haut, avec la barre des menus, dans la barre de titre du plein écran. Cette barre est sombre, comme la fenêtre ;
+- la capsule de gauche garde sa place, après les boutons, à la même hauteur : les boutons que le survol fait paraître (à x = 9, 32 et 55 pt) ne la recouvrent pas ;
+- les capsules restent visibles et reçoivent leurs clics.
 
-**Sous la capsule de gauche**, en plus petit et alignés sur elle :
-- la ligne de la tournée de la sonde ;
+**Ce qui change :** sur un Mac en clair, le survol du haut faisait descendre une bande blanche, la barre de titre et la barre d'outils, sur la ligne des capsules. Sa fenêtre, à part, prend l'apparence de la fenêtre du graphe, que SwiftUI laissait à celle du Mac : son fond était blanc (relevé dans l'app : 1, 1, 1). Il est maintenant gris très foncé (0,12). La capsule de gauche allait au bord, à 12 pt, et les boutons revenaient sur elle au survol. La barre d'outils ne paraît de toute façon qu'au survol du haut (`.windowToolbarFullScreenVisibility(.onHover)`) : sinon, sa fenêtre couvrirait les capsules et prendrait leurs clics.
+
+**Sous la ligne des capsules, contre le bord gauche** de la fenêtre, à la marge de la légende et de la ligne de niveau (16 pt), en plus petit :
+- la ligne de la tournée de la sonde, pendant une tournée seulement ;
 - le bandeau de scission, s'il y a lieu ;
-- le bandeau « pas encore de pièces de Maison », s'il y a lieu.
+- le bandeau « pas encore de pièces de Maison », s'il y a lieu ;
+- le fil « Maison ».
 
-Un bandeau qui apparaît glisse depuis le haut avec un fondu, en 0,3 s. Il repart de même. Avec « Réduire les animations », c'est un simple fondu.
+**Ce qui change (ronde finale du 02/10) :** ils étaient alignés sous la capsule de gauche, à 92 pt du bord.
+
+Un bandeau qui apparaît glisse depuis le haut avec un fondu, en 0,3 s. Il repart de même. Avec « Réduire les animations », c'est un simple fondu. La ligne de la tournée fait de même : quand elle disparaît, le bandeau et le fil remontent ; quand elle paraît, ils redescendent. **Ce qui change (ronde finale du 02/10) :** hors tournée, sa place restait gardée, vide, tant qu'une sonde était retenue (précision 21 du plan 4b).
 
 **Déplacer la fenêtre.** Sans barre de titre, glisser le fond tourne ou déplace la scène. La fenêtre se déplace donc en glissant **la bande vide du haut, entre les deux capsules**, et seulement là. Le double-clic sur cette bande fait ce que fait un double-clic sur une barre de titre selon les réglages du Mac. Sur cette bande, le double-clic de recadrage de la scène ne s'applique donc pas. Ailleurs, les gestes de la scène ne changent pas, avec deux ajouts du 02/10 :
 - **le premier clic agit aussi dans une fenêtre inactive** (choix de Djoko) : il active la fenêtre et isole la pièce, ouvre la fiche ou commence un glisser. Avant, macOS gardait ce clic pour activer la fenêtre, et la pièce ne s'isolait qu'au second clic ;
 - **un clic sur le nom d'une pièce l'isole** (son étiquette : son nom et le compte de ses appareils), comme un clic sur sa carte ou sa boîte : en 3D, les boîtes sont petites, et l'on clique volontiers sur le nom. Le nom l'emporte sur la boîte d'une autre pièce qu'il recouvre. Un clic sur le nom d'un appareil ouvre toujours sa fiche. Un clic droit sur le nom d'une pièce n'ouvre aucun menu, comme sur sa boîte (avant, il ouvrait celui du fond, « Replacer les pièces automatiquement »). C'est une proposition de la ronde, à confirmer avec Djoko.
 
 **Marge du haut.** La place laissée en haut de la vue d'ensemble suit la hauteur **mesurée** de ce qui est posé en haut : la ligne des capsules, puis la tournée et les bandeaux présents. Avec de l'air en haut, elle grandit de 20 pt : 118 pt dans la démo, au lieu de 98. Elle remplace les valeurs fixes d'aujourd'hui (72 pt, plus 40 pour la scission, 40 pour la tournée et 44 sans pièces ; précision 21 du plan 4b). Une marge qui change recadre la vue d'ensemble comme aujourd'hui, sauf si Djoko a zoomé ou isolé une pièce.
+
+**La scène ne bouge pas avec la tournée** (décision de Djoko, ronde finale du 02/10). Tant qu'une sonde est retenue, la marge du haut compte toujours la place d'une ligne de tournée et de son espacement, que la ligne soit montrée ou non : seuls les éléments posés en haut bougent quand elle paraît ou disparaît. Sans cela, la vue d'ensemble se recadrerait au début et à la fin de chaque tournée, toutes les 5 minutes.
 
 ## 2. La légende A, adaptée
 
@@ -114,7 +122,8 @@ Repliée, il ne reste que l'étiquette « Légende ». Son état, replié ou ouv
 - le fond en verre, au lieu du panneau sombre (02/10) ;
 - les signes dessinés comme dans la scène (02/10) ;
 - le chevron inversé, ⌄ ouverte et ⌃ repliée (revérification du 02/10) ;
-- 👑 et ☾ sans la pastille sombre des noms (revérification du 02/10). Dans la scène, les noms la gardent.
+- 👑 et ☾ sans la pastille sombre des noms (revérification du 02/10). Dans la scène, les noms la gardent ;
+- 👑 et ☾ centrés sur la place d'un nœud de leur groupe, un routeur pour la couronne, un appareil pour la lune : leurs textes s'alignent sur ceux des autres signes (ronde finale du 02/10). Ils étaient décalés d'environ 3,5 pt vers la droite. Seule la pastille d'une pile, plus large, garde sa place.
 
 **Contextuelle.** Une entrée n'est montrée que si la scène affichée la contient :
 - « autre partition » s'il y a plus d'une partition ;
@@ -154,6 +163,7 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 - la marge du haut mesurée ; celle du bas, mesurée elle aussi, fiche ouverte ou fermée, légende ouverte ou repliée ;
 - la taille minimale de la fenêtre ;
 - les capsules du haut : chacune à la largeur de son contenu, même à la taille minimale de la fenêtre, en 2D et en 3D (la bande vide prend la place qui reste) ;
+- ajoutés à la ronde finale du 02/10 : la colonne de gauche au bord, la tournée sans place réservée, le bandeau et le fil qui remontent, la marge du haut inchangée à la fin d'une tournée (`tourneeSansPlaceReservee`) ; en plein écran, la barre d'outils retirée puis rendue, et la capsule de gauche à sa place (`pleinEcran`) ; la fenêtre sombre demandée à SwiftUI ; les textes de 👑 et ☾ alignés (`couronneEtLuneAlignees`) ;
 - ajoutés à la revérification du 02/10 : la barre d'outils invisible, les boutons abaissés et la marge du haut qui suit (`deLAirEnHaut`) ; le plein écran gardé, et la capsule de gauche au bord en plein écran (`pleinEcran`) ; le chevron selon l'état, et son centrage, lus sur l'encre du rendu ; 👑 et ☾ sans pastille ; le menu de la barre qui se referme après « Ouvrir le graphe » et « Journal… » ;
 - ajoutés le 02/10 : la scène du graphe sans barre de titre (son style) ; le premier clic dans une fenêtre inactive ; le clic sur le nom d'une pièce, en 2D et en 3D ; la légende au-dessus de la fiche ; son repli faute de place, le repli gardé intact ; ses signes dessinés par les fonctions de la scène, et leur taille ; la durée de 0,45 s, de la légende et de son recadrage.
 
@@ -170,6 +180,8 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 - « Réduire les animations » ;
 - la petite fenêtre, avec ses capsules entières ;
 - l'annotation des courbes.
+
+**Ronde finale du 02/10, à voir en vrai** (section 6) : la colonne de gauche au bord ; une tournée qui paraît et disparaît, la scène immobile ; le survol du haut en plein écran, sur un Mac en clair ; 👑 et ☾ alignés.
 
 **Vérification du 02/10, à refaire en vrai** (section 6) : la barre de titre transparente et le plein écran ; le premier clic dans une fenêtre inactive ; le clic sur le nom d'une pièce ; la légende en verre et ses signes ; son ouverture en 0,45 s ; la légende au-dessus de la fiche, et son repli dans la petite fenêtre.
 
@@ -197,6 +209,22 @@ La vérification dans l'app, en démo et en instance à part, avec des relevés 
 - la barre transparente et la barre d'outils, toujours en place ;
 - les boutons abaissés et les capsules alignées sur eux ;
 - la bande entre les capsules qui reçoit ses clics ;
-- le plein écran gardé, et la fenêtre de la barre d'outils qui ne couvre plus les capsules.
+- le plein écran gardé, et la fenêtre de la barre d'outils qui ne couvre plus les capsules au repos (au survol du haut, voir la ronde finale).
 
 Le verre et le survol du haut en plein écran restent à juger à l'écran.
+
+### Ronde finale du 02/10
+
+Après la troisième vérification en vrai, Djoko a demandé quatre retouches. Le détail est dans les sections 1 et 2.
+- **La colonne de gauche au bord** (section 1) : la ligne de la tournée, les bandeaux et le fil « Maison » vont contre le bord gauche de la fenêtre, à 16 pt comme la légende et la ligne de niveau, et non plus sous la capsule de gauche.
+- **La tournée sans place réservée** (section 1) : sa ligne n'est là que pendant la tournée. Le bandeau et le fil remontent quand elle disparaît, et redescendent quand elle paraît, avec l'animation des bandeaux. **La scène, elle, reste stable** : la marge du haut compte toujours la place de la ligne tant qu'une sonde est retenue. Sans cela, la vue d'ensemble se recadrerait à chaque tournée, toutes les 5 minutes.
+- **Le plein écran** (section 1) : la barre d'outils invisible se retire, la barre de titre que le survol fait paraître est sombre, et la capsule de gauche garde sa place, après les boutons. Sur un Mac en clair, le survol faisait descendre une bande blanche sur les capsules, et les boutons revenaient sur la capsule de gauche. La cause de la bande : SwiftUI défaisait l'apparence sombre de la fenêtre, que la barre du plein écran reprend. La fenêtre la demande donc à SwiftUI (`.preferredColorScheme(.dark)`).
+- **👑 et ☾ alignés** (section 2) : leurs textes commencent avec ceux des autres signes de leur groupe.
+
+La vérification dans l'app, en démo et en instance à part, avec un passage en plein écran, a montré :
+- la barre d'outils retirée en plein écran, sans que SwiftUI la remette, puis rendue à la sortie, avec les boutons de nouveau à 19, 42 et 65 pt ;
+- la fenêtre et la barre de titre du plein écran en apparence sombre, le fond de cette barre à 0,12 au lieu de 1 ;
+- la capsule de gauche à {92, 11} avant, pendant et après le plein écran, et ses clics reçus par la fenêtre du graphe ;
+- les fenêtres de la barre des menus inchangées.
+
+La barre de titre du plein écran reste opaque : au survol du haut, elle couvre encore le haut des capsules, en sombre, le temps du survol. Aucune API publique ne la rend transparente. Le survol lui-même reste à juger à l'écran.
