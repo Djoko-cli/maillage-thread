@@ -207,8 +207,8 @@ clair. Conception :
   places gardées partent, pas l'ordre des étages) ; sur une pièce (sa boîte ou
   son nom) ou un appareil, aucun menu.
 - **Zoom sémantique** : de loin, les pièces seules ; puis les routeurs ; de
-  près, tous les noms qui tiennent. La ligne en haut à gauche, sous « Maison », dit le niveau, ou
-  combien de noms sont masqués faute de place.
+  près, tous les noms qui tiennent. La ligne en haut à gauche, sous
+  « Maison », dit le niveau, ou combien de noms sont masqués faute de place.
 - « Réduire les animations » (accessibilité de macOS) : l'envol et le retour
   par double-clic deviennent un fondu, les autres vols de caméra sont
   immédiats, la rotation lente est coupée, la fiche, la légende et les

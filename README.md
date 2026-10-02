@@ -198,8 +198,8 @@ French).
   floor"; on the background, "Arrange rooms automatically" (kept places go,
   not the floor order); on a room (its box or its name) or a device, no menu.
 - **Semantic zoom**: from afar, rooms only; then routers; up close, every name
-  that fits. The line at the top left, under "Home", gives the level, or how many names
-  are hidden for lack of room.
+  that fits. The line at the top left, under "Home", gives the level, or how
+  many names are hidden for lack of room.
 - "Reduce motion" (macOS accessibility): the flight and the double-click
   return become a fade, other camera flights are immediate, the slow rotation
   is off, the card, the legend and the top banners come and go with a plain
