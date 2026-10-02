@@ -5,8 +5,8 @@ import SwiftUI
 /// Fenetre de la vue par pieces (spec de la vue par pieces, sections 1 et 7 ; polissage B, section 1) :
 /// sans barre de titre (le style de sa scene, `.hiddenTitleBar`, dans `MaillageThreadApp`), la scene occupe
 /// toute la fenetre, jusque sous ses trois boutons ; en haut, les deux capsules du bandeau, la bande qui
-/// deplace la fenetre, la ligne de la tournee, les bandeaux et le fil (`HautPieces`) ; en bas, la pile : la
-/// legende et la ligne de niveau, puis la fiche. Elle reste sombre, comme la maquette, meme quand le Mac est en
+/// deplace la fenetre, la ligne de la tournee, les bandeaux, le fil et la ligne de niveau (`HautPieces`) ; en bas,
+/// la pile : la legende, puis la fiche. Elle reste sombre, comme la maquette, meme quand le Mac est en
 /// clair (precision 15 du plan 4b).
 struct FenetrePieces: View {
     @Environment(Surveillance.self) private var surveillance
@@ -21,12 +21,12 @@ struct FenetrePieces: View {
     @State private var feux = CadreFeux.defaut
     /// Marge du haut de la vue d'ensemble, d'apres la hauteur mesuree du haut de la fenetre.
     @State private var margeHautMesuree = FenetrePieces.margeHautInitiale
-    /// Hauteur mesuree de la rangee du bas (la legende et la ligne de niveau), la legende ouverte ; nil, repliee.
+    /// Hauteur mesuree de la rangee du bas (la legende), la legende ouverte ; nil, repliee.
     @State private var hauteurLegende: CGFloat?
     /// La derniere hauteur mesuree de la rangee, la legende ouverte : elle decide du repli faute de place, la legende
     /// repliee comprise.
     @State private var legendeOuverteMesuree: CGFloat?
-    /// Hauteur mesuree de la pile du bas (la rangee, puis la fiche), une fiche ouverte ; nil sans fiche.
+    /// Hauteur mesuree de la pile du bas (la legende, puis la fiche), une fiche ouverte ; nil sans fiche.
     @State private var hauteurPile: CGFloat?
     /// Hauteur mesuree de la fiche ; la derniere reste a sa fermeture, et vaut pour la suivante jusqu'a sa mesure.
     @State private var hauteurFiche: CGFloat?
@@ -46,6 +46,8 @@ struct FenetrePieces: View {
     /// Bord des elements poses sur la vue, et ecart entre eux (pt).
     static let bord: CGFloat = 16
     static let espacement: CGFloat = 10
+    /// Ecart entre le fil et la ligne de niveau, juste dessous (pt).
+    static let espacementNiveau: CGFloat = 4
 
     /// `fichierPlaces` : `positions-pieces.json` (`fichierPlaces(demo:sousTests:)`) ; `fichierPieces` :
     /// `pieces-routeurs.json` (`PiecesChoisies.fichier(demo:sousTests:)`) ; nil : ni lu ni ecrit.
@@ -70,18 +72,18 @@ struct FenetrePieces: View {
 
     /// Marge du haut de la vue d'ensemble (pt) : le bas de ce qui est pose en haut de la fenetre, mesure
     /// (`HautPieces` : la ligne des capsules, la place de la tournee tant qu'une sonde est retenue, les
-    /// bandeaux presents, le fil), puis l'espacement. Elle remplace les valeurs fixes du plan 4b
-    /// (precision 21).
+    /// bandeaux presents, le fil, la ligne de niveau, toujours la), puis l'espacement. Elle remplace les valeurs
+    /// fixes du plan 4b (precision 21).
     static func margeHaut(bas: CGFloat) -> CGFloat {
         ceil(bas) + espacement
     }
 
-    /// Avant la premiere mesure : la ligne des capsules, l'espacement et le fil.
-    static let margeHautInitiale = margeHaut(bas: 2 * CadreFeux.defaut.milieu + espacement + 16)
+    /// Avant la premiere mesure : la ligne des capsules, l'espacement, le fil, et la ligne de niveau.
+    static let margeHautInitiale = margeHaut(bas: 2 * CadreFeux.defaut.milieu + espacement + 16 + espacementNiveau
+                                                + RangeeNiveau.hauteur)
 
     /// Marge du bas de la vue d'ensemble (pt), comme celle du haut : la hauteur mesuree de ce qui est pose en bas,
-    /// la pile (de haut en bas, la rangee de la legende et de la ligne de niveau, puis la fiche), le bord et
-    /// l'espacement ; la vue d'ensemble se cadre au-dessus de tout cela (decisions de Djoko du 01/10 pour la legende
+    /// la pile (de haut en bas, la legende, puis la fiche), le bord et l'espacement ; la vue d'ensemble se cadre au-dessus de tout cela (decisions de Djoko du 01/10 pour la legende
     /// ouverte, du 02/10 pour la fiche, qui remplacent les 190 et 360 pt fixes de la fiche). Sans rien a garder
     /// (nil : la legende repliee, ou sans entree, et pas de fiche), 30 pt : la legende repliee et la ligne de
     /// niveau debordent un peu sur la vue.
@@ -135,20 +137,20 @@ struct FenetrePieces: View {
                 } else {
                     EtatVide()
                 }
+                // « Ancien » ne depend que de l'heure : lu ici, dans la `TimelineView`, il suit l'horloge.
                 HautPieces(moteur: moteur, troisD: $troisD, sansPieces: entree?.scene.sansPiecesMaison == true,
-                           feux: feux) { margeHautMesuree = Self.margeHaut(bas: $0) }
+                           ancien: surveillance.maillageAncien, feux: feux) { margeHautMesuree = Self.margeHaut(bas: $0) }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 VStack(alignment: .leading, spacing: Self.espacement) {
                     Spacer()
-                    // La pile du bas, de haut en bas : la rangee de la legende et de la ligne de niveau, puis la fiche ;
-                    // la legende reste au-dessus d'une fiche ouverte (verification du 02/10). La fiche glisse depuis le
-                    // bas a l'ouverture et a la fermeture, et la rangee glisse avec elle. Avec « Reduire les
-                    // animations », la fiche se fond (sa transition porte son fondu) et la rangee prend sa place d'un
-                    // coup : aucune animation de conteneur. D'un noeud a l'autre, le contenu de la fiche change sur
-                    // place.
+                    // La pile du bas, de haut en bas : la legende, puis la fiche ; la legende reste au-dessus d'une
+                    // fiche ouverte (verification du 02/10). La fiche glisse depuis le bas a l'ouverture et a la
+                    // fermeture, et la legende glisse avec elle. Avec « Reduire les animations », la fiche se fond (sa
+                    // transition porte son fondu) et la legende prend sa place d'un coup : aucune animation de
+                    // conteneur. D'un noeud a l'autre, le contenu de la fiche change sur place.
                     VStack(alignment: .leading, spacing: Self.espacement) {
-                        LigneDuBas(moteur: moteur, entree: entree, ancien: surveillance.maillageAncien,
-                                   repliDePlace: repliDePlace, rouvrir: { legendeRouverte = true }) { h in
+                        LigneDuBas(moteur: moteur, entree: entree, repliDePlace: repliDePlace,
+                                   rouvrir: { legendeRouverte = true }) { h in
                             hauteurLegende = h
                             if let h { legendeOuverteMesuree = h }
                         }
@@ -362,15 +364,14 @@ struct FilPieces: View {
     }
 }
 
-/// Bas a gauche de la fenetre, au-dessus de la fiche quand elle est ouverte : la legende, la ligne de niveau, et
-/// la pastille d'un releve de la sonde ancien. La ligne de niveau s'aligne sur la derniere ligne de la legende.
-/// Elle garde le repli de la legende, d'un lancement a l'autre, et donne sa hauteur quand la legende est ouverte
-/// (nil, repliee) : la marge du bas de la vue d'ensemble (`FenetrePieces.margeBas`).
+/// Bas a gauche de la fenetre, au-dessus de la fiche quand elle est ouverte : la legende seule (la ligne de niveau
+/// et la pastille d'un releve ancien sont montees dans la colonne de gauche du haut, `HautPieces`, decision de Djoko
+/// du 02/10). Elle garde le repli de la legende, d'un lancement a l'autre, et donne sa hauteur quand la legende est
+/// ouverte (nil, repliee) : la marge du bas de la vue d'ensemble (`FenetrePieces.margeBas`).
 struct LigneDuBas: View {
     @Environment(\.accessibilityReduceMotion) private var reduire
     let moteur: MoteurPieces
     let entree: EntreeScene?
-    var ancien = false
     /// Legende repliee ou ouverte, imposee (captures) : la preference n'est alors ni ecrite, ni suivie.
     var legendeForcee: Bool?
     /// Repli faute de place, sous une fiche, dans une fenetre trop basse (`FenetrePieces.repliDePlace`) : la legende
@@ -387,7 +388,7 @@ struct LigneDuBas: View {
         let rubriques = entree.map { LegendePieces.rubriques(LegendePieces.Lecture($0, ailleurs: ailleurs)) } ?? []
         let estRepliee = legendeForcee ?? (repliee || repliDePlace)
         let ouverte = !rubriques.isEmpty && !estRepliee
-        HStack(alignment: .lastTextBaseline, spacing: 12) {
+        HStack(spacing: 0) {
             if !rubriques.isEmpty {
                 LegendePieces(rubriques: rubriques, repliee: Binding(get: { estRepliee }, set: { r in
                     guard legendeForcee == nil else { return }
@@ -399,21 +400,17 @@ struct LigneDuBas: View {
                 }))
                 .obstacle("legende", moteur)
             }
-            LigneNiveauVue(ligne: moteur.ligneNiveau)
-                .obstacle("niveau", moteur)
-            if ancien {
-                PastilleAncien()
-                    .obstacle("ancien", moteur)
-            }
         }
-        // La ligne de niveau et la pastille glissent avec la legende qui s'ouvre ou se replie ; avec « Reduire les
-        // animations », elles prennent leur place d'un coup.
+        // Ce qui se decale avec la legende qui s'ouvre ou se replie glisse avec elle ; avec « Reduire les animations »,
+        // cela prend sa place d'un coup.
         .animation(Apparition.animationDuConteneurLegende(reduire: reduire), value: estRepliee)
         .onGeometryChange(for: CGFloat?.self) { ouverte ? $0.size.height : nil } action: { surHauteurOuverte($0) }
     }
 }
 
-/// Ligne de niveau, en bas a gauche : pieces seules, routeurs, noms masques, piece isolee.
+/// Ligne de niveau, en haut a gauche, dans la colonne, sous le fil : pieces seules, routeurs, noms masques, piece
+/// isolee. Une seule ligne, coupee par des points de suspension si elle est trop longue : la colonne ne change pas de
+/// hauteur quand elle change de texte, au fil des zooms.
 struct LigneNiveauVue: View {
     let ligne: LigneNiveau
 
@@ -421,6 +418,8 @@ struct LigneNiveauVue: View {
         Text(Self.texte(ligne))
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 
     static func texte(_ l: LigneNiveau) -> String {
@@ -433,6 +432,31 @@ struct LigneNiveauVue: View {
         case .masques(let n): String(localized: "\(n) noms masqués faute de place : rapprochez-vous (molette)")
         case .lisibles: String(localized: "Tous les noms sont lisibles")
         }
+    }
+}
+
+/// La rangee de la ligne de niveau, dans la colonne de gauche, sous le fil, et la pastille d'un releve de la sonde
+/// ancien, a cote d'elle (decision de Djoko du 02/10, qui les avait en bas). Sa hauteur est toujours celle de la
+/// pastille, qu'elle soit la ou non : la colonne ne bouge pas, ni la marge du haut de la vue d'ensemble, quand la
+/// pastille parait ou repart. La ligne se coupe d'elle-meme si elle est trop longue, la pastille garde sa place.
+struct RangeeNiveau: View {
+    let moteur: MoteurPieces
+    var ancien = false
+
+    /// Hauteur de la rangee (pt) : celle de la pastille, plus haute que la ligne.
+    static let hauteur = PastilleAncien.hauteur
+
+    var body: some View {
+        HStack(spacing: 8) {
+            LigneNiveauVue(ligne: moteur.ligneNiveau)
+                .obstacle("niveau", moteur)
+            if ancien {
+                PastilleAncien()
+                    .fixedSize()
+                    .obstacle("ancien", moteur)
+            }
+        }
+        .frame(height: Self.hauteur)
     }
 }
 

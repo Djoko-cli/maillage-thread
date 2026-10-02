@@ -130,14 +130,14 @@ struct FenetrePiecesTests {
 
     /// « Ancien » (6 min) et « perime » (15 min) ne dependent que de l'heure, que rien n'observe : la
     /// fenetre est une `TimelineView` qui se redessine chaque minute (`FenetrePieces.horloge`), avec
-    /// dedans tout ce qui lit l'heure (le bas de la fenetre et sa pastille d'un releve ancien, la scene,
+    /// dedans tout ce qui lit l'heure (le haut de la fenetre et sa pastille d'un releve ancien, la scene,
     /// la fiche).
     @Test func redessinChaqueMinute() throws {
         let horloge = String(reflecting: type(of: FenetrePieces.horloge))
         let corps = String(reflecting: FenetrePieces.Body.self)
         let dedans = try #require(Self.entreChevrons("TimelineView", dans: corps), "le corps est une TimelineView")
         #expect(dedans.hasPrefix(horloge), "sur l'horloge")
-        for vue in ["LigneDuBas", "VuePieces", "FicheNoeud"] {
+        for vue in ["HautPieces", "LigneDuBas", "VuePieces", "FicheNoeud"] {
             #expect(dedans.contains(vue), "\(vue) est dans la TimelineView, pas a cote")
         }
         let recu = Date(timeIntervalSince1970: 1_790_000_000)
@@ -146,8 +146,8 @@ struct FenetrePiecesTests {
     }
 
     /// La marge du haut de la vue d'ensemble suit la hauteur mesuree du haut de la fenetre (la ligne des
-    /// capsules, la tournee, les bandeaux, le fil) : son bas, arrondi, et l'espacement ; un bandeau ou la
-    /// ligne de la tournee la font grandir. Celle du bas, mesuree elle aussi : `margeDuBasMesuree`.
+    /// capsules, la tournee, les bandeaux, le fil, la ligne de niveau) : son bas, arrondi, et l'espacement ; un
+    /// bandeau ou la ligne de la tournee la font grandir. Celle du bas, mesuree elle aussi : `margeDuBasMesuree`.
     @Test(.timeLimit(.minutes(1))) func marges() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -165,7 +165,7 @@ struct FenetrePiecesTests {
         #expect(demo.reseau?.estScinde == true, "la demo : reseau scinde, bandeau affiche")
         let seul = haut(sansReseau, sansPieces: false)
         let scinde = haut(demo, sansPieces: false)
-        #expect(seul > 2 * CadreFeux.defaut.milieu, "la ligne des capsules, puis le fil")
+        #expect(seul > 2 * CadreFeux.defaut.milieu + RangeeNiveau.hauteur, "la ligne des capsules, le fil, la ligne de niveau")
         #expect(scinde > seul, "le bandeau de scission")
         #expect(haut(demo, sansPieces: true) > scinde, "le bandeau d'une maison sans pieces")
         await sonde.connecter(SondeMaillageTests.port, choisi: true)
@@ -176,17 +176,23 @@ struct FenetrePiecesTests {
         await sonde.oublier()
     }
 
-    /// Ce qui est pose en bas de la vraie fenetre : la pile, de haut en bas la rangee de la legende et de la ligne de
-    /// niveau, puis la fiche ; son haut, le plus haut des cadres de ses elements (nil avant qu'ils soient poses).
+    /// Ce qui est pose en bas de la vraie fenetre : la pile, de haut en bas la legende, puis la fiche ; son haut, le
+    /// plus haut des cadres de ses elements (nil avant qu'ils soient poses).
     static func hautDeLaPile(_ moteur: MoteurPieces) -> CGFloat? {
-        ["legende", "niveau", "ancien", "fiche"].compactMap { moteur.cadresInterface[$0] }.map(\.minY).min()
+        ["legende", "fiche"].compactMap { moteur.cadresInterface[$0] }.map(\.minY).min()
+    }
+
+    /// Le bas du haut de la vraie fenetre, mesure sur ses cadres : la rangee de la ligne de niveau, la derniere de la
+    /// colonne (nil avant qu'elle soit posee). La marge du haut le compte, avec la place de la tournee absente.
+    static func basDuHaut(_ moteur: MoteurPieces) -> CGFloat? {
+        moteur.cadresInterface["niveau"].map { $0.midY + RangeeNiveau.hauteur / 2 }
     }
 
     /// La marge du bas suit la hauteur mesuree de tout ce qui est pose en bas (verification du 02/10, comme la marge
     /// du haut suit le bandeau ; elle remplace les 190 et 360 pt fixes de la fiche) : dans la vraie fenetre, fiche
     /// fermee ou ouverte, legende ouverte ou repliee, la vue d'ensemble se cadre juste au-dessus de la pile (a
-    /// l'espacement pres), sauf la legende repliee sans fiche, qui deborde un peu sur la vue (30 pt, la marge
-    /// d'avant). La fiche la plus haute de la demo, et une fiche avec les courbes de l'historique, y tiennent aussi.
+    /// l'espacement pres), la legende seule ou avec la fiche (la ligne de niveau est en haut), sauf la legende repliee
+    /// sans fiche, qui deborde un peu sur la vue (30 pt, la marge d'avant). La fiche la plus haute de la demo, et une fiche avec les courbes de l'historique, y tiennent aussi.
     @Test(.timeLimit(.minutes(2))) func margeDuBasMesuree() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -236,8 +242,8 @@ struct FenetrePiecesTests {
     }
 
     /// La legende reste visible quand une fiche est ouverte (verification du 02/10) : elle monte au-dessus de la fiche
-    /// au lieu de disparaitre. De haut en bas : la rangee de la legende et de la ligne de niveau, puis la fiche ; la vue
-    /// d'ensemble se cadre au-dessus de tout cela. A la fermeture, la fiche part et la legende redescend.
+    /// au lieu de disparaitre. De haut en bas : la legende, puis la fiche ; la vue d'ensemble se cadre au-dessus de
+    /// tout cela. A la fermeture, la fiche part et la legende redescend.
     @Test(.timeLimit(.minutes(1))) func legendeAuDessusDeLaFiche() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -255,11 +261,10 @@ struct FenetrePiecesTests {
             moteur.cadresInterface["fiche"].map { abs($0.maxY - (taille.height - FenetrePieces.bord)) < 0.5 } == true
         }
         let legende = try #require(moteur.cadresInterface["legende"], "la legende reste")
-        let niveau = try #require(moteur.cadresInterface["niveau"])
         let fiche = try #require(moteur.cadresInterface["fiche"])
         #expect(legende.size == ouverte.size, "ouverte, comme sans fiche : \(legende.size), \(ouverte.size)")
-        #expect(legende.maxY <= fiche.minY - FenetrePieces.espacement + 0.5 && niveau.maxY <= fiche.minY,
-                "la rangee au-dessus de la fiche : \(legende), \(niveau), \(fiche)")
+        #expect(legende.maxY <= fiche.minY - FenetrePieces.espacement + 0.5,
+                "la legende au-dessus de la fiche : \(legende), \(fiche)")
         #expect(abs(fiche.maxY - (taille.height - FenetrePieces.bord)) < 0.5, "la fiche en bas : \(fiche)")
         try await MoteurPiecesTests.attendre { !moteur.margesEnRoute && taille.height - moteur.marges.bas <= legende.minY }
         #expect(moteur.cadre.maxY <= legende.minY, "la vue au-dessus de la legende : \(moteur.cadre)")
@@ -360,12 +365,12 @@ struct FenetrePiecesTests {
         #expect(NSHostingView(rootView: vue).fittingSize == FenetrePieces.tailleMinimale)
     }
 
-    /// La rangee du bas (la legende, la ligne de niveau, la pastille d'un releve ancien) est en bas a gauche
-    /// de la vraie fenetre, au bord (polissage B, section 2), et non au milieu : a la taille par defaut
-    /// (1100 pt de large) comme a la taille minimale. Sous une fiche, elle reste au bord, au-dessus de la fiche
-    /// (verification du 02/10), la legende ouverte ou repliee faute de place ; la fiche fermee, la rangee revient a
-    /// sa place. La marge du bas suit la hauteur mesuree de la rangee, puis de la rangee et de la fiche. Les
-    /// images de demo ne le montrent pas : `VueCapture` refait sa mise en page, alignee a gauche.
+    /// La legende, seule en bas (la ligne de niveau et la pastille d'un releve ancien sont montees en haut), est en bas a
+    /// gauche de la vraie fenetre, au bord (polissage B, section 2), et non au milieu : a la taille par defaut (1100 pt
+    /// de large) comme a la taille minimale. Sous une fiche, elle reste au bord, au-dessus de la fiche (verification
+    /// du 02/10), ouverte ou repliee faute de place ; la fiche fermee, elle revient a sa place. La marge du bas suit
+    /// la hauteur mesuree de la legende seule, puis de la legende et de la fiche : la ligne de niveau n'y compte plus.
+    /// Les images de demo ne le montrent pas : `VueCapture` refait sa mise en page, alignee a gauche.
     @Test(.timeLimit(.minutes(1)), arguments: [CGSize(width: 1100, height: 760), CGSize(width: 820, height: 680)])
     func rangeeDuBasAGauche(_ taille: CGSize) async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
@@ -373,7 +378,7 @@ struct FenetrePiecesTests {
         p.set(false, forKey: LegendePieces.cleRepliee)
         let demo = Surveillance(mode: .demo, dossier: nil)
         demo.demarrer()
-        // Un releve de la sonde ancien (plus de 6 min) : sa pastille est dans la rangee.
+        // Un releve de la sonde ancien (plus de 6 min) : sa pastille est en haut, et ne compte pas en bas.
         demo.recevoir(try #require(demo.maillage), a: demo.maintenant.addingTimeInterval(-7 * 60))
         #expect(demo.maillageAncien)
         // La vraie fenetre, hors ecran, avec son moteur (l'etat `moteur` de la vue) et des preferences a part.
@@ -382,45 +387,42 @@ struct FenetrePiecesTests {
         func cadre(_ cle: String) throws -> CGRect { try #require(moteur.cadresInterface[cle], "le cadre « \(cle) »") }
         let cas = "fenetre de \(Int(taille.width)) pt"
 
-        // Fiche fermee : la legende au bord, puis la ligne de niveau, puis la pastille.
+        // Fiche fermee : la legende au bord.
         try await MoteurPiecesTests.attendre { ["legende", "niveau", "ancien"].allSatisfy { moteur.cadresInterface[$0] != nil } }
         // La hauteur de la vue, mise en page : la fenetre ne descend pas sous sa taille minimale, 680 pt sous la barre
         // de titre, soit 732 pt en tout.
         let hauteur = fenetre.frame.height
         #expect(hauteur >= taille.height)
         let legende = try cadre("legende")
-        let niveau = try cadre("niveau")
-        let ancien = try cadre("ancien")
         #expect(legende.minX == FenetrePieces.bord, "\(cas) : la legende est au bord gauche (x = \(legende.minX))")
-        #expect(niveau.minX >= legende.maxX && ancien.minX >= niveau.maxX, "\(cas) : la ligne de niveau, puis la pastille, a droite de la legende")
-        // La marge du bas : la pile mesuree (son haut, le plus haut des cadres), le bord et l'espacement, a l'arrondi pres.
+        #expect(legende.maxY == hauteur - FenetrePieces.bord, "\(cas) : la legende est en bas : \(legende)")
+        let niveau = try cadre("niveau")
+        #expect(niveau.maxY < legende.minY, "\(cas) : la ligne de niveau n'est plus en bas, avec la legende")
+        // La marge du bas : la pile mesuree (son haut, le plus haut des cadres), le bord et l'espacement, a l'arrondi pres ;
+        // la legende seule, sans la ligne de niveau.
         func margeDeLaPile() throws -> CGFloat {
             FenetrePieces.margeBas(pile: hauteur - FenetrePieces.bord - (try #require(Self.hautDeLaPile(moteur))))
         }
         let ouverte = try margeDeLaPile()
+        #expect(ouverte == FenetrePieces.margeBas(pile: legende.height), "\(cas) : la legende seule : \(ouverte)")
         try await MoteurPiecesTests.attendre { abs(moteur.marges.bas - ouverte) <= 1 }
         #expect(abs(moteur.marges.bas - ouverte) <= 1, "\(cas) : la marge du bas suit la legende ouverte (\(moteur.marges.bas), \(ouverte), \(moteur.cadresInterface))")
 
-        // Fiche ouverte : la rangee reste au bord, au-dessus de la fiche.
+        // Fiche ouverte : la legende reste au bord, au-dessus de la fiche.
         moteur.selection = "Apple TV 4K"
         try await MoteurPiecesTests.attendre {
-            moteur.cadresInterface["fiche"].map { f in moteur.cadresInterface["niveau"].map { $0.maxY <= f.minY } == true } == true
+            moteur.cadresInterface["fiche"].map { f in moteur.cadresInterface["legende"].map { $0.maxY <= f.minY } == true } == true
         }
         let fiche = try cadre("fiche")
         let legendeSurFiche = try cadre("legende")
-        let niveauSurFiche = try cadre("niveau")
-        let ancienSurFiche = try cadre("ancien")
         #expect(legendeSurFiche.minX == FenetrePieces.bord, "\(cas) : la legende reste au bord (x = \(legendeSurFiche.minX))")
-        #expect(niveauSurFiche.minX >= legendeSurFiche.maxX && ancienSurFiche.minX >= niveauSurFiche.maxX,
-                "\(cas) : la ligne de niveau, puis la pastille, a droite de la legende")
-        #expect([legendeSurFiche, niveauSurFiche, ancienSurFiche].allSatisfy { $0.maxY <= fiche.minY },
-                "\(cas) : la rangee au-dessus de la fiche")
+        #expect(legendeSurFiche.maxY <= fiche.minY, "\(cas) : la legende au-dessus de la fiche")
         #expect(fiche.minX == FenetrePieces.bord && fiche.width == taille.width - 2 * FenetrePieces.bord, "\(cas) : la fiche, \(fiche)")
         let surFiche = try margeDeLaPile()
         try await MoteurPiecesTests.attendre { abs(moteur.marges.bas - surFiche) <= 1 }
-        #expect(abs(moteur.marges.bas - surFiche) <= 1, "\(cas) : la marge du bas suit la rangee et la fiche (\(moteur.marges.bas), \(surFiche))")
+        #expect(abs(moteur.marges.bas - surFiche) <= 1, "\(cas) : la marge du bas suit la legende et la fiche (\(moteur.marges.bas), \(surFiche))")
 
-        // Fiche fermee : la rangee revient a sa place, et la marge.
+        // Fiche fermee : la legende revient a sa place, et la marge.
         moteur.selection = nil
         try await MoteurPiecesTests.attendre {
             moteur.cadresInterface["fiche"] == nil && moteur.cadresInterface["legende"]?.size == legende.size
@@ -429,6 +431,97 @@ struct FenetrePiecesTests {
         #expect(legendeRevenue == legende, "\(cas) : la legende est revenue a sa place (\(legendeRevenue))")
         try await MoteurPiecesTests.attendre { abs(moteur.marges.bas - ouverte) <= 1 }
         #expect(abs(moteur.marges.bas - ouverte) <= 1, "\(cas) : la marge du bas est revenue a celle de la legende ouverte")
+    }
+
+    /// La ligne de niveau est en haut a gauche (decision de Djoko du 02/10), dans la colonne de gauche, juste sous le
+    /// fil « Maison », contre le bord gauche ; la pastille d'un releve de la sonde ancien est a cote d'elle, dans la
+    /// meme colonne. Les noms de la scene evitent ces nouvelles places (`cadresInterface`). Et la marge du haut de la
+    /// vue d'ensemble compte la ligne de niveau, qui est toujours la : elle ne change ni quand la ligne change de
+    /// texte (le zoom, une piece isolee, dont le texte est le plus long), ni quand la pastille parait ou repart.
+    @Test(.timeLimit(.minutes(1)), arguments: [CGSize(width: 1100, height: 760), CGSize(width: 820, height: 680)])
+    func ligneDeNiveauSousLeFil(_ taille: CGSize) async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set(false, forKey: LegendePieces.cleRepliee)
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let maillage = try #require(demo.maillage)
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: taille, preferences: p)
+        defer { Self.fermer(fenetre) }
+        func cadre(_ cle: String) throws -> CGRect { try #require(moteur.cadresInterface[cle], "le cadre « \(cle) »") }
+        func stable() async throws {
+            try await MoteurPiecesTests.attendre { moteur.pret && moteur.cadresInterface["niveau"] != nil && !moteur.margesEnRoute }
+            try await Task.sleep(for: .milliseconds(400))
+        }
+        let cas = "fenetre de \(Int(taille.width)) pt"
+        try await stable()
+        // Sous le fil, contre le bord gauche, au-dessus de la scene : le haut de la fenetre, pas le bas.
+        let colonne = try cadre("colonne")
+        var niveau = try cadre("niveau")
+        let legende = try cadre("legende")
+        #expect(niveau.minX == FenetrePieces.bord, "\(cas) : la ligne de niveau au bord gauche : \(niveau)")
+        #expect(abs(niveau.midY - (colonne.maxY + FenetrePieces.espacementNiveau + RangeeNiveau.hauteur / 2)) < 0.5,
+                "\(cas) : juste sous le fil (le bas de la colonne), \(colonne), \(niveau)")
+        #expect(niveau.maxY < legende.minY, "\(cas) : en haut, pas en bas avec la legende")
+        #expect(niveau.height <= RangeeNiveau.hauteur, "\(cas) : une seule ligne : \(niveau.height) pt")
+        let marge = moteur.marges.haut
+        let bas = try #require(Self.basDuHaut(moteur))
+        #expect(abs(marge - FenetrePieces.margeHaut(bas: bas)) < 1, "\(cas) : la marge compte la ligne de niveau : \(marge), \(bas)")
+        #expect(moteur.cadresInterface["ancien"] == nil, "\(cas) : pas de pastille d'un releve recent")
+
+        // Le texte de la ligne change au fil des zooms et d'une piece isolee, dont la ligne est la plus longue : la marge
+        // du haut ne bouge pas, ni la colonne.
+        var marges: Set<CGFloat> = []
+        var textes: Set<String> = [LigneNiveauVue.texte(moteur.ligneNiveau)]
+        var largeurs: Set<CGFloat> = [niveau.width]
+        func echantillonner(_ duree: Double) async throws {
+            let t0 = ProcessInfo.processInfo.systemUptime
+            while ProcessInfo.processInfo.systemUptime - t0 < duree {
+                marges.insert(moteur.marges.haut)
+                textes.insert(LigneNiveauVue.texte(moteur.ligneNiveau))
+                if let n = moteur.cadresInterface["niveau"] {
+                    largeurs.insert(n.width)
+                    #expect(n.minY == niveau.minY && n.minX == niveau.minX, "\(cas) : la ligne de niveau ne bouge pas : \(n)")
+                }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+        }
+        for dy in [-40.0, -40.0, 80.0, 80.0, 80.0] {
+            moteur.molette(dy, precis: false)
+            moteur.reveiller()
+            try await echantillonner(0.3)
+        }
+        moteur.isoler(0)
+        moteur.reveiller()
+        try await echantillonner(0.5)
+        #expect(textes.count >= 2, "\(cas) : la ligne a change de texte : \(textes)")
+        #expect(largeurs.count >= 2, "\(cas) : et de largeur : \(largeurs)")
+        #expect(marges == [marge], "\(cas) : la marge du haut ne change pas avec le texte de la ligne : \(marges)")
+        niveau = try cadre("niveau")
+        #expect(niveau.maxX <= taille.width - HautPieces.bordDroit, "\(cas) : coupee a la fenetre : \(niveau)")
+        let isolee = try cadre("colonne")
+        #expect(isolee.minX == colonne.minX && isolee.minY == colonne.minY && isolee.height == colonne.height,
+                "\(cas) : la colonne ne bouge pas, hors sa largeur (le fil de la piece isolee) : \(isolee)")
+
+        // La pastille d'un releve ancien : a cote de la ligne de niveau, dans la colonne ; la marge ne bouge pas.
+        demo.recevoir(maillage, a: demo.maintenant.addingTimeInterval(-7 * 60))
+        #expect(demo.maillageAncien)
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["ancien"] != nil }
+        try await stable()
+        let ancien = try cadre("ancien")
+        niveau = try cadre("niveau")
+        #expect(ancien.minX >= niveau.maxX && abs(ancien.midY - niveau.midY) < 0.5,
+                "\(cas) : la pastille a cote de la ligne de niveau : \(ancien), \(niveau)")
+        let basAvecPastille = try #require(Self.basDuHaut(moteur))
+        #expect(ancien.minY >= colonne.maxY && ancien.maxY <= basAvecPastille + 0.5,
+                "\(cas) : dans la colonne, sous le fil : \(ancien)")
+        #expect(niveau.minX == FenetrePieces.bord, "\(cas) : la ligne de niveau ne bouge pas avec la pastille")
+        #expect(moteur.marges.haut == marge, "\(cas) : la marge du haut ne change pas avec la pastille : \(moteur.marges.haut)")
+        #expect(try cadre("colonne").height == colonne.height, "\(cas) : la colonne ne bouge pas, avec la pastille")
+        demo.recevoir(maillage, a: demo.maintenant)
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["ancien"] == nil }
+        try await stable()
+        #expect(moteur.marges.haut == marge, "\(cas) : ni quand elle repart : \(moteur.marges.haut)")
     }
 
     /// La fiche et les bandeaux du haut glissent avec un fondu, en 0,3 s, sur la courbe de la maquette
@@ -515,15 +608,15 @@ struct FenetrePiecesTests {
         #expect(abs(fiche - Apparition.duree) < 0.07, "fiche : \(fiche) s")
     }
 
-    /// Avec « Reduire les animations », la rangee du bas prend sa place d'un coup quand la fiche parait : l'animation
-    /// du conteneur de la pile du bas est nulle (spec de B, sections 1 et 3 : « un simple fondu »), et ce qui part de
-    /// la rangee dans la meme mise a jour que la fiche part sans delai ; sans le reglage, cela glisse avec la fiche,
-    /// et part apres l'animation du conteneur (0,3 s). Cela se voit de l'exterieur : un element retire reste dans
-    /// l'arbre le temps de son animation de retrait, et son `onDisappear` (qui vide son cadre dans `cadresInterface`)
-    /// en donne la duree. Ici, la pastille d'un releve ancien, que le releve suivant rend non ancien dans la meme mise
-    /// a jour que la fiche.
+    /// Avec « Reduire les animations », rien ne glisse ni ne s'attarde en haut non plus (spec de B, sections 1 et 3 :
+    /// « un simple fondu ») : l'animation du conteneur de la colonne de gauche, ou est la pastille d'un releve ancien
+    /// (a cote de la ligne de niveau, montee du bas le 02/10), est nulle, et la pastille qui repart part sans delai ;
+    /// sans le reglage, elle part apres l'animation du conteneur (0,3 s). Cela se voit de l'exterieur : un element
+    /// retire reste dans l'arbre le temps de son animation de retrait, et son `onDisappear` (qui vide son cadre dans
+    /// `cadresInterface`) en donne la duree. Ici, le releve suivant rend le releve non ancien. La ligne de niveau, elle,
+    /// ne bouge pas : la rangee garde la hauteur de la pastille.
     @Test(.timeLimit(.minutes(2)), arguments: [true, false])
-    func rangeeDuBasPrendSaPlaceAvecReduire(reduire: Bool) async throws {
+    func pastilleDuHautPrendSaPlaceAvecReduire(reduire: Bool) async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         p.set(false, forKey: LegendePieces.cleRepliee)
@@ -539,9 +632,9 @@ struct FenetrePiecesTests {
             ["legende", "niveau", "ancien"].allSatisfy { moteur.cadresInterface[$0] != nil } && moteur.pret && !moteur.margesEnRoute
         }
         try await Task.sleep(for: .milliseconds(400))
-        // Dans la meme mise a jour : la fiche parait, le releve n'est plus ancien (sa pastille part).
+        let niveau = try #require(moteur.cadresInterface["niveau"])
+        // Le releve n'est plus ancien : sa pastille part.
         let t0 = ProcessInfo.processInfo.systemUptime
-        moteur.selection = "Apple TV 4K"
         demo.recevoir(maillage, a: demo.maintenant)
         var delai = 1.5
         while ProcessInfo.processInfo.systemUptime - t0 < 1.5 {
@@ -556,14 +649,15 @@ struct FenetrePiecesTests {
         } else {
             #expect(delai > 0.25, "sans le reglage, elle part avec l'animation du conteneur (\(delai) s)")
         }
+        #expect(moteur.cadresInterface["niveau"] == niveau, "la ligne de niveau ne bouge pas : \(String(describing: moteur.cadresInterface["niveau"]))")
     }
 
-    /// Dans la vraie fenetre, avec « Reduire les animations », la legende reste a sa place dans la rangee, au-dessus
-    /// de la fiche, quand celle-ci parait, et la vue se recadre par un fondu (le moteur), pas en glissant. Avant la
-    /// verification du 02/10, la legende se retirait sous la fiche, et son depart, d'un coup, montrait que la pile du
-    /// bas n'avait pas d'animation de conteneur ; elle reste desormais, et son depart ne dit donc plus rien de ce
-    /// cablage. Que rien ne glisse dans la rangee du bas est garde par `rangeeDuBasPrendSaPlaceAvecReduire`, qui mesure
-    /// le depart d'un de ses elements ; les fonctions, par `reduireLesAnimationsSansGlissement` et `dureeDeLaLegende`.
+    /// Dans la vraie fenetre, avec « Reduire les animations », la legende reste a sa place, au-dessus de la fiche,
+    /// quand celle-ci parait, et la vue se recadre par un fondu (le moteur), pas en glissant. Avant la verification du
+    /// 02/10, la legende se retirait sous la fiche, et son depart, d'un coup, montrait que la pile du bas n'avait pas
+    /// d'animation de conteneur ; elle reste desormais, et son depart ne dit donc plus rien de ce cablage. Que rien ne
+    /// glisse en haut est garde par `pastilleDuHautPrendSaPlaceAvecReduire`, qui mesure le depart de la pastille d'un
+    /// releve ancien ; les fonctions, par `reduireLesAnimationsSansGlissement` et `dureeDeLaLegende`.
     @Test(.timeLimit(.minutes(1)))
     func legendeResteAuDessusDeLaFicheAvecReduire() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
@@ -727,7 +821,7 @@ struct FenetrePiecesTests {
     /// De l'air en haut (reverification du 02/10) : dans la vraie fenetre, faite comme celle de l'app, la ligne des
     /// capsules suit les trois boutons abaisses par la barre d'outils invisible : centree sur eux, a 26 pt du haut,
     /// la capsule de gauche juste apres eux, le haut des capsules a 12 pt environ du bord. La marge du haut mesuree
-    /// suit la nouvelle hauteur : le bas de la colonne, et l'espacement.
+    /// suit la nouvelle hauteur : le bas de la colonne, ligne de niveau comprise, et l'espacement.
     @Test(.timeLimit(.minutes(1))) func deLAirEnHaut() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -737,7 +831,7 @@ struct FenetrePiecesTests {
         defer { Self.fermer(fenetre) }
         try await MoteurPiecesTests.attendre {
             moteur.pret && moteur.cadresInterface["ligne"] != nil && moteur.cadresInterface["colonne"] != nil
-                && !moteur.margesEnRoute
+                && moteur.cadresInterface["niveau"] != nil && !moteur.margesEnRoute
         }
         try await Task.sleep(for: .milliseconds(300))
         let feux = try #require(CadreFeux(fenetre: fenetre))
@@ -752,9 +846,11 @@ struct FenetrePiecesTests {
             .environment(NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit))).fittingSize.height
         let hautDesCapsules = feux.milieu - capsule / 2
         #expect(hautDesCapsules >= 10 && hautDesCapsules <= 13, "le haut des capsules : \(hautDesCapsules) pt")
-        #expect(moteur.marges.haut == FenetrePieces.margeHaut(bas: colonne.maxY), "la marge du haut : \(moteur.marges.haut)")
-        #expect(moteur.marges.haut >= FenetrePieces.margeHautInitiale, "la marge suit la nouvelle hauteur")
-        #expect(FenetrePieces.margeHautInitiale == FenetrePieces.margeHaut(bas: 2 * 26 + FenetrePieces.espacement + 16))
+        let bas = try #require(Self.basDuHaut(moteur))
+        #expect(abs(bas - (colonne.maxY + FenetrePieces.espacementNiveau + RangeeNiveau.hauteur)) < 0.5, "la ligne de niveau sous le fil")
+        #expect(abs(moteur.marges.haut - FenetrePieces.margeHaut(bas: bas)) <= 1, "la marge du haut : \(moteur.marges.haut)")
+        #expect(FenetrePieces.margeHautInitiale == FenetrePieces.margeHaut(bas: 2 * 26 + FenetrePieces.espacement + 16
+                                                                           + FenetrePieces.espacementNiveau + RangeeNiveau.hauteur))
     }
 
     /// La colonne de gauche au bord, et la tournee sans place reservee (ronde finale du 02/10). Sous la ligne des
@@ -792,7 +888,7 @@ struct FenetrePiecesTests {
         let pendant = try colonne()
         let margePendant = moteur.marges.haut
         #expect(pendant.minX == FenetrePieces.bord, "pendant la tournee, au bord : \(pendant)")
-        #expect(margePendant == FenetrePieces.margeHaut(bas: pendant.maxY), "la marge : le bas de la colonne")
+        #expect(abs(margePendant - FenetrePieces.margeHaut(bas: try #require(Self.basDuHaut(moteur)))) <= 1, "la marge : le bas de la colonne")
         // La tournee finit : la marge ne bouge a aucun moment, et la vue d'ensemble ne se recadre pas.
         canal.emettre(CanalRejoue.reseauMinimal(SondeMaillageTests.listeRetenue + "\n"))
         await SondeMaillageTests.attendre { !sonde.tourneeEnCours }
@@ -817,7 +913,8 @@ struct FenetrePiecesTests {
         await sonde.oublier()
         try await MoteurPiecesTests.attendre { moteur.marges.haut < margePendant && !moteur.margesEnRoute }
         let oubliee = try colonne()
-        #expect(moteur.marges.haut == FenetrePieces.margeHaut(bas: oubliee.maxY), "sans sonde : \(moteur.marges.haut)")
+        #expect(oubliee.minX == FenetrePieces.bord)
+        #expect(abs(moteur.marges.haut - FenetrePieces.margeHaut(bas: try #require(Self.basDuHaut(moteur)))) <= 1, "sans sonde : \(moteur.marges.haut)")
     }
 
     /// L'apparition de la tournee, une sonde deja retenue (le cas de toutes les 5 minutes, l'autre moitie de
@@ -849,7 +946,8 @@ struct FenetrePiecesTests {
         let avant = try colonne()
         let margeAvant = moteur.marges.haut
         let ligne = NSHostingView(rootView: IndicateurTournee(avancement: LigneTournee.premierPas, debut: nil)).fittingSize.height
-        #expect(abs(margeAvant - FenetrePieces.margeHaut(bas: avant.maxY + ligne + FenetrePieces.espacement)) < 0.5,
+        let basAvant = try #require(Self.basDuHaut(moteur))
+        #expect(abs(margeAvant - FenetrePieces.margeHaut(bas: basAvant + ligne + FenetrePieces.espacement)) < 0.5,
                 "la marge compte la place de la ligne : \(margeAvant)")
         // Une nouvelle tournee commence : la marge ne bouge a aucun moment, et la vue d'ensemble ne se recadre pas.
         sonde.rafraichir()

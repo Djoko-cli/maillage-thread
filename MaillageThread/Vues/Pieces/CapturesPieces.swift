@@ -122,8 +122,8 @@ enum CapturesPieces {
     }
 }
 
-/// La vue d'une capture : le fond, la scene, le haut de la fenetre (avec ses trois boutons), la legende
-/// (ouverte, ou repliee) et la ligne de niveau, puis, dessous, la fiche du noeud choisi ; sans horloge ni geste.
+/// La vue d'une capture : le fond, la scene, le haut de la fenetre (avec ses trois boutons, et la ligne de niveau
+/// sous le fil), la legende (ouverte, ou repliee), puis, dessous, la fiche du noeud choisi ; sans horloge ni geste.
 struct VueCapture: View {
     @Environment(Surveillance.self) private var surveillance
     let moteur: MoteurPieces

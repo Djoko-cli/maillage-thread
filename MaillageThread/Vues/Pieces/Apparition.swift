@@ -34,10 +34,10 @@ enum Apparition: Equatable {
     /// `animationDuConteneur`).
     var transitionAnimee: AnyTransition { transition.animation(animation) }
 
-    /// L'animation de ce qui se decale autour d'un element qui parait ou repart (la ligne de niveau et la
-    /// pastille d'un releve ancien quand la legende se retire, le fil sous un bandeau) : cela glisse avec
-    /// lui, sur sa courbe. Avec « Reduire les animations », aucune : cela prend sa place d'un coup, et seul
-    /// l'element se fond (`transitionAnimee`).
+    /// L'animation de ce qui se decale autour d'un element qui parait ou repart (le fil et la ligne de niveau sous
+    /// un bandeau ou la ligne de la tournee, la legende au-dessus de la fiche) : cela glisse avec lui, sur sa
+    /// courbe. Avec « Reduire les animations », aucune : cela prend sa place d'un coup, et seul l'element se fond
+    /// (`transitionAnimee`).
     static func animationDuConteneur(_ bord: Edge, reduire: Bool) -> Animation? {
         reduire ? nil : Apparition.glisse(bord).animation
     }
@@ -62,8 +62,7 @@ enum Apparition: Equatable {
         return t.animation(animationLegende(reduire: reduire))
     }
 
-    /// Ce qui se decale quand la legende s'ouvre ou se replie (la ligne de niveau, la pastille d'un releve ancien) :
-    /// cela glisse avec elle ; avec « Reduire les animations », rien : cela prend sa place d'un coup.
+    /// Ce qui se decale quand la legende s'ouvre ou se replie : cela glisse avec elle ; avec « Reduire les animations », rien : cela prend sa place d'un coup.
     static func animationDuConteneurLegende(reduire: Bool) -> Animation? {
         reduire ? nil : animationLegende(reduire: false)
     }

@@ -5,7 +5,7 @@ import SwiftUI
 // Haut de la fenetre de la vue par pieces, sans barre de titre (polissage B, section 1 ; maquette du
 // bandeau, carte C) : deux capsules de verre sur la ligne des trois boutons de la fenetre, le reseau a
 // gauche (`BarreOutils`), la vue a droite (`CommandesVue`) ; entre elles, la bande qui deplace la
-// fenetre ; dessous, contre le bord gauche, en plus petit, la tournee, les bandeaux et le fil.
+// fenetre ; dessous, contre le bord gauche, en plus petit, la tournee, les bandeaux, le fil et la ligne de niveau.
 
 extension EnvironmentValues {
     /// Rendu d'une capture (`CapturesPieces`, par `ImageRenderer`) : ni le verre, ni les vues d'AppKit
@@ -228,11 +228,12 @@ struct BandeFenetre: View {
 
 /// Haut de la fenetre, pose sur la scene : la ligne des capsules, centree sur les trois boutons de la
 /// fenetre (le reseau juste apres eux, la vue contre le bord droit, la bande entre elles) ; dessous, la
-/// colonne de gauche, contre le bord gauche de la fenetre, a la marge de la legende et de la ligne de niveau
-/// (ronde finale du 02/10) : la ligne de la tournee, pendant une tournee seulement, le bandeau de scission,
-/// celui d'une maison sans pieces, et le fil. Son bas mesure donne la marge du haut de la vue d'ensemble
-/// (`surBas`, puis `FenetrePieces.margeHaut`), avec la place d'une ligne de tournee absente tant qu'une sonde
-/// est retenue : la scene ne bouge pas quand la ligne parait ou disparait.
+/// colonne de gauche, contre le bord gauche de la fenetre, a la marge de la legende (ronde finale du 02/10) : la
+/// ligne de la tournee, pendant une tournee seulement, le bandeau de scission, celui d'une maison sans pieces, le
+/// fil, et, juste sous lui, la ligne de niveau avec la pastille d'un releve ancien (`RangeeNiveau`, decision de
+/// Djoko du 02/10). Son bas mesure donne la marge du haut de la vue d'ensemble (`surBas`, puis
+/// `FenetrePieces.margeHaut`), avec la place d'une ligne de tournee absente tant qu'une sonde est retenue : la
+/// scene ne bouge pas quand la ligne parait ou disparait, ni quand la ligne de niveau change de texte.
 struct HautPieces: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(SondeMaillage.self) private var sonde
@@ -241,6 +242,8 @@ struct HautPieces: View {
     @Binding var troisD: Bool
     /// Maison n'a encore aucune piece : le bandeau du passeur.
     var sansPieces = false
+    /// Le releve de la sonde est ancien : sa pastille est a cote de la ligne de niveau.
+    var ancien = false
     var feux = CadreFeux.defaut
     /// Le bas du haut de la fenetre, dans l'espace de la vue, la place d'une ligne de tournee absente comprise.
     var surBas: (CGFloat) -> Void = { _ in }
@@ -281,25 +284,31 @@ struct HautPieces: View {
             // Un bandeau qui parait glisse depuis le haut, et repart de meme ; ce qui est dessous descend
             // avec lui. Avec « Reduire les animations », le bandeau se fond (sa transition porte son fondu)
             // et le fil prend sa place d'un coup : aucune animation de conteneur. La ligne de la tournee fait
-            // de meme.
-            VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
-                if tournee == .montree {
-                    LigneTournee()
-                        .transition(apparition.transitionAnimee)
+            // de meme ; la pastille d'un releve ancien, qui ne change rien a la place de la ligne de niveau, se
+            // fond sur la meme animation de conteneur (aucune avec le reglage).
+            VStack(alignment: .leading, spacing: FenetrePieces.espacementNiveau) {
+                VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
+                    if tournee == .montree {
+                        LigneTournee()
+                            .transition(apparition.transitionAnimee)
+                    }
+                    if let r = surveillance.reseau, r.estScinde {
+                        BandeauScission(reseau: r)
+                            .transition(apparition.transitionAnimee)
+                    }
+                    if sansPieces {
+                        BandeauSansPieces()
+                            .transition(apparition.transitionAnimee)
+                    }
+                    FilPieces(moteur: moteur)
                 }
-                if let r = surveillance.reseau, r.estScinde {
-                    BandeauScission(reseau: r)
-                        .transition(apparition.transitionAnimee)
-                }
-                if sansPieces {
-                    BandeauSansPieces()
-                        .transition(apparition.transitionAnimee)
-                }
-                FilPieces(moteur: moteur)
+                .obstacle("colonne", moteur)
+                RangeeNiveau(moteur: moteur, ancien: ancien)
             }
             .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: surveillance.reseau?.estScinde == true)
             .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: sansPieces)
             .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: tournee == .montree)
+            .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: ancien)
             .background(alignment: .topLeading) {
                 if tournee != .aucune {
                     LigneTournee.gabarit
@@ -307,7 +316,6 @@ struct HautPieces: View {
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hauteurTournee = $0 }
                 }
             }
-            .obstacle("colonne", moteur)
             .padding(.leading, FenetrePieces.bord)
         }
         .padding(.trailing, Self.bordDroit)

@@ -1,8 +1,9 @@
+import AppKit
 import MaillageCoeur
 import SwiftUI
 
 /// Legende de la vue par pieces (polissage B, section 2 ; maquette de la legende, colonne de droite) :
-/// en bas a gauche, a cote de la ligne de niveau, au-dessus de la fiche quand elle est ouverte ; quatre
+/// en bas a gauche, au-dessus de la fiche quand elle est ouverte ; quatre
 /// groupes en grille de deux colonnes, qui ne montrent que ce que la scene affichee contient, chaque signe
 /// dessine comme dans la scene (`SigneLegende`). En verre, comme les capsules du haut (verification du 02/10 :
 /// le choix de Djoko, au lieu du panneau sombre de la maquette). Repliee, il ne reste que l'etiquette
@@ -321,24 +322,16 @@ struct GrilleLegende: Layout {
             y += hauteur + Self.ecartRangs
         }
     }
-
-    /// Derniere ligne de base : la plus basse du dernier rang, pour y aligner la ligne de niveau.
-    func explicitAlignment(of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
-                           subviews: Subviews, cache: inout ()) -> CGFloat? {
-        guard guide == .lastTextBaseline, !subviews.isEmpty else { return nil }
-        let m = mise(subviews)
-        let haut = m.rangs.dropLast().reduce(bounds.minY) { $0 + $1 + Self.ecartRangs }
-        let dernier = (m.rangs.count - 1) * 2
-        return (dernier..<min(dernier + 2, subviews.count)).map { i in
-            haut + subviews[i].dimensions(in: ProposedViewSize(m.tailles[i]))[VerticalAlignment.lastTextBaseline]
-        }.max()
-    }
 }
 
-/// « Releve de la sonde ancien » : une petite pastille orange, a cote de la ligne de niveau, quand le
-/// releve de la sonde a plus de 6 minutes (polissage B, section 2). Le dessin de la pastille du chef de
-/// la fiche (10,5 pt, marges de 2 x 8 pt, capsule teintee a 0,16 au filet de 0,5 pt a 0,5), en orange.
+/// « Releve de la sonde ancien » : une petite pastille orange, a cote de la ligne de niveau, en haut a gauche
+/// (`RangeeNiveau`), quand le releve de la sonde a plus de 6 minutes (polissage B, section 2). Le dessin de la
+/// pastille du chef de la fiche (10,5 pt, marges de 2 x 8 pt, capsule teintee a 0,16 au filet de 0,5 pt a 0,5), en
+/// orange.
 struct PastilleAncien: View {
+    /// Sa hauteur (pt), mesuree : celle de la rangee de la ligne de niveau (`RangeeNiveau`).
+    static let hauteur = NSHostingView(rootView: PastilleAncien()).fittingSize.height
+
     var body: some View {
         Text("Relevé de la sonde ancien")
             .font(.system(size: 10.5))

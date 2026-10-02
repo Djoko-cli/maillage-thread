@@ -134,7 +134,8 @@ struct LegendePiecesTests {
 
     /// La marge du bas suit la hauteur mesuree de tout ce qui est pose en bas (decision de Djoko du 01/10 pour la
     /// legende ouverte, du 02/10 pour la fiche, comme la marge du haut suit le bandeau) : la pile, de haut en bas la
-    /// rangee de la legende et de la ligne de niveau, puis la fiche ; le bord et l'espacement en plus. La legende
+    /// legende, puis la fiche ; le bord et l'espacement en plus. La ligne de niveau, montee en haut le 02/10, n'y est
+    /// plus : la rangee du bas a la hauteur de la legende seule. La legende
     /// repliee sans fiche : la marge d'avant, 30 pt. Les valeurs fixes de la fiche (190 et 360 pt) ne sont plus : la
     /// pile d'une fiche est mesuree, legende ouverte ou repliee au-dessus d'elle.
     @Test func margeDuBas() throws {
@@ -144,6 +145,8 @@ struct LegendePiecesTests {
         }
         let h = hauteur(LigneDuBas(moteur: MoteurPieces(), entree: e, legendeForcee: false))
         #expect(h > 150, "la legende de la demo, ouverte : \(h)")
+        let rubriques = LegendePieces.rubriques(LegendePieces.Lecture(e, ailleurs: false))
+        #expect(h == hauteur(LegendePieces(rubriques: rubriques, repliee: .constant(false))), "la legende seule, sans la ligne de niveau")
         #expect(FenetrePieces.margeBas(pile: h) == FenetrePieces.bord + ceil(h) + FenetrePieces.espacement)
         #expect(FenetrePieces.margeBas(pile: nil) == 30, "repliee, sans fiche")
         #expect(FenetrePieces.margeBas(pile: 2) == 30)
@@ -182,16 +185,36 @@ struct LegendePiecesTests {
     }
 
     /// « Releve de la sonde ancien » n'est plus dans la legende : c'est une pastille a cote de la ligne de
-    /// niveau, quand le releve est ancien, la legende ouverte ou repliee (une fiche ouverte ne la cache plus).
-    @Test func pastilleDuReleveAncien() throws {
-        let (_, _, e) = try NomsSceneTests.demo()
+    /// niveau, quand le releve est ancien, en haut a gauche dans la colonne (`RangeeNiveau`, decision de Djoko du
+    /// 02/10, qui l'avait en bas). La rangee garde la hauteur de la pastille, qu'elle soit la ou non : elle est plus
+    /// large avec elle, pas plus haute.
+    @Test func pastilleDuReleveAncien() {
         let m = MoteurPieces()
-        func largeur(_ v: LigneDuBas) -> CGFloat { NSHostingView(rootView: v).fittingSize.width }
-        let ouverte = largeur(LigneDuBas(moteur: m, entree: e, legendeForcee: false))
-        #expect(largeur(LigneDuBas(moteur: m, entree: e, ancien: true, legendeForcee: false)) > ouverte)
-        let repliee = largeur(LigneDuBas(moteur: m, entree: e, legendeForcee: true))
-        #expect(repliee < ouverte, "repliee : l'etiquette seule")
-        #expect(largeur(LigneDuBas(moteur: m, entree: e, ancien: true, legendeForcee: true)) > repliee)
+        func taille(_ ancien: Bool) -> CGSize {
+            NSHostingView(rootView: RangeeNiveau(moteur: m, ancien: ancien)).fittingSize
+        }
+        #expect(taille(true).width > taille(false).width, "la pastille a cote de la ligne de niveau")
+        #expect(taille(true).height == RangeeNiveau.hauteur && taille(false).height == RangeeNiveau.hauteur,
+                "la meme hauteur, avec ou sans la pastille : \(taille(true)), \(taille(false))")
+        #expect(NSHostingView(rootView: PastilleAncien()).fittingSize.height == RangeeNiveau.hauteur)
+        #expect(NSHostingView(rootView: LigneNiveauVue(ligne: .pieces)).fittingSize.height < RangeeNiveau.hauteur,
+                "la pastille est plus haute que la ligne de niveau")
+    }
+
+    /// La ligne de niveau tient sur une seule ligne, coupee par des points de suspension si elle est trop longue :
+    /// dans une largeur trop etroite, sa hauteur ne change pas (la colonne ne change jamais de hauteur au fil des
+    /// zooms), meme pour la piece isolee, dont le texte est le plus long ; sans contrainte, elle garde son texte entier.
+    @Test func ligneDeNiveauSurUneLigne() {
+        let lignes: [LigneNiveau] = [.pieces, .routeurs, .masques(1), .masques(12), .lisibles, .isolee("Salon")]
+        let seule = NSHostingView(rootView: LigneNiveauVue(ligne: .pieces).fixedSize()).fittingSize.height
+        for l in lignes {
+            let libre = NSHostingView(rootView: LigneNiveauVue(ligne: l).fixedSize()).fittingSize
+            let etroite = NSHostingView(rootView: LigneNiveauVue(ligne: l).frame(width: 120)).fittingSize
+            #expect(libre.height == seule, "\(l) : une ligne, sans contrainte (\(libre))")
+            #expect(etroite.height == seule && etroite.width <= 120, "\(l) : coupee dans 120 pt, pas sur deux lignes (\(etroite))")
+        }
+        let longue = NSHostingView(rootView: LigneNiveauVue(ligne: .isolee("Salon")).fixedSize()).fittingSize.width
+        #expect(longue > 400, "le texte le plus long de la ligne de niveau : \(longue) pt")
     }
 
     /// Les signes de la legende sont dessines comme dans la scene, par les memes fonctions que le rendu (verification
