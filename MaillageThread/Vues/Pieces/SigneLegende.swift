@@ -69,8 +69,9 @@ extension LegendePieces {
 
 /// Le signe d'une entree de la legende, dessine dans un `Canvas` par les fonctions du rendu de la scene (`dessiner`).
 /// Sa place est celle du signe : un noeud, son disque ; un lien, 22 pt de long ; un nom, une pastille ou un repere,
-/// leur taille dans la scene (`MesureNoms`) ; un glyphe, celle de son nom sans ses 5 pt de chaque cote. Le halo d'une
-/// sphere ou d'une pastille deborde autour, sans prendre de place.
+/// leur taille dans la scene (`MesureNoms`) ; un glyphe, la largeur d'un noeud de son groupe (`largeurGlyphe`) et la
+/// hauteur de son nom. Le halo d'une sphere ou d'une pastille, et un glyphe plus large que sa place, debordent autour,
+/// sans prendre de place.
 struct SigneLegende: View {
     let signe: LegendePieces.Signe
     @Environment(\.displayScale) private var echelle
@@ -95,13 +96,21 @@ struct SigneLegende: View {
             }
     }
 
+    /// Largeur de la place d'un glyphe (ronde finale du 02/10) : celle d'un noeud de son groupe, un routeur pour la
+    /// couronne, un appareil pour la lune. Les textes des lignes 👑 et ☾ s'alignent ainsi sur ceux des autres signes du
+    /// groupe ; a la place du glyphe (17 et 11 pt), ils etaient decales d'environ 3,5 pt vers la droite.
+    static func largeurGlyphe(routeur: Bool) -> CGFloat {
+        2 * (routeur ? LegendePieces.rayonRouteur : LegendePieces.rayonAppareil)
+    }
+
     /// La place du signe.
     static func taille(_ s: LegendePieces.Signe) -> CGSize {
         switch s {
         case .noeud(_, let rayon): CGSize(width: 2 * rayon, height: 2 * rayon)
         case .lienRadio, .lienEnfant: CGSize(width: longueurLien, height: 2)
         case .nom(let texte, let routeur): mesure.noeud(LibellesNoeuds.Libelle(texte: texte), routeur: routeur)
-        case .glyphe(let texte, let routeur): mesure.glyphe(texte, routeur: routeur)
+        case .glyphe(let texte, let routeur):
+            CGSize(width: largeurGlyphe(routeur: routeur), height: mesure.glyphe(texte, routeur: routeur).height)
         case .pastille(let texte): mesure.pastille(texte)
         case .ailleurs(let texte): mesure.ailleurs(texte)
         }
@@ -109,8 +118,8 @@ struct SigneLegende: View {
 
     /// Le signe dans sa place `r`, par les fonctions du rendu de la scene, avec ses parametres : un noeud au centre ;
     /// un lien d'un bord a l'autre, a mi-hauteur (1 pt de marge pour ses bouts ronds), avec l'opacite d'un lien au
-    /// repos ; un nom, une pastille ou un repere dans sa place ; un glyphe a son bord gauche, sans fond. `echelle` :
-    /// pixels par point (un lien vers un parent fait un pixel, comme dans la scene).
+    /// repos ; un nom, une pastille ou un repere dans sa place ; un glyphe centre sur elle, comme un noeud, sans fond.
+    /// `echelle` : pixels par point (un lien vers un parent fait un pixel, comme dans la scene).
     static func dessiner(_ s: LegendePieces.Signe, _ ctx: inout GraphicsContext, dans r: CGRect, echelle: CGFloat,
                          palette: Palette) {
         let a = CGPoint(x: r.minX + 1, y: r.midY)
@@ -131,7 +140,7 @@ struct SigneLegende: View {
             RenduCanvas.dessinerNom(&ctx, nom, dans: r, palette: palette)
         case .glyphe(let texte, let routeur):
             let glyphe = ctx.resolve(RenduCanvas.texteNom(texte, routeur: routeur, fort: false, palette: palette))
-            ctx.draw(glyphe, at: CGPoint(x: r.minX, y: r.midY), anchor: .leading)
+            ctx.draw(glyphe, at: CGPoint(x: r.midX, y: r.midY), anchor: .center)
         case .pastille(let texte):
             DessinNoeud.dessinerPastille(&ctx, texte, gauche: CGPoint(x: r.minX, y: r.midY), palette: palette)
         case .ailleurs(let texte):

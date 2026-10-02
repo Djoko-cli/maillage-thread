@@ -409,9 +409,45 @@ struct LegendePiecesTests {
         #expect(abs(milieu - Double(p.hauteur) / 2) <= 1, "milieu du chevron \(milieu) px, de l'etiquette \(Double(p.hauteur) / 2) px")
     }
 
+    /// Les textes des lignes 👑 et ☾ s'alignent sur ceux des autres signes de leur groupe (ronde finale du 02/10 :
+    /// ils etaient decales d'environ 3,5 pt vers la droite) : une ligne est son signe, 7 pt, puis son texte, et le glyphe
+    /// prend la place d'un noeud de son groupe (un routeur pour la couronne, un appareil pour la lune), centre sur elle,
+    /// comme les noeuds. Seule la pastille d'une pile, plus large, garde sa place.
+    @Test func couronneEtLuneAlignees() throws {
+        for (glyphe, noeud) in [(Entree.chef, Entree.routeur), (.endormi, .joignable)] {
+            let place = SigneLegende.taille(LegendePieces.signe(glyphe))
+            let reference = SigneLegende.taille(LegendePieces.signe(noeud))
+            #expect(place.width == reference.width, "\(glyphe) : la largeur d'un noeud (\(place.width) au lieu de \(reference.width))")
+        }
+        // Les groupes de la couronne et de la lune : une colonne de signes commune, la pile mise a part.
+        for groupe in [LegendePieces.Groupe.routeurs, .appareils] {
+            let largeurs = Set(groupe.entrees.filter { $0 != .pile }.map { SigneLegende.taille(LegendePieces.signe($0)).width })
+            #expect(largeurs.count == 1, "\(groupe) : une colonne de signes commune (\(largeurs))")
+        }
+        // Le glyphe est centre sur sa place, comme un noeud : le milieu de son encre, a un pixel pres.
+        let p = Palette(sombre: true)
+        for entree in [Entree.chef, .endormi] {
+            let signe = LegendePieces.signe(entree)
+            let taille = SigneLegende.taille(signe)
+            let cadre = CGRect(origin: CGPoint(x: 30 - taille.width / 2, y: 17 - taille.height / 2), size: taille)
+            var image = try Self.pixels(Canvas { ctx, _ in SigneLegende.dessiner(signe, &ctx, dans: cadre, echelle: 2, palette: p) }
+                .frame(width: 60, height: 34))
+            // La couronne se charge au premier rendu : un second rendu.
+            image = try Self.pixels(Canvas { ctx, _ in SigneLegende.dessiner(signe, &ctx, dans: cadre, echelle: 2, palette: p) }
+                .frame(width: 60, height: 34))
+            let colonnes = (0..<image.largeur).filter { x in
+                (0..<image.hauteur).contains { y in image.octets[(y * image.largeur + x) * 4 + 3] > 40 }
+            }
+            let premiere = try #require(colonnes.first, "\(entree) : de l'encre")
+            let derniere = try #require(colonnes.last)
+            let milieu = Double(premiere + derniere + 1) / 2
+            #expect(abs(milieu - 60) <= 2, "\(entree) : le glyphe centre (milieu de l'encre a \(milieu) px, de la place a 60)")
+        }
+    }
+
     /// La couronne du chef et la lune d'un endormi, dans la legende, sans la pastille sombre d'un nom (reverification
-    /// du 02/10 : « une ombre disgracieuse et inutile ») : le glyphe seul, dans le texte des noms de la scene, a la
-    /// place du glyphe (le nom sans ses 5 pt de chaque cote). Dans la scene, les noms gardent leur pastille.
+    /// du 02/10 : « une ombre disgracieuse et inutile ») : le glyphe seul, dans le texte des noms de la scene, centre
+    /// sur la place d'un noeud de son groupe (`couronneEtLuneAlignees`). Dans la scene, les noms gardent leur pastille.
     @Test func couronneEtLuneSansPastille() throws {
         let p = Palette(sombre: true)
         func image(_ dessin: @escaping (inout GraphicsContext) -> Void) throws -> [UInt8] {
@@ -426,12 +462,13 @@ struct LegendePiecesTests {
             let signe = LegendePieces.signe(entree)
             let nom = MesureNoms().noeud(LibellesNoeuds.Libelle(texte: glyphe), routeur: routeur)
             let taille = SigneLegende.taille(signe)
-            #expect(taille == CGSize(width: nom.width - 10, height: nom.height), "\(glyphe) : la place du glyphe seul (\(taille))")
+            #expect(taille == CGSize(width: SigneLegende.largeurGlyphe(routeur: routeur), height: nom.height),
+                    "\(glyphe) : la place d'un noeud de son groupe, a la hauteur du nom (\(taille))")
             let cadre = CGRect(origin: CGPoint(x: 20, y: 17 - taille.height / 2), size: taille)
             let legende = try image { SigneLegende.dessiner(signe, &$0, dans: cadre, echelle: 2, palette: p) }
             let seul = try image { ctx in
                 ctx.draw(ctx.resolve(RenduCanvas.texteNom(glyphe, routeur: routeur, fort: false, palette: p)),
-                         at: CGPoint(x: cadre.minX, y: cadre.midY), anchor: .leading)
+                         at: CGPoint(x: cadre.midX, y: cadre.midY), anchor: .center)
             }
             let ecarts = zip(legende, seul).filter { $0 != $1 }.count
             #expect(ecarts <= 8, "\(glyphe) : le glyphe seul, sans pastille (\(ecarts) octets differents)")
