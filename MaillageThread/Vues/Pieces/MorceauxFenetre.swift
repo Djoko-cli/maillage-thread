@@ -76,37 +76,43 @@ struct BarreOutils: View {
     }
 }
 
-/// Ligne de la tournee en cours, sous la capsule de gauche, en plus petit : la capsule garde sa
-/// largeur, son bouton rafraichir ne bouge pas sous le pointeur. Hors tournee, sa place reste gardee
-/// tant qu'une sonde est retenue : ni la scene ni ce qui est dessous ne bougent au debut ou a la fin
-/// d'une tournee (precision 21 du plan 4b). Vue a part : seule elle se redessine a chaque pas de la
-/// tournee, pas la fenetre de la vue.
+/// Ligne de la tournee en cours, en haut de la colonne de gauche, en plus petit : la capsule garde sa largeur, son
+/// bouton rafraichir ne bouge pas sous le pointeur. Elle n'est la que pendant une tournee, et ne garde plus sa place
+/// hors tournee (ronde finale du 02/10) : quand elle disparait, le bandeau de scission et le fil remontent ; quand elle
+/// parait, ils redescendent, avec l'animation des bandeaux (`HautPieces`). La scene, elle, ne bouge pas : la marge du
+/// haut compte sa place (`gabarit`) tant qu'une sonde est retenue, comme avant, et la vue d'ensemble ne se recadre pas
+/// a chaque tournee. Vue a part : seule elle se redessine a chaque pas de la tournee, pas la fenetre de la vue.
 struct LigneTournee: View {
     @Environment(SondeMaillage.self) private var sonde
 
-    /// Ce que montre la ligne : l'indicateur pendant une tournee, sa place (vide) tant qu'une sonde
-    /// est retenue, rien sinon.
+    /// Ce que fait la ligne : montree pendant une tournee ; hors tournee, une sonde retenue, cachee, mais sa place
+    /// comptee dans la marge du haut ; rien sans sonde.
     enum Place: Equatable {
-        case indicateur(AvancementTournee, debut: Date)
-        case gardee
+        case montree
+        case comptee
         case aucune
     }
 
-    static func place(serie: String?, avancement: AvancementTournee?, debut: Date?) -> Place {
-        if let avancement, let debut { return .indicateur(avancement, debut: debut) }
-        return serie != nil ? .gardee : .aucune
+    /// `debut` : celui de la tournee en cours, nil hors tournee. La fenetre ne lit que lui et la sonde retenue : elle ne
+    /// se redessine qu'au debut et a la fin d'une tournee, pas a chaque pas.
+    static func place(serie: String?, debut: Date?) -> Place {
+        if debut != nil { return .montree }
+        return serie != nil ? .comptee : .aucune
+    }
+
+    /// Le premier pas d'une tournee, montre avant le premier avancement recu ; et celui du gabarit.
+    static let premierPas = AvancementTournee(etape: .etatSonde, fait: 0, total: 1)
+
+    /// La ligne, cachee et sans horloge : sa place, de la taille de la ligne montree, que compte la marge du haut.
+    static var gabarit: some View {
+        IndicateurTournee(avancement: premierPas, debut: nil)
+            .hidden()
+            .accessibilityHidden(true)
     }
 
     var body: some View {
-        switch Self.place(serie: sonde.serie, avancement: sonde.avancement, debut: sonde.debutTournee) {
-        case .indicateur(let a, let debut):
-            IndicateurTournee(avancement: a, debut: debut)
-        case .gardee:
-            IndicateurTournee(avancement: AvancementTournee(etape: .etatSonde, fait: 0, total: 1), debut: nil)
-                .hidden()
-                .accessibilityHidden(true)
-        case .aucune:
-            EmptyView()
+        if let debut = sonde.debutTournee {
+            IndicateurTournee(avancement: sonde.avancement ?? Self.premierPas, debut: debut)
         }
     }
 }

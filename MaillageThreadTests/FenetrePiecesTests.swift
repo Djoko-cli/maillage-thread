@@ -35,9 +35,10 @@ struct FenetrePiecesTests {
     /// La vraie fenetre de la vue par pieces, hors ecran, de `taille` pt, sur la surveillance `s`, avec les
     /// preferences `p` (jamais celles de l'app) et « Reduire les animations » impose ; et son moteur (l'etat
     /// `moteur` de la vue). La vue couvre toute la fenetre, de `taille` pt comme dans l'app (`setContentSize`
-    /// ajouterait la barre de titre), faite comme celle de l'app (`sansBarreDeTitre`). A retirer par `fermer`.
+    /// ajouterait la barre de titre), faite comme celle de l'app (`sansBarreDeTitre`). `sonde` : la sonde de la vue
+    /// (sinon une sonde inactive, sans sonde retenue). A retirer par `fermer`.
     static func fenetre(_ s: Surveillance, taille: CGSize, preferences p: UserDefaults,
-                        reduire: Bool = false) throws -> (NSWindow, MoteurPieces) {
+                        reduire: Bool = false, sonde: SondeMaillage? = nil) throws -> (NSWindow, MoteurPieces) {
         let vue = FenetrePieces(fichierPlaces: nil)
         let etat = try #require(Mirror(reflecting: vue).children.first { $0.label == "_moteur" }?.value)
         let moteur = try #require(Mirror(reflecting: etat).descendant("_value") as? MoteurPieces)
@@ -49,7 +50,7 @@ struct FenetrePiecesTests {
         fenetre.contentView = NSHostingView(rootView: vue
             .environment(s)
             .environment(NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit))
-            .environment(SondeMaillage(preferences: p, actif: false))
+            .environment(sonde ?? SondeMaillage(preferences: p, actif: false))
             .environment(\._accessibilityReduceMotion, reduire)
             .defaultAppStorage(p))
         fenetre.setFrame(NSRect(origin: fenetre.frame.origin, size: taille), display: false)
@@ -755,10 +756,75 @@ struct FenetrePiecesTests {
         #expect(FenetrePieces.margeHautInitiale == FenetrePieces.margeHaut(bas: 2 * 26 + FenetrePieces.espacement + 16))
     }
 
+    /// La colonne de gauche au bord, et la tournee sans place reservee (ronde finale du 02/10). Sous la ligne des
+    /// capsules, la ligne de la tournee, le bandeau de scission et le fil « Maison » vont contre le bord gauche de la
+    /// fenetre, a la marge de la legende et de la ligne de niveau, que la tournee soit la ou non. Quand la tournee
+    /// finit, sa ligne disparait, et le bandeau et le fil remontent (la colonne, dont le haut ne bouge pas, perd la
+    /// hauteur de la ligne et un espacement). La scene, elle, ne bouge pas : la marge du haut compte toujours la place
+    /// d'une ligne de tournee tant qu'une sonde est retenue, et ne change ni a la fin de la tournee, ni pendant que la
+    /// colonne se reajuste (sinon, la vue d'ensemble se recadrerait a chaque tournee, toutes les 5 minutes).
+    @Test(.timeLimit(.minutes(1))) func tourneeSansPlaceReservee() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        let canal = SondeMaillageTests.canalRetenu(journal)
+        let sonde = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        #expect(demo.reseau?.estScinde == true, "la demo : le bandeau de scission, dans la colonne")
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p,
+                                                 sonde: sonde)
+        defer { Self.fermer(fenetre) }
+        func colonne() throws -> CGRect { try #require(moteur.cadresInterface["colonne"], "la colonne") }
+        func stable() async throws {
+            try await MoteurPiecesTests.attendre { moteur.pret && moteur.cadresInterface["colonne"] != nil && !moteur.margesEnRoute }
+            try await Task.sleep(for: .milliseconds(400))
+        }
+        try await stable()
+        let sansSonde = try colonne()
+        #expect(sansSonde.minX == FenetrePieces.bord, "sans sonde, au bord : \(sansSonde)")
+        // Une sonde retenue, en tournee : la ligne de la tournee parait en haut de la colonne.
+        await sonde.connecter(SondeMaillageTests.port, choisi: true)
+        await journal.attendre(SondeMaillageTests.listeRetenue)
+        await SondeMaillageTests.attendre { sonde.avancement != nil }
+        try await stable()
+        let pendant = try colonne()
+        let margePendant = moteur.marges.haut
+        #expect(pendant.minX == FenetrePieces.bord, "pendant la tournee, au bord : \(pendant)")
+        #expect(margePendant == FenetrePieces.margeHaut(bas: pendant.maxY), "la marge : le bas de la colonne")
+        // La tournee finit : la marge ne bouge a aucun moment, et la vue d'ensemble ne se recadre pas.
+        canal.emettre(CanalRejoue.reseauMinimal(SondeMaillageTests.listeRetenue + "\n"))
+        await SondeMaillageTests.attendre { !sonde.tourneeEnCours }
+        var marges: Set<CGFloat> = []
+        var recadree = false
+        let t0 = ProcessInfo.processInfo.systemUptime
+        while ProcessInfo.processInfo.systemUptime - t0 < 0.8 {
+            marges.insert(moteur.marges.haut)
+            recadree = recadree || moteur.margesEnRoute
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(marges == [margePendant], "la marge du haut, stable : \(marges)")
+        #expect(!recadree, "la scene ne se recadre pas")
+        let apres = try colonne()
+        let ligne = NSHostingView(rootView: IndicateurTournee(avancement: AvancementTournee(etape: .etatSonde, fait: 0, total: 1),
+                                                             debut: nil)).fittingSize.height
+        #expect(apres.minX == FenetrePieces.bord, "apres la tournee, au bord : \(apres)")
+        #expect(apres.minY == pendant.minY, "le haut de la colonne ne bouge pas")
+        #expect(abs(pendant.height - apres.height - (ligne + FenetrePieces.espacement)) < 0.5,
+                "le bandeau et le fil remontent de la ligne de la tournee : \(pendant.height) -> \(apres.height)")
+        // La sonde oubliee : la marge ne compte plus de ligne de tournee.
+        await sonde.oublier()
+        try await MoteurPiecesTests.attendre { moteur.marges.haut < margePendant && !moteur.margesEnRoute }
+        let oubliee = try colonne()
+        #expect(moteur.marges.haut == FenetrePieces.margeHaut(bas: oubliee.maxY), "sans sonde : \(moteur.marges.haut)")
+    }
+
     /// Le vrai plein ecran (reverification du 02/10 : le bouton vert ne faisait qu'agrandir la fenetre) : SwiftUI pose
     /// a la fenetre d'une app de la barre des menus `fullScreenAuxiliary` ou `fullScreenNone` (releve dans l'app, en
-    /// demo), et la vue le remplace par `fullScreenPrimary`, a chaque fois. En plein ecran, les trois boutons se
-    /// cachent : la capsule de gauche va au bord, a 12 pt comme celle de droite, et revient apres eux a la sortie.
+    /// demo), et la vue le remplace par `fullScreenPrimary`, a chaque fois. En plein ecran (ronde finale du 02/10), la
+    /// barre d'outils invisible se retire : revelee au survol du haut, elle faisait une bande claire sur les capsules.
+    /// Elle revient a la sortie, et les boutons avec elle. La capsule de gauche garde sa place, apres les boutons : ceux
+    /// que le survol du haut fait paraitre ne la recouvrent pas.
     @Test(.timeLimit(.minutes(1))) func pleinEcran() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -780,14 +846,21 @@ struct FenetrePiecesTests {
             #expect(primaire(), "remis apres \(autre.rawValue) : 0x\(String(fenetre.collectionBehavior.rawValue, radix: 16))")
         }
         let apres = CadreFeux.defaut.droite + HautPieces.ecartFeux
+        let barre = try #require(fenetre.toolbar)
         #expect(moteur.cadresInterface["ligne"]?.minX == apres)
+        #expect(barre.isVisible, "hors plein ecran, la barre d'outils invisible abaisse les boutons")
         NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: fenetre)
-        try await MoteurPiecesTests.attendre { moteur.cadresInterface["ligne"]?.minX == HautPieces.bordDroit }
-        #expect(moteur.cadresInterface["ligne"]?.minX == HautPieces.bordDroit, "en plein ecran, au bord")
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!barre.isVisible, "en plein ecran, la barre d'outils se retire")
+        #expect(moteur.cadresInterface["ligne"]?.minX == apres, "en plein ecran, la capsule garde sa place")
         #expect(moteur.cadresInterface["ligne"]?.midY == CadreFeux.defaut.milieu, "a la meme hauteur")
         NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: fenetre)
-        try await MoteurPiecesTests.attendre { moteur.cadresInterface["ligne"]?.minX == apres }
+        try await MoteurPiecesTests.attendre { barre.isVisible }
+        #expect(barre.isVisible, "a la sortie, la barre d'outils revient")
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(CadreFeux(fenetre: fenetre) == CadreFeux.defaut, "et les boutons abaisses avec elle")
         #expect(moteur.cadresInterface["ligne"]?.minX == apres, "a la sortie, apres les boutons")
+        #expect(moteur.cadresInterface["ligne"]?.midY == CadreFeux.defaut.milieu)
     }
 
     /// La bande du haut : un clic, glisse, deplace la fenetre ; un double-clic fait ce que dit le reglage
@@ -907,16 +980,14 @@ struct FenetrePiecesTests {
         #expect(cadre.width > 0, "\(cas) : la bande n'est pas vide (\(cadre.width) pt)")
     }
 
-    /// La fenetre reste sombre, meme quand le Mac est en clair : sa barre, ses menus, sa fiche et ses
-    /// feuilles en apparence sombre.
+    /// La fenetre reste sombre, meme quand le Mac est en clair : sa barre, ses menus, sa fiche et ses feuilles, et en
+    /// plein ecran la barre de titre que le survol du haut fait paraitre (ronde finale du 02/10 : une bande blanche sur
+    /// un Mac en clair). SwiftUI pose l'apparence de la fenetre a chaque mise a jour, d'apres la preference de la vue :
+    /// l'apparence sombre posee par AppKit etait aussitot defaite (releve dans l'app, en demo). La vue demande donc
+    /// l'apparence sombre a SwiftUI (`preferredColorScheme`).
     @Test func fenetreToujoursSombre() {
-        let fenetre = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled],
-                               backing: .buffered, defer: true)
-        fenetre.isReleasedWhenClosed = false
-        fenetre.appearance = NSAppearance(named: .aqua)
-        FenetrePieces.assombrir(fenetre)
-        #expect(fenetre.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
-        FenetrePieces.assombrir(nil)
+        let corps = String(reflecting: FenetrePieces.Body.self)
+        #expect(corps.contains("PreferredColorSchemeKey"), "la vue demande l'apparence sombre a SwiftUI")
     }
 
     /// « Placer dans une piece… » : pour un routeur de bordure que Maison ne place pas seulement, les

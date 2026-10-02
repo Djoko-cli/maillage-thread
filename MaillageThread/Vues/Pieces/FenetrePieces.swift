@@ -57,12 +57,6 @@ struct FenetrePieces: View {
         _piecesChoisies = State(initialValue: PiecesChoisies(fichier: fichierPieces))
     }
 
-    /// La fenetre reste sombre : barre, menus, fiche et feuilles en apparence sombre, quelle que soit
-    /// celle du Mac.
-    static func assombrir(_ fenetre: NSWindow?) {
-        fenetre?.appearance = NSAppearance(named: .darkAqua)
-    }
-
     /// Places des pieces, a cote des identites des routeurs ; ni en demo ni sous les tests.
     static func fichierPlaces(demo: Bool, sousTests: Bool) -> URL? {
         demo || sousTests ? nil : Surveillance.dossierParDefaut.appendingPathComponent("positions-pieces.json")
@@ -142,10 +136,7 @@ struct FenetrePieces: View {
                     EtatVide()
                 }
                 HautPieces(moteur: moteur, troisD: $troisD, sansPieces: entree?.scene.sansPiecesMaison == true,
-                           feux: feux)
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(VuePieces.espace)).maxY } action: {
-                        margeHautMesuree = Self.margeHaut(bas: $0)
-                    }
+                           feux: feux) { margeHautMesuree = Self.margeHaut(bas: $0) }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 VStack(alignment: .leading, spacing: Self.espacement) {
                     Spacer()
@@ -184,17 +175,22 @@ struct FenetrePieces: View {
             .ignoresSafeArea()
         }
         .frame(minWidth: Self.tailleMinimale.width, minHeight: Self.tailleMinimale.height)
-        // De l'air en haut (reverification du 02/10, comme dans Plans) : une barre d'outils vide, en style unifie, sans
-        // fond. Elle fait la barre de titre de 52 pt et abaisse les trois boutons ; les capsules, posees sur la scene
-        // et non dans la barre, se centrent sur eux (`SuiviFenetre`), leur haut a 11 pt du bord. SwiftUI la garde a
-        // chaque mise a jour de la fenetre. En plein ecran, elle ne parait qu'au survol du haut : sinon, sa fenetre
-        // couvrirait les capsules et prendrait leurs clics (releve dans l'app, en demo).
+        // De l'air en haut (reverification du 02/10, comme dans Plans) : une barre d'outils vide, sans fond, du style
+        // que SwiftUI choisit (automatique). Elle fait la barre de titre de 52 pt et abaisse les trois boutons ; les
+        // capsules, posees sur la scene et non dans la barre, se centrent sur eux (`SuiviFenetre`), leur haut a 11 pt du
+        // bord. SwiftUI la garde a chaque mise a jour de la fenetre. En plein ecran, elle se retire (`SuiviFenetre`,
+        // ronde finale du 02/10), et ne parait de toute facon qu'au survol du haut : sinon, sa fenetre couvrirait les
+        // capsules et prendrait leurs clics (releve dans l'app, en demo).
         .toolbar { ToolbarSpacer(.flexible) }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .windowToolbarFullScreenVisibility(.onHover)
         .environment(piecesChoisies)
         .environment(\.colorScheme, .dark)
-        .background(SondeFenetre { Self.assombrir($0) })
+        // La fenetre reste sombre, quelle que soit l'apparence du Mac : sa barre, ses menus, ses feuilles, et en plein
+        // ecran la barre de titre que le survol du haut fait paraitre (ronde finale du 02/10 : sur un Mac en clair, une
+        // bande blanche). SwiftUI pose l'apparence de la fenetre a chaque mise a jour : l'apparence sombre posee par
+        // AppKit (`appearance`, avant) etait aussitot defaite (releve dans l'app, en demo).
+        .preferredColorScheme(.dark)
         // Les trois boutons, que suit la capsule de gauche, et le vrai plein ecran ; hors de la mise a jour de la vue en
         // cours.
         .background(SuiviFenetre { c in Task { @MainActor in feux = c } })
@@ -341,8 +337,8 @@ struct BandeauSansPieces: View {
     }
 }
 
-/// Fil, sous la capsule de gauche : « Maison », puis « › Salon » en piece isolee ; « Maison » y
-/// ramene. Une capture le dessine sans bouton.
+/// Fil, dans la colonne de gauche, sous la ligne des capsules : « Maison », puis « › Salon » en piece
+/// isolee ; « Maison » y ramene. Une capture le dessine sans bouton.
 struct FilPieces: View {
     @Environment(\.capturePieces) private var capture
     let moteur: MoteurPieces

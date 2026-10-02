@@ -41,18 +41,17 @@ struct FenetreTests {
         #expect(Set(largeurs).count == 1, "\(largeurs)")
     }
 
-    /// La place de la tournee : l'indicateur pendant une tournee ; hors tournee, sa place, de la meme
-    /// taille, tant qu'une sonde est retenue (rien ne bouge au debut ni a la fin d'une tournee) ; rien
-    /// sans sonde.
+    /// La place de la tournee (ronde finale du 02/10) : la ligne montree pendant une tournee ; hors tournee, une sonde
+    /// retenue, cachee, mais sa place comptee dans la marge du haut (la scene ne bouge pas au debut ni a la fin d'une
+    /// tournee) ; rien sans sonde. Le gabarit que compte la marge a la taille de la ligne montree.
     @Test func placeDeLaTournee() {
         let a = AvancementTournee(etape: .balayage, fait: 24, total: 48)
         let debut = Date(timeIntervalSince1970: 1_790_000_000)
-        #expect(LigneTournee.place(serie: "A0:00:00:00:00:01", avancement: a, debut: debut) == .indicateur(a, debut: debut))
-        #expect(LigneTournee.place(serie: "A0:00:00:00:00:01", avancement: nil, debut: nil) == .gardee)
-        #expect(LigneTournee.place(serie: nil, avancement: nil, debut: nil) == .aucune)
+        #expect(LigneTournee.place(serie: "A0:00:00:00:00:01", debut: debut) == .montree)
+        #expect(LigneTournee.place(serie: "A0:00:00:00:00:01", debut: nil) == .comptee)
+        #expect(LigneTournee.place(serie: nil, debut: nil) == .aucune)
         let tournee = NSHostingView(rootView: IndicateurTournee(avancement: a, debut: debut)).fittingSize
-        let place = NSHostingView(rootView: IndicateurTournee(avancement: AvancementTournee(etape: .etatSonde, fait: 0, total: 1),
-                                                              debut: nil).hidden()).fittingSize
+        let place = NSHostingView(rootView: LigneTournee.gabarit).fittingSize
         #expect(place == tournee)
     }
 

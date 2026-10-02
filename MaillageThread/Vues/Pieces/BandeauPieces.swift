@@ -5,7 +5,7 @@ import SwiftUI
 // Haut de la fenetre de la vue par pieces, sans barre de titre (polissage B, section 1 ; maquette du
 // bandeau, carte C) : deux capsules de verre sur la ligne des trois boutons de la fenetre, le reseau a
 // gauche (`BarreOutils`), la vue a droite (`CommandesVue`) ; entre elles, la bande qui deplace la
-// fenetre ; sous la capsule de gauche, en plus petit, la tournee, les bandeaux et le fil.
+// fenetre ; dessous, contre le bord gauche, en plus petit, la tournee, les bandeaux et le fil.
 
 extension EnvironmentValues {
     /// Rendu d'une capture (`CapturesPieces`, par `ImageRenderer`) : ni le verre, ni les vues d'AppKit
@@ -17,7 +17,7 @@ extension EnvironmentValues {
 /// l'origine est le coin haut gauche de la fenetre (le contenu la couvre en entier) : la capsule de
 /// gauche commence juste apres eux, et se centre sur leur milieu.
 struct CadreFeux: Equatable {
-    /// Bord droit du bouton agrandir (pt, depuis le bord gauche) ; 0 : les boutons caches (plein ecran).
+    /// Bord droit du bouton agrandir (pt, depuis le bord gauche).
     var droite: CGFloat
     /// Milieu des boutons (pt, depuis le haut).
     var milieu: CGFloat
@@ -27,12 +27,6 @@ struct CadreFeux: Equatable {
     /// 14 pt, en x = 19, 42 et 65, de 19 a 33 pt du haut (sans elle : 32 pt, en x = 9, 32 et 55, de 9 a 23 pt).
     /// Avant que la fenetre soit connue, et pour les captures, qui ne rendent pas la fenetre.
     static let defaut = CadreFeux(droite: 79, milieu: 26)
-
-    /// En plein ecran, les boutons se cachent (ils ne paraissent qu'au survol du haut, avec la barre des menus) : la
-    /// capsule de gauche va au bord (`HautPieces.debut`), a la meme hauteur.
-    static func pleinEcran(milieu: CGFloat) -> CadreFeux {
-        CadreFeux(droite: 0, milieu: milieu)
-    }
 
     init(droite: CGFloat, milieu: CGFloat) {
         self.droite = droite
@@ -54,13 +48,18 @@ struct CadreFeux: Equatable {
 
 /// Suit la fenetre de la vue (reverification du 02/10) : ses trois boutons, que la capsule de gauche suit, et le
 /// vrai plein ecran.
-/// - Les boutons sont lus a l'arrivee dans la fenetre et a la sortie du plein ecran ; a l'entree, ils se cachent
-///   (`CadreFeux.pleinEcran`).
+/// - Les boutons sont lus a l'arrivee dans la fenetre et a la sortie du plein ecran. En plein ecran, la capsule de
+///   gauche garde sa place, apres eux (ronde finale du 02/10) : quand le survol du haut les fait paraitre, ils ne
+///   la recouvrent pas.
 /// - Le plein ecran : SwiftUI pose a la fenetre d'une app de la barre des menus (`LSUIElement`)
 ///   `fullScreenAuxiliary` ou `fullScreenNone`, et le bouton vert ne faisait qu'agrandir la fenetre ;
 ///   `.windowFullScreenBehavior(.enabled)` n'y change rien (essaye dans l'app, en demo). La fenetre recoit
 ///   `fullScreenPrimary`, et le garde : SwiftUI le defait au lancement, puis a l'entree et a la sortie du plein
 ///   ecran (releve dans l'app), et la sonde le remet aussitot, en observant `collectionBehavior`.
+/// - En plein ecran, la barre d'outils invisible se retire (ronde finale du 02/10) : elle ne sert qu'a abaisser les
+///   boutons hors plein ecran, et le survol du haut la faisait descendre en bande claire sur les capsules. Elle
+///   revient a la sortie. La barre de titre que le survol fait paraitre, elle, est sombre, comme la fenetre
+///   (`FenetrePieces`, `.preferredColorScheme(.dark)`).
 struct SuiviFenetre: NSViewRepresentable {
     let rapporter: (CadreFeux) -> Void
 
@@ -102,23 +101,26 @@ struct SuiviFenetre: NSViewRepresentable {
                                object: window)
             centre.addObserver(self, selector: #selector(sortDuPleinEcran), name: NSWindow.didExitFullScreenNotification,
                                object: window)
+            // Une fenetre deja en plein ecran (rouverte ainsi) : la barre d'outils se retire, et la capsule garde la
+            // place par defaut, celle d'apres les boutons.
+            if window.styleMask.contains(.fullScreen) {
+                entreEnPleinEcran()
+            }
             lireLesBoutons()
         }
 
         @objc private func entreEnPleinEcran() {
-            signaler(.pleinEcran(milieu: feux.milieu))
+            window?.toolbar?.isVisible = false
         }
 
         @objc private func sortDuPleinEcran() {
+            window?.toolbar?.isVisible = true
+            window?.contentView?.superview?.layoutSubtreeIfNeeded()
             lireLesBoutons()
         }
 
         private func lireLesBoutons() {
-            guard let window, let c = CadreFeux(fenetre: window) else { return }
-            signaler(c)
-        }
-
-        private func signaler(_ c: CadreFeux) {
+            guard let window, let c = CadreFeux(fenetre: window), c != feux else { return }
             feux = c
             rapporter(c)
         }
@@ -202,31 +204,40 @@ struct BandeFenetre: View {
 }
 
 /// Haut de la fenetre, pose sur la scene : la ligne des capsules, centree sur les trois boutons de la
-/// fenetre (le reseau juste apres eux, la vue contre le bord droit, la bande entre elles) ; sous la
-/// capsule de gauche, alignes sur elle, la ligne de la tournee (sa place gardee tant qu'une sonde est
-/// retenue), le bandeau de scission, celui d'une maison sans pieces, et le fil. Sa hauteur mesuree donne
-/// la marge du haut de la vue d'ensemble (`FenetrePieces.margeHaut`).
+/// fenetre (le reseau juste apres eux, la vue contre le bord droit, la bande entre elles) ; dessous, la
+/// colonne de gauche, contre le bord gauche de la fenetre, a la marge de la legende et de la ligne de niveau
+/// (ronde finale du 02/10) : la ligne de la tournee, pendant une tournee seulement, le bandeau de scission,
+/// celui d'une maison sans pieces, et le fil. Son bas mesure donne la marge du haut de la vue d'ensemble
+/// (`surBas`, puis `FenetrePieces.margeHaut`), avec la place d'une ligne de tournee absente tant qu'une sonde
+/// est retenue : la scene ne bouge pas quand la ligne parait ou disparait.
 struct HautPieces: View {
     @Environment(Surveillance.self) private var surveillance
+    @Environment(SondeMaillage.self) private var sonde
     @Environment(\.accessibilityReduceMotion) private var reduire
     let moteur: MoteurPieces
     @Binding var troisD: Bool
     /// Maison n'a encore aucune piece : le bandeau du passeur.
     var sansPieces = false
     var feux = CadreFeux.defaut
+    /// Le bas du haut de la fenetre, dans l'espace de la vue, la place d'une ligne de tournee absente comprise.
+    var surBas: (CGFloat) -> Void = { _ in }
+    /// Hauteur mesuree de la ligne de la tournee (`LigneTournee.gabarit`).
+    @State private var hauteurTournee: CGFloat?
 
     /// Ecart entre le bouton agrandir et la capsule de gauche, et entre la capsule de droite et le bord
     /// de la fenetre (pt) : ceux de la maquette (72 - 59, et 12).
     static let ecartFeux: CGFloat = 13
     static let bordDroit: CGFloat = 12
 
-    /// Debut de la capsule de gauche (pt, depuis le bord gauche) : juste apres les trois boutons ; au bord, a 12 pt
-    /// comme la capsule de droite, quand ils sont caches (plein ecran).
+    /// Debut de la capsule de gauche (pt, depuis le bord gauche) : juste apres les trois boutons, en plein ecran aussi.
     static func debut(_ feux: CadreFeux) -> CGFloat {
-        feux.droite > 0 ? feux.droite + ecartFeux : bordDroit
+        feux.droite + ecartFeux
     }
 
     var body: some View {
+        let tournee = LigneTournee.place(serie: sonde.serie, debut: sonde.debutTournee)
+        // Hors tournee, une sonde retenue : la marge du haut compte la ligne absente et son espacement.
+        let reserve = tournee == .comptee ? (hauteurTournee ?? 0) + FenetrePieces.espacement : 0
         VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
             // Chaque capsule garde la largeur de son contenu (`fixedSize`) : la bande vide prend la place qui
             // reste. Sans cela, les trois se la partagent et la capsule du reseau tronque ses boutons.
@@ -242,11 +253,16 @@ struct HautPieces: View {
             }
             .frame(height: 2 * feux.milieu)
             .obstacle("ligne", moteur)
+            .padding(.leading, Self.debut(feux))
             // Un bandeau qui parait glisse depuis le haut, et repart de meme ; ce qui est dessous descend
             // avec lui. Avec « Reduire les animations », le bandeau se fond (sa transition porte son fondu)
-            // et le fil prend sa place d'un coup : aucune animation de conteneur.
+            // et le fil prend sa place d'un coup : aucune animation de conteneur. La ligne de la tournee fait
+            // de meme.
             VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
-                LigneTournee()
+                if tournee == .montree {
+                    LigneTournee()
+                        .transition(apparition.transitionAnimee)
+                }
                 if let r = surveillance.reseau, r.estScinde {
                     BandeauScission(reseau: r)
                         .transition(apparition.transitionAnimee)
@@ -259,10 +275,21 @@ struct HautPieces: View {
             }
             .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: surveillance.reseau?.estScinde == true)
             .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: sansPieces)
+            .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: tournee == .montree)
+            .background(alignment: .topLeading) {
+                if tournee != .aucune {
+                    LigneTournee.gabarit
+                        .fixedSize()
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hauteurTournee = $0 }
+                }
+            }
             .obstacle("colonne", moteur)
+            .padding(.leading, FenetrePieces.bord)
         }
-        .padding(.leading, Self.debut(feux))
         .padding(.trailing, Self.bordDroit)
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(VuePieces.espace)).maxY + reserve } action: {
+            surBas($0)
+        }
     }
 
     private var apparition: Apparition { Apparition.pour(.top, reduire: reduire) }
@@ -358,7 +385,7 @@ extension View {
         modifier(CapsuleDeVerre())
     }
 
-    /// Ligne sous la capsule de gauche, en plus petit (maquette du bandeau, `.pilule`) : texte de 10 pt
+    /// Ligne de la colonne de gauche, en plus petit (maquette du bandeau, `.pilule`) : texte de 10 pt
     /// blanc a 0,75, marges de 3 x 10 pt, en capsule de verre, teintee pour un bandeau d'alerte. Une
     /// capture pose a sa place le fond de la maquette : rgba(40, 48, 72, 0,32) (ou la teinte), filet de
     /// 0,5 pt blanc a 0,16.
