@@ -90,10 +90,8 @@ struct Palette {
     var bulle: Color { Color(.sRGB, red: 0.55, green: 0.72, blue: 1.0) }
     var equateur: Color { Color(.sRGB, red: 0xDF / 255, green: 0xE6 / 255, blue: 0xF3 / 255) }
 
-    // MARK: Legende (polissage B, section 2 ; maquette de la legende)
+    // MARK: Legende (polissage B, section 2 ; maquette de la legende ; en verre depuis la verification du 02/10)
 
-    /// Fond de la legende : le fond de la vue (son deuxieme arret, rgb(15, 23, 41)) a 0,92.
-    static let fondLegende = Color(red: 0.06, green: 0.09, blue: 0.16).opacity(0.92)
     /// Texte de la legende : blanc a 0,88 ; titres de ses groupes, gris bleute : rgb(148, 163, 190).
     static let texteLegende = Color(white: 1, opacity: 0.88)
     static let titreLegende = Color(.sRGB, red: 148 / 255, green: 163 / 255, blue: 190 / 255)

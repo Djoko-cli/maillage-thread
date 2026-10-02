@@ -5,9 +5,9 @@ import SwiftUI
 /// Fenetre de la vue par pieces (spec de la vue par pieces, sections 1 et 7 ; polissage B, section 1) :
 /// sans barre de titre (le style de sa scene, `.hiddenTitleBar`, dans `MaillageThreadApp`), la scene occupe
 /// toute la fenetre, jusque sous ses trois boutons ; en haut, les deux capsules du bandeau, la bande qui
-/// deplace la fenetre, la ligne de la tournee, les bandeaux et le fil (`HautPieces`) ; en bas, la ligne de
-/// niveau, la legende et la fiche. Elle reste sombre, comme la maquette, meme quand le Mac est en clair
-/// (precision 15 du plan 4b).
+/// deplace la fenetre, la ligne de la tournee, les bandeaux et le fil (`HautPieces`) ; en bas, la pile : la
+/// legende et la ligne de niveau, puis la fiche. Elle reste sombre, comme la maquette, meme quand le Mac est en
+/// clair (precision 15 du plan 4b).
 struct FenetrePieces: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(NomsInternes.self) private var nomsMaison
@@ -21,9 +21,19 @@ struct FenetrePieces: View {
     @State private var feux = CadreFeux.defaut
     /// Marge du haut de la vue d'ensemble, d'apres la hauteur mesuree du haut de la fenetre.
     @State private var margeHautMesuree = FenetrePieces.margeHautInitiale
-    /// Hauteur mesuree de la ligne du bas, la legende ouverte ; nil, repliee (la derniere mesure reste
-    /// sous une fiche ouverte, qui cache la legende).
+    /// Hauteur mesuree de la rangee du bas (la legende et la ligne de niveau), la legende ouverte ; nil, repliee.
     @State private var hauteurLegende: CGFloat?
+    /// La derniere hauteur mesuree de la rangee, la legende ouverte : elle decide du repli faute de place, la legende
+    /// repliee comprise.
+    @State private var legendeOuverteMesuree: CGFloat?
+    /// Hauteur mesuree de la pile du bas (la rangee, puis la fiche), une fiche ouverte ; nil sans fiche.
+    @State private var hauteurPile: CGFloat?
+    /// Hauteur mesuree de la fiche ; la derniere reste a sa fermeture, et vaut pour la suivante jusqu'a sa mesure.
+    @State private var hauteurFiche: CGFloat?
+    /// Hauteur mesuree de la vue.
+    @State private var hauteurVue: CGFloat?
+    /// Djoko a rouvert la legende repliee faute de place : elle reste ouverte jusqu'a la fermeture de la fiche.
+    @State private var legendeRouverte = false
 
     /// Preference du mode 2D ou 3D.
     static let cleMode = "vuePieces3D"
@@ -72,15 +82,32 @@ struct FenetrePieces: View {
     /// Avant la premiere mesure : la ligne des capsules, l'espacement et le fil.
     static let margeHautInitiale = margeHaut(bas: 2 * CadreFeux.defaut.milieu + espacement + 16)
 
-    /// Marge du bas de la vue d'ensemble (pt) : la fiche ouverte, plus haute avec les courbes de
-    /// l'historique (plan 3b), qui cache la legende : la vue ne bouge pas d'un noeud a l'autre ; la legende
-    /// ouverte (decision de Djoko du 01/10) : comme en haut, la hauteur mesuree de la ligne du bas (la
-    /// legende et la ligne de niveau), le bord et l'espacement, la vue d'ensemble se cadrant au-dessus
-    /// d'elle ; sinon 30 pt : la legende repliee et la ligne de niveau debordent un peu sur la vue.
-    static func margeBas(fiche: Bool, courbes: Bool, legendeOuverte: CGFloat? = nil) -> CGFloat {
-        if fiche { return courbes ? 360 : 190 }
-        guard let h = legendeOuverte else { return 30 }
-        return max(30, bord + ceil(h) + espacement)
+    /// Marge du bas de la vue d'ensemble (pt), comme celle du haut : la hauteur mesuree de ce qui est pose en bas,
+    /// la pile (de haut en bas, la rangee de la legende et de la ligne de niveau, puis la fiche), le bord et
+    /// l'espacement ; la vue d'ensemble se cadre au-dessus de tout cela (decisions de Djoko du 01/10 pour la legende
+    /// ouverte, du 02/10 pour la fiche, qui remplacent les 190 et 360 pt fixes de la fiche). Sans rien a garder
+    /// (nil : la legende repliee, ou sans entree, et pas de fiche), 30 pt : la legende repliee et la ligne de
+    /// niveau debordent un peu sur la vue.
+    static func margeBas(pile: CGFloat?) -> CGFloat {
+        guard let pile else { return 30 }
+        return max(30, bord + ceil(pile) + espacement)
+    }
+
+    /// Hauteur de scene en dessous de laquelle la legende ouverte se replie d'elle-meme sous une fiche (pt) : les
+    /// 230 pt environ que la spec de B garde a la scene dans la plus petite fenetre, avec la fiche et ses courbes
+    /// (section 3) ; la legende ne la fait pas descendre plus bas. Mesure sur la demo, sous la fiche de l'Apple TV 4K
+    /// et sous la plus haute : dans la fenetre par defaut (1100 x 760), la legende ouverte laisse 291 et 256 pt a la
+    /// scene, et reste ouverte ; dans la plus petite (820 x 712, dont 680 sous la barre de titre cachee), elle
+    /// laisserait 205 et 176 pt : repliee, la scene y retrouve 402 et 373 pt.
+    static let sceneMinimale: CGFloat = 230
+
+    /// La legende se replie d'elle-meme sous une fiche ouverte (verification du 02/10) si, ouverte au-dessus d'elle,
+    /// elle ne laissait a la scene que moins de `sceneMinimale` pt, dans une vue de `hauteur` pt, sous la marge du
+    /// haut. `legende` : la hauteur de sa rangee ouverte, la derniere mesuree ; `fiche` : celle de la fiche ; nil, pas
+    /// encore mesurees : elle ne se replie pas. Le repli garde (la preference) n'y est pour rien.
+    static func repliDePlace(hauteur: CGFloat, margeHaut: CGFloat, legende: CGFloat?, fiche: CGFloat?) -> Bool {
+        guard let legende, let fiche else { return false }
+        return hauteur - margeHaut - margeBas(pile: legende + espacement + fiche) < sceneMinimale
     }
 
     var body: some View {
@@ -92,13 +119,17 @@ struct FenetrePieces: View {
             let entree = surveillance.reseau.map {
                 EntreeScene(surveillance: surveillance, reseau: $0, places: moteur.places, choix: piecesChoisies.choix)
             }
+            let fiche = moteur.selection != nil
+            // Sous une fiche, la legende se replie d'elle-meme si la place manque, sauf si Djoko l'a rouverte.
+            let repliDePlace = fiche && !legendeRouverte && hauteurVue.map {
+                Self.repliDePlace(hauteur: $0, margeHaut: margeHautMesuree, legende: legendeOuverteMesuree,
+                                  fiche: hauteurFiche)
+            } == true
             ZStack {
                 RadialGradient(gradient: palette.fond, center: UnitPoint(x: 0.3, y: 0.35), startRadius: 0, endRadius: 900)
                 if let entree {
                     VuePieces(moteur: moteur, entree: entree, palette: palette,
-                              marges: (margeHautMesuree, Self.margeBas(fiche: moteur.selection != nil,
-                                                                courbes: FicheNoeud.courbesVisibles(dans: surveillance),
-                                                                legendeOuverte: hauteurLegende)))
+                              marges: (margeHautMesuree, Self.margeBas(pile: hauteurPile ?? hauteurLegende)))
                     if !moteur.pret {
                         ProgressView().controlSize(.small)
                     }
@@ -113,26 +144,37 @@ struct FenetrePieces: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 VStack(alignment: .leading, spacing: Self.espacement) {
                     Spacer()
-                    LigneDuBas(moteur: moteur, entree: entree, legende: moteur.selection == nil,
-                               ancien: surveillance.maillageAncien) { hauteurLegende = $0 }
-                    // La fiche glisse depuis le bas a l'ouverture et a la fermeture, et ce qui est a cote
-                    // glisse avec elle (la ligne de niveau, la pastille). Avec « Reduire les animations »,
-                    // la fiche se fond (sa transition porte son fondu) et le reste prend sa place d'un coup :
-                    // aucune animation de conteneur. D'un noeud a l'autre, son contenu change sur place.
-                    if let selection = moteur.selection {
-                        FicheNoeud(id: selection, entree: entree, instant: surveillance.maintenant(a: contexte.date),
-                                   aRenommer: $aRenommer, choisir: { moteur.selection = $0 }) {
-                            moteur.selection = nil
+                    // La pile du bas, de haut en bas : la rangee de la legende et de la ligne de niveau, puis la fiche ;
+                    // la legende reste au-dessus d'une fiche ouverte (verification du 02/10). La fiche glisse depuis le
+                    // bas a l'ouverture et a la fermeture, et la rangee glisse avec elle. Avec « Reduire les
+                    // animations », la fiche se fond (sa transition porte son fondu) et la rangee prend sa place d'un
+                    // coup : aucune animation de conteneur. D'un noeud a l'autre, le contenu de la fiche change sur
+                    // place.
+                    VStack(alignment: .leading, spacing: Self.espacement) {
+                        LigneDuBas(moteur: moteur, entree: entree, ancien: surveillance.maillageAncien,
+                                   repliDePlace: repliDePlace, rouvrir: { legendeRouverte = true }) { h in
+                            hauteurLegende = h
+                            if let h { legendeOuverteMesuree = h }
                         }
-                        .obstacle("fiche", moteur)
-                        .transition(Apparition.pour(.bottom, reduire: reduire).transitionAnimee)
+                        if let selection = moteur.selection {
+                            FicheNoeud(id: selection, entree: entree, instant: surveillance.maintenant(a: contexte.date),
+                                       aRenommer: $aRenommer, choisir: { moteur.selection = $0 }) {
+                                moteur.selection = nil
+                            }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hauteurFiche = $0 }
+                            .obstacle("fiche", moteur)
+                            .transition(Apparition.pour(.bottom, reduire: reduire).transitionAnimee)
+                        }
                     }
+                    // Sa hauteur, une fiche ouverte : la marge du bas (sans fiche, celle de la rangee).
+                    .onGeometryChange(for: CGFloat?.self) { fiche ? $0.size.height : nil } action: { hauteurPile = $0 }
                 }
                 .animation(Apparition.animationDuConteneur(.bottom, reduire: reduire), value: moteur.selection == nil)
                 // En bas a gauche : la pile prend toute la largeur, sinon le `ZStack` centre la rangee du bas.
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Self.bord)
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hauteurVue = $0 }
             .coordinateSpace(.named(VuePieces.espace))
             .ignoresSafeArea()
         }
@@ -148,6 +190,10 @@ struct FenetrePieces: View {
         })
         .sheet(item: $aRenommer) { FeuilleRenommer(id: $0.id) }
         .onChange(of: reduire, initial: true) { _, r in moteur.reduire = r }
+        // La fiche fermee, la legende reprend son repli garde.
+        .onChange(of: moteur.selection == nil) { _, sansFiche in
+            if sansFiche { legendeRouverte = false }
+        }
         .task {
             // Batteries de Maison a jour tant que la vue est ouverte.
             while !Task.isCancelled {
@@ -310,31 +356,40 @@ struct FilPieces: View {
     }
 }
 
-/// Bas a gauche de la fenetre : la legende (cachee sous une fiche ouverte), la ligne de niveau, et la
-/// pastille d'un releve de la sonde ancien. La ligne de niveau s'aligne sur la derniere ligne de la
-/// legende. Elle garde le repli de la legende, d'un lancement a l'autre, et donne sa hauteur quand la
-/// legende est ouverte (nil, repliee) : la marge du bas de la vue d'ensemble (`FenetrePieces.margeBas`).
+/// Bas a gauche de la fenetre, au-dessus de la fiche quand elle est ouverte : la legende, la ligne de niveau, et
+/// la pastille d'un releve de la sonde ancien. La ligne de niveau s'aligne sur la derniere ligne de la legende.
+/// Elle garde le repli de la legende, d'un lancement a l'autre, et donne sa hauteur quand la legende est ouverte
+/// (nil, repliee) : la marge du bas de la vue d'ensemble (`FenetrePieces.margeBas`).
 struct LigneDuBas: View {
+    @Environment(\.accessibilityReduceMotion) private var reduire
     let moteur: MoteurPieces
     let entree: EntreeScene?
-    var legende = true
     var ancien = false
     /// Legende repliee ou ouverte, imposee (captures) : la preference n'est alors ni ecrite, ni suivie.
     var legendeForcee: Bool?
-    /// Hauteur de la ligne, la legende ouverte ; nil, repliee. Rien sous une fiche, qui cache la legende.
+    /// Repli faute de place, sous une fiche, dans une fenetre trop basse (`FenetrePieces.repliDePlace`) : la legende
+    /// se replie sans toucher a la preference ; l'ouvrir d'un clic le leve (`rouvrir`).
+    var repliDePlace = false
+    var rouvrir: () -> Void = {}
+    /// Hauteur de la ligne, la legende ouverte ; nil, repliee.
     var surHauteurOuverte: (CGFloat?) -> Void = { _ in }
     @AppStorage(LegendePieces.cleRepliee) private var repliee = false
 
     var body: some View {
         // Des reperes « ailleurs » sont poses dans une piece isolee (lue avec elle : `isolee`).
         let ailleurs = moteur.isolee != nil && !moteur.textes.ailleurs.isEmpty
-        let rubriques = legende ? entree.map { LegendePieces.rubriques(LegendePieces.Lecture($0, ailleurs: ailleurs)) } ?? [] : []
-        let estRepliee = legendeForcee ?? repliee
+        let rubriques = entree.map { LegendePieces.rubriques(LegendePieces.Lecture($0, ailleurs: ailleurs)) } ?? []
+        let estRepliee = legendeForcee ?? (repliee || repliDePlace)
         let ouverte = !rubriques.isEmpty && !estRepliee
         HStack(alignment: .lastTextBaseline, spacing: 12) {
             if !rubriques.isEmpty {
                 LegendePieces(rubriques: rubriques, repliee: Binding(get: { estRepliee }, set: { r in
-                    if legendeForcee == nil { repliee = r }
+                    guard legendeForcee == nil else { return }
+                    // Un clic : le recadrage qui suit prend la duree de la legende ; l'ouvrir leve son repli faute de
+                    // place, sans rien ecrire de plus que le choix de Djoko.
+                    moteur.legendeBasculee()
+                    if !r { rouvrir() }
+                    repliee = r
                 }))
                 .obstacle("legende", moteur)
             }
@@ -345,9 +400,10 @@ struct LigneDuBas: View {
                     .obstacle("ancien", moteur)
             }
         }
-        .onGeometryChange(for: CGFloat?.self) { ouverte ? $0.size.height : nil } action: { h in
-            if legende { surHauteurOuverte(h) }
-        }
+        // La ligne de niveau et la pastille glissent avec la legende qui s'ouvre ou se replie ; avec « Reduire les
+        // animations », elles prennent leur place d'un coup.
+        .animation(Apparition.animationDuConteneurLegende(reduire: reduire), value: estRepliee)
+        .onGeometryChange(for: CGFloat?.self) { ouverte ? $0.size.height : nil } action: { surHauteurOuverte($0) }
     }
 }
 

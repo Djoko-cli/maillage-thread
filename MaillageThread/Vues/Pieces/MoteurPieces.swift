@@ -68,14 +68,18 @@ final class MoteurPieces {
     @ObservationIgnored private(set) var geometrie = GeometrieMaison(rayons: [])
     @ObservationIgnored private(set) var orbite = Orbite(cible: .zero, distance: 1000, azimut: 0, inclinaison: 0.0001, champ: 2)
     @ObservationIgnored private var taille = CGSize.zero
-    /// Marges du haut (le haut de la fenetre, mesure) et du bas (legende ouverte, fiche), posees par la
-    /// vue : la place utile de la vue d'ensemble. Le cadre les rejoint en 0,3 s, sur la courbe de la fiche
-    /// qui glisse (`Apparition`) : la vue se releve avec elle, au-dessus de la legende ouverte, ou descend
-    /// sous un bandeau ; avec « Reduire les animations », par un fondu.
+    /// Marges du haut (le haut de la fenetre, mesure) et du bas (la pile du bas, mesuree : la legende et la ligne
+    /// de niveau, puis la fiche), posees par la vue : la place utile de la vue d'ensemble. Le cadre les rejoint en
+    /// 0,3 s, sur la courbe de la fiche qui glisse (`Apparition`) : la vue se releve avec elle, au-dessus de la pile,
+    /// ou descend sous un bandeau ; en 0,45 s quand la legende s'ouvre ou se replie (`legendeBasculee`) ; avec
+    /// « Reduire les animations », par un fondu.
     @ObservationIgnored var marges: (haut: CGFloat, bas: CGFloat) = (0, 0)
     /// Marges du cadre, et leur glissement en cours vers `marges`.
     @ObservationIgnored private var margesCadre: (haut: CGFloat, bas: CGFloat)?
     @ObservationIgnored private var glissement: GlissementMarges?
+    /// Duree du prochain glissement des marges : celle de la legende, qui vient de s'ouvrir ou de se replier
+    /// (`legendeBasculee`) ; nil, celle de la fiche et des bandeaux.
+    @ObservationIgnored private var dureeAnnoncee: Double?
     /// Opacite de la scene pendant le fondu des marges (« Reduire les animations ») ; 1 sinon.
     @ObservationIgnored private(set) var opaciteMarges = 1.0
     @ObservationIgnored private(set) var cadre = CGRect(x: 0, y: 0, width: 1, height: 1)
@@ -147,12 +151,13 @@ final class MoteurPieces {
         case piece(String, hauteur: Double)
     }
 
-    /// Glissement des marges du cadre, de `depart` a `arrivee`, depuis `debut` ; `fondu` : avec « Reduire
-    /// les animations », un fondu par le fond, les marges sautant a mi-chemin.
+    /// Glissement des marges du cadre, de `depart` a `arrivee`, depuis `debut`, en `duree` ; `fondu` : avec
+    /// « Reduire les animations », un fondu par le fond, les marges sautant a mi-chemin.
     private struct GlissementMarges {
         var depart: (haut: CGFloat, bas: CGFloat)
         var arrivee: (haut: CGFloat, bas: CGFloat)
         var debut: Double
+        var duree: Double
         var fondu: Bool
     }
 
@@ -591,28 +596,30 @@ final class MoteurPieces {
         if !fige && !doitContinuer(now) { endormir() }
     }
 
-    /// Marges du cadre a l'instant `now` : les marges visees, ou en route vers elles pendant 0,3 s quand
-    /// elles changent ; avec « Reduire les animations », par un fondu de 0,3 s (la scene s'efface, les
-    /// marges sautent a mi-chemin, la scene revient : `opaciteMarges`) ; tout de suite avant la premiere
-    /// disposition et pour une capture.
+    /// Marges du cadre a l'instant `now` : les marges visees, ou en route vers elles quand elles changent, pendant
+    /// 0,3 s, ou 0,45 s quand la legende s'ouvre ou se replie (`legendeBasculee`) ; avec « Reduire les animations »,
+    /// par un fondu de cette duree (la scene s'efface, les marges sautent a mi-chemin, la scene revient :
+    /// `opaciteMarges`) ; tout de suite avant la premiere disposition et pour une capture.
     func margesDuCadre(_ now: Double) -> (haut: CGFloat, bas: CGFloat) {
         let actuelles = margesCadre ?? marges
         let visees = glissement?.arrivee ?? actuelles
         if marges.haut != visees.haut || marges.bas != visees.bas {
             if pret, !fige, margesCadre != nil {
-                glissement = GlissementMarges(depart: actuelles, arrivee: marges, debut: now, fondu: reduire)
+                glissement = GlissementMarges(depart: actuelles, arrivee: marges, debut: now,
+                                              duree: dureeAnnoncee ?? Apparition.duree, fondu: reduire)
                 // Le glissement demande des images : l'horloge repart, hors du rendu.
                 if !anime { Task { @MainActor [weak self] in self?.reveiller() } }
             } else {
                 glissement = nil
             }
+            dureeAnnoncee = nil
         }
         guard let g = glissement else {
             margesCadre = marges
             opaciteMarges = 1
             return marges
         }
-        let q = min(1, max(0, (now - g.debut) / Apparition.duree))
+        let q = min(1, max(0, (now - g.debut) / g.duree))
         let m: (haut: CGFloat, bas: CGFloat)
         if g.fondu {
             m = q < 0.5 ? g.depart : g.arrivee
@@ -632,6 +639,15 @@ final class MoteurPieces {
 
     /// Les marges du cadre sont en route.
     var margesEnRoute: Bool { glissement != nil }
+
+    /// Les marges du cadre sont en route par un fondu (« Reduire les animations »).
+    var margesEnFondu: Bool { glissement?.fondu == true }
+
+    /// La legende s'ouvre ou se replie, d'un clic : le recadrage qui l'accompagne (le prochain changement des
+    /// marges) prend sa duree, 0,45 s (`Apparition.dureeLegende`), au lieu des 0,3 s de la fiche et des bandeaux.
+    func legendeBasculee() {
+        dureeAnnoncee = Apparition.dureeLegende
+    }
 
     private func ligne(_ niveau: NiveauZoom, ancres: [CGRect?]) -> LigneNiveau {
         if estIsolee, let nom = isolee { return .isolee(nom) }

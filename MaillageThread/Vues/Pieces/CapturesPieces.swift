@@ -59,10 +59,13 @@ enum CapturesPieces {
         try? FileManager.default.createDirectory(atPath: dossier, withIntermediateDirectories: true)
         guard let r = s.reseau else { return [] }
         let palette = Palette(sombre: true)
+        // Hauteur d'une vue de la fenetre, rendue pour une capture, a la largeur `largeur` (sinon la sienne).
+        func hauteur(_ vue: some View, largeur: CGFloat? = nil) -> CGFloat {
+            NSHostingView(rootView: vue.frame(width: largeur).pourCapture(s, sonde, nomsMaison)).fittingSize.height
+        }
         // Marge du haut : la hauteur du haut de la fenetre, mesuree comme dans la fenetre.
-        let haut = NSHostingView(rootView: HautPieces(moteur: MoteurPieces(), troisD: .constant(false))
-            .pourCapture(s, sonde, nomsMaison)).fittingSize.height
-        let marges = (FenetrePieces.margeHaut(bas: haut), FenetrePieces.margeBas(fiche: false, courbes: false))
+        let haut = hauteur(HautPieces(moteur: MoteurPieces(), troisD: .constant(false)))
+        let marges = (FenetrePieces.margeHaut(bas: haut), FenetrePieces.margeBas(pile: nil))
         var noms: [String] = []
         for c in cas {
             let m = MoteurPieces()
@@ -71,23 +74,34 @@ enum CapturesPieces {
             m.poserTaille(taille)
             let e = EntreeScene(surveillance: s, reseau: r, places: m.places)
             m.installerMaintenant(e)
-            // La vue d'ensemble se cadre au-dessus de la legende ouverte : la hauteur mesuree de la ligne du
-            // bas, comme dans la fenetre ; repliee, la marge d'avant.
+            // La vue d'ensemble se cadre au-dessus de la legende ouverte : la hauteur mesuree de la rangee du bas,
+            // comme dans la fenetre ; repliee, la marge d'avant.
+            let ouverte = hauteur(LigneDuBas(moteur: MoteurPieces(), entree: e, legendeForcee: false))
             if !c.legendeRepliee {
-                let legende = NSHostingView(rootView: LigneDuBas(moteur: MoteurPieces(), entree: e, legendeForcee: false)
-                    .pourCapture(s, sonde, nomsMaison)).fittingSize.height
-                m.marges.bas = FenetrePieces.margeBas(fiche: false, courbes: false, legendeOuverte: legende)
+                m.marges.bas = FenetrePieces.margeBas(pile: ouverte)
             }
             m.poserTaille(taille)
             c.poser(m, e.scene)
-            if m.selection != nil {
-                m.marges.bas = FenetrePieces.margeBas(fiche: true, courbes: false)
+            // La fiche : la legende reste au-dessus d'elle (repliee si la place manque, comme dans la fenetre), et la
+            // vue se cadre au-dessus de la pile mesuree.
+            var repliee = c.legendeRepliee
+            if let id = m.selection {
+                let largeur = taille.width - 2 * FenetrePieces.bord
+                let fiche = hauteur(FicheNoeud(id: id, entree: e, instant: s.maintenant, aRenommer: .constant(nil)) {},
+                                    largeur: largeur)
+                repliee = repliee || FenetrePieces.repliDePlace(hauteur: taille.height, margeHaut: m.marges.haut,
+                                                                legende: ouverte, fiche: fiche)
+                let pile = hauteur(VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
+                    LigneDuBas(moteur: MoteurPieces(), entree: e, legendeForcee: repliee)
+                    FicheNoeud(id: id, entree: e, instant: s.maintenant, aRenommer: .constant(nil)) {}
+                }, largeur: largeur)
+                m.marges.bas = FenetrePieces.margeBas(pile: pile)
                 m.poserTaille(taille)
             }
             // Deux passages : le premier pose les noms, le second les dessine a leur place.
             var image: CGImage?
             for _ in 0..<2 {
-                let rendu = ImageRenderer(content: VueCapture(moteur: m, palette: palette, legendeRepliee: c.legendeRepliee)
+                let rendu = ImageRenderer(content: VueCapture(moteur: m, palette: palette, legendeRepliee: repliee)
                     .frame(width: taille.width, height: taille.height)
                     .pourCapture(s, sonde, nomsMaison))
                 rendu.scale = 2
@@ -109,7 +123,7 @@ enum CapturesPieces {
 }
 
 /// La vue d'une capture : le fond, la scene, le haut de la fenetre (avec ses trois boutons), la legende
-/// (ouverte, ou repliee) et la ligne de niveau, ou la fiche du noeud choisi ; sans horloge ni geste.
+/// (ouverte, ou repliee) et la ligne de niveau, puis, dessous, la fiche du noeud choisi ; sans horloge ni geste.
 struct VueCapture: View {
     @Environment(Surveillance.self) private var surveillance
     let moteur: MoteurPieces
@@ -124,8 +138,7 @@ struct VueCapture: View {
             FeuxDeCapture()
             VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
                 Spacer()
-                LigneDuBas(moteur: moteur, entree: moteur.entree, legende: moteur.selection == nil,
-                           legendeForcee: legendeRepliee)
+                LigneDuBas(moteur: moteur, entree: moteur.entree, legendeForcee: legendeRepliee)
                 if let id = moteur.selection {
                     FicheNoeud(id: id, entree: moteur.entree, instant: surveillance.maintenant,
                                aRenommer: .constant(nil)) {}

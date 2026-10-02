@@ -3,7 +3,8 @@ import SwiftUI
 /// Apparition d'un element pose sur la vue (polissage B ; maquette de la fiche, carte A) : la fiche
 /// glisse depuis le bas, un bandeau du haut depuis le haut, avec un fondu, en 0,3 s, sur la courbe de
 /// la maquette (`cubic-bezier(.2, .8, .2, 1)`) ; ils repartent de meme. Avec « Reduire les
-/// animations », un fondu simple, et rien d'autre ne glisse (`animationDuConteneur`).
+/// animations », un fondu simple, et rien d'autre ne glisse (`animationDuConteneur`). La legende s'ouvre
+/// et se replie sur la meme courbe, en 0,45 s (`transitionLegende`).
 enum Apparition: Equatable {
     /// Glisse depuis ce bord, de 110 % de sa hauteur, avec un fondu.
     case glisse(Edge)
@@ -41,8 +42,34 @@ enum Apparition: Equatable {
         reduire ? nil : Apparition.glisse(bord).animation
     }
 
+    // MARK: La legende
+
+    /// L'ouverture et le repli de la legende (verification du 02/10) : un peu plus lents que la fiche et les
+    /// bandeaux, Djoko trouvant l'ouverture « un poil trop fugace » a 0,3 s. Le recadrage qui l'accompagne prend la
+    /// meme duree (`MoteurPieces.legendeBasculee`).
+    static let dureeLegende = 0.45
+
+    /// Sur la courbe de la maquette, en 0,45 s ; avec « Reduire les animations », un fondu.
+    static func animationLegende(reduire: Bool) -> Animation {
+        reduire ? .easeInOut(duration: dureeLegende) : .timingCurve(0.2, 0.8, 0.2, 1, duration: dureeLegende)
+    }
+
+    /// Le panneau parait depuis l'etiquette « Legende », en bas a gauche, et s'y replie : un fondu et un leger
+    /// grossissement depuis ce coin ; l'etiquette fait de meme. Avec « Reduire les animations », un fondu seul.
+    /// L'animation est portee par la transition : elle se joue meme quand le conteneur n'en a pas.
+    static func transitionLegende(reduire: Bool) -> AnyTransition {
+        let t: AnyTransition = reduire ? .opacity : .opacity.combined(with: .scale(scale: 0.92, anchor: .bottomLeading))
+        return t.animation(animationLegende(reduire: reduire))
+    }
+
+    /// Ce qui se decale quand la legende s'ouvre ou se replie (la ligne de niveau, la pastille d'un releve ancien) :
+    /// cela glisse avec elle ; avec « Reduire les animations », rien : cela prend sa place d'un coup.
+    static func animationDuConteneurLegende(reduire: Bool) -> Animation? {
+        reduire ? nil : animationLegende(reduire: false)
+    }
+
     /// La courbe de la maquette, `cubic-bezier(.2, .8, .2, 1)` : l'avancement en fonction du temps, de 0
-    /// a 1. Le moteur y fait glisser les marges de la vue avec la fiche et les bandeaux.
+    /// a 1. Le moteur y fait glisser les marges de la vue avec la fiche, les bandeaux et la legende.
     static func courbe(_ temps: Double) -> Double {
         if temps <= 0 { return 0 }
         if temps >= 1 { return 1 }

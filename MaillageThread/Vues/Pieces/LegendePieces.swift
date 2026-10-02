@@ -2,11 +2,14 @@ import MaillageCoeur
 import SwiftUI
 
 /// Legende de la vue par pieces (polissage B, section 2 ; maquette de la legende, colonne de droite) :
-/// en bas a gauche, a cote de la ligne de niveau ; quatre groupes en grille de deux colonnes, qui ne
-/// montrent que ce que la scene affichee contient. Repliee, il ne reste que l'etiquette « Legende » ;
-/// son etat est garde d'un lancement a l'autre, par la ligne du bas (`LigneDuBas`). Une legende sans
-/// entree n'est pas montree.
+/// en bas a gauche, a cote de la ligne de niveau, au-dessus de la fiche quand elle est ouverte ; quatre
+/// groupes en grille de deux colonnes, qui ne montrent que ce que la scene affichee contient, chaque signe
+/// dessine comme dans la scene (`SigneLegende`). En verre, comme les capsules du haut (verification du 02/10 :
+/// le choix de Djoko, au lieu du panneau sombre de la maquette). Repliee, il ne reste que l'etiquette
+/// « Legende » ; son etat est garde d'un lancement a l'autre, par la ligne du bas (`LigneDuBas`). Une legende
+/// sans entree n'est pas montree.
 struct LegendePieces: View {
+    @Environment(\.accessibilityReduceMotion) private var reduire
     let rubriques: [Rubrique]
     /// Repliee ou ouverte : un clic sur l'en-tete bascule.
     @Binding var repliee: Bool
@@ -16,10 +19,14 @@ struct LegendePieces: View {
 
     var body: some View {
         if !rubriques.isEmpty {
+            // Le panneau parait depuis l'etiquette et s'y replie, en 0,45 s ; un fondu seul avec « Reduire les
+            // animations ».
             if repliee {
                 etiquette
+                    .transition(Apparition.transitionLegende(reduire: reduire))
             } else {
                 panneau
+                    .transition(Apparition.transitionLegende(reduire: reduire))
             }
         }
     }
@@ -37,7 +44,7 @@ struct LegendePieces: View {
             .foregroundStyle(Palette.texteLegende)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .fondDeLegende()
+            .verreDeLegende()
             .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
@@ -69,7 +76,7 @@ struct LegendePieces: View {
         .font(.system(size: 11))
         .foregroundStyle(Palette.texteLegende)
         .padding(EdgeInsets(top: 9, leading: 12, bottom: 11, trailing: 12))
-        .fondDeLegende()
+        .verreDeLegende()
     }
 
     /// Un groupe : son titre (10 pt semi-gras, gris bleute), 4 pt, puis ses entrees, a 3 pt l'une de
@@ -89,76 +96,13 @@ struct LegendePieces: View {
         .fixedSize()
     }
 
-    /// Une entree : son signe, 7 pt, son texte ; la couronne et la lune sont dans le texte.
-    @ViewBuilder
+    /// Une entree : son signe, dessine comme dans la scene (`SigneLegende`), 7 pt, son texte.
     private func ligne(_ e: Entree) -> some View {
-        let palette = Palette(sombre: true)
-        switch e {
-        case .chef, .endormi:
+        HStack(spacing: 7) {
+            SigneLegende(signe: Self.signe(e))
+                .accessibilityHidden(true)
             Text(e.texte)
-        default:
-            HStack(spacing: 7) {
-                signe(e, palette)
-                    .accessibilityHidden(true)
-                Text(e.texte)
-            }
         }
-    }
-
-    @ViewBuilder
-    private func signe(_ e: Entree, _ palette: Palette) -> some View {
-        switch e {
-        case .routeur: point(palette.routeur(principale: true))
-        case .nonIdentifie: point(palette.routeurInconnu)
-        case .autrePartition: point(palette.routeur(principale: false))
-        case .joignable: point(palette.appareil(.joignable))
-        case .partitionCoupee: point(palette.appareil(.partitionCoupee))
-        case .sansAdresse: point(palette.appareil(.sansAdresse))
-        case .disparu:
-            Circle().strokeBorder(palette.appareil(.disparu), lineWidth: 1.6).frame(width: 9, height: 9)
-        case .pile:
-            Text(verbatim: LegendePieces.exemplePile)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(palette.texteBatterieFaible)
-                .padding(.horizontal, 4)
-                .background(RoundedRectangle(cornerRadius: 4).fill(palette.batterieFaible))
-        case .bonne: trait(palette.lienSonde(3))
-        case .moyenne: trait(palette.lienSonde(2))
-        case .faible: trait(palette.lienSonde(1))
-        case .inconnue: trait(palette.lienSonde(nil))
-        case .versParent:
-            Rectangle().fill(palette.encre.opacity(0.28)).frame(width: 22, height: 1)
-        case .rattachement:
-            Path { p in
-                p.move(to: CGPoint(x: 0, y: 0.6))
-                p.addLine(to: CGPoint(x: 22, y: 0.6))
-            }
-            .stroke(palette.encre.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [2, 4]))
-            .frame(width: 22, height: 1.2)
-        case .ailleurs:
-            Text(verbatim: LegendePieces.exempleAilleurs)
-                .font(.system(size: 10))
-                .foregroundStyle(Color.white.opacity(0.8))
-                .padding(.horizontal, 5)
-                .background(RoundedRectangle(cornerRadius: 4).fill(palette.fondAilleurs))
-        case .candidats:
-            Text(verbatim: LegendePieces.exempleCandidats)
-                .font(.system(size: 10))
-                .padding(.horizontal, 5)
-                .background(RoundedRectangle(cornerRadius: 4).fill(palette.fondNom))
-        case .chef, .endormi:
-            EmptyView()
-        }
-    }
-
-    /// Point de 9 pt.
-    private func point(_ c: Color) -> some View {
-        Circle().fill(c).frame(width: 9, height: 9)
-    }
-
-    /// Trait de 22 x 2 pt, arrondi : un lien radio, de la couleur de sa qualite.
-    private func trait(_ c: Color) -> some View {
-        RoundedRectangle(cornerRadius: 2).fill(c).frame(width: 22, height: 2)
     }
 
     /// Exemples des signes, comme dans la scene : la pastille d'une pile a 12 %, un repere « ailleurs »,
@@ -172,7 +116,8 @@ struct LegendePieces: View {
 }
 
 extension LegendePieces {
-    /// Une entree de la legende : un signe et son texte (spec du polissage B, section 2).
+    /// Une entree de la legende : un signe et son texte (spec du polissage B, section 2) ; la couronne du chef et la
+    /// lune d'un endormi sont leur signe, dans un nom de noeud comme dans la scene.
     enum Entree: Hashable, CaseIterable {
         case routeur, nonIdentifie, autrePartition, chef
         case joignable, partitionCoupee, sansAdresse, disparu, endormi, pile
@@ -184,12 +129,12 @@ extension LegendePieces {
             case .routeur: String(localized: "routeur")
             case .nonIdentifie: String(localized: "non identifié")
             case .autrePartition: String(localized: "autre partition")
-            case .chef: "👑 " + String(localized: "chef du réseau Thread, élu automatiquement")
+            case .chef: String(localized: "chef du réseau Thread, élu automatiquement")
             case .joignable: String(localized: "joignable")
             case .partitionCoupee: String(localized: "partition coupée")
             case .sansAdresse: String(localized: "sans adresse")
             case .disparu: String(localized: "disparu")
-            case .endormi: "☾ " + String(localized: "endormi")
+            case .endormi: String(localized: "endormi")
             case .pile: String(localized: "pile")
             case .bonne: String(localized: "bonne")
             case .moyenne: String(localized: "moyenne")
@@ -395,10 +340,26 @@ struct PastilleAncien: View {
 }
 
 extension View {
-    /// Fond de la legende (maquette) : le fond de la vue a 0,92, coins de 10 pt, filet de 0,5 pt blanc a
-    /// 0,18.
-    func fondDeLegende() -> some View {
-        background(RoundedRectangle(cornerRadius: 10).fill(Palette.fondLegende))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5))
+    /// Verre de la legende (verification du 02/10 : le choix de Djoko, au lieu du panneau sombre de la maquette A) :
+    /// celui des capsules du haut, en rectangle aux coins de 10 pt ; le texte, clair, se lit sur la scene sombre. Une
+    /// capture, qui ne rend pas le verre, pose a sa place le fond des capsules dans les captures (rgba(40, 48, 72,
+    /// 0,38), filet de 0,5 pt blanc a 0,22, ombre noire a 0,35), aux memes coins.
+    func verreDeLegende() -> some View {
+        modifier(VerreDeLegende())
+    }
+}
+
+private struct VerreDeLegende: ViewModifier {
+    @Environment(\.capturePieces) private var capture
+
+    func body(content: Content) -> some View {
+        if capture {
+            content
+                .background(RoundedRectangle(cornerRadius: 10).fill(fondVerreCapture.opacity(0.38))
+                    .shadow(color: .black.opacity(0.35), radius: 9, y: 6))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.22), lineWidth: 0.5))
+        } else {
+            content.glassEffect(.regular, in: .rect(cornerRadius: 10))
+        }
     }
 }

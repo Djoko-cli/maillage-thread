@@ -28,18 +28,26 @@ enum DessinNoeud {
     }
 
     /// Apparence d'un noeud : sphere pour un routeur de bordure ou un routeur que seule la sonde
-    /// connait (halo de 10 pour le centre, 5 sinon), pastille pour un appareil (qui route ou non),
-    /// anneau pour un appareil disparu. `etat` : celui de l'appareil ; `principale` : la partition du
-    /// noeud est la principale.
+    /// connait, pastille pour un appareil (qui route ou non), anneau pour un appareil disparu. `etat` :
+    /// celui de l'appareil ; `principale` : la partition du noeud est la principale. La legende reprend les
+    /// memes (`apparenceRouteur`, `apparenceAppareil`).
     static func apparence(_ n: ScenePieces.Noeud, etat: EtatAffiche?, principale: Bool) -> Apparence {
         switch n.genre {
-        case .centre, .routeur:
-            return Apparence(forme: .sphere(halo: n.genre == .centre ? 10 : 5),
-                             couleur: n.inconnu ? .routeurInconnu : .routeur(principale: principale))
-        case .appareil:
-            let e = etat ?? .inconnu
-            return Apparence(forme: e == .disparu ? .anneau : .pastille, couleur: .appareil(e))
+        case .centre, .routeur: apparenceRouteur(centre: n.genre == .centre, inconnu: n.inconnu, principale: principale)
+        case .appareil: apparenceAppareil(etat)
         }
+    }
+
+    /// Un routeur : sphere brillante, au halo de 10 pour le centre de sa partition, de 5 sinon ; grise s'il n'est
+    /// connu que de la sonde, sinon de la couleur de sa partition, principale ou non.
+    static func apparenceRouteur(centre: Bool = false, inconnu: Bool, principale: Bool) -> Apparence {
+        Apparence(forme: .sphere(halo: centre ? 10 : 5), couleur: inconnu ? .routeurInconnu : .routeur(principale: principale))
+    }
+
+    /// Un appareil : pastille de la couleur de son etat (inconnu sans etat), anneau s'il a disparu.
+    static func apparenceAppareil(_ etat: EtatAffiche?) -> Apparence {
+        let e = etat ?? .inconnu
+        return Apparence(forme: e == .disparu ? .anneau : .pastille, couleur: .appareil(e))
     }
 
     static func couleur(_ c: Couleur, palette: Palette) -> Color {

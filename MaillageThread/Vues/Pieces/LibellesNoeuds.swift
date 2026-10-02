@@ -5,6 +5,10 @@ import MaillageCoeur
 /// pastille de sa batterie faible ; les noms des pieces et des etages ; le compte d'une piece ; le
 /// texte d'un repere « ailleurs ».
 enum LibellesNoeuds {
+    /// La couronne du chef et la lune d'un endormi, a la suite du nom ; la legende les reprend.
+    static let couronne = "👑"
+    static let lune = "☾"
+
     /// Libelle d'un noeud : son texte, et la pastille de sa batterie faible.
     struct Libelle: Hashable {
         var texte: String
@@ -53,8 +57,8 @@ enum LibellesNoeuds {
             let a = appareils[n.id]
             let nom = a?.nom ?? nomsRouteurs[n.id] ?? maillage?.noeud(n.id).map(inconnu) ?? n.id
             var texte = CartesPieces.couper(nom)
-            if chefs.contains(n.id) { texte += " 👑" }
-            if a?.endormi == true { texte += " ☾" }
+            if chefs.contains(n.id) { texte += " " + couronne }
+            if a?.endormi == true { texte += " " + lune }
             if a?.etat == .sansAdresse || a?.etat == .disparu { texte += " ⚠︎" }
             libelles[n.id] = Libelle(texte: texte, pastille: pastilleBatterie(a?.batterie))
         }
@@ -121,7 +125,7 @@ enum LibellesNoeuds {
         case .dessous: "↓"
         case .dessus: "↑"
         }
-        let parent = (libelles[a.parent]?.texte ?? a.parent).replacingOccurrences(of: " 👑", with: "")
+        let parent = (libelles[a.parent]?.texte ?? a.parent).replacingOccurrences(of: " " + couronne, with: "")
         let piece = nom(scene.pieces[a.piece].nom, libelles: libelles)
         guard a.sens != .memeEtage else { return "\(fleche) \(parent) · \(piece)" }
         return "\(fleche) \(parent) · \(piece), \(nom(scene.etages[a.etage].nom))"

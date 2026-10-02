@@ -114,7 +114,7 @@ struct MoteurPiecesTests {
             let m = MoteurPieces(troisD: troisD)
             m.fige = true
             // Le haut de la fenetre de la demo : la ligne des capsules, le bandeau de scission et le fil.
-            m.marges = (FenetrePieces.margeHaut(bas: 90), FenetrePieces.margeBas(fiche: false, courbes: false))
+            m.marges = (FenetrePieces.margeHaut(bas: 90), FenetrePieces.margeBas(pile: nil))
             m.poserTaille(taille)
             m.installerMaintenant(e)
             m.poserZoom(echelle: k, vers: m.centrePiece(salon))
@@ -182,6 +182,32 @@ struct MoteurPiecesTests {
         m.fige = true
         m.marges = (100, 50)
         #expect(m.margesDuCadre(t + 3).haut == 100 && !m.margesEnRoute, "une capture : tout de suite")
+    }
+
+    /// La legende s'ouvre ou se replie (un clic sur son en-tete ou son etiquette) : le recadrage qui l'accompagne prend
+    /// sa duree, 0,45 s (verification du 02/10), sur la meme courbe ; avec « Reduire les animations », un fondu de
+    /// 0,45 s. Le changement suivant, sans elle (la fiche, un bandeau), reprend les 0,3 s de la fiche. Evalue a des
+    /// instants decales de `t`, le temps d'eveil, comme `margesQuiGlissent`.
+    @Test(arguments: [1_020.0, 10_800, 200_000, 1_198_161, 2_592_000, 7_776_000])
+    func margesQuiGlissentAvecLaLegende(eveil t: Double) throws {
+        let (m, _) = try Self.moteur()
+        #expect(m.margesDuCadre(t).bas == 50)
+        m.legendeBasculee()
+        m.marges = (84, 246)
+        #expect(m.margesDuCadre(t).bas == 50, "le depart")
+        let apres = m.margesDuCadre(t + 0.31).bas
+        #expect(m.margesEnRoute && apres > 50 && apres < 246, "encore en route apres 0,3 s : \(apres)")
+        #expect(m.margesDuCadre(t + 0.46).bas == 246 && !m.margesEnRoute, "fini, 0,01 s apres 0,45 s")
+        m.marges = (84, 50)
+        _ = m.margesDuCadre(t + 1)
+        #expect(m.margesDuCadre(t + 1.31).bas == 50 && !m.margesEnRoute, "sans la legende : 0,3 s")
+        m.reduire = true
+        m.legendeBasculee()
+        m.marges = (84, 246)
+        #expect(m.margesDuCadre(t + 2).bas == 50 && m.margesEnFondu, "« Reduire les animations » : un fondu")
+        #expect(m.margesDuCadre(t + 2.2).bas == 50 && m.opaciteMarges < 1, "avant la mi-temps (0,225 s), la scene s'efface")
+        #expect(m.margesDuCadre(t + 2.25).bas == 246, "apres la mi-temps, les marges ont saute")
+        #expect(m.margesDuCadre(t + 2.46).bas == 246 && m.opaciteMarges == 1 && !m.margesEnRoute)
     }
 
     /// Clic sur une piece : elle s'isole (le fil la nomme) ; sur un appareil : sa fiche ; a cote : la

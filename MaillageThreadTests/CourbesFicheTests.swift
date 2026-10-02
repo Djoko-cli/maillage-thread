@@ -51,16 +51,26 @@ struct CourbesFicheTests {
     }
 
     /// La fiche montre les courbes des qu'il y a un historique (jamais en demo), et la vue lui
-    /// garde plus de place en bas ; pour un noeud sans historique, une ligne de texte.
+    /// garde plus de place en bas : la marge du bas suit la pile mesuree, plus haute avec les courbes (elle
+    /// remplace les 190 et 360 pt fixes) ; pour un noeud sans historique, une ligne de texte.
     @Test func ficheEtMarge() throws {
         let s = try Self.surveillance()
         #expect(FicheNoeud.courbesVisibles(dans: s))
         let demo = Surveillance(mode: .demo, dossier: nil)
         demo.demarrer()
         #expect(!FicheNoeud.courbesVisibles(dans: demo))
-        #expect(FenetrePieces.margeBas(fiche: false, courbes: true) == 30)
-        #expect(FenetrePieces.margeBas(fiche: true, courbes: false) == 190)
-        #expect(FenetrePieces.margeBas(fiche: true, courbes: true) == 360)
+        let entree = FenetrePiecesTests.entree(s)
+        func pile(_ id: String) -> CGFloat {
+            let v = VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
+                LigneDuBas(moteur: MoteurPieces(), entree: entree, legendeForcee: true)
+                FicheNoeud(id: id, entree: entree, instant: Date(), aRenommer: .constant(nil)) {}
+            }.frame(width: 1100 - 2 * FenetrePieces.bord)
+            return NSHostingView(rootView: v.environment(s).environment(PiecesChoisies(fichier: nil))).fittingSize.height
+        }
+        let avecCourbes = pile(JournalMaillageTests.appareil)
+        let sansCourbes = pile("instance:inconnue")
+        #expect(FenetrePieces.margeBas(pile: avecCourbes) > FenetrePieces.margeBas(pile: sansCourbes) + 100,
+                "\(avecCourbes) \(sansCourbes)")
         let avec = NSHostingView(rootView: CourbesFiche(id: JournalMaillageTests.appareil, instant: Date()).environment(s)).fittingSize
         let sans = NSHostingView(rootView: CourbesFiche(id: "instance:inconnue", instant: Date()).environment(s)).fittingSize
         #expect(avec.height > sans.height + 100, "\(avec) \(sans)")

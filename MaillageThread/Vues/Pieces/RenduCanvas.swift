@@ -146,13 +146,8 @@ enum RenduCanvas {
     private static func dessinerLiensEnfants(_ ctx: inout GraphicsContext, _ image: ImagePieces, _ palette: Palette) {
         let pixel = 1 / image.echelle
         for l in image.projetee.liensEnfants {
-            let couleur = palette.encre.opacity(l.opacite)
-            if l.genre == .rattachement {
-                ctx.stroke(segment(l.a, l.b), with: .color(couleur),
-                           style: StrokeStyle(lineWidth: l.eclaire ? 1.6 : 1, dash: [2, 4]))
-            } else {
-                ctx.stroke(segment(l.a, l.b), with: .color(couleur), lineWidth: pixel)
-            }
+            dessinerLienEnfant(&ctx, de: l.a, a: l.b, rattachement: l.genre == .rattachement, opacite: l.opacite,
+                               eclaire: l.eclaire, pixel: pixel, palette: palette)
         }
         for f in image.projetee.fils {
             ctx.stroke(segment(f.a, f.b), with: .color(palette.filAilleurs.opacity(f.opacite)),
@@ -160,12 +155,30 @@ enum RenduCanvas {
         }
     }
 
-    /// Liens radio entre routeurs : 2 points, couleurs de qualite, bouts ronds.
+    /// Un lien enfant -> parent : un pixel de l'encre de la palette ; un rattachement suppose en pointilles, plus
+    /// epais eclaire. La legende le reprend.
+    static func dessinerLienEnfant(_ ctx: inout GraphicsContext, de a: CGPoint, a b: CGPoint, rattachement: Bool,
+                                   opacite: Double, eclaire: Bool, pixel: CGFloat, palette: Palette) {
+        let couleur = palette.encre.opacity(opacite)
+        if rattachement {
+            ctx.stroke(segment(a, b), with: .color(couleur), style: StrokeStyle(lineWidth: eclaire ? 1.6 : 1, dash: [2, 4]))
+        } else {
+            ctx.stroke(segment(a, b), with: .color(couleur), lineWidth: pixel)
+        }
+    }
+
+    /// Liens radio entre routeurs.
     private static func dessinerLiensRouteurs(_ ctx: inout GraphicsContext, _ image: ImagePieces, _ palette: Palette) {
         for l in image.projetee.liensRouteurs {
-            ctx.stroke(segment(l.a, l.b), with: .color(palette.lienSonde(l.qualite).opacity(l.opacite)),
-                       style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            dessinerLienRadio(&ctx, de: l.a, a: l.b, qualite: l.qualite, opacite: l.opacite, palette: palette)
         }
+    }
+
+    /// Un lien radio entre routeurs : 2 points, la couleur de sa qualite, bouts ronds. La legende le reprend.
+    static func dessinerLienRadio(_ ctx: inout GraphicsContext, de a: CGPoint, a b: CGPoint, qualite: Int?, opacite: Double,
+                                  palette: Palette) {
+        ctx.stroke(segment(a, b), with: .color(palette.lienSonde(qualite).opacity(opacite)),
+                   style: StrokeStyle(lineWidth: 2, lineCap: .round))
     }
 
     /// Pastilles, du plus loin au plus proche, puis l'anneau de la selection.
@@ -218,11 +231,9 @@ enum RenduCanvas {
                 guard let libelle = image.textes.noeuds[id] else { continue }
                 let routeur = image.routeurs.contains(id)
                 let texte = cache.resolu(g, "n|\(routeur)|\(l.fort)|" + libelle.texte, echelle: e) {
-                    StylesNoms.noeud(libelle.texte, routeur: routeur, fort: l.fort)
-                        .foregroundStyle(l.fort ? .white : palette.texteNom)
+                    texteNom(libelle.texte, routeur: routeur, fort: l.fort, palette: palette)
                 }
-                g.fill(Path(roundedRect: r, cornerRadius: 4), with: .color(palette.fondNom))
-                g.draw(texte, at: CGPoint(x: r.minX + 5, y: r.midY), anchor: .leading)
+                dessinerNom(&g, texte, dans: r, palette: palette)
                 if let p = libelle.pastille {
                     let largeur = ceil(texte.measure(in: grand).width)
                     DessinNoeud.dessinerPastille(&g, p, gauche: CGPoint(x: r.minX + 5 + largeur + 5, y: r.midY),
@@ -266,15 +277,37 @@ enum RenduCanvas {
                 }
             case .ailleurs(let id):
                 guard let texte = image.textes.ailleurs[id] else { continue }
-                let forme = Path(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 4)
-                g.fill(forme, with: .color(palette.fondAilleurs))
-                g.stroke(forme, with: .color(palette.texteAilleurs.opacity(0.5)),
-                         style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                let resolu = cache.resolu(g, "a|" + texte, echelle: e) {
-                    StylesNoms.ailleurs(texte).foregroundStyle(palette.texteAilleurs)
-                }
-                g.draw(resolu, at: CGPoint(x: r.minX + 6, y: r.midY), anchor: .leading)
+                let resolu = cache.resolu(g, "a|" + texte, echelle: e) { texteAilleurs(texte, palette: palette) }
+                dessinerAilleurs(&g, resolu, dans: r, palette: palette)
             }
         }
+    }
+
+    /// Le texte du nom d'un noeud : 12 points pour un routeur, 11 pour un appareil ; semi-gras et blanc au survol
+    /// et a la selection. La legende le reprend (la couronne, la lune, des candidats).
+    static func texteNom(_ texte: String, routeur: Bool, fort: Bool, palette: Palette) -> Text {
+        StylesNoms.noeud(texte, routeur: routeur, fort: fort).foregroundStyle(fort ? .white : palette.texteNom)
+    }
+
+    /// Le nom d'un noeud dans sa boite `r` : la pastille sombre aux coins de 4 points, le texte a 5 points du bord.
+    static func dessinerNom(_ g: inout GraphicsContext, _ texte: GraphicsContext.ResolvedText, dans r: CGRect,
+                            palette: Palette) {
+        g.fill(Path(roundedRect: r, cornerRadius: 4), with: .color(palette.fondNom))
+        g.draw(texte, at: CGPoint(x: r.minX + 5, y: r.midY), anchor: .leading)
+    }
+
+    /// Le texte d'un repere « ailleurs ».
+    static func texteAilleurs(_ texte: String, palette: Palette) -> Text {
+        StylesNoms.ailleurs(texte).foregroundStyle(palette.texteAilleurs)
+    }
+
+    /// Un repere « ailleurs » dans sa boite `r` : fond sombre aux coins de 4 points, bordure en tirets, le texte a
+    /// 6 points du bord. La legende le reprend.
+    static func dessinerAilleurs(_ g: inout GraphicsContext, _ texte: GraphicsContext.ResolvedText, dans r: CGRect,
+                                 palette: Palette) {
+        let forme = Path(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 4)
+        g.fill(forme, with: .color(palette.fondAilleurs))
+        g.stroke(forme, with: .color(palette.texteAilleurs.opacity(0.5)), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+        g.draw(texte, at: CGPoint(x: r.minX + 6, y: r.midY), anchor: .leading)
     }
 }
