@@ -32,7 +32,9 @@ struct FenetrePieces: View {
     @State private var hauteurFiche: CGFloat?
     /// Hauteur mesuree de la vue.
     @State private var hauteurVue: CGFloat?
-    /// Djoko a rouvert la legende repliee faute de place : elle reste ouverte jusqu'a la fermeture de la fiche.
+    /// Djoko a rouvert, sous une fiche, la legende repliee faute de place : elle reste ouverte jusqu'a la fermeture de
+    /// cette fiche. Une ouverture faite sans fiche n'y compte pas : le drapeau tombe a chaque ouverture et a chaque
+    /// fermeture de fiche (`onChange` plus bas).
     @State private var legendeRouverte = false
 
     /// Preference du mode 2D ou 3D.
@@ -190,9 +192,9 @@ struct FenetrePieces: View {
         })
         .sheet(item: $aRenommer) { FeuilleRenommer(id: $0.id) }
         .onChange(of: reduire, initial: true) { _, r in moteur.reduire = r }
-        // La fiche fermee, la legende reprend son repli garde.
-        .onChange(of: moteur.selection == nil) { _, sansFiche in
-            if sansFiche { legendeRouverte = false }
+        // La fiche parait ou se ferme : la legende reprend son repli garde, et un « rouvert » anterieur ne vaut plus.
+        .onChange(of: moteur.selection == nil) { _, _ in
+            legendeRouverte = false
         }
         .task {
             // Batteries de Maison a jour tant que la vue est ouverte.

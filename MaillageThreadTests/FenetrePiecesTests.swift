@@ -61,6 +61,37 @@ struct FenetrePiecesTests {
         fenetre.contentView = nil
     }
 
+    /// Un clic de la souris sur le point `p` de la vue (en points, depuis le haut), envoye a la fenetre : le vrai
+    /// chemin d'un clic, par `sendEvent`, jusqu'au geste ou au bouton de SwiftUI.
+    static func cliquer(_ fenetre: NSWindow, en p: CGPoint) async throws {
+        let dansFenetre = NSPoint(x: p.x, y: fenetre.frame.height - p.y)
+        for (genre, pression) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, Float(0))] {
+            let evenement = try #require(NSEvent.mouseEvent(with: genre, location: dansFenetre, modifierFlags: [],
+                                                            timestamp: ProcessInfo.processInfo.systemUptime,
+                                                            windowNumber: fenetre.windowNumber, context: nil,
+                                                            eventNumber: 0, clickCount: 1, pressure: pression))
+            fenetre.sendEvent(evenement)
+            if genre == .leftMouseDown { try await Task.sleep(for: .milliseconds(10)) }
+        }
+    }
+
+    /// Duree du recadrage de la vue (les marges en route, `margesEnRoute`) : du premier echantillon ou elles le sont au
+    /// premier ou elles ne le sont plus ; nil si elles ne partent pas, ou ne s'arretent pas, en 2 s.
+    static func dureeDuRecadrage(_ moteur: MoteurPieces) async throws -> Double? {
+        let t0 = ProcessInfo.processInfo.systemUptime
+        var debut: Double?
+        while ProcessInfo.processInfo.systemUptime - t0 < 2 {
+            let t = ProcessInfo.processInfo.systemUptime - t0
+            if moteur.margesEnRoute {
+                if debut == nil { debut = t }
+            } else if let debut {
+                return t - debut
+            }
+            try await Task.sleep(for: .milliseconds(3))
+        }
+        return nil
+    }
+
     /// Le premier clic sur une piece agit aussi dans une fenetre inactive (verification du 02/10) : sans
     /// `allowsWindowActivationEvents`, AppKit le gardait pour activer la fenetre, et la piece ne s'isolait pas (le
     /// diagnostic l'a reproduit : 0 fois sur 4). Un clic envoye a la vraie fenetre, hors ecran et jamais cle, au
@@ -90,15 +121,7 @@ struct FenetrePiecesTests {
                 && !moteur.cadresInterface.values.contains { $0.insetBy(dx: -4, dy: -4).contains(p) }
         })
         #expect(moteur.focus == nil && !fenetre.isKeyWindow, "une fenetre inactive, sans piece isolee")
-        let dansFenetre = NSPoint(x: point.x, y: fenetre.frame.height - point.y)
-        for (genre, pression) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, Float(0))] {
-            let evenement = try #require(NSEvent.mouseEvent(with: genre, location: dansFenetre, modifierFlags: [],
-                                                            timestamp: ProcessInfo.processInfo.systemUptime,
-                                                            windowNumber: fenetre.windowNumber, context: nil,
-                                                            eventNumber: 0, clickCount: 1, pressure: pression))
-            fenetre.sendEvent(evenement)
-            try await Task.sleep(for: .milliseconds(60))
-        }
+        try await Self.cliquer(fenetre, en: point)
         try await MoteurPiecesTests.attendre { moteur.focus != nil }
         #expect(moteur.focus == salon && moteur.estIsolee, "le premier clic isole la piece (focus \(String(describing: moteur.focus)))")
     }
@@ -297,6 +320,30 @@ struct FenetrePiecesTests {
         #expect(sousGardee < 40 && apresGardee < 40, "repliee par Djoko : elle le reste (\(sousGardee), \(apresGardee))")
     }
 
+    /// Une legende que Djoko ouvre a la main, sans fiche, n'empeche pas son repli faute de place sous la fiche qui
+    /// parait ensuite : seul compte un « rouvert » fait sous une fiche (`FenetrePieces.legendeRouverte`), et la fiche
+    /// qui parait efface le drapeau. Dans la plus petite fenetre, la legende, repliee par la preference, est ouverte
+    /// d'un vrai clic sur son etiquette ; la fiche de l'Apple TV 4K ouverte, elle se replie quand meme.
+    @Test(.timeLimit(.minutes(2))) func ouvertureManuelleSansFicheLaisseLeRepliAutomatique() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set(true, forKey: LegendePieces.cleRepliee)
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: FenetrePieces.tailleMinimale, preferences: p)
+        defer { Self.fermer(fenetre) }
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["legende"] != nil && moteur.pret }
+        try await Task.sleep(for: .milliseconds(500))
+        let etiquette = try #require(moteur.cadresInterface["legende"])
+        try await Self.cliquer(fenetre, en: CGPoint(x: etiquette.midX, y: etiquette.midY))
+        try await MoteurPiecesTests.attendre { (moteur.cadresInterface["legende"]?.height ?? 0) > 150 }
+        #expect((moteur.cadresInterface["legende"]?.height ?? 0) > 150, "ouverte d'un clic")
+        moteur.selection = "Apple TV 4K"
+        try await Task.sleep(for: .milliseconds(1000))
+        #expect((moteur.cadresInterface["legende"]?.height ?? 999) < 40,
+                "sous la fiche, dans la plus petite fenetre, la legende se replie : scene de \(moteur.cadre.height) pt")
+    }
+
     /// Taille minimale de la fenetre : 820 x 680 pt.
     @Test func tailleMinimale() throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
@@ -417,7 +464,8 @@ struct FenetrePiecesTests {
     /// trouvait l'ouverture « un poil trop fugace ») : 0,45 s au lieu de 0,3 s, sur la meme courbe, pour la legende
     /// et pour ce qui se decale avec elle (la ligne de niveau, la pastille) ; avec « Reduire les animations », un
     /// fondu de 0,45 s, et rien ne glisse. La fiche et les bandeaux restent a 0,3 s. Le recadrage qui accompagne la
-    /// legende prend sa duree (`MoteurPiecesTests.margesQuiGlissentAvecLaLegende`).
+    /// legende prend sa duree (`MoteurPiecesTests.margesQuiGlissentAvecLaLegende`) ; apres un vrai clic dans la
+    /// vraie fenetre, `recadrageDeLaLegendeApresUnClic` le mesure.
     @Test func dureeDeLaLegende() {
         let courbe = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.45)
         #expect(Apparition.dureeLegende == 0.45)
@@ -428,14 +476,93 @@ struct FenetrePiecesTests {
         #expect(Apparition.animationDuConteneurLegende(reduire: true) == nil, "avec le reglage, rien ne se decale en glissant")
     }
 
-    /// Dans la vraie fenetre, avec « Reduire les animations », rien ne glisse quand la fiche parait : la legende reste
-    /// a sa place dans la rangee, au-dessus de la fiche, et la vue se recadre par un fondu (le moteur), pas en
-    /// glissant. Avant la verification du 02/10, la legende se retirait sous la fiche, et son depart, d'un coup,
-    /// montrait que la pile du bas n'avait pas d'animation de conteneur ; elle reste desormais, et ce cablage ne se
-    /// voit plus de l'exterieur (SwiftUI donne d'emblee la position finale de ce qui se decale) : il est couvert par
-    /// les fonctions (`reduireLesAnimationsSansGlissement`, `dureeDeLaLegende`), comme pour le haut.
+    /// Un vrai clic sur l'etiquette de la legende (son en-tete, ouverte), dans la vraie fenetre, recadre la vue en
+    /// 0,45 s (`Apparition.dureeLegende`), pour son repli comme pour son ouverture, avec le reglage (un fondu de cette
+    /// duree) comme sans ; la fiche, elle, la recadre en 0,3 s. `dureeDeLaLegende` ne garde que les fonctions : ici,
+    /// le clic passe par la legende (`LigneDuBas`), qui annonce sa duree au moteur (`legendeBasculee`), puis par le
+    /// recadrage lui-meme. La transition de la legende (`Apparition.transitionLegende`) ne s'observe pas par la
+    /// geometrie : ce test ne la garde pas.
+    @Test(.timeLimit(.minutes(2)), arguments: [false, true])
+    func recadrageDeLaLegendeApresUnClic(reduire: Bool) async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set(false, forKey: LegendePieces.cleRepliee)
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p,
+                                                 reduire: reduire)
+        defer { Self.fermer(fenetre) }
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["legende"] != nil && moteur.pret && !moteur.margesEnRoute }
+        try await Task.sleep(for: .milliseconds(600))
+        // Ouverte : un clic sur son en-tete la replie.
+        var legende = try #require(moteur.cadresInterface["legende"])
+        try await Self.cliquer(fenetre, en: CGPoint(x: legende.minX + 40, y: legende.minY + 16))
+        let repli = try #require(try await Self.dureeDuRecadrage(moteur))
+        #expect(abs(repli - Apparition.dureeLegende) < 0.07, "repli par clic : \(repli) s")
+        try await Task.sleep(for: .milliseconds(600))
+        // Repliee : un clic sur son etiquette l'ouvre.
+        legende = try #require(moteur.cadresInterface["legende"])
+        try await Self.cliquer(fenetre, en: CGPoint(x: legende.midX, y: legende.midY))
+        let ouverture = try #require(try await Self.dureeDuRecadrage(moteur))
+        #expect(abs(ouverture - Apparition.dureeLegende) < 0.07, "ouverture par clic : \(ouverture) s")
+        try await Task.sleep(for: .milliseconds(600))
+        // La fiche, elle, garde ses 0,3 s.
+        moteur.selection = "Apple TV 4K"
+        let fiche = try #require(try await Self.dureeDuRecadrage(moteur))
+        #expect(abs(fiche - Apparition.duree) < 0.07, "fiche : \(fiche) s")
+    }
+
+    /// Avec « Reduire les animations », la rangee du bas prend sa place d'un coup quand la fiche parait : l'animation
+    /// du conteneur de la pile du bas est nulle (spec de B, sections 1 et 3 : « un simple fondu »), et ce qui part de
+    /// la rangee dans la meme mise a jour que la fiche part sans delai ; sans le reglage, cela glisse avec la fiche,
+    /// et part apres l'animation du conteneur (0,3 s). Cela se voit de l'exterieur : un element retire reste dans
+    /// l'arbre le temps de son animation de retrait, et son `onDisappear` (qui vide son cadre dans `cadresInterface`)
+    /// en donne la duree. Ici, la pastille d'un releve ancien, que le releve suivant rend non ancien dans la meme mise
+    /// a jour que la fiche.
+    @Test(.timeLimit(.minutes(2)), arguments: [true, false])
+    func rangeeDuBasPrendSaPlaceAvecReduire(reduire: Bool) async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        p.set(false, forKey: LegendePieces.cleRepliee)
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let maillage = try #require(demo.maillage)
+        demo.recevoir(maillage, a: demo.maintenant.addingTimeInterval(-7 * 60))
+        #expect(demo.maillageAncien)
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p,
+                                                 reduire: reduire)
+        defer { Self.fermer(fenetre) }
+        try await MoteurPiecesTests.attendre {
+            ["legende", "niveau", "ancien"].allSatisfy { moteur.cadresInterface[$0] != nil } && moteur.pret && !moteur.margesEnRoute
+        }
+        try await Task.sleep(for: .milliseconds(400))
+        // Dans la meme mise a jour : la fiche parait, le releve n'est plus ancien (sa pastille part).
+        let t0 = ProcessInfo.processInfo.systemUptime
+        moteur.selection = "Apple TV 4K"
+        demo.recevoir(maillage, a: demo.maintenant)
+        var delai = 1.5
+        while ProcessInfo.processInfo.systemUptime - t0 < 1.5 {
+            if moteur.cadresInterface["ancien"] == nil {
+                delai = ProcessInfo.processInfo.systemUptime - t0
+                break
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        if reduire {
+            #expect(delai < 0.15, "avec le reglage, la pastille part d'un coup (\(delai) s)")
+        } else {
+            #expect(delai > 0.25, "sans le reglage, elle part avec l'animation du conteneur (\(delai) s)")
+        }
+    }
+
+    /// Dans la vraie fenetre, avec « Reduire les animations », la legende reste a sa place dans la rangee, au-dessus
+    /// de la fiche, quand celle-ci parait, et la vue se recadre par un fondu (le moteur), pas en glissant. Avant la
+    /// verification du 02/10, la legende se retirait sous la fiche, et son depart, d'un coup, montrait que la pile du
+    /// bas n'avait pas d'animation de conteneur ; elle reste desormais, et son depart ne dit donc plus rien de ce
+    /// cablage. Que rien ne glisse dans la rangee du bas est garde par `rangeeDuBasPrendSaPlaceAvecReduire`, qui mesure
+    /// le depart d'un de ses elements ; les fonctions, par `reduireLesAnimationsSansGlissement` et `dureeDeLaLegende`.
     @Test(.timeLimit(.minutes(1)))
-    func rangeeDuBasPrendSaPlaceAvecReduire() async throws {
+    func legendeResteAuDessusDeLaFicheAvecReduire() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         p.set(false, forKey: LegendePieces.cleRepliee)
