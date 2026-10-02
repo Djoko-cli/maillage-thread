@@ -235,3 +235,20 @@ La barre de titre du plein écran reste opaque : au survol du haut, elle couvre 
 Djoko a décidé deux retouches. Le détail est dans la section 1.
 - **En plein écran, la capsule de gauche prend la place des boutons** : contre le bord gauche, à 12 pt, comme la capsule de droite contre le bord droit. La barre de titre que le survol du haut fait paraître la couvre le temps du survol : c'est accepté. Hors plein écran, rien ne change. Quand le bouton vert est pressé, `SuiviFenetre` donne aux boutons un cadre « caché » (`CadreFeux.pleinEcran`), et la capsule suit. Comme SwiftUI remet la barre d'outils à jour, et la rend visible, quand la capsule change de place, `SuiviFenetre` la retire de nouveau tant que la fenêtre est en plein écran (observation de `toolbar.isVisible`).
 - **La ligne de niveau monte en haut à gauche**, sous le fil « Maison », dans la colonne de gauche, avec la pastille « relevé de la sonde ancien ». Une seule ligne, coupée par des points de suspension si elle est trop longue ; style inchangé. Le bas ne garde que la légende : la marge du bas suit la légende seule, ou la légende et la fiche. La marge du haut compte la ligne de niveau, qui est toujours là, et reste stable au fil des zooms et des tournées : la rangée a la hauteur de la pastille, qu'elle soit là ou non. Les obstacles des noms de la scène suivent les nouvelles places.
+
+### Vérifié avec Djoko le 02/10 (fin de B)
+
+Après cinq vérifications en vrai, toutes les demandes sont tenues :
+- la fenêtre sans barre de titre, avec de l'air en haut ;
+- les deux capsules ;
+- la bande qui déplace la fenêtre et son double-clic ;
+- le vrai plein écran, avec la capsule de gauche au bord et une barre sombre au survol ;
+- la colonne de gauche contre le bord, avec la tournée sans place réservée et une scène stable ;
+- la ligne de niveau sous « Maison » ;
+- la légende en verre, avec les signes de la scène, une ouverture en 0,45 s, le chevron inversé et centré, 👑 et ☾ sans pastille, et la légende au-dessus de la fiche ;
+- le premier clic qui agit, et le nom d'une pièce qui l'isole ;
+- le menu de la barre qui se referme sur « Ouvrir le graphe » et « Journal… ».
+
+Restent pour la suite :
+- isoler une zone (C) ;
+- ⌥ + glisser (D).
