@@ -46,7 +46,7 @@ Un bandeau qui apparaît glisse depuis le haut avec un fondu, en 0,3 s. Il repar
 
 **Déplacer la fenêtre.** Sans barre de titre, glisser le fond tourne ou déplace la scène. La fenêtre se déplace donc en glissant **la bande vide du haut, entre les deux capsules**, et seulement là. Le double-clic sur cette bande fait ce que fait un double-clic sur une barre de titre selon les réglages du Mac. Sur cette bande, le double-clic de recadrage de la scène ne s'applique donc pas. Ailleurs, les gestes de la scène ne changent pas, avec deux ajouts du 02/10 :
 - **le premier clic agit aussi dans une fenêtre inactive** (choix de Djoko) : il active la fenêtre et isole la pièce, ouvre la fiche ou commence un glisser. Avant, macOS gardait ce clic pour activer la fenêtre, et la pièce ne s'isolait qu'au second clic ;
-- **un clic sur le nom d'une pièce l'isole** (son étiquette : son nom et le compte de ses appareils), comme un clic sur sa carte ou sa boîte : en 3D, les boîtes sont petites, et l'on clique volontiers sur le nom. Le nom l'emporte sur la boîte d'une autre pièce qu'il recouvre. Un clic sur le nom d'un appareil ouvre toujours sa fiche. C'est une proposition de la ronde, à confirmer avec Djoko.
+- **un clic sur le nom d'une pièce l'isole** (son étiquette : son nom et le compte de ses appareils), comme un clic sur sa carte ou sa boîte : en 3D, les boîtes sont petites, et l'on clique volontiers sur le nom. Le nom l'emporte sur la boîte d'une autre pièce qu'il recouvre. Un clic sur le nom d'un appareil ouvre toujours sa fiche. Un clic droit sur le nom d'une pièce n'ouvre aucun menu, comme sur sa boîte (avant, il ouvrait celui du fond, « Replacer les pièces automatiquement »). C'est une proposition de la ronde, à confirmer avec Djoko.
 
 **Marge du haut.** La place laissée en haut de la vue d'ensemble suit la hauteur **mesurée** de ce qui est posé en haut : la ligne des capsules, puis la tournée et les bandeaux présents. Elle remplace les valeurs fixes d'aujourd'hui (72 pt, plus 40 pour la scission, 40 pour la tournée et 44 sans pièces ; précision 21 du plan 4b). Une marge qui change recadre la vue d'ensemble comme aujourd'hui, sauf si Djoko a zoomé ou isolé une pièce.
 
@@ -62,8 +62,8 @@ Un bandeau qui apparaît glisse depuis le haut avec un fondu, en 0,3 s. Il repar
 - **le repli et l'ouverture de la légende durent 0,45 s** (02/10 : Djoko trouvait l'ouverture « un poil trop fugace » à 0,3 s) : le panneau paraît depuis l'étiquette, en bas à gauche, avec un fondu et un léger grossissement, sur la courbe de la fiche, et le recadrage qui l'accompagne prend la même durée. La fiche et les bandeaux restent à 0,3 s. Avec « Réduire les animations », la règle ne change pas : un fondu pour ce qui paraît ou disparaît, la vue recadrée par un fondu, et rien ne glisse.
 
 **Petite fenêtre** (02/10). Sous une fiche ouverte, si la légende ouverte ne laissait à la scène que moins de **230 pt**, elle se replie d'elle-même, tant que la fiche est ouverte, et se rouvre à sa fermeture. Elle ne se replie que si c'est nécessaire, et son repli gardé ne change pas ; un clic sur son étiquette la rouvre pour cette fiche. Le seuil est la hauteur que la section 3 garde à la scène dans la plus petite fenêtre, avec la fiche et ses courbes : environ 230 pt. Mesuré sur la démo :
-- fenêtre par défaut (1100 × 760) : sous la fiche de l'Apple TV 4K et sous la plus haute de la démo, la légende ouverte laisse 291 et 256 pt à la scène, et reste ouverte ; avec les courbes de l'historique, elle se replie ;
-- plus petite fenêtre (820 × 712 pt, dont 680 sous la barre de titre cachée) : sous ces deux fiches, elle laisserait 205 et 176 pt ; elle se replie, et la scène retrouve 402 et 373 pt. Sous une fiche courte, elle reste ouverte.
+- fenêtre par défaut (1100 × 760) : sous la fiche de l'Apple TV 4K, la légende ouverte laisse 291 pt à la scène, et reste ouverte, comme sous la plupart des fiches de la démo (30 sur 31, 240 pt de scène au moins) ; sous la plus haute (179 pt), elle n'en laisserait que 224 : elle se replie, et la scène retrouve 421 pt. Avec les courbes de l'historique, elle se replie aussi ;
+- plus petite fenêtre (820 × 712 pt, soit 680 pt sous la barre de titre cachée) : sous la fiche de l'Apple TV 4K et sous la plus haute, elle laisserait 205 et 176 pt ; elle se replie, et la scène retrouve 402 et 373 pt. Sous une fiche courte, elle reste ouverte.
 
 **Aspect**, comme la maquette A, sauf le fond :
 - **en Liquid Glass** (02/10), le verre des capsules du haut, en rectangle aux coins de 10 pt. Ce qui change : la maquette A dessine un panneau sombre (le fond de la vue à environ 92 %, filet de 0,5 px blanc à environ 18 %). Djoko choisit cet écart à la maquette en connaissance de cause. Le texte, clair, reste lisible sur la scène sombre. Les images de démo, qui ne rendent pas le verre, le dessinent comme celui des capsules ;
@@ -129,7 +129,7 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 
 **Le chef.** Sur la fiche d'un routeur couronné, une pastille « 👑 Chef du réseau Thread, élu automatiquement » se pose sous le nom. Cela vaut pour un routeur de bordure comme pour un routeur que seule la sonde connaît. La fiche lit les chefs de la scène (`EntreeScene.chefs`, polissage A) : elle couronne exactement les mêmes nœuds que la scène.
 
-**Taille minimale.** La fenêtre passe de 820 × 560 à **820 × 680** pt au minimum. Avec la fiche et ses courbes, la scène garde ainsi environ 230 pt de haut, contre 88 aujourd'hui (tri A, n° 11).
+**Taille minimale.** La fenêtre ne descend pas sous **820 × 712 pt**, soit 680 pt sous la barre de titre cachée (avant : 820 × 560 pt sous la barre de titre, alors visible). Avec la fiche et ses courbes, la scène garde ainsi environ 230 pt de haut, contre 88 aujourd'hui (tri A, n° 11).
 
 **À vérifier avec Djoko** (tri A, n° 12). L'annotation « → Nom » d'un changement de parent, au-dessus des courbes, peut chevaucher le titre du graphique. Si c'est le cas à l'écran, elle descend sous le titre.
 
@@ -170,7 +170,7 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 La vérification en vrai a trouvé deux défauts, et Djoko a demandé quatre retouches de la légende. Chaque point dit ce qui change ; le détail est dans les sections 1 à 3.
 - **La barre de titre** (section 1) : elle restait opaque, car SwiftUI défaisait le crochet AppKit. Elle passe par le style de la scène, `.hiddenTitleBar`, que SwiftUI garde.
 - **Le premier clic** (section 1) : il agit aussi dans une fenêtre inactive, au lieu de seulement l'activer.
-- **Le nom d'une pièce** (section 1) : un clic sur lui isole la pièce. Proposé par la ronde, à confirmer avec Djoko.
+- **Le nom d'une pièce** (section 1) : un clic sur lui isole la pièce, et un clic droit n'ouvre aucun menu, comme sur la boîte. Proposé par la ronde, à confirmer avec Djoko.
 - **La légende en verre** (section 2) : au lieu du panneau sombre de la maquette A, un écart choisi par Djoko.
 - **Ses signes comme dans la scène** (section 2) : la sphère brillante du routeur, les pastilles, l'anneau, la couronne, la lune, la pastille de pile et les liens de la scène, par les mêmes fonctions.
 - **Son ouverture et son repli** (section 2) : 0,45 s au lieu de 0,3 s, avec le recadrage qui les accompagne.

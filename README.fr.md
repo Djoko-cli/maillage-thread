@@ -74,9 +74,10 @@ open "…/Maillage Thread.app" --args -demo -captures ~/Library/Containers/fr.dj
 Avec `-captures <dossier>`, l'app écrit quatorze images PNG de la vue par
 pièces (2D, envol, 3D, zooms, pièces isolées, survol, la fiche du chef, la
 légende repliée), puis quitte, sans fenêtre. Son rendu ne dessine ni la
-fenêtre ni le verre : le haut de la fenêtre et la fiche y sont dessinés comme
-dans leurs maquettes, avec les trois boutons de la fenêtre à leur place. L'app
-vit dans un bac à sable : le dossier doit être dans son conteneur.
+fenêtre ni le verre : le haut de la fenêtre, la légende et la fiche y sont
+dessinés comme dans leurs maquettes, avec les trois boutons de la fenêtre à
+leur place. L'app vit dans un bac à sable : le dossier doit être dans son
+conteneur.
 
 La démo rejoue la panne du 27 septembre, reconstituée à partir du relevé réel
 du 28 septembre (`docs/releves/2026-09-28/`) : rien n'est écrit, rien n'est
@@ -147,7 +148,8 @@ clair. Conception :
   juste après les boutons, celle de la vue (2D / 3D, rotation lente) contre le
   bord droit. Glisser la bande vide entre elles déplace la fenêtre ; un
   double-clic y fait ce que fait un double-clic sur une barre de titre sur ce
-  Mac (réglages Bureau et Dock). 820 × 680 points au moins.
+  Mac (réglages Bureau et Dock). 820 × 712 points au moins, soit 680 sous la
+  barre de titre cachée.
 - **Légende** en bas à gauche, en verre : routeurs, appareils, liens radio
   par qualité et autres signes, seulement ceux que la vue montre, dessinés
   comme dans la scène. Ouverte, la vue d'ensemble se cadre au-dessus d'elle ;
@@ -192,7 +194,8 @@ clair. Conception :
   premier clic agit aussi quand la fenêtre est inactive.
 - **Clics droits** : sur un nom d'étage, « Monter d'un étage » et « Descendre
   d'un étage » ; sur le fond, « Replacer les pièces automatiquement » (les
-  places gardées partent, pas l'ordre des étages).
+  places gardées partent, pas l'ordre des étages) ; sur une pièce (sa boîte ou
+  son nom) ou un appareil, aucun menu.
 - **Zoom sémantique** : de loin, les pièces seules ; puis les routeurs ; de
   près, tous les noms qui tiennent. La ligne en bas à gauche dit le niveau, ou
   combien de noms sont masqués faute de place.

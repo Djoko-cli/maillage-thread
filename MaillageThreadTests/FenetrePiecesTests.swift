@@ -344,7 +344,8 @@ struct FenetrePiecesTests {
                 "sous la fiche, dans la plus petite fenetre, la legende se replie : scene de \(moteur.cadre.height) pt")
     }
 
-    /// Taille minimale de la fenetre : 820 x 680 pt.
+    /// Taille minimale du contenu de la fenetre : 820 x 680 pt, sous la barre de titre cachee (la fenetre, elle, fait
+    /// 712 pt de haut au moins).
     @Test func tailleMinimale() throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }

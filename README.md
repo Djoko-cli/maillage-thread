@@ -73,9 +73,9 @@ open "…/Maillage Thread.app" --args -demo -captures ~/Library/Containers/fr.dj
 With `-captures <folder>`, the app writes fourteen PNG images of the room view
 (2D, flight, 3D, zooms, isolated rooms, hover, the leader's card, the folded
 legend), then quits, with no window. Its renderer draws neither the window nor
-glass: the top of the window and the card are drawn as in their mockups, with
-the window's three buttons in place. The app is sandboxed: the folder must be
-inside its container.
+glass: the top of the window, the legend and the card are drawn as in their
+mockups, with the window's three buttons in place. The app is sandboxed: the
+folder must be inside its container.
 
 The demo replays the September 27 outage, rebuilt from the real survey of
 September 28 (`docs/releves/2026-09-28/`): nothing is written, nothing is
@@ -146,7 +146,7 @@ French).
   view one (2D / 3D, slow rotation) against the right edge. Drag the empty
   band between them to move the window; a double-click there does what a
   double-click on a title bar does on your Mac (Desktop & Dock settings). At
-  least 820 × 680 points.
+  least 820 × 712 points, that is 680 below the hidden title bar.
 - **Legend** at the bottom left, in glass: routers, devices, radio links by
   quality and the other signs, only those the view shows, drawn as in the
   view. Open, the overview is framed above it; it folds to its label, giving
@@ -186,7 +186,7 @@ French).
   even when the window is inactive.
 - **Right clicks**: on a floor name, "Move up one floor" and "Move down one
   floor"; on the background, "Arrange rooms automatically" (kept places go,
-  not the floor order).
+  not the floor order); on a room (its box or its name) or a device, no menu.
 - **Semantic zoom**: from afar, rooms only; then routers; up close, every name
   that fits. The line at the bottom left gives the level, or how many names
   are hidden for lack of room.
