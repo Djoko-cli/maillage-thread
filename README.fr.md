@@ -151,10 +151,12 @@ clair. Conception :
   elles déplace la fenêtre ; un double-clic y fait ce que fait un double-clic
   sur une barre de titre sur ce Mac (réglages Bureau et Dock). Dessous, contre
   le bord gauche, comme la légende : la ligne de la tournée, le bandeau d'un
-  réseau scindé et le fil « Maison ». Le bouton vert passe en plein écran : la
-  barre d'outils invisible s'y retire, les boutons s'y cachent jusqu'au survol
-  du haut, qui les montre dans une barre de titre sombre, et la capsule du
-  réseau garde sa place, après eux. 820 × 732 points au moins, soit 680 sous
+  réseau scindé, le fil « Maison » et, juste sous lui, la ligne de niveau
+  (une seule ligne, coupée si elle est trop longue). Le bouton vert passe en
+  plein écran : la barre d'outils invisible s'y retire, les boutons s'y cachent
+  jusqu'au survol du haut, qui les montre dans une barre de titre sombre
+  (elle couvre la capsule le temps du survol), et la capsule du réseau prend
+  leur place, contre le bord gauche. 820 × 732 points au moins, soit 680 sous
   la barre de titre cachée.
 - **Légende** en bas à gauche, en verre : routeurs, appareils, liens radio
   par qualité et autres signes, seulement ceux que la vue montre, dessinés
@@ -165,7 +167,7 @@ clair. Conception :
   on l'a laissée. Une fiche ouverte la laisse visible, au-dessus d'elle ; si la
   fenêtre est trop basse pour les deux, elle se replie d'elle-même jusqu'à la
   fermeture de la fiche. Quand le relevé de la sonde est ancien, une pastille
-  orange le dit, à côté de la ligne de niveau.
+  orange le dit, à côté de la ligne de niveau, en haut à gauche.
 - **Étages et pièces.** Les étages sont les zones de Maison, dans leur ordre
   (le premier en bas) ; une pièce dans plusieurs zones va dans la première,
   les pièces hors zone forment « Autres pièces », et une maison sans zones n'a
@@ -205,7 +207,7 @@ clair. Conception :
   places gardées partent, pas l'ordre des étages) ; sur une pièce (sa boîte ou
   son nom) ou un appareil, aucun menu.
 - **Zoom sémantique** : de loin, les pièces seules ; puis les routeurs ; de
-  près, tous les noms qui tiennent. La ligne en bas à gauche dit le niveau, ou
+  près, tous les noms qui tiennent. La ligne en haut à gauche, sous « Maison », dit le niveau, ou
   combien de noms sont masqués faute de place.
 - « Réduire les animations » (accessibilité de macOS) : l'envol et le retour
   par double-clic deviennent un fondu, les autres vols de caméra sont

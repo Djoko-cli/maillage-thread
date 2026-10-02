@@ -40,18 +40,19 @@ Chaque capsule prend la taille de son contenu. Entre les deux, la scène reste v
 **Le vrai plein écran** (revérification du 02/10). Le bouton vert passe la fenêtre en plein écran. **Ce qui change :** il ne faisait qu'agrandir la fenêtre, car SwiftUI pose `fullScreenAuxiliary` ou `fullScreenNone` à la fenêtre d'une app de la barre des menus, et `.windowFullScreenBehavior(.enabled)` n'y change rien. La fenêtre reçoit donc `fullScreenPrimary`, et la vue le remet chaque fois que SwiftUI le défait : au lancement, puis à l'entrée et à la sortie du plein écran. En plein écran (ronde finale du 02/10) :
 - la barre d'outils invisible se retire, et revient à la sortie. Elle ne sert qu'à abaisser les boutons hors plein écran ;
 - les trois boutons se cachent, et ne paraissent qu'au survol du haut, avec la barre des menus, dans la barre de titre du plein écran. Cette barre est sombre, comme la fenêtre ;
-- la capsule de gauche garde sa place, après les boutons, à la même hauteur : les boutons que le survol fait paraître (à x = 9, 32 et 55 pt) ne la recouvrent pas ;
+- la capsule de gauche prend la place des boutons (décision de Djoko du 02/10) : elle va contre le bord gauche, à 12 pt, la même marge que la capsule de droite contre le bord droit, à la même hauteur, au lieu de garder le vide qu'ils laissent. La barre de titre que le survol du haut fait paraître la couvre le temps du survol : c'est accepté. Hors plein écran, rien ne change : la capsule reste après les boutons. À la sortie, elle y revient ;
 - les capsules restent visibles et reçoivent leurs clics.
 
-**Ce qui change :** sur un Mac en clair, le survol du haut faisait descendre une bande blanche, la barre de titre et la barre d'outils, sur la ligne des capsules. Sa fenêtre, à part, prend l'apparence de la fenêtre du graphe, que SwiftUI laissait à celle du Mac : son fond était blanc (relevé dans l'app : 1, 1, 1). Il est maintenant gris très foncé (0,12). La capsule de gauche allait au bord, à 12 pt, et les boutons revenaient sur elle au survol. La barre d'outils ne paraît de toute façon qu'au survol du haut (`.windowToolbarFullScreenVisibility(.onHover)`) : sinon, sa fenêtre couvrirait les capsules et prendrait leurs clics.
+**Ce qui change :** sur un Mac en clair, le survol du haut faisait descendre une bande blanche, la barre de titre et la barre d'outils, sur la ligne des capsules. Sa fenêtre, à part, prend l'apparence de la fenêtre du graphe, que SwiftUI laissait à celle du Mac : son fond était blanc (relevé dans l'app : 1, 1, 1). Il est maintenant gris très foncé (0,12). La barre d'outils ne paraît de toute façon qu'au survol du haut (`.windowToolbarFullScreenVisibility(.onHover)`) : sinon, sa fenêtre couvrirait les capsules et prendrait leurs clics.
 
-**Sous la ligne des capsules, contre le bord gauche** de la fenêtre, à la marge de la légende et de la ligne de niveau (16 pt), en plus petit :
+**Sous la ligne des capsules, contre le bord gauche** de la fenêtre, à la marge de la légende (16 pt), en plus petit :
 - la ligne de la tournée de la sonde, pendant une tournée seulement ;
 - le bandeau de scission, s'il y a lieu ;
 - le bandeau « pas encore de pièces de Maison », s'il y a lieu ;
-- le fil « Maison ».
+- le fil « Maison » ;
+- la ligne de niveau, juste sous le fil (décision de Djoko du 02/10), avec la pastille « relevé de la sonde ancien » à côté d'elle.
 
-**Ce qui change (ronde finale du 02/10) :** ils étaient alignés sous la capsule de gauche, à 92 pt du bord.
+**Ce qui change (ronde finale du 02/10) :** ils étaient alignés sous la capsule de gauche, à 92 pt du bord. La ligne de niveau était en bas, à côté de la légende : elle monte dans cette colonne (« Vue d'ensemble : les pièces », « Mi-distance : … », « N noms masqués… », « Pièce isolée : … »). Une seule ligne, coupée par des points de suspension si elle est trop longue : la colonne ne change jamais de hauteur au fil des zooms. Elle garde son style (11 pt, plus pâle). La rangée a toujours la hauteur de la pastille, qu'elle soit là ou non : ni la ligne ni la marge du haut ne bougent quand la pastille paraît ou repart. Cette pastille se fond sur l'animation de conteneur de la colonne : avec « Réduire les animations », elle prend sa place d'un coup.
 
 Un bandeau qui apparaît glisse depuis le haut avec un fondu, en 0,3 s. Il repart de même. Avec « Réduire les animations », c'est un simple fondu. La ligne de la tournée fait de même : quand elle disparaît, le bandeau et le fil remontent ; quand elle paraît, ils redescendent. **Ce qui change (ronde finale du 02/10) :** hors tournée, sa place restait gardée, vide, tant qu'une sonde était retenue (précision 21 du plan 4b).
 
@@ -65,10 +66,10 @@ Un bandeau qui apparaît glisse depuis le haut avec un fondu, en 0,3 s. Il repar
 
 ## 2. La légende A, adaptée
 
-**Elle remplace la petite légende des liens d'aujourd'hui** (`LegendeLiens`), à la même place, en bas à gauche, à côté de la ligne de niveau.
+**Elle remplace la petite légende des liens d'aujourd'hui** (`LegendeLiens`), à la même place, en bas à gauche.
 
 **La vue d'ensemble se cadre au-dessus de tout ce qui est posé en bas** (choix de Djoko du 01/10 pour la légende ouverte, sur les premières images, où la légende cachait des pièces ; du 02/10 pour la fiche) :
-- la marge du bas suit la hauteur **mesurée** de la pile du bas, comme la marge du haut suit le bandeau : de haut en bas, la légende et la ligne de niveau, puis la fiche quand elle est ouverte ;
+- la marge du bas suit la hauteur **mesurée** de la pile du bas, comme la marge du haut suit le bandeau : de haut en bas, la légende, puis la fiche quand elle est ouverte. La ligne de niveau n'y est plus : elle est en haut, dans la colonne de gauche (section 1) ;
 - repliée, sans fiche, la légende rend la place : la marge reprend sa valeur d'avant (30 pt) ;
 - **une fiche ouverte ne cache plus la légende** (02/10) : la légende reste visible et monte au-dessus de la fiche. Ce qui change : avant, elle disparaissait sous la fiche, qui gardait des marges fixes de 190 ou 360 pt ; ces valeurs fixes disparaissent ;
 - un changement de marge recadre la vue d'ensemble comme aujourd'hui, sauf si Djoko a zoomé ou isolé une pièce ;
@@ -135,13 +136,13 @@ Repliée, il ne reste que l'étiquette « Légende ». Son état, replié ou ouv
 
 Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas montrée.
 
-**« Relevé de la sonde ancien »**, que la petite légende d'aujourd'hui montrait en orange, sort de la légende. Il devient une petite pastille orange, à côté de la ligne de niveau, quand le relevé de la sonde est ancien.
+**« Relevé de la sonde ancien »**, que la petite légende d'aujourd'hui montrait en orange, sort de la légende. Il devient une petite pastille orange, à côté de la ligne de niveau (en haut à gauche, section 1), quand le relevé de la sonde est ancien.
 
 **Spec de la vue par pièces, section 8.** La phrase « sans partition en gris » est corrigée : couleur des routeurs (principale en bleu, les autres en ambre, un routeur que la sonde seule connaît en gris). Un appareil prend la couleur de son état, comme le dit la légende.
 
 ## 3. La fiche
 
-**Apparition.** La fiche d'un nœud glisse depuis le bas, avec un fondu, en 0,3 s. La vue se relève en même temps pour lui laisser la place : la marge du bas suit la pile mesurée, la légende et la ligne de niveau au-dessus de la fiche (section 2). Ce qui change (02/10) : avant, la fiche cachait la légende et prenait une marge fixe de 190 ou 360 pt. À la fermeture, elle repart vers le bas. Passer d'une fiche à une autre ne la refait pas glisser : son contenu change sur place. Avec « Réduire les animations », elle apparaît et disparaît par un simple fondu.
+**Apparition.** La fiche d'un nœud glisse depuis le bas, avec un fondu, en 0,3 s. La vue se relève en même temps pour lui laisser la place : la marge du bas suit la pile mesurée, la légende au-dessus de la fiche (section 2). Ce qui change (02/10) : avant, la fiche cachait la légende et prenait une marge fixe de 190 ou 360 pt. À la fermeture, elle repart vers le bas. Passer d'une fiche à une autre ne la refait pas glisser : son contenu change sur place. Avec « Réduire les animations », elle apparaît et disparaît par un simple fondu.
 
 **Le chef.** Sur la fiche d'un routeur couronné, une pastille « 👑 Chef du réseau Thread, élu automatiquement » se pose sous le nom. Cela vaut pour un routeur de bordure comme pour un routeur que seule la sonde connaît. La fiche lit les chefs de la scène (`EntreeScene.chefs`, polissage A) : elle couronne exactement les mêmes nœuds que la scène.
 
@@ -163,8 +164,8 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 - la marge du haut mesurée ; celle du bas, mesurée elle aussi, fiche ouverte ou fermée, légende ouverte ou repliée ;
 - la taille minimale de la fenêtre ;
 - les capsules du haut : chacune à la largeur de son contenu, même à la taille minimale de la fenêtre, en 2D et en 3D (la bande vide prend la place qui reste) ;
-- ajoutés à la ronde finale du 02/10 : la colonne de gauche au bord, la tournée sans place réservée, le bandeau et le fil qui remontent, la marge du haut inchangée à la fin d'une tournée (`tourneeSansPlaceReservee`) ; en plein écran, la barre d'outils retirée puis rendue, et la capsule de gauche à sa place (`pleinEcran`) ; la fenêtre sombre demandée à SwiftUI ; les textes de 👑 et ☾ alignés (`couronneEtLuneAlignees`) ;
-- ajoutés à la revérification du 02/10 : la barre d'outils invisible, les boutons abaissés et la marge du haut qui suit (`deLAirEnHaut`) ; le plein écran gardé, et la capsule de gauche au bord en plein écran (`pleinEcran`) ; le chevron selon l'état, et son centrage, lus sur l'encre du rendu ; 👑 et ☾ sans pastille ; le menu de la barre qui se referme après « Ouvrir le graphe » et « Journal… » ;
+- ajoutés à la ronde finale du 02/10 : la colonne de gauche au bord, la tournée sans place réservée, le bandeau et le fil qui remontent, la marge du haut inchangée à la fin d'une tournée (`tourneeSansPlaceReservee`) et à son apparition, une sonde déjà retenue (`tourneeQuiParaitSansBouger`) ; en plein écran, la barre d'outils retirée puis rendue, et la capsule de gauche au bord, puis de nouveau après les boutons (`pleinEcran`) ; la ligne de niveau sous le fil, à gauche, une seule ligne, la marge du haut stable au fil des zooms, d'une pièce isolée et de la pastille (`ligneDeNiveauSousLeFil`, `ligneDeNiveauSurUneLigne`, `pastilleDuReleveAncien`), la pastille qui part sans délai avec « Réduire les animations » (`pastilleDuHautPrendSaPlaceAvecReduire`), la marge du bas qui ne compte que la légende (`rangeeDuBasAGauche`, `margeDuBas`) ; la fenêtre sombre demandée à SwiftUI ; les textes de 👑 et ☾ alignés (`couronneEtLuneAlignees`) ;
+- ajoutés à la revérification du 02/10 : la barre d'outils invisible, les boutons abaissés et la marge du haut qui suit (`deLAirEnHaut`) ; le plein écran gardé (`pleinEcran`) ; le chevron selon l'état, et son centrage, lus sur l'encre du rendu ; 👑 et ☾ sans pastille ; le menu de la barre qui se referme après « Ouvrir le graphe » et « Journal… » ;
 - ajoutés le 02/10 : la scène du graphe sans barre de titre (son style) ; le premier clic dans une fenêtre inactive ; le clic sur le nom d'une pièce, en 2D et en 3D ; la légende au-dessus de la fiche ; son repli faute de place, le repli gardé intact ; ses signes dessinés par les fonctions de la scène, et leur taille ; la durée de 0,45 s, de la légende et de son recadrage.
 
 **Captures de démo.** Elles changent toutes, puisque la fenêtre change, et deux images s'y ajoutent : la fiche du chef, avec sa pastille, et la légende repliée (quatorze en tout). Les nouvelles sont montrées à Djoko à côté des maquettes.
@@ -181,7 +182,7 @@ Un groupe sans entrée disparaît. Une légende sans aucune entrée n'est pas mo
 - la petite fenêtre, avec ses capsules entières ;
 - l'annotation des courbes.
 
-**Ronde finale du 02/10, à voir en vrai** (section 6) : la colonne de gauche au bord ; une tournée qui paraît et disparaît, la scène immobile ; le survol du haut en plein écran, sur un Mac en clair ; 👑 et ☾ alignés.
+**Ronde finale du 02/10, à voir en vrai** (section 6) : la colonne de gauche au bord, avec la ligne de niveau sous le fil ; une tournée qui paraît et disparaît, la scène immobile ; le plein écran, sur un Mac en clair : la capsule contre le bord gauche, et le survol du haut qui la couvre le temps du survol ; 👑 et ☾ alignés.
 
 **Vérification du 02/10, à refaire en vrai** (section 6) : la barre de titre transparente et le plein écran ; le premier clic dans une fenêtre inactive ; le clic sur le nom d'une pièce ; la légende en verre et ses signes ; son ouverture en 0,45 s ; la légende au-dessus de la fiche, et son repli dans la petite fenêtre.
 
@@ -200,7 +201,7 @@ La vérification en vrai a trouvé deux défauts, et Djoko a demandé quatre ret
 
 Djoko a revérifié la fenêtre en vrai et demandé cinq retouches. Chaque point dit ce qui change ; le détail est dans les sections 1 et 2.
 - **De l'air en haut** (section 1) : une barre d'outils vide et invisible abaisse les trois boutons, et les capsules, centrées sur eux, ont leur haut à 11 pt du bord, au lieu de 1,5 pt. Djoko annule son choix du 01/10 de les garder collées en haut. La marge du haut, mesurée, grandit de 20 pt, et la fenêtre minimale passe à 820 × 732 pt.
-- **Le vrai plein écran** (section 1) : le bouton vert passe en plein écran, au lieu d'agrandir la fenêtre. En plein écran, la capsule de gauche va au bord, et la barre d'outils ne paraît qu'au survol du haut.
+- **Le vrai plein écran** (section 1) : le bouton vert passe en plein écran, au lieu d'agrandir la fenêtre. En plein écran, la barre d'outils ne paraît qu'au survol du haut (la capsule de gauche : voir la ronde finale, où elle prend la place des boutons).
 - **Le chevron de la légende** (section 2) : vers le bas ouverte, vers le haut repliée, à l'inverse de la maquette A ; centré sur la ligne de l'étiquette repliée.
 - **👑 et ☾ dans la légende** (section 2) : sans la pastille sombre des noms, « une ombre disgracieuse et inutile ». Dans la scène, les noms la gardent.
 - **Le menu de la barre** : « Ouvrir le graphe » et « Journal… » le referment, comme « Réglages… » depuis le 30/09. L'app inactive, il restait ouvert.
@@ -218,13 +219,19 @@ Le verre et le survol du haut en plein écran restent à juger à l'écran.
 Après la troisième vérification en vrai, Djoko a demandé quatre retouches. Le détail est dans les sections 1 et 2.
 - **La colonne de gauche au bord** (section 1) : la ligne de la tournée, les bandeaux et le fil « Maison » vont contre le bord gauche de la fenêtre, à 16 pt comme la légende et la ligne de niveau, et non plus sous la capsule de gauche.
 - **La tournée sans place réservée** (section 1) : sa ligne n'est là que pendant la tournée. Le bandeau et le fil remontent quand elle disparaît, et redescendent quand elle paraît, avec l'animation des bandeaux. **La scène, elle, reste stable** : la marge du haut compte toujours la place de la ligne tant qu'une sonde est retenue. Sans cela, la vue d'ensemble se recadrerait à chaque tournée, toutes les 5 minutes.
-- **Le plein écran** (section 1) : la barre d'outils invisible se retire, la barre de titre que le survol fait paraître est sombre, et la capsule de gauche garde sa place, après les boutons. Sur un Mac en clair, le survol faisait descendre une bande blanche sur les capsules, et les boutons revenaient sur la capsule de gauche. La cause de la bande : SwiftUI défaisait l'apparence sombre de la fenêtre, que la barre du plein écran reprend. La fenêtre la demande donc à SwiftUI (`.preferredColorScheme(.dark)`).
+- **Le plein écran** (section 1) : la barre d'outils invisible se retire, la barre de titre que le survol fait paraître est sombre, et la capsule de gauche prend la place des boutons, contre le bord gauche (décision de Djoko du 02/10, qui a préféré cela au vide laissé après eux : un premier essai l'avait gardée après les boutons, ce qui laisse un vide). Sur un Mac en clair, le survol faisait descendre une bande blanche sur les capsules. La cause de la bande : SwiftUI défaisait l'apparence sombre de la fenêtre, que la barre du plein écran reprend. La fenêtre la demande donc à SwiftUI (`.preferredColorScheme(.dark)`).
 - **👑 et ☾ alignés** (section 2) : leurs textes commencent avec ceux des autres signes de leur groupe.
 
 La vérification dans l'app, en démo et en instance à part, avec un passage en plein écran, a montré :
 - la barre d'outils retirée en plein écran, sans que SwiftUI la remette, puis rendue à la sortie, avec les boutons de nouveau à 19, 42 et 65 pt ;
 - la fenêtre et la barre de titre du plein écran en apparence sombre, le fond de cette barre à 0,12 au lieu de 1 ;
-- la capsule de gauche à {92, 11} avant, pendant et après le plein écran, et ses clics reçus par la fenêtre du graphe ;
+- la capsule de gauche à {92, 11} avant et après le plein écran (cette position précède la décision de Djoko : en plein écran, elle va désormais à 12 pt), et ses clics reçus par la fenêtre du graphe ;
 - les fenêtres de la barre des menus inchangées.
 
 La barre de titre du plein écran reste opaque : au survol du haut, elle couvre encore le haut des capsules, en sombre, le temps du survol. Aucune API publique ne la rend transparente. Le survol lui-même reste à juger à l'écran.
+
+### Retouche du plein écran et ligne de niveau en haut (02/10, après la 4e vérification)
+
+Djoko a décidé deux retouches. Le détail est dans la section 1.
+- **En plein écran, la capsule de gauche prend la place des boutons** : contre le bord gauche, à 12 pt, comme la capsule de droite contre le bord droit. La barre de titre que le survol du haut fait paraître la couvre le temps du survol : c'est accepté. Hors plein écran, rien ne change. Quand le bouton vert est pressé, `SuiviFenetre` donne aux boutons un cadre « caché » (`CadreFeux.pleinEcran`), et la capsule suit. Comme SwiftUI remet la barre d'outils à jour, et la rend visible, quand la capsule change de place, `SuiviFenetre` la retire de nouveau tant que la fenêtre est en plein écran (observation de `toolbar.isVisible`).
+- **La ligne de niveau monte en haut à gauche**, sous le fil « Maison », dans la colonne de gauche, avec la pastille « relevé de la sonde ancien ». Une seule ligne, coupée par des points de suspension si elle est trop longue ; style inchangé. Le bas ne garde que la légende : la marge du bas suit la légende seule, ou la légende et la fiche. La marge du haut compte la ligne de niveau, qui est toujours là, et reste stable au fil des zooms et des tournées : la rangée a la hauteur de la pastille, qu'elle soit là ou non. Les obstacles des noms de la scène suivent les nouvelles places.

@@ -148,10 +148,12 @@ French).
   right edge. Drag the empty band between them to move the window; a
   double-click there does what a double-click on a title bar does on your Mac
   (Desktop & Dock settings). Below, against the left edge, like the legend:
-  the tour line, the split-network banner and the "Home" path. The green
+  the tour line, the split-network banner, the "Home" path and, right under it,
+  the level line (a single line, cut off if it is too long). The green
   button goes full screen: the invisible toolbar goes away there, the buttons
-  hide until you hover over the top, which shows them in a dark title bar, and
-  the network capsule keeps its place, after them. At least 820 × 732 points,
+  hide until you hover over the top, which shows them in a dark title bar (it
+  covers the capsule while you hover), and the network capsule takes their
+  place, against the left edge. At least 820 × 732 points,
   that is 680 below the hidden title bar.
 - **Legend** at the bottom left, in glass: routers, devices, radio links by
   quality and the other signs, only those the view shows, drawn as in the
@@ -161,7 +163,7 @@ French).
   chevron (⌃) opens it again; it stays as you left it. An open card keeps it visible,
   above the card; if the window is too short for both, it folds by itself
   until the card closes. When the probe's survey is old, an orange tag says so
-  next to the level line.
+  next to the level line, at the top left.
 - **Floors and rooms.** Floors are the Home zones, in their order (the first
   at the bottom); a room in several zones goes to the first one, rooms outside
   any zone make "Other rooms", and a house without zones has a single "Home"
@@ -196,7 +198,7 @@ French).
   floor"; on the background, "Arrange rooms automatically" (kept places go,
   not the floor order); on a room (its box or its name) or a device, no menu.
 - **Semantic zoom**: from afar, rooms only; then routers; up close, every name
-  that fits. The line at the bottom left gives the level, or how many names
+  that fits. The line at the top left, under "Home", gives the level, or how many names
   are hidden for lack of room.
 - "Reduce motion" (macOS accessibility): the flight and the double-click
   return become a fade, other camera flights are immediate, the slow rotation
