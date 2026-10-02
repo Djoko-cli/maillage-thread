@@ -147,11 +147,13 @@ French).
   band between them to move the window; a double-click there does what a
   double-click on a title bar does on your Mac (Desktop & Dock settings). At
   least 820 × 680 points.
-- **Legend** at the bottom left: routers, devices, radio links by quality and
-  the other signs, only those the view shows. Open, the overview is framed
-  above it; it folds to its label, giving the room back, and stays as you left
-  it. When the probe's survey is old, an orange tag says so next to the level
-  line.
+- **Legend** at the bottom left, in glass: routers, devices, radio links by
+  quality and the other signs, only those the view shows, drawn as in the
+  view. Open, the overview is framed above it; it folds to its label, giving
+  the room back, and stays as you left it. An open card keeps it visible,
+  above the card; if the window is too short for both, it folds by itself
+  until the card closes. When the probe's survey is old, an orange tag says so
+  next to the level line.
 - **Floors and rooms.** Floors are the Home zones, in their order (the first
   at the bottom); a room in several zones goes to the first one, rooms outside
   any zone make "Other rooms", and a house without zones has a single "Home"
@@ -175,12 +177,13 @@ French).
 - **Gestures.** Scroll wheel or pinch: zoom, towards the pointer in 2D. Drag
   the background: pan in 2D, orbit around the house in 3D. Drag a room: move
   it within its floor; its place is kept (`positions-pieces.json` in the app
-  folder, never in the demo). Click a room: isolate it (the others fade, a tag
-  points to a parent elsewhere); click outside, Esc or "Home" in the path:
-  come back. Double-click the background: back to the overview, zoom and pan
-  undone. Click a device or its name: its card, which slides up from the
-  bottom as the view rises; the card of the Thread network's leader shows
-  "👑 Thread network leader, elected automatically".
+  folder, never in the demo). Click a room or its name: isolate it (the others
+  fade, a tag points to a parent elsewhere); click outside, Esc or "Home" in
+  the path: come back. Double-click the background: back to the overview, zoom
+  and pan undone. Click a device or its name: its card, which slides up from
+  the bottom as the view rises; the card of the Thread network's leader shows
+  "👑 Thread network leader, elected automatically". The first click works
+  even when the window is inactive.
 - **Right clicks**: on a floor name, "Move up one floor" and "Move down one
   floor"; on the background, "Arrange rooms automatically" (kept places go,
   not the floor order).
@@ -189,8 +192,8 @@ French).
   are hidden for lack of room.
 - "Reduce motion" (macOS accessibility): the flight and the double-click
   return become a fade, other camera flights are immediate, the slow rotation
-  is off, the card and the top banners come and go with a plain fade, and the
-  view reframes itself through a fade.
+  is off, the card, the legend and the top banners come and go with a plain
+  fade, and the view reframes itself through a fade.
 - The room layout is computed off the main thread: a few hundredths of a
   second for the demo, under a second for 20 rooms and 100 devices
   (`outils/mesurer.sh`).

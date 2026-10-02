@@ -148,11 +148,14 @@ clair. Conception :
   bord droit. Glisser la bande vide entre elles déplace la fenêtre ; un
   double-clic y fait ce que fait un double-clic sur une barre de titre sur ce
   Mac (réglages Bureau et Dock). 820 × 680 points au moins.
-- **Légende** en bas à gauche : routeurs, appareils, liens radio par qualité
-  et autres signes, seulement ceux que la vue montre. Ouverte, la vue
-  d'ensemble se cadre au-dessus d'elle ; elle se replie sur son étiquette, qui
-  rend la place, et reste comme on l'a laissée. Quand le relevé de la sonde
-  est ancien, une pastille orange le dit, à côté de la ligne de niveau.
+- **Légende** en bas à gauche, en verre : routeurs, appareils, liens radio
+  par qualité et autres signes, seulement ceux que la vue montre, dessinés
+  comme dans la scène. Ouverte, la vue d'ensemble se cadre au-dessus d'elle ;
+  elle se replie sur son étiquette, qui rend la place, et reste comme on l'a
+  laissée. Une fiche ouverte la laisse visible, au-dessus d'elle ; si la
+  fenêtre est trop basse pour les deux, elle se replie d'elle-même jusqu'à la
+  fermeture de la fiche. Quand le relevé de la sonde est ancien, une pastille
+  orange le dit, à côté de la ligne de niveau.
 - **Étages et pièces.** Les étages sont les zones de Maison, dans leur ordre
   (le premier en bas) ; une pièce dans plusieurs zones va dans la première,
   les pièces hors zone forment « Autres pièces », et une maison sans zones n'a
@@ -180,12 +183,13 @@ clair. Conception :
   fond : déplacer la vue en 2D, tourner autour de la maison en 3D. Glisser une
   pièce : la déplacer dans son étage ; sa place est gardée
   (`positions-pieces.json` dans le dossier de l'app, jamais en démo). Clic sur
-  une pièce : l'isoler (les autres s'estompent, un repère montre un parent
-  situé ailleurs) ; clic à côté, Échap ou « Maison » dans le fil : revenir.
-  Double-clic sur le fond : retour à la vue d'ensemble, zoom et déplacement
-  annulés. Clic sur un appareil ou sur son nom : sa fiche, qui glisse depuis le
-  bas pendant que la vue se relève ; la fiche du chef du réseau Thread porte
-  « 👑 Chef du réseau Thread, élu automatiquement ».
+  une pièce ou sur son nom : l'isoler (les autres s'estompent, un repère
+  montre un parent situé ailleurs) ; clic à côté, Échap ou « Maison » dans le
+  fil : revenir. Double-clic sur le fond : retour à la vue d'ensemble, zoom et
+  déplacement annulés. Clic sur un appareil ou sur son nom : sa fiche, qui
+  glisse depuis le bas pendant que la vue se relève ; la fiche du chef du
+  réseau Thread porte « 👑 Chef du réseau Thread, élu automatiquement ». Le
+  premier clic agit aussi quand la fenêtre est inactive.
 - **Clics droits** : sur un nom d'étage, « Monter d'un étage » et « Descendre
   d'un étage » ; sur le fond, « Replacer les pièces automatiquement » (les
   places gardées partent, pas l'ordre des étages).
@@ -194,8 +198,9 @@ clair. Conception :
   combien de noms sont masqués faute de place.
 - « Réduire les animations » (accessibilité de macOS) : l'envol et le retour
   par double-clic deviennent un fondu, les autres vols de caméra sont
-  immédiats, la rotation lente est coupée, la fiche et les bandeaux du haut
-  vont et viennent par un simple fondu, et la vue se recadre par un fondu.
+  immédiats, la rotation lente est coupée, la fiche, la légende et les
+  bandeaux du haut vont et viennent par un simple fondu, et la vue se recadre
+  par un fondu.
 - La disposition des pièces est calculée hors du fil principal : quelques
   centièmes de seconde pour la démo, moins d'une seconde pour 20 pièces et 100
   appareils (`outils/mesurer.sh`).
