@@ -17,7 +17,7 @@ extension EnvironmentValues {
 /// l'origine est le coin haut gauche de la fenetre (le contenu la couvre en entier) : la capsule de
 /// gauche commence juste apres eux, et se centre sur leur milieu.
 struct CadreFeux: Equatable {
-    /// Bord droit du bouton agrandir (pt, depuis le bord gauche).
+    /// Bord droit du bouton agrandir (pt, depuis le bord gauche) ; 0 : les boutons caches (plein ecran).
     var droite: CGFloat
     /// Milieu des boutons (pt, depuis le haut).
     var milieu: CGFloat
@@ -27,6 +27,12 @@ struct CadreFeux: Equatable {
     /// 14 pt, en x = 19, 42 et 65, de 19 a 33 pt du haut (sans elle : 32 pt, en x = 9, 32 et 55, de 9 a 23 pt).
     /// Avant que la fenetre soit connue, et pour les captures, qui ne rendent pas la fenetre.
     static let defaut = CadreFeux(droite: 79, milieu: 26)
+
+    /// En plein ecran, les boutons se cachent (ils ne paraissent qu'au survol du haut, avec la barre de titre) : la
+    /// capsule de gauche prend leur place, contre le bord (`HautPieces.debut`), a la meme hauteur.
+    static func pleinEcran(milieu: CGFloat) -> CadreFeux {
+        CadreFeux(droite: 0, milieu: milieu)
+    }
 
     init(droite: CGFloat, milieu: CGFloat) {
         self.droite = droite
@@ -48,9 +54,9 @@ struct CadreFeux: Equatable {
 
 /// Suit la fenetre de la vue (reverification du 02/10) : ses trois boutons, que la capsule de gauche suit, et le
 /// vrai plein ecran.
-/// - Les boutons sont lus a l'arrivee dans la fenetre et a la sortie du plein ecran. En plein ecran, la capsule de
-///   gauche garde sa place, apres eux (ronde finale du 02/10) : quand le survol du haut les fait paraitre, ils ne
-///   la recouvrent pas.
+/// - Les boutons sont lus a l'arrivee dans la fenetre et a la sortie du plein ecran ; a l'entree, ils se cachent
+///   (`CadreFeux.pleinEcran`) : la capsule de gauche prend leur place, contre le bord (decision de Djoko, 02/10). La
+///   barre de titre que le survol du haut fait paraitre la couvre le temps du survol.
 /// - Le plein ecran : SwiftUI pose a la fenetre d'une app de la barre des menus (`LSUIElement`)
 ///   `fullScreenAuxiliary` ou `fullScreenNone`, et le bouton vert ne faisait qu'agrandir la fenetre ;
 ///   `.windowFullScreenBehavior(.enabled)` n'y change rien (essaye dans l'app, en demo). La fenetre recoit
@@ -79,6 +85,9 @@ struct SuiviFenetre: NSViewRepresentable {
         let rapporter: (CadreFeux) -> Void
         private var feux = CadreFeux.defaut
         private var observation: NSKeyValueObservation?
+        private var observationBarre: NSKeyValueObservation?
+        /// La fenetre est en plein ecran, ou y entre : sa barre d'outils invisible reste retiree.
+        private var enPleinEcran = false
 
         init(_ rapporter: @escaping (CadreFeux) -> Void) {
             self.rapporter = rapporter
@@ -92,17 +101,24 @@ struct SuiviFenetre: NSViewRepresentable {
             let centre = NotificationCenter.default
             centre.removeObserver(self)
             observation = nil
+            observationBarre = nil
             guard let window else { return }
             SuiviFenetre.permettrePleinEcran(window)
             observation = window.observe(\.collectionBehavior) { fenetre, _ in
                 MainActor.assumeIsolated { SuiviFenetre.permettrePleinEcran(fenetre) }
             }
+            // Quand la capsule change de place, SwiftUI remet la barre d'outils a jour, et la rend visible : en plein
+            // ecran, elle se retire de nouveau aussitot.
+            observationBarre = window.observe(\.toolbar?.isVisible) { [weak self] fenetre, _ in
+                MainActor.assumeIsolated {
+                    if self?.enPleinEcran == true, fenetre.toolbar?.isVisible == true { fenetre.toolbar?.isVisible = false }
+                }
+            }
             centre.addObserver(self, selector: #selector(entreEnPleinEcran), name: NSWindow.willEnterFullScreenNotification,
                                object: window)
             centre.addObserver(self, selector: #selector(sortDuPleinEcran), name: NSWindow.didExitFullScreenNotification,
                                object: window)
-            // Une fenetre deja en plein ecran (rouverte ainsi) : la barre d'outils se retire, et la capsule garde la
-            // place par defaut, celle d'apres les boutons.
+            // Une fenetre deja en plein ecran (rouverte ainsi) : la barre d'outils se retire, et la capsule va au bord.
             if window.styleMask.contains(.fullScreen) {
                 entreEnPleinEcran()
             }
@@ -110,10 +126,13 @@ struct SuiviFenetre: NSViewRepresentable {
         }
 
         @objc private func entreEnPleinEcran() {
+            enPleinEcran = true
             window?.toolbar?.isVisible = false
+            signaler(.pleinEcran(milieu: feux.milieu))
         }
 
         @objc private func sortDuPleinEcran() {
+            enPleinEcran = false
             window?.toolbar?.isVisible = true
             window?.contentView?.superview?.layoutSubtreeIfNeeded()
             lireLesBoutons()
@@ -121,6 +140,10 @@ struct SuiviFenetre: NSViewRepresentable {
 
         private func lireLesBoutons() {
             guard let window, let c = CadreFeux(fenetre: window), c != feux else { return }
+            signaler(c)
+        }
+
+        private func signaler(_ c: CadreFeux) {
             feux = c
             rapporter(c)
         }
@@ -229,9 +252,10 @@ struct HautPieces: View {
     static let ecartFeux: CGFloat = 13
     static let bordDroit: CGFloat = 12
 
-    /// Debut de la capsule de gauche (pt, depuis le bord gauche) : juste apres les trois boutons, en plein ecran aussi.
+    /// Debut de la capsule de gauche (pt, depuis le bord gauche) : juste apres les trois boutons ; au bord, a 12 pt
+    /// comme la capsule de droite, quand ils sont caches (plein ecran).
     static func debut(_ feux: CadreFeux) -> CGFloat {
-        feux.droite + ecartFeux
+        feux.droite > 0 ? feux.droite + ecartFeux : bordDroit
     }
 
     var body: some View {

@@ -727,7 +727,7 @@ struct FenetrePiecesTests {
     /// De l'air en haut (reverification du 02/10) : dans la vraie fenetre, faite comme celle de l'app, la ligne des
     /// capsules suit les trois boutons abaisses par la barre d'outils invisible : centree sur eux, a 26 pt du haut,
     /// la capsule de gauche juste apres eux, le haut des capsules a 12 pt environ du bord. La marge du haut mesuree
-    /// suit la nouvelle hauteur : le bas de la colonne sous la capsule de gauche, et l'espacement.
+    /// suit la nouvelle hauteur : le bas de la colonne, et l'espacement.
     @Test(.timeLimit(.minutes(1))) func deLAirEnHaut() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -820,12 +820,66 @@ struct FenetrePiecesTests {
         #expect(moteur.marges.haut == FenetrePieces.margeHaut(bas: oubliee.maxY), "sans sonde : \(moteur.marges.haut)")
     }
 
+    /// L'apparition de la tournee, une sonde deja retenue (le cas de toutes les 5 minutes, l'autre moitie de
+    /// `tourneeSansPlaceReservee`) : la ligne parait en haut de la colonne, le bandeau et le fil descendent de sa hauteur
+    /// et d'un espacement, et la marge du haut ne change pas (la place de la ligne etait deja comptee), a aucun moment :
+    /// la vue d'ensemble ne se recadre pas.
+    @Test(.timeLimit(.minutes(1))) func tourneeQuiParaitSansBouger() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let journal = JournalCanaux()
+        let canal = SondeMaillageTests.canalRetenu(journal)
+        let sonde = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p,
+                                                 sonde: sonde)
+        defer { Self.fermer(fenetre) }
+        func colonne() throws -> CGRect { try #require(moteur.cadresInterface["colonne"], "la colonne") }
+        func stable() async throws {
+            try await MoteurPiecesTests.attendre { moteur.pret && moteur.cadresInterface["colonne"] != nil && !moteur.margesEnRoute }
+            try await Task.sleep(for: .milliseconds(400))
+        }
+        // Une sonde retenue, dont la premiere tournee est finie : la ligne de la tournee a disparu, sa place est comptee.
+        await sonde.connecter(SondeMaillageTests.port, choisi: true)
+        await journal.attendre(SondeMaillageTests.listeRetenue)
+        canal.emettre(CanalRejoue.reseauMinimal(SondeMaillageTests.listeRetenue + "\n"))
+        await SondeMaillageTests.attendre { !sonde.tourneeEnCours }
+        try await stable()
+        let avant = try colonne()
+        let margeAvant = moteur.marges.haut
+        let ligne = NSHostingView(rootView: IndicateurTournee(avancement: LigneTournee.premierPas, debut: nil)).fittingSize.height
+        #expect(abs(margeAvant - FenetrePieces.margeHaut(bas: avant.maxY + ligne + FenetrePieces.espacement)) < 0.5,
+                "la marge compte la place de la ligne : \(margeAvant)")
+        // Une nouvelle tournee commence : la marge ne bouge a aucun moment, et la vue d'ensemble ne se recadre pas.
+        sonde.rafraichir()
+        await SondeMaillageTests.attendre { sonde.tourneeEnCours }
+        var marges: Set<CGFloat> = [moteur.marges.haut]
+        var recadree = moteur.margesEnRoute
+        let t0 = ProcessInfo.processInfo.systemUptime
+        while ProcessInfo.processInfo.systemUptime - t0 < 0.8 {
+            marges.insert(moteur.marges.haut)
+            recadree = recadree || moteur.margesEnRoute
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(marges == [margeAvant], "la marge du haut, stable a l'apparition de la tournee : \(marges)")
+        #expect(!recadree, "la scene ne se recadre pas")
+        // La ligne a bien paru : le bandeau et le fil ont descendu, le haut de la colonne est le meme.
+        let pendant = try colonne()
+        #expect(pendant.minX == FenetrePieces.bord, "pendant la tournee, au bord : \(pendant)")
+        #expect(pendant.minY == avant.minY, "le haut de la colonne ne bouge pas")
+        #expect(abs(pendant.height - avant.height - (ligne + FenetrePieces.espacement)) < 0.5,
+                "le bandeau et le fil descendent de la ligne de la tournee : \(avant.height) -> \(pendant.height)")
+        await sonde.oublier()
+    }
+
     /// Le vrai plein ecran (reverification du 02/10 : le bouton vert ne faisait qu'agrandir la fenetre) : SwiftUI pose
     /// a la fenetre d'une app de la barre des menus `fullScreenAuxiliary` ou `fullScreenNone` (releve dans l'app, en
     /// demo), et la vue le remplace par `fullScreenPrimary`, a chaque fois. En plein ecran (ronde finale du 02/10), la
     /// barre d'outils invisible se retire : revelee au survol du haut, elle faisait une bande claire sur les capsules.
-    /// Elle revient a la sortie, et les boutons avec elle. La capsule de gauche garde sa place, apres les boutons : ceux
-    /// que le survol du haut fait paraitre ne la recouvrent pas.
+    /// Elle revient a la sortie, et les boutons avec elle. La capsule de gauche prend la place des boutons (decision de
+    /// Djoko, 02/10) : contre le bord gauche, a la meme marge que la capsule de droite contre le bord droit, au lieu de
+    /// garder le vide qu'ils laissent ; la barre que le survol du haut fait paraitre la couvre le temps du survol.
     @Test(.timeLimit(.minutes(1))) func pleinEcran() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -847,20 +901,24 @@ struct FenetrePiecesTests {
             #expect(primaire(), "remis apres \(autre.rawValue) : 0x\(String(fenetre.collectionBehavior.rawValue, radix: 16))")
         }
         let apres = CadreFeux.defaut.droite + HautPieces.ecartFeux
+        let bord = HautPieces.bordDroit
         let barre = try #require(fenetre.toolbar)
         #expect(moteur.cadresInterface["ligne"]?.minX == apres)
         #expect(barre.isVisible, "hors plein ecran, la barre d'outils invisible abaisse les boutons")
         NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: fenetre)
         try await Task.sleep(for: .milliseconds(300))
         #expect(!barre.isVisible, "en plein ecran, la barre d'outils se retire")
-        #expect(moteur.cadresInterface["ligne"]?.minX == apres, "en plein ecran, la capsule garde sa place")
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["ligne"]?.minX == bord }
+        #expect(moteur.cadresInterface["ligne"]?.minX == bord, "en plein ecran, la capsule prend la place des boutons")
+        #expect(moteur.cadresInterface["colonne"]?.minX == FenetrePieces.bord, "la colonne ne bouge pas")
         #expect(moteur.cadresInterface["ligne"]?.midY == CadreFeux.defaut.milieu, "a la meme hauteur")
         NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: fenetre)
         try await MoteurPiecesTests.attendre { barre.isVisible }
         #expect(barre.isVisible, "a la sortie, la barre d'outils revient")
         try await Task.sleep(for: .milliseconds(300))
         #expect(CadreFeux(fenetre: fenetre) == CadreFeux.defaut, "et les boutons abaisses avec elle")
-        #expect(moteur.cadresInterface["ligne"]?.minX == apres, "a la sortie, apres les boutons")
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["ligne"]?.minX == apres }
+        #expect(moteur.cadresInterface["ligne"]?.minX == apres, "a la sortie, de nouveau apres les boutons")
         #expect(moteur.cadresInterface["ligne"]?.midY == CadreFeux.defaut.milieu)
     }
 
