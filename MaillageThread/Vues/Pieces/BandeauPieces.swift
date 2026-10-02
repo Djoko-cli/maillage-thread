@@ -17,15 +17,22 @@ extension EnvironmentValues {
 /// l'origine est le coin haut gauche de la fenetre (le contenu la couvre en entier) : la capsule de
 /// gauche commence juste apres eux, et se centre sur leur milieu.
 struct CadreFeux: Equatable {
-    /// Bord droit du bouton agrandir (pt, depuis le bord gauche).
+    /// Bord droit du bouton agrandir (pt, depuis le bord gauche) ; 0 : les boutons caches (plein ecran).
     var droite: CGFloat
     /// Milieu des boutons (pt, depuis le haut).
     var milieu: CGFloat
 
-    /// Celui d'une fenetre sans barre d'outils, mesure sous macOS 27 (barre de titre de 32 pt) : trois
-    /// boutons de 14 pt, en x = 9, 32 et 55, de 9 a 23 pt du haut. Avant que la fenetre soit connue,
-    /// et pour les captures, qui ne rendent pas la fenetre.
-    static let defaut = CadreFeux(droite: 69, milieu: 16)
+    /// Celui de la fenetre de la vue, mesure sous macOS 27 : sa barre d'outils vide, en style unifie
+    /// (`FenetrePieces`, reverification du 02/10), fait la barre de titre de 52 pt et abaisse les trois boutons de
+    /// 14 pt, en x = 19, 42 et 65, de 19 a 33 pt du haut (sans elle : 32 pt, en x = 9, 32 et 55, de 9 a 23 pt).
+    /// Avant que la fenetre soit connue, et pour les captures, qui ne rendent pas la fenetre.
+    static let defaut = CadreFeux(droite: 79, milieu: 26)
+
+    /// En plein ecran, les boutons se cachent (ils ne paraissent qu'au survol du haut, avec la barre des menus) : la
+    /// capsule de gauche va au bord (`HautPieces.debut`), a la meme hauteur.
+    static func pleinEcran(milieu: CGFloat) -> CadreFeux {
+        CadreFeux(droite: 0, milieu: milieu)
+    }
 
     init(droite: CGFloat, milieu: CGFloat) {
         self.droite = droite
@@ -33,14 +40,88 @@ struct CadreFeux: Equatable {
     }
 
     /// Lu sur la fenetre : les cadres des boutons fermer et agrandir, ramenes au coin haut gauche de la
-    /// fenetre ; nil sans ces boutons.
+    /// fenetre ; nil sans ces boutons, ou s'ils sont ailleurs (en plein ecran, dans la fenetre de la barre d'outils).
     @MainActor
     init?(fenetre: NSWindow) {
         guard let fermer = fenetre.standardWindowButton(.closeButton),
-              let agrandir = fenetre.standardWindowButton(.zoomButton) else { return nil }
+              let agrandir = fenetre.standardWindowButton(.zoomButton),
+              fermer.window === fenetre, agrandir.window === fenetre else { return nil }
         let f = fermer.convert(fermer.bounds, to: nil)
         let a = agrandir.convert(agrandir.bounds, to: nil)
         self.init(droite: a.maxX, milieu: fenetre.frame.height - f.midY)
+    }
+}
+
+/// Suit la fenetre de la vue (reverification du 02/10) : ses trois boutons, que la capsule de gauche suit, et le
+/// vrai plein ecran.
+/// - Les boutons sont lus a l'arrivee dans la fenetre et a la sortie du plein ecran ; a l'entree, ils se cachent
+///   (`CadreFeux.pleinEcran`).
+/// - Le plein ecran : SwiftUI pose a la fenetre d'une app de la barre des menus (`LSUIElement`)
+///   `fullScreenAuxiliary` ou `fullScreenNone`, et le bouton vert ne faisait qu'agrandir la fenetre ;
+///   `.windowFullScreenBehavior(.enabled)` n'y change rien (essaye dans l'app, en demo). La fenetre recoit
+///   `fullScreenPrimary`, et le garde : SwiftUI le defait au lancement, puis a l'entree et a la sortie du plein
+///   ecran (releve dans l'app), et la sonde le remet aussitot, en observant `collectionBehavior`.
+struct SuiviFenetre: NSViewRepresentable {
+    let rapporter: (CadreFeux) -> Void
+
+    func makeNSView(context: Context) -> Vue { Vue(rapporter) }
+    func updateNSView(_ nsView: Vue, context: Context) {}
+
+    /// Le plein ecran permis a la fenetre, comme fenetre principale : ni `fullScreenAuxiliary`, ni `fullScreenNone`.
+    @MainActor
+    static func permettrePleinEcran(_ fenetre: NSWindow) {
+        var c = fenetre.collectionBehavior
+        c.remove([.fullScreenAuxiliary, .fullScreenNone])
+        c.insert(.fullScreenPrimary)
+        if c != fenetre.collectionBehavior { fenetre.collectionBehavior = c }
+    }
+
+    final class Vue: NSView {
+        let rapporter: (CadreFeux) -> Void
+        private var feux = CadreFeux.defaut
+        private var observation: NSKeyValueObservation?
+
+        init(_ rapporter: @escaping (CadreFeux) -> Void) {
+            self.rapporter = rapporter
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            let centre = NotificationCenter.default
+            centre.removeObserver(self)
+            observation = nil
+            guard let window else { return }
+            SuiviFenetre.permettrePleinEcran(window)
+            observation = window.observe(\.collectionBehavior) { fenetre, _ in
+                MainActor.assumeIsolated { SuiviFenetre.permettrePleinEcran(fenetre) }
+            }
+            centre.addObserver(self, selector: #selector(entreEnPleinEcran), name: NSWindow.willEnterFullScreenNotification,
+                               object: window)
+            centre.addObserver(self, selector: #selector(sortDuPleinEcran), name: NSWindow.didExitFullScreenNotification,
+                               object: window)
+            lireLesBoutons()
+        }
+
+        @objc private func entreEnPleinEcran() {
+            signaler(.pleinEcran(milieu: feux.milieu))
+        }
+
+        @objc private func sortDuPleinEcran() {
+            lireLesBoutons()
+        }
+
+        private func lireLesBoutons() {
+            guard let window, let c = CadreFeux(fenetre: window) else { return }
+            signaler(c)
+        }
+
+        private func signaler(_ c: CadreFeux) {
+            feux = c
+            rapporter(c)
+        }
     }
 }
 
@@ -139,6 +220,12 @@ struct HautPieces: View {
     static let ecartFeux: CGFloat = 13
     static let bordDroit: CGFloat = 12
 
+    /// Debut de la capsule de gauche (pt, depuis le bord gauche) : juste apres les trois boutons ; au bord, a 12 pt
+    /// comme la capsule de droite, quand ils sont caches (plein ecran).
+    static func debut(_ feux: CadreFeux) -> CGFloat {
+        feux.droite > 0 ? feux.droite + ecartFeux : bordDroit
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: FenetrePieces.espacement) {
             // Chaque capsule garde la largeur de son contenu (`fixedSize`) : la bande vide prend la place qui
@@ -174,7 +261,7 @@ struct HautPieces: View {
             .animation(Apparition.animationDuConteneur(.top, reduire: reduire), value: sansPieces)
             .obstacle("colonne", moteur)
         }
-        .padding(.leading, feux.droite + Self.ecartFeux)
+        .padding(.leading, Self.debut(feux))
         .padding(.trailing, Self.bordDroit)
     }
 
@@ -326,7 +413,7 @@ struct FeuxDeCapture: View {
             Circle().fill(Color(.sRGB, red: 0x28 / 255, green: 0xC8 / 255, blue: 0x40 / 255))
         }
         .frame(width: 3 * 14 + 2 * 9, height: 14)
-        .offset(x: 9, y: CadreFeux.defaut.milieu - 7)
+        .offset(x: CadreFeux.defaut.droite - (3 * 14 + 2 * 9), y: CadreFeux.defaut.milieu - 7)
         .accessibilityHidden(true)
     }
 }

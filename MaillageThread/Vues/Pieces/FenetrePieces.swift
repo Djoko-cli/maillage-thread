@@ -17,7 +17,7 @@ struct FenetrePieces: View {
     @State private var moteur: MoteurPieces
     @State private var piecesChoisies: PiecesChoisies
     @State private var aRenommer: NoeudChoisi?
-    /// Les trois boutons de la fenetre, lus sur elle : la capsule de gauche commence apres eux.
+    /// Les trois boutons de la fenetre, lus sur elle (`SuiviFenetre`) : la capsule de gauche commence apres eux.
     @State private var feux = CadreFeux.defaut
     /// Marge du haut de la vue d'ensemble, d'apres la hauteur mesuree du haut de la fenetre.
     @State private var margeHautMesuree = FenetrePieces.margeHautInitiale
@@ -184,15 +184,20 @@ struct FenetrePieces: View {
             .ignoresSafeArea()
         }
         .frame(minWidth: Self.tailleMinimale.width, minHeight: Self.tailleMinimale.height)
+        // De l'air en haut (reverification du 02/10, comme dans Plans) : une barre d'outils vide, en style unifie, sans
+        // fond. Elle fait la barre de titre de 52 pt et abaisse les trois boutons ; les capsules, posees sur la scene
+        // et non dans la barre, se centrent sur eux (`SuiviFenetre`), leur haut a 11 pt du bord. SwiftUI la garde a
+        // chaque mise a jour de la fenetre. En plein ecran, elle ne parait qu'au survol du haut : sinon, sa fenetre
+        // couvrirait les capsules et prendrait leurs clics (releve dans l'app, en demo).
+        .toolbar { ToolbarSpacer(.flexible) }
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .windowToolbarFullScreenVisibility(.onHover)
         .environment(piecesChoisies)
         .environment(\.colorScheme, .dark)
-        .background(SondeFenetre { fenetre in
-            Self.assombrir(fenetre)
-            // Hors de la mise a jour de la vue en cours.
-            if let fenetre, let c = CadreFeux(fenetre: fenetre) {
-                Task { @MainActor in feux = c }
-            }
-        })
+        .background(SondeFenetre { Self.assombrir($0) })
+        // Les trois boutons, que suit la capsule de gauche, et le vrai plein ecran ; hors de la mise a jour de la vue en
+        // cours.
+        .background(SuiviFenetre { c in Task { @MainActor in feux = c } })
         .sheet(item: $aRenommer) { FeuilleRenommer(id: $0.id) }
         .onChange(of: reduire, initial: true) { _, r in moteur.reduire = r }
         // La fiche parait ou se ferme : la legende reprend son repli garde, et un « rouvert » anterieur ne vaut plus.

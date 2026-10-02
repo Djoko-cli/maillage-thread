@@ -35,7 +35,7 @@ struct FenetrePiecesTests {
     /// La vraie fenetre de la vue par pieces, hors ecran, de `taille` pt, sur la surveillance `s`, avec les
     /// preferences `p` (jamais celles de l'app) et « Reduire les animations » impose ; et son moteur (l'etat
     /// `moteur` de la vue). La vue couvre toute la fenetre, de `taille` pt comme dans l'app (`setContentSize`
-    /// ajouterait la barre de titre, 32 pt). A retirer par `fermer`.
+    /// ajouterait la barre de titre), faite comme celle de l'app (`sansBarreDeTitre`). A retirer par `fermer`.
     static func fenetre(_ s: Surveillance, taille: CGSize, preferences p: UserDefaults,
                         reduire: Bool = false) throws -> (NSWindow, MoteurPieces) {
         let vue = FenetrePieces(fichierPlaces: nil)
@@ -45,6 +45,7 @@ struct FenetrePiecesTests {
                                styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered,
                                defer: false)
         fenetre.isReleasedWhenClosed = false
+        Self.sansBarreDeTitre(fenetre)
         fenetre.contentView = NSHostingView(rootView: vue
             .environment(s)
             .environment(NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit))
@@ -673,13 +674,16 @@ struct FenetrePiecesTests {
         #expect(LigneNiveauVue.texte(.lisibles) == String(localized: "Tous les noms sont lisibles"))
     }
 
-    /// Une fenetre faite comme celle que pose `.windowStyle(.hiddenTitleBar)` (releve dans l'app, en demo, le
-    /// 02/10) : le contenu sous la barre de titre, la barre transparente, le titre masque. Les tests montent
-    /// leur fenetre a la main, sans la scene de l'app.
+    /// Une fenetre faite comme celle de l'app (releves dans l'app, en demo, les 02/10) : le contenu sous la barre de
+    /// titre, la barre transparente, le titre masque (`.windowStyle(.hiddenTitleBar)`) ; et une barre d'outils vide,
+    /// en style unifie, sans fond (`FenetrePieces.barreDOutilsInvisible`), qui abaisse les trois boutons. Les tests
+    /// montent leur fenetre a la main, sans la scene de l'app : SwiftUI n'y pose pas la barre d'outils.
     static func sansBarreDeTitre(_ fenetre: NSWindow) {
         fenetre.styleMask.insert(.fullSizeContentView)
         fenetre.titlebarAppearsTransparent = true
         fenetre.titleVisibility = .hidden
+        fenetre.toolbar = NSToolbar(identifier: "graphe-test")
+        fenetre.toolbarStyle = .unified
     }
 
     /// Sans barre de titre (polissage B, section 1) : la scene du graphe, et elle seule, porte le style
@@ -687,7 +691,9 @@ struct FenetrePiecesTests {
     /// garde a chaque mise a jour de la fenetre ; le crochet d'AppKit d'avant, pose une fois, etait defait par
     /// SwiftUI (diagnostic du 02/10 : barre opaque des 0,285 s). Le titre « Maillage Thread » reste celui de la
     /// fenetre (Mission Control, menu Fenetre). Les trois boutons restent : la capsule de gauche commence apres
-    /// eux, centree sur eux ; dans une fenetre ainsi faite, sous macOS 27, a leur place de `CadreFeux.defaut`.
+    /// eux, centree sur eux. La vue pose une barre d'outils vide et invisible (reverification du 02/10 : de l'air en
+    /// haut, comme dans Plans), qui abaisse les boutons : dans une fenetre ainsi faite, sous macOS 27, a leur place
+    /// de `CadreFeux.defaut`, le milieu a 26 pt du haut.
     @Test func fenetreSansBarreDeTitre() throws {
         let scenes = String(reflecting: MaillageThreadApp.Body.self)
         let graphe = try #require(scenes.range(of: "FenetrePieces"), "la scene du graphe")
@@ -706,6 +712,82 @@ struct FenetrePiecesTests {
         let agrandir = try #require(fenetre.standardWindowButton(.zoomButton))
         #expect(feux.droite == agrandir.convert(agrandir.bounds, to: nil).maxX)
         #expect(feux == CadreFeux.defaut)
+        #expect(CadreFeux.defaut == CadreFeux(droite: 79, milieu: 26), "les boutons abaisses : \(CadreFeux.defaut)")
+        // La vue pose la barre d'outils : vide, un espace souple seul, sans fond, et cachee en plein ecran (sauf au
+        // survol du haut) ; la scene la porte, et SwiftUI la garde.
+        let corps = String(reflecting: FenetrePieces.Body.self)
+        let barre = try #require(corps.range(of: "ToolbarSpacer"), "une barre d'outils vide")
+        #expect(corps[barre.upperBound...].components(separatedBy: "ToolbarAppearanceModifier").count - 1 == 2,
+                "sans fond, et au survol seulement en plein ecran")
+        #expect(corps.contains("SuiviFenetre"), "les boutons suivis, et le plein ecran")
+    }
+
+    /// De l'air en haut (reverification du 02/10) : dans la vraie fenetre, faite comme celle de l'app, la ligne des
+    /// capsules suit les trois boutons abaisses par la barre d'outils invisible : centree sur eux, a 26 pt du haut,
+    /// la capsule de gauche juste apres eux, le haut des capsules a 12 pt environ du bord. La marge du haut mesuree
+    /// suit la nouvelle hauteur : le bas de la colonne sous la capsule de gauche, et l'espacement.
+    @Test(.timeLimit(.minutes(1))) func deLAirEnHaut() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p)
+        defer { Self.fermer(fenetre) }
+        try await MoteurPiecesTests.attendre {
+            moteur.pret && moteur.cadresInterface["ligne"] != nil && moteur.cadresInterface["colonne"] != nil
+                && !moteur.margesEnRoute
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        let feux = try #require(CadreFeux(fenetre: fenetre))
+        #expect(feux == CadreFeux.defaut, "les boutons abaisses : \(feux)")
+        let ligne = try #require(moteur.cadresInterface["ligne"])
+        let colonne = try #require(moteur.cadresInterface["colonne"])
+        #expect(abs(ligne.midY - feux.milieu) < 0.5 && ligne.minY == 0, "la ligne centree sur les boutons : \(ligne)")
+        #expect(ligne.minX == feux.droite + HautPieces.ecartFeux, "la capsule de gauche apres les boutons : \(ligne)")
+        let capsule = NSHostingView(rootView: BarreOutils().capsuleDeVerre()
+            .environment(demo)
+            .environment(SondeMaillage(preferences: p, actif: false))
+            .environment(NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit))).fittingSize.height
+        let hautDesCapsules = feux.milieu - capsule / 2
+        #expect(hautDesCapsules >= 10 && hautDesCapsules <= 13, "le haut des capsules : \(hautDesCapsules) pt")
+        #expect(moteur.marges.haut == FenetrePieces.margeHaut(bas: colonne.maxY), "la marge du haut : \(moteur.marges.haut)")
+        #expect(moteur.marges.haut >= FenetrePieces.margeHautInitiale, "la marge suit la nouvelle hauteur")
+        #expect(FenetrePieces.margeHautInitiale == FenetrePieces.margeHaut(bas: 2 * 26 + FenetrePieces.espacement + 16))
+    }
+
+    /// Le vrai plein ecran (reverification du 02/10 : le bouton vert ne faisait qu'agrandir la fenetre) : SwiftUI pose
+    /// a la fenetre d'une app de la barre des menus `fullScreenAuxiliary` ou `fullScreenNone` (releve dans l'app, en
+    /// demo), et la vue le remplace par `fullScreenPrimary`, a chaque fois. En plein ecran, les trois boutons se
+    /// cachent : la capsule de gauche va au bord, a 12 pt comme celle de droite, et revient apres eux a la sortie.
+    @Test(.timeLimit(.minutes(1))) func pleinEcran() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p)
+        defer { Self.fermer(fenetre) }
+        try await MoteurPiecesTests.attendre { moteur.pret && moteur.cadresInterface["ligne"] != nil }
+        func primaire() -> Bool {
+            let c = fenetre.collectionBehavior
+            return c.contains(.fullScreenPrimary) && !c.contains(.fullScreenAuxiliary) && !c.contains(.fullScreenNone)
+        }
+        try await MoteurPiecesTests.attendre { primaire() }
+        #expect(primaire(), "le plein ecran : 0x\(String(fenetre.collectionBehavior.rawValue, radix: 16))")
+        // Ce que fait SwiftUI a chaque mise a jour des tailles de la fenetre : la vue le defait aussitot.
+        for autre in [NSWindow.CollectionBehavior.fullScreenAuxiliary, .fullScreenNone] {
+            fenetre.collectionBehavior = fenetre.collectionBehavior.subtracting(.fullScreenPrimary).union(autre)
+            try await MoteurPiecesTests.attendre { primaire() }
+            #expect(primaire(), "remis apres \(autre.rawValue) : 0x\(String(fenetre.collectionBehavior.rawValue, radix: 16))")
+        }
+        let apres = CadreFeux.defaut.droite + HautPieces.ecartFeux
+        #expect(moteur.cadresInterface["ligne"]?.minX == apres)
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: fenetre)
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["ligne"]?.minX == HautPieces.bordDroit }
+        #expect(moteur.cadresInterface["ligne"]?.minX == HautPieces.bordDroit, "en plein ecran, au bord")
+        #expect(moteur.cadresInterface["ligne"]?.midY == CadreFeux.defaut.milieu, "a la meme hauteur")
+        NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: fenetre)
+        try await MoteurPiecesTests.attendre { moteur.cadresInterface["ligne"]?.minX == apres }
+        #expect(moteur.cadresInterface["ligne"]?.minX == apres, "a la sortie, apres les boutons")
     }
 
     /// La bande du haut : un clic, glisse, deplace la fenetre ; un double-clic fait ce que dit le reglage
