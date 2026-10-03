@@ -227,9 +227,12 @@ struct DispositionPiecesTests {
     }
 
     /// La vue de reference du cout (polissage C, section 4) : chaque niveau est une rangee, son etage principal en
-    /// x = 0, ses zones a cote a droite, `esp` entre les bords. Un lien entre deux niveaux ne coute que 0,1 fois
-    /// son ecart horizontal : ni longueur, ni carte traversee, ni croisement ; un lien du meme niveau, entre un
-    /// etage et sa zone a cote, coute sa longueur dans cette vue.
+    /// x = 0, ses zones a cote a droite, l'une apres l'autre, `esp` entre les bords. Un lien entre deux niveaux ne
+    /// coute que 0,1 fois son ecart horizontal : ni longueur, ni carte traversee, ni croisement ; un lien du meme
+    /// niveau, entre un etage et sa zone a cote, coute 0,3 fois sa longueur dans cette vue. Le niveau de chaque piece
+    /// est ecrit a la main ; le decalage de chaque plateau et les extremites des liens sont recalcules a part, sans
+    /// `vueReference` : l'attendu ne suit pas une erreur du code juge. Des positions ou un lien du niveau coupe un
+    /// lien entre niveaux montrent que ce croisement ne coute rien.
     @Test func vueDeReference() throws {
         let pieces = ["Apple TV": "Salon", "HomePod": "Chambre", "E000000000000002": "Terrasse",
                       "E000000000000003": "Terrasse", "E000000000000004": "Salon", "E000000000000005": "Salon"]
@@ -243,26 +246,71 @@ struct DispositionPiecesTests {
         let k = DispositionPieces.Calcul(scene: s, cartes: c, fixees: [:])
         let d = DispositionPieces(scene: s, cartes: c)
         let v = k.vueReference(d.positions)
+        let salon = try #require(s.pieces.firstIndex { $0.nom == .maison("Salon") })
         let terrasse = try #require(s.pieces.firstIndex { $0.nom == .maison("Terrasse") })
         let chambre = try #require(s.pieces.firstIndex { $0.nom == .maison("Chambre") })
+        // Les niveaux, a la main : le Salon et la Terrasse (dans le Jardin, a cote du Rez-de-chaussee) au niveau 0, la
+        // Chambre au-dessus.
+        #expect(k.niveauEtage == [0, 0, 1])
+        #expect(k.niveau[salon] == 0 && k.niveau[terrasse] == 0 && k.niveau[chambre] == 1)
         let cx = d.rayons[0] + DispositionPieces.esp + d.rayons[1]
         #expect(abs(v.rects[terrasse].x0 - (cx + d.positions[terrasse].x - c[terrasse].largeur / 2)) < 1e-12)
         #expect(abs(v.rects[chambre].x0 - (d.positions[chambre].x - c[chambre].largeur / 2)) < 1e-12, "l'etage, en x = 0")
-        var attendu = v.rayons.reduce(0, +)
-        for (n, l) in k.liens.enumerated() {
-            let (p, q) = v.segments[n]
-            if k.niveau[l.pa] == k.niveau[l.pb] {
-                attendu += 0.3 * simd_length(q - p)
-                for (r, rect) in v.rects.enumerated() where r != l.pa && r != l.pb && k.niveau[r] == k.niveau[l.pa] {
-                    let t = DispositionPieces.dedans(p, q, rect)
-                    if t > 0 { attendu += 6 + 4 * t }
+        // Trois jeux de positions : la disposition ; puis la Chambre posee a la main en (1, 0), ou le lien
+        // Terrasse-Salon (du niveau 0) coupe le lien Terrasse-Chambre (entre niveaux) ; puis en (-12, -1), ou celui-ci
+        // coupe le lien Salon-Salon (E...05). Ces valeurs sont celles de cette maison : si la taille des cartes ou
+        // l'ordre des liens change, les deux `croise` echouent d'abord. Un croisement ne compte qu'entre deux liens du
+        // meme niveau : aucun de ceux-la ne compte.
+        var coupe = d.positions, coupe2 = d.positions
+        coupe[chambre] = SIMD2(1, 0)
+        coupe2[chambre] = SIMD2(-12, -1)
+        let vc = k.vueReference(coupe), vc2 = k.vueReference(coupe2)
+        #expect(DispositionPieces.croise(vc.segments[2].0, vc.segments[2].1, vc.segments[3].0, vc.segments[3].1),
+                "liens 2 et 3 : Terrasse-Salon coupe Terrasse-Chambre")
+        #expect(DispositionPieces.croise(vc2.segments[3].0, vc2.segments[3].1, vc2.segments[4].0, vc2.segments[4].1),
+                "liens 3 et 4 : Terrasse-Chambre coupe Salon-Salon")
+        let jeux = [("disposition", d.positions), ("Chambre en (1, 0)", coupe), ("Chambre en (-12, -1)", coupe2)]
+        for (nom, pos) in jeux {
+            let vue = k.vueReference(pos)
+            let rayons = (0..<s.etages.count).map { k.rayon(pos, $0) }
+            // Le x de chaque plateau : le Rez-de-chaussee en 0, le Jardin apres lui, l'Etage en 0 (autre niveau).
+            let cxs = [0.0, rayons[0] + DispositionPieces.esp + rayons[1], 0.0]
+            var attendu = rayons.reduce(0, +)
+            for (n, l) in k.liens.enumerated() {
+                let p = SIMD2(cxs[k.etage[l.pa]], 0.0) + pos[l.pa] + l.la
+                let q = SIMD2(cxs[k.etage[l.pb]], 0.0) + pos[l.pb] + l.lb
+                #expect(vue.segments[n].0 == p && vue.segments[n].1 == q, "extremites du lien \(n), \(nom)")
+                if k.niveau[l.pa] == k.niveau[l.pb] {
+                    attendu += 0.3 * simd_length(q - p)
+                    for (r, rect) in vue.rects.enumerated() where r != l.pa && r != l.pb && k.niveau[r] == k.niveau[l.pa] {
+                        let t = DispositionPieces.dedans(p, q, rect)
+                        if t > 0 { attendu += 6 + 4 * t }
+                    }
+                } else {
+                    attendu += 0.1 * simd_length(p - q)
                 }
-            } else {
-                attendu += 0.1 * simd_length(p - q)
             }
+            #expect(abs(k.cout(pos) - attendu) < 1e-9, "cout, \(nom) : aucun croisement ne compte")
         }
-        #expect(abs(k.cout(d.positions) - attendu) < 1e-9, "aucun croisement dans cette petite maison")
         #expect(k.traversees(d.positions) == 0)
+        // Deux zones a cote du meme etage : la seconde vient apres la premiere, et non a sa place. Une quatrieme piece,
+        // « Abri » (le noeud E...05 : seul son rectangle sert ici), seule dans la zone « Cabane », a cote du
+        // Rez-de-chaussee, apres le Jardin.
+        let s2 = ScenePieces(graphe: try ScenePiecesTests.graphe(sonde: true), libelles: ScenePiecesTests.libelles,
+                             piecesNoeuds: pieces.merging(["E000000000000005": "Abri"]) { $1 },
+                             zones: zones + [ZoneMaison(nom: "Cabane", pieces: ["Abri"])], chefs: ["Apple TV"],
+                             piecesMaison: true,
+                             aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée", dehors: true),
+                                     "zone:Cabane": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée")])
+        #expect(s2.etages.map(\.id) == ["zone:Rez-de-chaussée", "zone:Jardin", "zone:Cabane", "zone:Étage"])
+        let c2 = CartesPieces.cartes(s2, largeurs: [:])
+        let d2 = DispositionPieces(scene: s2, cartes: c2)
+        let v2 = DispositionPieces.Calcul(scene: s2, cartes: c2, fixees: [:]).vueReference(d2.positions)
+        let abri = try #require(s2.pieces.firstIndex { $0.nom == .maison("Abri") })
+        let cxJardin = d2.rayons[0] + DispositionPieces.esp + d2.rayons[1]
+        let cxCabane = cxJardin + d2.rayons[1] + DispositionPieces.esp + d2.rayons[2]
+        #expect(abs(v2.rects[abri].x0 - (cxCabane + d2.positions[abri].x - c2[abri].largeur / 2)) < 1e-12,
+                "la Cabane, apres le Jardin")
     }
 
     /// Longueur traversee (Liang-Barsky) et croisements stricts.
