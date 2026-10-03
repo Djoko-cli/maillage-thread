@@ -239,6 +239,8 @@ On les écarte alors sur l'axe où la pénétration est la plus faible, de moiti
 
 ### 4.4 Étages en 2D et en 3D
 
+> **Polissage C (03/10) :** cette section est remplacée par les sections 2 (3D) et 3 (2D) de `2026-10-03-maillage-thread-polissage-c-design.md` : niveaux partagés, zones dans ou hors de la maison, 2D en grille par défaut. Le coût de la disposition (section 4.3) y change aussi (section 4), et l'isolement s'étend aux étages (section 5).
+
 - **Centre des plateaux en 2D :** côte à côte sur x, dans l'ordre des étages. Deux plateaux voisins sont séparés de `ESP` entre leurs bords. La même règle s'étend à N étages.
 - **En 3D :** tous centrés sur x = z = 0, empilés sur y avec un pas `ETAGE = 1,5 × RMAX`, où `RMAX` est le plus grand rayon de plateau.
 - **Hauteur des blocs :** `h(u) = 0,04 + 2,4·u`, où `u` va de 0 (2D) à 1 (3D).

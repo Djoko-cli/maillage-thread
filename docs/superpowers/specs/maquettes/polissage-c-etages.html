@@ -1,0 +1,1084 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Maquette du sous-projet C (etages), v4 : la v3 avec Option + glisser a 0,7 fois la vitesse du pointeur, une
+     forme de fenetre simulee (Navigateur, Carree, Ordinaire, Large ; ?fenetre=carree|ordinaire|large) et un envol 2D/3D
+     qui part de la pose exacte de la camera.
+     v3 : la v2 avec une grille qui attend une vraie taille, Option + glisser
+     (deplacer la vue en 3D) et une piece qui remonte d'ou l'on vient.
+     v2 : la v1 (copie de la reference v13, validee par Djoko le 30/09/2026)
+     avec les retours de Djoko : grille en place affichee, clic sur le disque d'un etage, placement de chaque zone
+     dans la maison ou hors de la maison (clic droit), marge sous la barre, aide en bas a droite.
+     Maison et noms inventes. Ouvrir dans un navigateur : three.js vient de unpkg.
+     Parametre de test : ?plateaux=1, 2 ou 3 ne garde que les premiers plateaux de la rangee (4 par defaut).
+     Parametres de relecture : ?vue=3d, ?jardin=a (zones a cote dans la maison) ou b (hors de la maison, le depart),
+     ?rot=0, ?rangee=1, ?etage=N. -->
+<h2>C — étages, v4</h2>
+<p class="subtitle">Base v3 : ⌥ + glisser va moins vite, la barre simule la forme de la fenêtre de l'app pour voir la grille changer, et l'envol entre 2D et 3D part de la pose exacte de la caméra.</p>
+
+<style>
+#vue3d{position:fixed;inset:0;z-index:50;overflow:hidden;background:#02030e;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+#cadre{position:absolute;inset:0;overflow:hidden;background:radial-gradient(circle 900px at 30% 35%,#1f3b8a 0%,#0f1729 50%,#030517 100%)}
+#cadre.forme{box-sizing:border-box;border:1px solid rgba(255,255,255,.18);border-radius:10px}
+#vue3d canvas{display:block}
+#traits{position:absolute;inset:0;pointer-events:none}
+#etiquettes{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.etq{position:absolute;left:0;top:0;white-space:nowrap;visibility:hidden;will-change:transform}
+.etq-noeud{font-size:11px;line-height:15px;color:rgba(230,230,230,.95);background:rgba(6,10,26,.72);padding:0 5px;border-radius:4px}
+.etq-noeud.routeur{font-size:12px;line-height:16px}
+.etq-noeud.fort{color:#fff;font-weight:600}
+.etq-piece{font-size:12px;line-height:16px;color:#eef3ff;background:rgba(14,22,48,.78);padding:1px 7px;border-radius:6px;border:1px solid rgba(255,255,255,.15)}
+.etq-piece i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.etq-piece small{font-size:11px;color:#9fb0d0;margin-left:6px}
+.etq-etage{font-size:12px;color:rgba(59,130,245,.95)}
+.etq-etage.survol{text-decoration:underline}
+.etq-maison{font-size:13px;color:rgba(230,230,230,.9);text-shadow:0 1px 3px #000}
+.etq-ailleurs{font-size:11px;line-height:15px;color:#b8c4dc;background:rgba(6,10,26,.78);padding:0 5px;border-radius:4px;border:1px dashed rgba(184,196,220,.5)}
+.barre{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:max-content;display:flex;gap:14px;z-index:3}
+.barre .groupe{display:flex;gap:6px}
+.barre button{font:13px -apple-system,system-ui,sans-serif;padding:4px 12px;border-radius:7px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(230,230,230,.9);cursor:pointer}
+.barre button.actif{background:rgba(59,130,245,.35);border-color:rgba(97,166,250,.6)}
+.barre button.inactif{opacity:.38;cursor:default}
+#etat-grille{position:absolute;top:44px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11px;line-height:15px;color:rgba(180,190,210,.85);pointer-events:none;z-index:3}
+#fil{position:absolute;left:16px;top:50px;font-size:13px;color:rgba(230,230,230,.9);z-index:3}
+#fil a{color:#61a6fa;cursor:pointer}
+#niveau{position:absolute;left:16px;bottom:14px;max-width:calc(100% - 480px);font-size:11px;line-height:15px;color:rgba(180,190,210,.85);pointer-events:none;z-index:3}
+#aide{position:absolute;right:16px;bottom:14px;text-align:right;white-space:nowrap;font-size:11px;line-height:15px;color:rgba(180,190,210,.6);pointer-events:none;z-index:3}
+#fiche{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:4;min-width:240px;max-width:min(420px,60%);padding:10px 34px 10px 14px;border-radius:14px;background:rgba(40,48,72,.55);-webkit-backdrop-filter:blur(14px) saturate(160%);backdrop-filter:blur(14px) saturate(160%);border:.5px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 8px 24px rgba(0,0,0,.4);color:rgba(255,255,255,.92);font-size:11px;line-height:16px}
+#fiche h4{margin:0 0 2px;font-size:13.5px;font-weight:600}
+#fiche .gris{color:rgba(255,255,255,.6)}
+#fiche .x{position:absolute;top:9px;right:10px;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.12);cursor:pointer}
+.menu{position:absolute;z-index:20;min-width:210px;padding:5px;border-radius:9px;background:rgba(32,36,52,.94);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);border:.5px solid rgba(255,255,255,.2);box-shadow:0 12px 32px rgba(0,0,0,.5);font:13px -apple-system,system-ui,sans-serif;color:rgba(236,239,246,.95);user-select:none;-webkit-user-select:none}
+.menu .art{position:relative;display:flex;align-items:center;padding:3px 10px 3px 24px;border-radius:5px;white-space:nowrap;cursor:default}
+.menu .art:hover{background:rgba(59,130,245,.9);color:#fff}
+.menu .art.gris{color:rgba(236,239,246,.32)}
+.menu .art.gris:hover{background:none;color:rgba(236,239,246,.32)}
+.menu .coche{position:absolute;left:9px}
+.menu .fleche{margin-left:auto;padding-left:22px;font-size:10px;opacity:.75}
+.menu .sep{height:1px;margin:5px 9px;background:rgba(255,255,255,.13)}
+.menu .titre{padding:2px 10px 4px;font-size:11px;font-weight:600;color:rgba(236,239,246,.5)}
+.menu .sous{display:none;top:-6px;left:100%}
+.menu.a-gauche .sous{left:auto;right:100%}
+.menu .art:hover > .sous{display:block}
+</style>
+
+<div id="vue3d">
+  <div id="cadre">
+  <svg id="traits" width="100%" height="100%"><path fill="none" stroke="rgba(230,236,250,.45)" stroke-width="1"/></svg>
+  <div id="etiquettes"></div>
+  <div id="etat-grille"></div>
+  <div id="fil"></div><div id="niveau"></div>
+  <div id="aide"><div>Clic sur un étage, son nom ou son disque : l'isoler</div><div>Échap ou clic à côté : remonter d'un cran · ⌥ + glisser : déplacer la vue (3D)</div><div>Clic droit sur un étage : son niveau · double-clic sur le fond : vue d'ensemble</div></div>
+  <div id="fiche" hidden></div>
+  <div id="menu" class="menu" hidden></div>
+  </div>
+  <div class="barre">
+    <span class="groupe"><button id="b-2d">2D</button><button id="b-3d">3D</button><button id="e-rotation">Rotation lente</button></span>
+    <span class="groupe"><button id="d-grille">Grille</button><button id="d-rangee">Rangée</button></span>
+    <span class="groupe" title="Forme de la fenêtre de l'app, simulée dans l'onglet"><button id="f-nav">Navigateur</button><button id="f-carree">Carrée</button><button id="f-ordinaire">Ordinaire</button><button id="f-large">Large</button></span>
+  </div>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+
+// onglet : toute la page ; hote : le cadre de la vue (tout l'onglet, ou une fenêtre simulée). W, H : ceux du cadre.
+const onglet = document.getElementById('vue3d'), hote = document.getElementById('cadre');
+let W = hote.clientWidth, H = hote.clientHeight, ASPECT = W / H;
+const rendu = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+rendu.setPixelRatio(window.devicePixelRatio); rendu.setSize(W, H); rendu.setClearColor(0x000000, 0);
+hote.insertBefore(rendu.domElement, hote.firstChild);
+const scene = new THREE.Scene();
+scene.add(new THREE.AmbientLight(0xffffff, 2.2));
+const lum = new THREE.DirectionalLight(0xffffff, 1.6); lum.position.set(-10, 30, 14); scene.add(lum);
+const camera = new THREE.PerspectiveCamera(2, ASPECT, 0.5, 60000);
+const controles = new OrbitControls(camera, rendu.domElement);
+controles.enableDamping = true; controles.autoRotateSpeed = 0.5; controles.screenSpacePanning = false; controles.zoomToCursor = true;
+controles.mouseButtons.RIGHT = null;                       // le clic droit ouvre le menu d'un étage
+const couche = document.getElementById('etiquettes'), traits = document.querySelector('#traits path');
+const filEl = document.getElementById('fil'), niveauEl = document.getElementById('niveau'), etatEl = document.getElementById('etat-grille');
+const barreEl = document.querySelector('.barre'), ficheEl = document.getElementById('fiche'), menuEl = document.getElementById('menu');
+const interface_ = [barreEl, ...hote.querySelectorAll('#etat-grille, #fil, #niveau, #aide, #fiche')];
+
+// ---------- Données de démonstration ----------
+const E = { rotation: true, grille: true, fenetre: 'nav' };
+const PX = 24;                                            // pixels par unité à l'échelle naturelle
+const GAP = 80 / PX, LAB = 28 / PX, MARGE = 56 / PX, ESP = 140 / PX, H3 = 2.4, BANDE = 34 / PX;   // BANDE : nom d'étage, en 2D
+// Zones : un plateau chacune, de numéro e fixe. Leur placement change avec le menu du clic droit : NIV liste les
+// niveaux du bas vers le haut, chacun avec sa zone principale (empilée sur l'axe en 3D) puis ses zones « à côté » ;
+// dehors : les zones à côté sorties de la maison. L'ordre de la rangée et de la grille suit NIV.
+// Paramètre de test : ?plateaux=N ne garde que les N premiers plateaux de l'ordre de départ.
+const TOUS_NIVEAUX = [['Rez-de-chaussée', 'Jardin'], ['Étage'], ['Combles']];
+const N_PLATEAUX = Math.max(1, Math.round(+new URLSearchParams(location.search).get('plateaux')) || 99);
+const gardees = new Set(TOUS_NIVEAUX.flat().slice(0, N_PLATEAUX));
+const NIVEAUX = TOUS_NIVEAUX.map(noms => noms.filter(nom => gardees.has(nom))).filter(noms => noms.length);
+const zones = NIVEAUX.flat().map(nom => ({ nom }));
+const numZone = Object.fromEntries(zones.map((Z, e) => [Z.nom, e]));
+// État de départ : les zones à côté sont hors de la maison (ici le Jardin, au niveau du Rez-de-chaussée).
+const NIV0 = NIVEAUX.map(noms => noms.map(nom => numZone[nom])), DEHORS0 = NIV0.flatMap(l => l.slice(1));
+let NIV = NIV0.map(l => l.slice()), dehors = new Set(DEHORS0), lieu = lieux();
+function lieux() {                     // pour chaque zone : niveau, rang dans le niveau (0 : principale), sortie
+  const L = [];
+  NIV.forEach((l, niveau) => l.forEach((e, rang) => { L[e] = { niveau, rang, principale: rang === 0, dehors: rang > 0 && dehors.has(e) }; }));
+  return L;
+}
+const pieces = [
+  { nom: 'Salon', z: 'Rez-de-chaussée', c: 0x3b82f5 }, { nom: 'Cuisine', z: 'Rez-de-chaussée', c: 0x22c55e }, { nom: 'Entrée', z: 'Rez-de-chaussée', c: 0xf59e0b }, { nom: 'Buanderie', z: 'Rez-de-chaussée', c: 0x94a3b8 },
+  { nom: 'Chambre', z: 'Étage', c: 0xa855f7 }, { nom: 'Bureau', z: 'Étage', c: 0x06b6d4 }, { nom: 'Salle de bain', z: 'Étage', c: 0xec4899 }, { nom: 'Chambre d\'amis', z: 'Étage', c: 0x818cf8 },
+  { nom: 'Grenier', z: 'Combles', c: 0xeab308 }, { nom: 'Salle de jeux', z: 'Combles', c: 0xef4444 },
+  { nom: 'Terrasse', z: 'Jardin', c: 0x84cc16 }, { nom: 'Abri', z: 'Jardin', c: 0x14b8a6 }
+].filter(pc => gardees.has(pc.z)).map(pc => ({ ...pc, e: numZone[pc.z] }));           // e : numéro du plateau
+const noeuds = [
+  { id: 'chef', nom: 'Prise cafetière 👑', p: 'Salon', rt: 1 }, { id: 'hpg', nom: 'HomePod Palier', p: 'Salon', rt: 1, apple: 1 },
+  { id: 'atv', nom: 'Apple TV 4K', p: 'Salon', rt: 1, apple: 1, grand: 1 }, { id: 'hpd', nom: 'HomePod Avant', p: 'Salon', rt: 1, apple: 1 },
+  { id: 'surv', nom: 'Prise du salon', p: 'Salon', rt: 1 }, { id: 'pres', nom: 'Détecteur de passage nord ☾', p: 'Salon', par: 'hpg' },
+  { id: 'amp', nom: 'Ampoule entrée', p: 'Entrée', par: 'surv' }, { id: 'porte', nom: 'Porte d\'entrée ☾', p: 'Entrée', par: 'surv' },
+  { id: 'cui', nom: 'Store banne serre ☾', p: 'Cuisine', par: 'surv' }, { id: 'fri', nom: 'Prise frigo', p: 'Cuisine', par: 'surv' },
+  { id: 'lav', nom: 'Prise lave-linge', p: 'Buanderie', par: 'surv' },
+  { id: 'hmc', nom: 'HomePod mini chambre', p: 'Chambre', rt: 1, apple: 1 }, { id: 'lit1', nom: 'Détecteur de passage lingerie sud ☾', p: 'Chambre', par: 'hpg' },
+  { id: 'lit2', nom: 'Détecteur de passage galerie est ☾', p: 'Chambre', par: 'hpg' }, { id: 'lampe', nom: 'Lampe de chevet', p: 'Chambre', par: 'hmc' },
+  { id: 'hmb', nom: 'HomePod mini bureau', p: 'Bureau', rt: 1, apple: 1 }, { id: 'prb', nom: 'Prise bureau', p: 'Bureau', par: 'hmb' },
+  { id: 'sdb', nom: 'Détecteur de passage nord ☾', p: 'Salle de bain', par: 'hmb' }, { id: 'ami', nom: 'Lampe chambre d\'amis', p: 'Chambre d\'amis', par: 'hmc' },
+  { id: 'ami2', nom: 'Capteur fenêtre ☾', p: 'Chambre d\'amis', par: 'hmc' },
+  { id: 'pco', nom: 'Prise console', p: 'Salle de jeux', rt: 1 }, { id: 'arc', nom: 'Lampe arcade', p: 'Salle de jeux', par: 'pco' },
+  { id: 'luc', nom: 'Capteur de lucarne ☾', p: 'Salle de jeux', par: 'pco' },
+  { id: 'fum', nom: 'Détecteur de chaleur allée ☾', p: 'Grenier', par: 'pco' }, { id: 'hum', nom: 'Capteur d\'humidité ☾', p: 'Grenier', par: 'hmc' },
+  { id: 'prt', nom: 'Prise terrasse', p: 'Terrasse', rt: 1 }, { id: 'met', nom: 'Station météo ☾', p: 'Terrasse', par: 'hpd' },
+  { id: 'van', nom: 'Vanne d\'arrosage ☾', p: 'Abri', par: 'prt' }, { id: 'pab', nom: 'Capteur porte de l\'abri ☾', p: 'Abri', par: 'prt' }
+].filter(n => pieces.some(pc => pc.nom === n.p));
+for (const n of noeuds) if (n.par && !noeuds.some(m => m.id === n.par)) delete n.par;
+const QUALITE = { 3: 0x4ade80, 2: 0xfacc15, 1: 0xf97316 };
+const liensRouteurs = [['chef', 'hpg', 2], ['chef', 'atv', 2], ['chef', 'surv', 3], ['surv', 'hpd', 2], ['hmc', 'hmb', 1], ['atv', 'hmc', 1],
+  ['pco', 'hmc', 2], ['pco', 'hmb', 1], ['prt', 'surv', 2], ['prt', 'hpd', 3]].filter(([a, b]) => noeuds.some(n => n.id === a) && noeuds.some(n => n.id === b));
+const liensEnfants = noeuds.filter(n => n.par).map(n => [n.id, n.par]);
+const parId = Object.fromEntries(noeuds.map(n => [n.id, n]));
+const pieceDe = nom => pieces.find(p => p.nom === nom);
+
+// ---------- Étiquettes : chacune cherche une place libre autour de son ancre ----------
+const etiquettes = [];
+const DIRS = [[0, -1], [1, 0], [-1, 0], [0, 1], [1, -1], [-1, -1], [1, 1], [-1, 1]], ANNEAUX = [3, 14, 28, 44, 62];
+const ordre = (...ds) => ANNEAUX.flatMap((a, i) => ds.map(k => ({ dx: DIRS[k][0], dy: DIRS[k][1], a, i })));
+const C_APPAREIL = ordre(1, 2, 0, 3, 4, 6, 5, 7), C_PIECE = ordre(0, 3, 1, 2, 4, 5, 6, 7), C_FIXE = ordre(0, 3, 1, 2);
+function etiquette(classe, html, prio, cands, fixe = false) {
+  const el = document.createElement('div'); el.className = 'etq ' + classe; el.innerHTML = html; couche.appendChild(el);
+  const L = { el, prio, cands, fixe, ancre: () => null, voulu: true, vu: false, k: -1, w: el.offsetWidth, h: el.offsetHeight };
+  etiquettes.push(L); return L;
+}
+function oublierEtiquette(L) { L.el.remove(); etiquettes.splice(etiquettes.indexOf(L), 1); }
+const tmpE = new THREE.Vector3(), tmpP = new THREE.Vector3();
+function ecran(v) { tmpE.copy(v).project(camera); return tmpE.z > -1 && tmpE.z < 1 ? { x: (tmpE.x + 1) / 2 * W, y: (1 - tmpE.y) / 2 * H } : null; }
+function rectCand(L, A, c) {
+  const cx = (A.x0 + A.x1) / 2, cy = (A.y0 + A.y1) / 2, m = c.dx && c.dy ? c.a * 0.7 : c.a;
+  const x = c.dx > 0 ? A.x1 + m : c.dx < 0 ? A.x0 - m - L.w : cx - L.w / 2;
+  const y = c.dy > 0 ? A.y1 + m : c.dy < 0 ? A.y0 - m - L.h : cy - L.h / 2;
+  return { x0: x, y0: y, x1: x + L.w, y1: y + L.h };
+}
+const chevauche = (r, q) => r.x0 - 2 < q.x1 && q.x0 - 2 < r.x1 && r.y0 - 2 < q.y1 && q.y0 - 2 < r.y1;
+const dansCadre = r => r.x0 >= 4 && r.y0 >= 4 && r.x1 <= W - 4 && r.y1 <= H - 4;
+function cacher(L) { if (L.vu) { L.el.style.visibility = 'hidden'; L.vu = false; } L.k = -1; }
+function placer(pris) {
+  let d = '';
+  for (const L of etiquettes.slice().sort((a, b) => a.prio - b.prio)) {
+    const A = L.voulu ? L.ancre() : null;
+    if (!A) { cacher(L); continue; }
+    const libre = k => { const r = rectCand(L, A, L.cands[k]); return dansCadre(r) && (L.fixe || !pris.some(q => chevauche(r, q))) ? r : null; };
+    let k = -1, R = null;
+    for (let j = 0; j < L.cands.length; j++) { R = libre(j); if (R) { k = j; break; } }
+    if (k < 0) { cacher(L); continue; }
+    // Stabilité : l'étiquette garde sa place tant qu'elle est libre, et ne rejoint la place préférée
+    // qu'après l'avoir trouvée libre une demi-seconde (pas de clignotement pendant la rotation).
+    if (L.k >= 0 && L.k !== k) {
+      const R2 = libre(L.k);
+      if (R2 && (L.envie = (L.envie || 0) + 1) < 30) { k = L.k; R = R2; } else L.envie = 0;
+    } else L.envie = 0;
+    L.k = k; L.r = R; pris.push(R);                          // L.r : sa place à l'écran, pour les clics
+    L.el.style.transform = 'translate(' + R.x0.toFixed(1) + 'px,' + R.y0.toFixed(1) + 'px)';
+    if (!L.vu) { L.el.style.visibility = 'visible'; L.vu = true; }
+    const op = L.pale ? '0.45' : ''; if (L.el.style.opacity !== op) L.el.style.opacity = op;
+    if (L.cands[k].i > 0) {
+      const cx = (R.x0 + R.x1) / 2, cy = (R.y0 + R.y1) / 2, px = Math.min(Math.max(cx, A.x0), A.x1), py = Math.min(Math.max(cy, A.y0), A.y1);
+      d += 'M' + px.toFixed(1) + ' ' + py.toFixed(1) + 'L' + Math.min(Math.max(px, R.x0), R.x1).toFixed(1) + ' ' + Math.min(Math.max(py, R.y0), R.y1).toFixed(1);
+    }
+  }
+  traits.setAttribute('d', d);
+}
+function hautEcran() { return new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion); }
+function hautHorizontal() { const v = hautEcran(); v.y = 0; return v.lengthSq() < 1e-8 ? new THREE.Vector3(0, 0, -1) : v.normalize(); }
+
+// ---------- Cartes de pièce : une ligne par appareil, pastille puis nom ----------
+for (const n of noeuds) {
+  n.rpx = n.grand ? 15 : n.apple ? 13 : n.rt ? 8 : 7;
+  n.L = etiquette('etq-noeud' + (n.rt ? ' routeur' : ''), n.nom, n.id === 'chef' ? 5 : n.rt ? 6 : 7, C_APPAREIL);
+}
+const rang = n => n.id === 'chef' ? 0 : n.apple ? 1 : n.rt ? 2 : 3;
+function carte(membres) {
+  const lignes = membres.slice().sort((a, b) => rang(a) - rang(b) || a.nom.localeCompare(b.nom)).map(n => ({ n, h: Math.max(30, 2 * n.rpx + 12) }));
+  let meilleur = null;
+  for (let cols = 1; cols <= Math.min(3, lignes.length); cols++) {
+    const parCol = Math.ceil(lignes.length / cols);
+    if ((cols - 1) * parCol >= lignes.length) continue;
+    const colonnes = Array.from({ length: cols }, (_, c) => lignes.slice(c * parCol, (c + 1) * parCol));
+    const larg = colonnes.map(col => 14 + 2 * Math.max(...col.map(l => l.n.rpx)) + 9 + Math.max(...col.map(l => l.n.L.w)) + 14);
+    const haut = Math.max(...colonnes.map(col => col.reduce((s, l) => s + l.h, 0))) + 16, w = larg.reduce((a, b) => a + b, 0);
+    const score = Math.abs(Math.log(w / haut / 1.3));
+    if (!meilleur || score < meilleur.score) meilleur = { score, colonnes, larg, w, haut };
+  }
+  let x0 = 0;
+  meilleur.colonnes.forEach((col, c) => {
+    const rmax = Math.max(...col.map(l => l.n.rpx)); let y = 8;
+    for (const l of col) { l.n.local = new THREE.Vector3((x0 + 14 + rmax - meilleur.w / 2) / PX, 0, (y + l.h / 2 - meilleur.haut / 2) / PX); y += l.h; }
+    x0 += meilleur.larg[c];
+  });
+  return { w: meilleur.w / PX, d: meilleur.haut / PX };
+}
+
+// ---------- Disposition des pièces : organique, puis réglée pour que les liens évitent les autres pièces ----------
+const tousLiens = [...liensRouteurs.map(([a, b]) => [a, b]), ...liensEnfants];
+const etageDe = Object.fromEntries(pieces.map(p => [p.nom, p.e]));        // plateau de chaque pièce
+const voisinage = new Set();
+for (const [a, b] of tousLiens) { const pa = parId[a].p, pb = parId[b].p; if (pa !== pb) { voisinage.add(pa + '|' + pb); voisinage.add(pb + '|' + pa); } }
+const lie = (a, b) => voisinage.has(a + '|' + b);
+const etages = zones.map((Z, e) => ({ e, liste: pieces.filter(p => p.e === e).map(pc => { const membres = noeuds.filter(n => n.p === pc.nom); return { pc, membres, ...carte(membres), pos: new THREE.Vector2() }; }).sort((a, b) => b.w * b.d - a.w * a.d) }));
+const parPiece = Object.fromEntries(etages.flatMap(E => E.liste.map(it => [it.pc.nom, it])));
+function separer(liste, attirer) {
+  for (let i = 0; i < liste.length; i++) for (let j = i + 1; j < liste.length; j++) {
+    const A = liste[i], B = liste[j], dx = B.pos.x - A.pos.x, dz = B.pos.y - A.pos.y;
+    const px = (A.w + B.w) / 2 + GAP - Math.abs(dx), pz = (A.d + B.d) / 2 + GAP + LAB - Math.abs(dz);
+    if (px > 0 && pz > 0) {
+      if (px < pz) { const m = (Math.sign(dx) || 1) * px / 2; A.pos.x -= m; B.pos.x += m; }
+      else { const m = (Math.sign(dz) || 1) * pz / 2; A.pos.y -= m; B.pos.y += m; }
+    } else if (attirer && lie(A.pc.nom, B.pc.nom)) { A.pos.x += dx * 0.003; A.pos.y += dz * 0.003; B.pos.x -= dx * 0.003; B.pos.y -= dz * 0.003; }
+  }
+}
+function recentrer(liste) {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const A of liste) { x0 = Math.min(x0, A.pos.x - A.w / 2); x1 = Math.max(x1, A.pos.x + A.w / 2); z0 = Math.min(z0, A.pos.y - A.d / 2 - LAB); z1 = Math.max(z1, A.pos.y + A.d / 2); }
+  for (const A of liste) { A.pos.x -= (x0 + x1) / 2; A.pos.y -= (z0 + z1) / 2; }
+}
+function rayonDe(liste) {
+  let r = 0;
+  for (const A of liste) for (const sx of [-1, 1]) for (const sz of [-1, 1]) r = Math.max(r, Math.hypot(A.pos.x + sx * A.w / 2, A.pos.y + (sz < 0 ? -A.d / 2 - LAB : A.d / 2)));
+  return r + MARGE;
+}
+function tasser(liste, tours, f) { for (let k = 0; k < tours; k++) { separer(liste, true); for (const A of liste) A.pos.multiplyScalar(f); } for (let k = 0; k < 60; k++) separer(liste, false); recentrer(liste); }
+// Longueur d'un segment à l'intérieur d'un rectangle (découpage de Liang-Barsky).
+function dedans(p, q, r) {
+  let t0 = 0, t1 = 1; const dx = q[0] - p[0], dz = q[1] - p[1];
+  for (const [pp, qq] of [[-dx, p[0] - r.x0], [dx, r.x1 - p[0]], [-dz, p[1] - r.z0], [dz, r.z1 - p[1]]]) {
+    if (pp === 0) { if (qq < 0) return 0; continue; }
+    const u = qq / pp;
+    if (pp < 0) { if (u > t1) return 0; if (u > t0) t0 = u; } else { if (u < t0) return 0; if (u < t1) t1 = u; }
+  }
+  return t1 > t0 ? (t1 - t0) * Math.hypot(dx, dz) : 0;
+}
+const sens = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+const croise = (p, q, r, w) => sens(p, q, r) * sens(p, q, w) < 0 && sens(r, w, p) * sens(r, w, q) < 0;
+// Coût d'une disposition, vue en 2D avec les plateaux en rangée (la grille dépend de la fenêtre) : un lien qui passe
+// sur une autre pièce (ou sur son nom) coûte cher, un croisement de liens un peu moins ; s'y ajoutent la longueur
+// des liens, la taille des plateaux et, pour la 3D, l'écart à l'horizontale des liens entre étages empilés. Calculé
+// une fois, sur le placement de départ : les pièces ne se réarrangent pas quand le menu déplace une zone.
+function cout() {
+  const R = etages.map(E => rayonDe(E.liste)), cx = [];
+  R.forEach((r, e) => cx.push(e ? cx[e - 1] + R[e - 1] + ESP + r : r));
+  const p2 = n => { const it = parPiece[n.p]; return [cx[etageDe[n.p]] + it.pos.x + n.local.x, it.pos.y + n.local.z]; };
+  const rects = pieces.map(pc => { const it = parPiece[pc.nom], x = cx[pc.e] + it.pos.x, z = it.pos.y; return { nom: pc.nom, x0: x - it.w / 2, x1: x + it.w / 2, z0: z - it.d / 2 - LAB, z1: z + it.d / 2 }; });
+  const segs = tousLiens.map(([a, b]) => ({ A: parId[a], B: parId[b], p: p2(parId[a]), q: p2(parId[b]) }));
+  let c = R.reduce((a, b) => a + b, 0);
+  for (const g of segs) {
+    c += 0.3 * Math.hypot(g.q[0] - g.p[0], g.q[1] - g.p[1]);
+    for (const r of rects) if (r.nom !== g.A.p && r.nom !== g.B.p) { const l = dedans(g.p, g.q, r); if (l > 0) c += 6 + 4 * l; }
+    const za = etageDe[g.A.p], zb = etageDe[g.B.p];
+    if (za !== zb && lieu[za].principale && lieu[zb].principale) { const a = parPiece[g.A.p], b = parPiece[g.B.p]; c += 0.1 * Math.hypot(a.pos.x + g.A.local.x - b.pos.x - g.B.local.x, a.pos.y + g.A.local.z - b.pos.y - g.B.local.z); }
+  }
+  for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+    const S = segs[i], T = segs[j];
+    if (S.A === T.A || S.A === T.B || S.B === T.A || S.B === T.B) continue;
+    if (croise(S.p, S.q, T.p, T.q)) c += 5;
+  }
+  return c;
+}
+// Descente : à chaque tour, on essaie d'échanger deux pièces d'un même plateau, ou de tourner ou retourner un plateau,
+// et on garde le meilleur coup ; six départs différents, on retient la meilleure disposition.
+const ORIENT = [p => p, p => p.set(-p.y, p.x), p => p.set(-p.x, -p.y), p => p.set(p.y, -p.x), p => p.set(-p.x, p.y), p => p.set(p.y, p.x), p => p.set(p.x, -p.y), p => p.set(-p.y, -p.x)];
+const etat = () => etages.map(E => E.liste.map(A => A.pos.clone()));
+const remettre = st => etages.forEach((E, i) => E.liste.forEach((A, j) => A.pos.copy(st[i][j])));
+let retenu = null, coutRetenu = Infinity, coutDepart = Infinity;
+for (let essai = 0; essai < 6; essai++) {
+  for (const E of etages) { E.liste.forEach((A, i) => { const a = essai * 1.047 + i * 2.39996, r = Math.sqrt(i + 0.5) * 6; A.pos.set(Math.cos(a) * r, Math.sin(a) * r); }); tasser(E.liste, 900, 0.996); }
+  let courant = etat(), c = cout();
+  if (essai === 0) coutDepart = c;
+  for (let tour = 0; tour < 25; tour++) {
+    let mieux = null, cm = c;
+    for (const E of etages) {
+      const n = E.liste.length, coups = [];
+      for (let o = 1; o < 8; o++) coups.push(() => { for (const A of E.liste) ORIENT[o](A.pos); });
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) coups.push(() => { const x = E.liste[i].pos.clone(); E.liste[i].pos.copy(E.liste[j].pos); E.liste[j].pos.copy(x); });
+      for (const coup of coups) { remettre(courant); coup(); tasser(E.liste, 200, 0.998); const cc = cout(); if (cc < cm - 1e-6) { cm = cc; mieux = etat(); } }
+    }
+    if (!mieux) break;
+    courant = mieux; c = cm;
+  }
+  if (c < coutRetenu) { coutRetenu = c; retenu = courant; }
+}
+remettre(retenu);
+window.coutsDisposition = { depart: coutDepart, retenu: coutRetenu };
+const plateaux = etages.map(E => ({ e: E.e, rayon: rayonDe(E.liste), liste: E.liste }));
+const rayon = e => plateaux[e].rayon;
+const hauteur = u => 0.04 + H3 * u;
+
+// ---------- 3D : placement des zones, selon NIV et dehors ----------
+// Zones principales empilées sur l'axe x = z = 0, au pas ETAGE = 1,5 × RMAX (RMAX : zones principales et zones à côté
+// dans la maison). À côté, dans la maison : la première à droite (+x) de la zone principale, la deuxième à gauche
+// (−x), puis en alternant, de plus en plus loin, ESP entre les bords, à la hauteur du niveau. La sphère englobe les
+// zones de la maison : centre de leur boîte en x et en y (z = 0), rayon hypot(demi-largeur + 0,8, demi-hauteur + 1,4)
+// + 0,4. Hors de la maison : à la hauteur du niveau, à R + ESP + r du centre de la sphère, mesuré à plat, la première
+// vers +x, puis −x, +z, −z, et de plus en plus loin ; elles tournent avec la maison. Le cadrage de la vue d'ensemble
+// couvre la sphère et leur orbite.
+function geometrie() {
+  const dans = zones.map((Z, e) => e).filter(e => !lieu[e].dehors);
+  const RMAX = Math.max(...dans.map(rayon)), ETAGE = 1.5 * RMAX, hh = ((NIV.length - 1) * ETAGE + H3) / 2;
+  const pos = zones.map((Z, e) => new THREE.Vector3(0, lieu[e].niveau * ETAGE, 0));
+  for (const l of NIV) {
+    const bord = [rayon(l[0]), rayon(l[0])];                                  // bord déjà occupé à droite, à gauche
+    l.slice(1).filter(e => !lieu[e].dehors).forEach((e, k) => {
+      const c = k % 2, x = bord[c] + ESP + rayon(e); pos[e].x = c ? -x : x; bord[c] = x + rayon(e);
+    });
+  }
+  const x0 = Math.min(...dans.map(e => pos[e].x - rayon(e))), x1 = Math.max(...dans.map(e => pos[e].x + rayon(e)));
+  const centre = new THREE.Vector3((x0 + x1) / 2, hh, 0), R = Math.hypot((x1 - x0) / 2 + 0.8, hh + 1.4) + 0.4;
+  const DIR = [[1, 0], [-1, 0], [0, 1], [0, -1]], loin = [R, R, R, R];        // distance déjà occupée dans chaque direction
+  let cadre = R, k = 0;
+  for (const e of NIV.flat()) if (lieu[e].dehors) {
+    const d = k++ % 4, dist = loin[d] + ESP + rayon(e);
+    pos[e].x = centre.x + DIR[d][0] * dist; pos[e].z = DIR[d][1] * dist; loin[d] = dist + rayon(e); cadre = Math.max(cadre, loin[d]);
+  }
+  return { pos, centre, R, cadre, RMAX, ETAGE };
+}
+
+// ---------- 2D : grille selon la forme de la fenêtre, ou rangée ----------
+// La grille se remplit depuis la rangée du bas, de gauche à droite, dans l'ordre de NIV (niveaux du bas vers le haut ;
+// dans un niveau, la zone principale puis ses zones à côté, dans la maison ou non) ; la rangée du haut, incomplète, est
+// centrée. Largeur de colonne : le plus grand diamètre de la colonne ; hauteur de rangée : le plus grand diamètre de la
+// rangée, plus la bande des noms d'étage ; ESP entre les cases. Chaque plateau est centré dans sa case (bande
+// comprise). La rangée de v13 est la grille d'une seule rangée.
+function disposition(c) {
+  const ordre = NIV.flat(), n = ordre.length, nr = Math.ceil(n / c), D = e => 2 * rayon(e);
+  const rangees = Array.from({ length: nr }, (_, i) => ordre.slice(i * c, (i + 1) * c));   // rangée 0 : en bas
+  const larg = Array.from({ length: c }, (_, k) => Math.max(...rangees.map(r => k < r.length ? D(r[k]) : 0)));
+  const haut = rangees.map(r => Math.max(...r.map(D)) + BANDE);
+  const L = larg.reduce((a, b) => a + b, 0) + (c - 1) * ESP, Ht = haut.reduce((a, b) => a + b, 0) + (nr - 1) * ESP;
+  const centres = zones.map(() => new THREE.Vector3());
+  let bas = Ht / 2;                                                        // en 2D, le haut de l'écran est vers −z
+  rangees.forEach((r, i) => {
+    let x = -(r.reduce((s, e, k) => s + larg[k], 0) + (r.length - 1) * ESP) / 2;
+    r.forEach((e, k) => { centres[e].set(x + larg[k] / 2, 0, bas - haut[i] + BANDE + (haut[i] - BANDE) / 2); x += larg[k] + ESP; });
+    bas -= haut[i] + ESP;
+  });
+  return { c, centres, L, H: Ht, boite: { x0: -L / 2, x1: L / 2, z0: -Ht / 2, z1: Ht / 2 } };
+}
+// Colonnes (de 1 à n) : parmi les grilles à moins de 10 % de la plus grande échelle de la vue d'ensemble, pour la
+// forme de la fenêtre, celle qui a le moins de cases vides, puis le moins de rangées. Au redimensionnement
+// (`hysteresis`), la grille en place reste tant qu'elle est à moins de 5 % de ce choix. En rangée, toujours n.
+function colonnesVoulues(w = W, h = H, hysteresis = false) {
+  const n = zones.length;
+  if (!E.grille) return n;
+  if (w <= 1 || h <= 1) return dispo ? dispo.c : n;        // taille nulle (onglet caché) : rien ne se choisit
+  const cands = [];
+  for (let c = 1; c <= n; c++) {
+    const d = disposition(c), nr = Math.ceil(n / c);
+    cands.push({ c, ech: Math.min(w / d.L, h / d.H), nr, vides: c * nr - n });
+  }
+  const best = Math.max(...cands.map(k => k.ech));
+  const choix = cands.filter(k => k.ech >= 0.9 * best).sort((a, b) => a.vides - b.vides || a.nr - b.nr)[0];
+  const enPlace = hysteresis && dispo ? cands.find(k => k.c === dispo.c) : null;
+  return enPlace && enPlace.ech >= 0.95 * choix.ech ? enPlace.c : choix.c;
+}
+
+// ---------- Places courantes : disposition 2D (glissement de 0,4 s), placement 3D (glissement de 0,9 s) ----------
+const place2D = zones.map(() => new THREE.Vector3()), BOITE = { x0: 0, x1: 0, z0: 0, z1: 0 };
+let dispo = null, glis = null;
+function viser(c, aussitot = false, duree = 400) {  // nouvelle disposition (colonnes ou ordre) : les plateaux glissent vers leur case
+  const cle = NIV.flat().join();
+  if (dispo && dispo.c === c && dispo.cle === cle) return;
+  const d = disposition(c); d.cle = cle;
+  if (dispo && !aussitot) glis = { p0: place2D.map(p => p.clone()), b0: { ...BOITE }, debut: performance.now(), duree };
+  else { glis = null; d.centres.forEach((p, e) => place2D[e].copy(p)); Object.assign(BOITE, d.boite); }
+  dispo = d;
+}
+function glisser(ts) {
+  if (!glis) return false;
+  const r = Math.min(1, (ts - glis.debut) / glis.duree), k = ease(r);
+  dispo.centres.forEach((p, e) => place2D[e].lerpVectors(glis.p0[e], p, k));
+  for (const cle in BOITE) BOITE[cle] = glis.b0[cle] + (dispo.boite[cle] - glis.b0[cle]) * k;
+  if (r >= 1) { glis = null; bornes(); }
+  return true;
+}
+const pos3D = zones.map(() => new THREE.Vector3()), CENTRE3 = new THREE.Vector3();
+let R3 = 0, RCADRE = 0, geoVers = geometrie(), geoDe = null, geoDebut = 0;
+function geometrieCourante(k) {        // de la place de départ (geoDe) à la place visée (geoVers) ; k : avancée adoucie
+  const de = geoDe || geoVers, mix = (a, b) => a + (b - a) * k;
+  pos3D.forEach((p, e) => p.lerpVectors(de.pos[e], geoVers.pos[e], k));
+  CENTRE3.lerpVectors(de.centre, geoVers.centre, k); R3 = mix(de.R, geoVers.R); RCADRE = mix(de.cadre, geoVers.cadre);
+}
+function regeometrer() {               // après un changement du menu : les plateaux, la sphère et le cadrage glissent
+  geoDe = { pos: pos3D.map(p => p.clone()), centre: CENTRE3.clone(), R: R3, cadre: RCADRE };
+  geoVers = geometrie(); geoDebut = performance.now();
+}
+geometrieCourante(1); viser(colonnesVoulues());
+const centre2D = e => place2D[e].clone(), centre3D = e => pos3D[e].clone();
+const centre = (e, u) => centre2D(e).lerp(centre3D(e), u);
+// Cadrage 2D d'une boîte (vue d'ensemble, étage isolé) : elle tient entre la barre, avec 60 px libres dessous, et le
+// bas de la fenêtre, avec les marges de v13 sur les côtés ; elle est centrée dans cet espace.
+function cadre2D(B) {
+  const T = Math.max(0, barreEl.getBoundingClientRect().bottom - hote.getBoundingClientRect().top) + 60, bas = 0.045 * H;
+  const L = B.x1 - B.x0, Hb = B.z1 - B.z0, place = Math.max(0.3 * H, H - T - bas);
+  const s = Math.min(W / (1.05 * L), place / Hb), libre = place - Hb * s;           // s : pixels par unité
+  return { cible: new THREE.Vector3((B.x0 + B.x1) / 2, 0, B.z0 + (H / 2 - T - libre / 2) / s), vue: H / s };
+}
+const vue2D = () => cadre2D(BOITE).vue;
+const vue3D = () => 2.4 * RCADRE * Math.max(1, 1 / ASPECT);
+const vue = u => vue2D() + (vue3D() - vue2D()) * u;
+const vuePlateau = e => Math.max((2 * rayon(e) + BANDE) * 1.1, 2 * rayon(e) * 1.05 / ASPECT);     // un plateau seul, en 3D
+const cibleEnsemble = u => cadre2D(BOITE).cible.lerp(CENTRE3, u);
+
+// ---------- Étages : plateaux ronds, comme la zone de partition de l'app ----------
+const texZone = (() => {
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); gr.addColorStop(0, 'rgba(59,130,245,0.26)'); gr.addColorStop(1, 'rgba(59,130,245,0.08)');
+  g.fillStyle = gr; g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.fill();
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx;
+})();
+const disques = plateaux.map(({ e, rayon }) => {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.CircleGeometry(rayon, 160), new THREE.MeshBasicMaterial({ map: texZone, transparent: true, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.renderOrder = 0; m.userData.e = e;
+  const bord = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 200 }, (_, i) => new THREE.Vector3(rayon * Math.cos(i / 200 * Math.PI * 2), 0.01, rayon * Math.sin(i / 200 * Math.PI * 2)))),
+    new THREE.LineBasicMaterial({ color: 0x3b82f5, transparent: true, opacity: 0.45, depthWrite: false })); bord.renderOrder = 0;
+  const L = etiquette('etq-etage', zones[e].nom, 1, C_FIXE, true);
+  L.ancre = () => { const p = ecran(g.position.clone().addScaledVector(hautHorizontal(), rayon)); return p ? { x0: p.x, y0: p.y, x1: p.x, y1: p.y } : null; };
+  // ek : part propre au plateau dans l'isolement d'étage (comme fk pour les pièces) ; ve : son voile du moment ;
+  // survol : disque cliquable sous le pointeur, un peu éclairci.
+  g.add(m, bord); g.userData = { e, m, bord, L, rayon, ek: 0, ve: 1, survol: false }; scene.add(g); return g;
+});
+
+// ---------- Pièces : cartes en 2D, blocs de verre en 3D ----------
+const blocs = {};
+function rectBloc(b) {
+  const { w, d, f } = b.userData, h = hauteur(t); let r = null;
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const p = ecran(b.localToWorld(tmpP.set(sx * w * f / 2, sy * h / 2, sz * d * f / 2)));
+    if (!p) return null;
+    r = r ? { x0: Math.min(r.x0, p.x), y0: Math.min(r.y0, p.y), x1: Math.max(r.x1, p.x), y1: Math.max(r.y1, p.y) } : { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+  }
+  return r;
+}
+for (const P of plateaux) for (const it of P.liste) {
+  const { pc, membres, w, d } = it, g = new THREE.Group(), hex = pc.c.toString(16).padStart(6, '0');
+  const verre = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: pc.c, transparent: true, opacity: 0.13, depthWrite: false })); verre.renderOrder = 1;
+  const aretes = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: pc.c, transparent: true, opacity: 0.75, depthWrite: false })); aretes.renderOrder = 1;
+  g.add(verre, aretes);
+  const L = etiquette('etq-piece', '<i style="background:#' + hex + '"></i>' + pc.nom + '<small>' + membres.length + (membres.length > 1 ? ' appareils' : ' appareil') + '</small>', 4, C_PIECE);
+  L.el.style.borderColor = '#' + hex + '99'; L.ancre = () => rectBloc(g);
+  g.userData = { pc, w, d, verre, aretes, L, local: new THREE.Vector3(it.pos.x, 0, it.pos.y), membres, f: 1, fk: 0, voile: 1 };
+  verre.userData.bloc = g; blocs[pc.nom] = g; scene.add(g);
+}
+
+// ---------- La maison : sphère à liseré, sans reflets, visible en 3D ----------
+const maison = new THREE.Group(); scene.add(maison);                         // centre et rayon suivent le placement (poser)
+const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.ShaderMaterial({
+  uniforms: { force: { value: 0 } },
+  vertexShader: 'varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+  fragmentShader: 'uniform float force; varying vec3 vN; varying vec3 vV; void main() { float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.5); gl_FragColor = vec4(0.55, 0.72, 1.0, force * (0.02 + 0.45 * f)); }',
+  transparent: true, depthWrite: false
+})); sphere.renderOrder = 5;
+const equateur = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 193 }, (_, i) => new THREE.Vector3(Math.cos(i / 192 * Math.PI * 2), 0, Math.sin(i / 192 * Math.PI * 2)))),
+  new THREE.LineBasicMaterial({ color: 0xdfe6f3, transparent: true, opacity: 0, depthWrite: false }));
+maison.add(sphere, equateur);
+const Lm = etiquette('etq-maison', '⌂ Maison', 0, ordre(3, 1, 2, 0));
+Lm.ancre = () => { const p = ecran(CENTRE3.clone().addScaledVector(hautEcran(), sphere.scale.x)); return p ? { x0: p.x, y0: p.y, x1: p.x, y1: p.y } : null; };
+
+// ---------- Appareils : sphères brillantes (routeurs Apple) et pastilles vertes, comme l'app ----------
+const textures = {};
+function textureNoeud(hex, brillant) {
+  const cle = hex + (brillant ? 'b' : ''); if (textures[cle]) return textures[cle];
+  const S = 128, G = brillant ? 2.1 : 1.8, rd = S / 2 / G, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), rgb = [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255].join(',');
+  const halo = g.createRadialGradient(S / 2, S / 2, rd * 0.7, S / 2, S / 2, S / 2);
+  halo.addColorStop(0, 'rgba(' + rgb + ',0.6)'); halo.addColorStop(1, 'rgba(' + rgb + ',0)');
+  g.fillStyle = halo; g.fillRect(0, 0, S, S);
+  g.beginPath(); g.arc(S / 2, S / 2, rd, 0, Math.PI * 2);
+  if (brillant) { const o = S / 2 - rd / 3, gr = g.createRadialGradient(o, o, 0, o, o, rd * 1.3); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgb(' + rgb + ')'); g.fillStyle = gr; }
+  else g.fillStyle = 'rgb(' + rgb + ')';
+  g.fill();
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return (textures[cle] = { tx, G });
+}
+for (const n of noeuds) {
+  const { tx, G } = textureNoeud(n.apple ? 0x61a6fa : 0x4ade80, !!n.apple);
+  const o = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthWrite: false })); o.renderOrder = 4;
+  o.userData = { n, G, rpx: n.rpx }; n.o = o; scene.add(o);
+  n.L.ancre = () => { const p = ecran(o.position), r = o.userData.rpx; return p ? { x0: p.x - r, y0: p.y - r, x1: p.x + r, y1: p.y + r } : null; };
+}
+function pxParUnite(p) { tmpP.copy(p).applyMatrix4(camera.matrixWorldInverse); return H / (2 * Math.max(0.01, -tmpP.z) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))); }
+function tailles() {
+  // Comme l'app : les pastilles suivent le zoom sans enfler au-delà de 1,1 fois leur taille naturelle.
+  for (const n of noeuds) {
+    const o = n.o, ppu = pxParUnite(o.position), r = Math.min(n.rpx * 1.1, Math.max(3, n.rpx * ppu / PX));
+    o.userData.rpx = r; o.scale.setScalar(2 * r / ppu * o.userData.G);
+  }
+}
+
+// ---------- Liens radio ----------
+const liensR = liensRouteurs.map(([a, b, q]) => {
+  const mat = new LineMaterial({ color: QUALITE[q], linewidth: 2, transparent: true, opacity: 0.95, depthWrite: false }); mat.resolution.set(W, H);
+  const geo = new LineGeometry(); geo.setPositions([0, 0, 0, 0, 0, 1]);
+  const obj = new Line2(geo, mat); obj.renderOrder = 3; obj.frustumCulled = false; scene.add(obj); return { a, b, obj };
+});
+const liensE = liensEnfants.map(([a, b]) => {
+  const obj = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28, depthWrite: false }));
+  obj.renderOrder = 2; obj.frustumCulled = false; scene.add(obj); return { a, b, obj };
+});
+
+// ---------- État, placement de la scène ----------
+let t = 0, depart = 0, cible = 0, debut = 0, focus = null, s = 0, sDepart = 0, sCible = 0, sDebut = 0, survol = null, vol = null, niveauZoom = 2;
+// focusEtage : plateau isolé, ou plateau de la pièce isolée (le cran « étage » du fil) ; se : isolement d'étage,
+// comme s pour les pièces. Au retour, focusEtage reste posé jusqu'à la fin du fondu, comme focus dans v13.
+// ensemble : la caméra est à la vue d'ensemble (sans zoom ni isolement) ; grilleAVoir : la fenêtre a changé de forme ;
+// choisi : l'appareil dont la fiche est ouverte.
+let focusEtage = null, se = 0, seDepart = 0, seCible = 0, seDebut = 0, ensemble = true, grilleAVoir = false, choisi = null;
+const ailleurs = [];
+function ease(x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; }
+const isolee = () => focus && sCible === 1;
+const etageVise = () => seCible === 1 ? focusEtage : null;                 // l'étage du fil
+const sansIsolement = () => !focus && focusEtage === null;
+// s : isolement de pièce (voile les étages et les autres pièces) ; fk : part propre à chaque pièce, qui passe
+// en douceur d'une pièce à l'autre quand on clique directement sur une autre pièce. se et ek : la même chose pour
+// les étages ; un étage isolé voile les autres plateaux jusqu'à 15 %, avec leurs pièces, leurs pastilles, leurs liens.
+// Une pièce isolée laisse les disques à 15 % : ils restent cliquables.
+function poser() {
+  const h = hauteur(t), es = ease(s), fo = 1 - es, ee = ease(se);
+  const rs = R3 * (0.8 + 0.2 * t); maison.position.copy(CENTRE3); sphere.scale.setScalar(rs); equateur.scale.setScalar(rs);
+  sphere.material.uniforms.force.value = t * t * fo * (1 - ee); equateur.material.opacity = 0.18 * t * fo * (1 - ee);
+  for (const dq of disques) {
+    const u = dq.userData; u.ve = 1 - 0.85 * ee * (1 - ease(u.ek));
+    const vis = Math.min(u.ve, 1 - 0.85 * es), plus = u.survol ? 1.5 : 1;
+    dq.position.copy(centre(u.e, t)); u.m.material.opacity = vis * plus; u.bord.material.opacity = Math.min(1, 0.45 * vis * plus);
+  }
+  for (const nom in blocs) {
+    const b = blocs[nom], u = b.userData, fk = ease(u.fk), ve = disques[u.pc.e].userData.ve;
+    u.voile = 1 - es * (1 - fk); u.f = 1 + 0.3 * fk;
+    b.position.copy(centre(u.pc.e, t)).add(u.local); b.position.y += h / 2 + 0.02; b.updateMatrixWorld(true);
+    u.verre.scale.set(u.w * u.f, h, u.d * u.f); u.aretes.scale.set(u.w * u.f, h, u.d * u.f);
+    const vis = Math.min(1 - 0.85 * (1 - u.voile), ve);
+    u.verre.material.opacity = vis * (0.13 + 0.05 * t); u.aretes.material.opacity = vis * 0.75;
+  }
+  for (const n of noeuds) {
+    const b = blocs[n.p], loc = n.local.clone().multiplyScalar(b.userData.f); loc.y = -h / 2 + 0.08 + 0.5 * h * t;
+    n.o.position.copy(b.localToWorld(loc)); n.o.material.opacity = Math.min(1 - 0.8 * (1 - b.userData.voile), disques[b.userData.pc.e].userData.ve);
+  }
+  const poids = l => {
+    const A = blocs[parId[l.a].p].userData, B = blocs[parId[l.b].p].userData;
+    return Math.min(1 - 0.85 * (1 - Math.max(A.voile, B.voile)), Math.max(disques[A.pc.e].userData.ve, disques[B.pc.e].userData.ve));
+  };
+  for (const l of liensR) {
+    const A = parId[l.a].o.position, B = parId[l.b].o.position, buf = l.obj.geometry.attributes.instanceStart.data;
+    buf.array.set([A.x, A.y, A.z, B.x, B.y, B.z]); buf.needsUpdate = true;
+    l.obj.material.opacity = 0.95 * poids(l);
+  }
+  for (const l of liensE) {
+    const A = parId[l.a].o.position, B = parId[l.b].o.position, p = l.obj.geometry.attributes.position;
+    p.setXYZ(0, A.x, A.y, A.z); p.setXYZ(1, B.x, B.y, B.z); p.needsUpdate = true;
+    l.obj.material.opacity = survol === l.a || survol === l.b ? 0.85 : 0.28 * poids(l);
+  }
+  for (const a of ailleurs) {
+    const e = a.userData.enfant.o.position, dir = a.userData.parent.o.position.clone().sub(focus.position).setY(0);
+    if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
+    a.position.copy(focus.position).addScaledVector(dir.normalize(), Math.max(focus.userData.w, focus.userData.d) * focus.userData.f / 2 + 2.6); a.position.y = e.y;
+    const p = a.userData.fil.geometry.attributes.position; p.setXYZ(0, e.x, e.y, e.z); p.setXYZ(1, a.position.x, a.position.y, a.position.z); p.needsUpdate = true;
+    const fk = ease(focus.userData.fk); a.userData.fil.computeLineDistances(); a.userData.fil.material.opacity = 0.8 * fk; a.userData.L.voulu = fk > 0.6;
+  }
+}
+// Zoom sémantique : très loin, les pièces seules ; à mi-distance, les routeurs en plus ; de près, tous les noms
+// (ceux qui ne trouvent pas de place attendent un zoom plus proche). Étage isolé : seulement ses appareils.
+function details() {
+  const k = pxParUnite(controles.target) / PX; niveauZoom = k < 0.42 ? 0 : k < 0.6 ? 1 : 2;
+  const fo = 1 - ease(s);
+  for (const n of noeuds) {
+    const u = blocs[n.p].userData, ve = disques[u.pc.e].userData.ve, vise = survol === n.id || choisi === n.id;
+    n.L.voulu = vise || (isolee() ? u.fk > 0.6 : !focus && ve > 0.6 && (niveauZoom === 2 || (niveauZoom === 1 && !!n.rt)));
+    n.L.prio = vise ? 2 : n.id === 'chef' ? 5 : n.rt ? 6 : 7;
+    n.L.el.classList.toggle('fort', vise);
+  }
+  for (const nom in blocs) { const u = blocs[nom].userData, pale = (!!focus && u.fk < 0.5 && s > 0.3) || disques[u.pc.e].userData.ve < 0.6; u.L.voulu = true; u.L.pale = pale; u.L.prio = pale ? 8 : 4; }
+  for (const dq of disques) { const u = dq.userData; u.L.voulu = true; u.L.pale = u.ve < 0.6 || (!!focus && s > 0.3); }   // pâles, mais cliquables
+  Lm.voulu = fo > 0.5 && ease(se) < 0.5 && t > 0.4;
+}
+function niveau() {
+  const caches = noeuds.filter(n => n.L.voulu && !n.L.vu).length, ze = etageVise();
+  const txt = isolee() ? 'Pièce isolée : ' + focus.userData.pc.nom + ' · clic sur une autre pièce pour y aller'
+    : ze !== null ? 'Étage isolé : ' + zones[ze].nom + ' · clic sur une pièce ou un autre étage pour y aller'
+    : niveauZoom === 0 ? 'Vue d\'ensemble : les pièces · molette pour voir les noms'
+    : niveauZoom === 1 ? 'Mi-distance : les pièces et les routeurs'
+    : caches ? caches + (caches > 1 ? ' noms masqués' : ' nom masqué') + ' faute de place : rapprochez-vous (molette)' : 'Tous les noms sont lisibles';
+  if (niveauEl.textContent !== txt) niveauEl.textContent = txt;
+}
+// Ligne d'état sous la barre, en 2D : la grille en place, « Grille : 2 × 2 », « Grille : 3 + 1 » ou « Rangée ».
+function etatGrille() {
+  if (cible === 1) return '';
+  if (!E.grille) return 'Rangée';
+  const n = zones.length, c = dispo.c, nr = Math.ceil(n / c), der = n - (nr - 1) * c;
+  if (nr === 1 && n > 1) return 'Grille : ' + c + ' × 1 (fenêtre large : la grille est une rangée ; rétrécis-la pour voir la grille)';
+  return 'Grille : ' + (der === c ? c + ' × ' + nr : Array(nr - 1).fill(c).concat(der).join(' + '));
+}
+function obstacles() {
+  const r = [], h0 = hote.getBoundingClientRect();
+  for (const n of noeuds) if (n.o.material.opacity > 0.5) { const p = ecran(n.o.position), q = n.o.userData.rpx; if (p) r.push({ x0: p.x - q, y0: p.y - q, x1: p.x + q, y1: p.y + q }); }
+  for (const el of interface_) { const b = el.getBoundingClientRect(); if (b.width) r.push({ x0: b.left - h0.left - 4, y0: b.top - h0.top - 4, x1: b.right - h0.left + 4, y1: b.bottom - h0.top + 4 }); }
+  return r;
+}
+
+// ---------- Caméra, isolement (pièce, étage), bascule ----------
+function distancePour(v) { return v / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))); }
+// Fil : « Maison › Étage › Chambre » ; les crans au-dessus du dernier sont cliquables. Maison d'un seul plateau :
+// pas de cran « étage ».
+function fil() {
+  const ze = etageVise(), nom = isolee() ? focus.userData.pc.nom : null;
+  filEl.textContent = '';
+  if (ze === null && !nom) { filEl.textContent = 'Maison'; return; }
+  const lien = (txt, f) => { const a = document.createElement('a'); a.textContent = txt; a.onclick = f; return a; };
+  filEl.append(lien('Maison', versMaison));
+  if (ze !== null) filEl.append(' › ', nom ? lien(zones[ze].nom, () => allerEtage(ze)) : zones[ze].nom);
+  if (nom) filEl.append(' › ', nom);
+}
+// Un vol part de la caméra du moment ; son arrivée est recalculée à chaque image (fin()), pour suivre ce qu'il vise
+// si la disposition 2D glisse ou si le placement 3D change en route.
+// Le vol commence à l'image suivante (debut nul) : sa première image est exactement la pose de départ.
+function volerVers(fin, duree) { vol = { p0: camera.position.clone(), c0: controles.target.clone(), fin, debut: null, duree }; }
+function viderAilleurs() { for (const a of ailleurs) { scene.remove(a, a.userData.fil); oublierEtiquette(a.userData.L); } ailleurs.length = 0; }
+function directionVue() { return t === 1 ? camera.position.clone().sub(controles.target).normalize() : new THREE.Vector3(0, 1, 0.0001); }
+function viserEtage(e) { focusEtage = e; if (seCible !== 1) { seDepart = se; seCible = 1; seDebut = performance.now(); } }
+// provenance : d'où vient la pièce isolée (null : la maison ; sinon l'étage isolé d'où on l'a ouverte). Passer à
+// une autre pièce la garde, sauf vers un autre étage : la provenance devient alors la maison.
+let provenance = null;
+function isoler(b) {
+  if (focus === b && sCible === 1) return;
+  if (!isolee()) provenance = etageVise();
+  else if (provenance !== null && provenance !== b.userData.pc.e) provenance = null;
+  viderAilleurs(); focus = b;
+  if (sCible !== 1) { sDepart = s; sCible = 1; sDebut = performance.now(); }
+  if (zones.length > 1) viserEtage(b.userData.pc.e);                        // le fil prend l'étage de la pièce
+  for (const n of b.userData.membres) if (n.par && parId[n.par].p !== n.p) {
+    const par = parId[n.par], g = new THREE.Object3D(), zp = etageDe[par.p], zb = b.userData.pc.e, np = lieu[zp].niveau, nb = lieu[zb].niveau;
+    const fleche = np === nb ? '↗ ' : np < nb ? '↓ ' : '↑ ';
+    const L = etiquette('etq-ailleurs', fleche + par.nom.replace(' 👑', '') + ' · ' + par.p + (zp === zb ? '' : ', ' + zones[zp].nom.toLowerCase()), 3, C_APPAREIL);
+    L.voulu = false; L.ancre = () => { const p = ecran(g.position); return p ? { x0: p.x - 3, y0: p.y - 3, x1: p.x + 3, y1: p.y + 3 } : null; };
+    const filL = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineDashedMaterial({ color: 0x4ade80, dashSize: 0.25, gapSize: 0.2, transparent: true, opacity: 0, depthWrite: false }));
+    filL.frustumCulled = false; g.userData = { enfant: n, parent: par, fil: filL, L }; scene.add(g, filL); ailleurs.push(g);
+  }
+  const dir = directionVue(), dist = distancePour(Math.max(b.userData.w / ASPECT, b.userData.d) * 1.3 * 1.8 + 6);
+  volerVers(() => ({ cib: b.position.clone(), pos: b.position.clone().addScaledVector(dir, dist) }), 1300);
+  controles.autoRotate = false; fil();
+}
+// Isoler un étage : vol de 1,3 s qui cadre son plateau. En 2D, vue de dessus, sous la barre comme la vue d'ensemble ;
+// en 3D, même azimut et même inclinaison, cible au centre du plateau, à sa hauteur. Depuis une pièce isolée, la pièce
+// rejoint son étage.
+function allerEtage(e) {
+  if (zones.length < 2 || t !== cible) return;
+  if (focus && sCible === 1) { sDepart = s; sCible = 0; sDebut = performance.now(); }
+  viserEtage(e);
+  const dq = disques[e], dir = directionVue();
+  volerVers(() => {
+    if (t === 0) { const c = dq.position, r = rayon(e), k = cadre2D({ x0: c.x - r, x1: c.x + r, z0: c.z - r - BANDE, z1: c.z + r }); return { cib: k.cible, pos: k.cible.clone().addScaledVector(dir, distancePour(k.vue)) }; }
+    const c = dq.position.clone(); return { cib: c, pos: c.clone().addScaledVector(dir, distancePour(vuePlateau(e))) };
+  }, 1300);
+  controles.autoRotate = false; fil();
+}
+// Retour à la maison : vue d'ensemble, depuis une pièce, un étage, ou un zoom (double-clic sur le fond).
+function versMaison() {
+  if (t !== cible) return;
+  if (focus && sCible === 1) { sDepart = s; sCible = 0; sDebut = performance.now(); }
+  if (seCible === 1) { seDepart = se; seCible = 0; seDebut = performance.now(); }
+  const dir = directionVue();
+  volerVers(() => { const c = cibleEnsemble(t); return { cib: c, pos: c.clone().addScaledVector(dir, distancePour(vue(t))) }; }, 1300);
+  controles.autoRotate = false; fil();
+}
+// Échap et clic à côté : remonter d'un cran. Une pièce revient d'où l'on vient : à son étage si on l'a ouverte depuis
+// l'étage isolé, à la maison si on l'a ouverte depuis la vue d'ensemble ; un étage revient à la maison.
+function remonter() {
+  if (t !== cible) return;
+  if (isolee()) { if (zones.length > 1 && provenance !== null) allerEtage(focus.userData.pc.e); else versMaison(); }
+  else if (etageVise() !== null) versMaison();
+}
+function reprendreRotation() { if (t === 1 && cible === 1 && !vol && sansIsolement()) controles.autoRotate = E.rotation; }
+function ancreCamera() { return focus ? focus.position.clone() : focusEtage !== null ? disques[focusEtage].position.clone() : cibleEnsemble(t); }
+// À la vue d'ensemble : même direction de vue, cible et distance du moment (fenêtre, grille, placement).
+function recadrer() {
+  const dir = camera.position.clone().sub(controles.target).normalize(), c = cibleEnsemble(t);
+  controles.target.copy(c); camera.position.copy(c).addScaledVector(dir, distancePour(vue(t)));
+}
+function aLEnsemble() {
+  if (focus || focusEtage !== null || vol || t !== cible) return false;
+  const d = distancePour(vue(t));
+  return controles.target.distanceTo(cibleEnsemble(t)) < 0.01 * d && Math.abs(camera.position.distanceTo(controles.target) - d) < 0.01 * d;
+}
+
+// ---------- Fiche d'appareil : comme celle de l'app, en plus simple ----------
+function ouvrirFiche(n) {
+  choisi = n.id; ficheEl.textContent = '';
+  const x = document.createElement('span'), titre = document.createElement('h4'), l1 = document.createElement('div'), l2 = document.createElement('div');
+  x.className = 'x'; x.textContent = '✕'; x.addEventListener('click', fermerFiche);
+  titre.textContent = n.nom; l1.className = l2.className = 'gris';
+  l1.textContent = (n.id === 'chef' ? 'Routeur, chef du réseau' : n.rt ? 'Routeur' : n.nom.includes('☾') ? 'Appareil endormi' : 'Appareil') + ' · ' + n.p + ', ' + zones[pieceDe(n.p).e].nom.toLowerCase();
+  l2.textContent = n.par ? 'Parent : ' + parId[n.par].nom.replace(' 👑', '') + ' · ' + parId[n.par].p
+    : 'Liens radio : ' + liensRouteurs.filter(l => l[0] === n.id || l[1] === n.id).length + ' · enfants : ' + noeuds.filter(m => m.par === n.id).length;
+  ficheEl.append(x, titre, l1, l2); ficheEl.hidden = false;
+}
+function fermerFiche() { choisi = null; ficheEl.hidden = true; }
+
+// ---------- Ce qui est sous le pointeur ----------
+// Priorité des clics : un appareil, puis une pièce (son bloc ou son nom), puis le nom d'un étage, puis le disque d'un
+// étage (le plus proche, en 3D), puis le fond.
+function surEtiquette(L, x, y) { return L.vu && L.r && x >= L.r.x0 && x <= L.r.x1 && y >= L.r.y0 && y <= L.r.y1; }
+function cibleSous(ev) {
+  pointer(ev);
+  const r = rendu.domElement.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  let h = ray.intersectObjects(noeuds.map(n => n.o))[0];
+  const n = h ? h.object.userData.n : noeuds.find(m => surEtiquette(m.L, x, y));
+  if (n) return { type: 'appareil', n };
+  h = ray.intersectObjects(verres())[0];
+  const b = h ? h.object.userData.bloc : Object.values(blocs).find(c => surEtiquette(c.userData.L, x, y));
+  if (b) return { type: 'piece', b };
+  const dq = disques.find(d => surEtiquette(d.userData.L, x, y));
+  if (dq) return { type: 'nom', e: dq.userData.e };
+  h = ray.intersectObjects(disques.map(d => d.userData.m))[0];
+  return h ? { type: 'disque', e: h.object.userData.e } : { type: 'fond' };
+}
+// Un disque est cliquable sauf celui de l'étage isolé (entre ses pièces, un clic ne fait rien). Maison d'un seul
+// plateau : seulement depuis une pièce isolée, pour remonter.
+function disqueCliquable(e) { return zones.length > 1 ? !!isolee() || etageVise() !== e : !!isolee(); }
+// Un clic, selon sa cible et l'état de la vue :
+// - vue d'ensemble : disque ou nom d'étage, isoler l'étage ; fond, fermer la fiche ;
+// - étage isolé : son propre disque, rien ; un autre disque ou un nom, y aller ; fond, remonter à la maison ;
+// - pièce isolée : disque ou nom de son étage, y remonter ; d'un autre étage, l'isoler ; fond, remonter à l'étage.
+function cliquer(c) {
+  if (c.type === 'appareil') return ouvrirFiche(c.n);
+  if (c.type === 'piece') { if (focus !== c.b || sCible !== 1) isoler(c.b); return; }
+  if (c.type === 'nom' || c.type === 'disque') {
+    if (zones.length < 2) { if (isolee()) versMaison(); return; }
+    if (c.type === 'disque' && etageVise() === c.e && !isolee()) return;
+    return allerEtage(c.e);
+  }
+  fermerFiche(); remonter();
+}
+function survoler(ev) {                // ev nul : le pointeur a quitté la vue
+  const c = ev && t === cible ? cibleSous(ev) : { type: 'fond' };
+  survol = c.type === 'appareil' ? c.n.id : null;
+  for (const dq of disques) {
+    const u = dq.userData;
+    u.survol = c.type === 'disque' && c.e === u.e && disqueCliquable(u.e);
+    u.L.el.classList.toggle('survol', c.type === 'nom' && c.e === u.e);
+  }
+  const main = c.type === 'appareil' || c.type === 'piece' || (c.type === 'nom' && (zones.length > 1 || !!isolee())) || (c.type === 'disque' && disqueCliquable(c.e));
+  if (ev) optionTenue = !!ev.altKey;
+  curseurBase = main ? 'pointer' : ''; curseur();
+}
+// Curseur : main fermée pendant ⌥ + glisser, main ouverte tant que ⌥ est tenue au-dessus de la vue en 3D.
+let curseurBase = '', optionTenue = false, dansVue = false, panEcran = null;
+function curseur() {
+  rendu.domElement.style.cursor = panEcran ? 'grabbing' : optionTenue && dansVue && t === 1 && cible === 1 ? 'grab' : curseurBase;
+}
+
+// ---------- Menu du clic droit : placement d'une zone, ou retour à l'état de départ sur le fond ----------
+const menuOuvert = () => !menuEl.hidden;
+function fermerMenu() { menuEl.hidden = true; menuEl.textContent = ''; }
+function remplirMenu(el, articles) {
+  for (const a of articles) {
+    const d = document.createElement('div');
+    if (a.sep) d.className = 'sep';
+    else if (a.titre) { d.className = 'titre'; d.textContent = a.titre; }
+    else {
+      d.className = 'art' + (a.gris ? ' gris' : '');
+      const coche = document.createElement('span'), txt = document.createElement('span');
+      coche.className = 'coche'; coche.textContent = a.coche ? '✓' : ''; txt.textContent = a.texte; d.append(coche, txt);
+      if (a.sous) {
+        const f = document.createElement('span'); f.className = 'fleche'; f.textContent = '▶'; d.append(f);
+        if (!a.gris) { const s = document.createElement('div'); s.className = 'menu sous'; remplirMenu(s, a.sous); d.append(s); }
+      } else if (!a.gris) d.addEventListener('click', ev => { ev.stopPropagation(); fermerMenu(); a.action(); });
+    }
+    el.append(d);
+  }
+}
+function ouvrirMenu(x, y, articles) {
+  fermerMenu(); remplirMenu(menuEl, articles); menuEl.hidden = false;
+  const w = menuEl.offsetWidth, h = menuEl.offsetHeight;
+  menuEl.style.left = Math.max(4, Math.min(x, W - w - 4)) + 'px'; menuEl.style.top = Math.max(4, Math.min(y, H - h - 4)) + 'px';
+  menuEl.classList.toggle('a-gauche', x + 2 * w + 8 > W);                    // près du bord droit, le sous-menu s'ouvre à gauche
+}
+// Articles pour une zone. Monter, descendre : une zone principale, avec tout son niveau. Au même niveau que : la zone
+// passe à côté de la zone principale d'un autre niveau, dans la maison (ses zones à côté la suivent). Hors de la
+// maison, sur son propre niveau : une zone à côté.
+function articlesZone(e) {
+  const L = lieu[e], dernier = NIV.length - 1;
+  const autres = NIV.map((l, i) => ({ i, nom: zones[l[0]].nom })).filter(x => !(L.principale && x.i === L.niveau));
+  return [
+    { titre: zones[e].nom },
+    { texte: 'Monter d\'un étage', gris: !L.principale || L.niveau === dernier, action: () => echanger(L.niveau, L.niveau + 1) },
+    { texte: 'Descendre d\'un étage', gris: !L.principale || L.niveau === 0, action: () => echanger(L.niveau, L.niveau - 1) },
+    { sep: true },
+    { texte: 'Au même niveau que', gris: !autres.length, sous: autres.map(x => ({ texte: x.nom, coche: !L.principale && x.i === L.niveau, action: () => rejoindre(e, x.i) })) },
+    { texte: 'Hors de la maison', coche: L.dehors, gris: L.principale, action: () => sortirZone(e) },
+    { texte: 'Sur son propre niveau', gris: L.principale, action: () => propreNiveau(e) }
+  ];
+}
+const aLEtatDeDepart = () => JSON.stringify(NIV) === JSON.stringify(NIV0) && dehors.size === DEHORS0.length && DEHORS0.every(e => dehors.has(e));
+function articlesFond() { return [{ texte: 'Revenir à l\'état de départ', gris: aLEtatDeDepart(), action: reinitialiser }]; }
+function echanger(i, j) { [NIV[i], NIV[j]] = [NIV[j], NIV[i]]; appliquer(); }
+function rejoindre(e, i) {
+  const L = lieu[e]; if (!L.principale && L.niveau === i) return;               // déjà à ce niveau : article coché
+  const suite = L.principale ? NIV[L.niveau].slice(1) : [], dest = NIV[i];
+  NIV[L.niveau] = NIV[L.niveau].filter(z => z !== e && !suite.includes(z));
+  dest.splice(1, 0, e, ...suite);                                               // du côté +x de la zone principale
+  NIV = NIV.filter(l => l.length); dehors.delete(e); appliquer();
+}
+function sortirZone(e) { if (dehors.has(e)) dehors.delete(e); else dehors.add(e); appliquer(); }
+function propreNiveau(e) { const i = lieu[e].niveau; NIV[i] = NIV[i].filter(z => z !== e); NIV.splice(i + 1, 0, [e]); dehors.delete(e); appliquer(); }
+function reinitialiser() { NIV = NIV0.map(l => l.slice()); dehors = new Set(DEHORS0); appliquer(); }
+function appliquer() { lieu = lieux(); regeometrer(); viser(colonnesVoulues()); fil(); }
+function zoneSous(ev) {                // clic droit : le nom ou le disque d'une zone, ou rien (le fond)
+  pointer(ev);
+  const r = rendu.domElement.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  const dq = disques.find(d => surEtiquette(d.userData.L, x, y));
+  if (dq) return dq.userData.e;
+  const h = ray.intersectObjects(disques.map(d => d.userData.m))[0];
+  return h ? h.object.userData.e : null;
+}
+
+// ---------- Gestes ----------
+window.addEventListener('keydown', ev => {
+  if (ev.key === 'Alt') { optionTenue = true; curseur(); return; }
+  if (ev.key !== 'Escape') return; if (menuOuvert()) fermerMenu(); else if (choisi) fermerFiche(); else remonter();
+});
+window.addEventListener('keyup', ev => { if (ev.key === 'Alt') { optionTenue = false; curseur(); } });
+window.addEventListener('blur', () => { optionTenue = false; curseur(); });
+const ray = new THREE.Raycaster(), souris = new THREE.Vector2();
+let glisse = null, planGlisse = new THREE.Plane(), prise = new THREE.Vector3(), bouge = false, appui = null, premierClic = null;
+function pointer(ev) { const r = rendu.domElement.getBoundingClientRect(); souris.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(souris, camera); }
+const verres = () => Object.values(blocs).map(b => b.userData.verre);
+rendu.domElement.addEventListener('pointerdown', ev => {
+  if (t !== cible) { appui = null; return; }
+  pointer(ev); bouge = false; appui = { x: ev.clientX, y: ev.clientY, immobile: false };
+  // ⌥ + glisser, en 3D : la vue glisse dans le plan de l'écran, sans tourner. Le mode est fixé à l'appui ; ⌥ passe
+  // avant le glisser d'une pièce. La rotation lente s'arrête pendant le geste (contrôles coupés) et reprend après.
+  if (ev.button === 0 && ev.altKey && t === 1 && cible === 1) {
+    vol = null; panEcran = { x: ev.clientX, y: ev.clientY, c0: controles.target.clone(), p0: camera.position.clone() };
+    controles.enabled = false; curseur(); return;
+  }
+  if (ev.button !== 0 || ev.ctrlKey) return;
+  const hit = ray.intersectObjects(verres())[0], ze = etageVise(), b = hit ? hit.object.userData.bloc : null;
+  // On ne déplace que les pièces de la vue d'ensemble, ou celles de l'étage isolé ; les autres se cliquent.
+  if (!focus && b && (ze === null || b.userData.pc.e === ze)) { glisse = b; controles.enabled = false; planGlisse.set(new THREE.Vector3(0, 1, 0), -glisse.position.y); ray.ray.intersectPlane(planGlisse, prise); }
+});
+rendu.domElement.addEventListener('pointermove', ev => {
+  if (panEcran) {
+    const P = panEcran, k = 0.7 * 2 * P.p0.distanceTo(P.c0) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / H;   // 0,7 fois le pointeur, à la cible
+    const dep = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).multiplyScalar(-(ev.clientX - P.x) * k).addScaledVector(hautEcran(), (ev.clientY - P.y) * k);
+    controles.target.copy(P.c0).add(dep); camera.position.copy(P.p0).add(dep);
+    return;
+  }
+  if (glisse) {
+    pointer(ev);
+    const p = new THREE.Vector3();
+    if (ray.ray.intersectPlane(planGlisse, p)) {
+      if (p.distanceTo(prise) > 0.05) bouge = true;
+      const d = p.clone().sub(prise); d.y = 0; const loc = glisse.userData.local.clone().add(d);
+      const R = plateaux[glisse.userData.pc.e].rayon - 0.5 * Math.hypot(glisse.userData.w, glisse.userData.d);
+      if (loc.length() > R) loc.setLength(R); glisse.userData.local.copy(loc); prise.copy(p);
+    }
+    return;
+  }
+  if (ev.buttons === 0) survoler(ev);
+});
+rendu.domElement.addEventListener('pointerenter', () => { dansVue = true; curseur(); });
+rendu.domElement.addEventListener('pointerleave', () => { dansVue = false; survoler(null); });
+rendu.domElement.addEventListener('pointerup', ev => {
+  if (panEcran) { panEcran = null; controles.enabled = true; curseur(); }
+  if (glisse) { glisse = null; controles.enabled = true; }
+  if (appui) appui.immobile = !bouge && Math.hypot(ev.clientX - appui.x, ev.clientY - appui.y) < 5;
+});
+// Un clic est un appui relâché sans bouger (moins de 5 px) : un disque, comme le fond, se glisse pour déplacer la vue
+// (2D) ou la tourner (3D). Le deuxième clic d'un double-clic ne compte pas : le double-clic décide.
+rendu.domElement.addEventListener('click', ev => {
+  const ok = appui && appui.immobile && t === cible && ev.button === 0 && !ev.ctrlKey; appui = null;
+  if (ev.detail > 1) return;
+  premierClic = ok ? cibleSous(ev) : null;
+  if (premierClic) cliquer(premierClic);
+});
+// Double-clic sur le fond ou sur un disque : vue d'ensemble. Si le premier clic a commencé à isoler un étage, le vol
+// repart de la pose courante, sans saut.
+rendu.domElement.addEventListener('dblclick', () => { if (t === cible && premierClic && (premierClic.type === 'fond' || premierClic.type === 'disque')) versMaison(); });
+rendu.domElement.addEventListener('contextmenu', ev => {
+  ev.preventDefault(); if (t !== cible) return;
+  const e = zoneSous(ev), r = hote.getBoundingClientRect();
+  ouvrirMenu(ev.clientX - r.left, ev.clientY - r.top, e === null ? articlesFond() : articlesZone(e));
+});
+document.addEventListener('pointerdown', ev => { if (menuOuvert() && !menuEl.contains(ev.target)) fermerMenu(); }, true);
+function boutons() {
+  const actif = (id, oui) => document.getElementById(id).classList.toggle('actif', oui);
+  actif('e-rotation', E.rotation); actif('b-2d', cible === 0); actif('b-3d', cible === 1);
+  actif('d-grille', E.grille); actif('d-rangee', !E.grille);
+  for (const f in FORMES) actif('f-' + f, E.fenetre === f);
+  for (const id of ['d-grille', 'd-rangee']) {                               // grille et rangée : en 2D seulement
+    const b = document.getElementById(id), off = cible === 1;
+    b.classList.toggle('inactif', off); b.setAttribute('aria-disabled', off ? 'true' : 'false'); b.title = off ? 'En 2D seulement' : '';
+  }
+}
+function bornes() {
+  if (t !== cible) return;
+  if (t === 1) { controles.minDistance = 5; controles.maxDistance = distancePour(vue3D() * 2.5); }
+  else { controles.minDistance = distancePour(3); controles.maxDistance = distancePour(vue2D() * 3); }
+}
+function regler2D() { controles.enableRotate = false; controles.minPolarAngle = controles.maxPolarAngle = 0; controles.mouseButtons.LEFT = THREE.MOUSE.PAN; controles.autoRotate = false; bornes(); }
+function regler3D() { controles.enableRotate = true; controles.minPolarAngle = 0.15; controles.maxPolarAngle = 1.45; controles.mouseButtons.LEFT = THREE.MOUSE.ROTATE; controles.autoRotate = E.rotation && sansIsolement(); bornes(); }
+function cameraBascule(u) {
+  camera.fov = 2 + 38 * Math.pow(u, 1.6); camera.updateProjectionMatrix();
+  const c = cibleEnsemble(u), ang = -0.75 * u, incl = 0.0001 + 0.95 * u;
+  const dir = new THREE.Vector3(Math.sin(incl) * Math.sin(ang), Math.cos(incl), Math.sin(incl) * Math.cos(ang)).normalize();
+  camera.position.copy(c).add(dir.multiplyScalar(distancePour(vue(u)))); camera.lookAt(c); controles.target.copy(c);
+}
+// Envol 2D ↔ 3D : pose idéale de v13 à l'avancée u (cible, azimut, inclinaison, distance, champ).
+function poseIdeale(u) {
+  const fov = 2 + 38 * Math.pow(u, 1.6);
+  return { fov, c: cibleEnsemble(u), th: -0.75 * u, ph: 0.0001 + 0.95 * u, d: vue(u) / (2 * Math.tan(THREE.MathUtils.degToRad(fov / 2))) };
+}
+// L'envol part de la pose exacte de la caméra au moment du clic (cible déplacée, azimut de la rotation lente, zoom,
+// champ) : l'écart à la pose idéale de départ s'efface au fil de l'envol (w : de 1 à 0), en coordonnées sphériques.
+let ecartEnvol = null;
+function poseCourante() {
+  const o = camera.position.clone().sub(controles.target), d = o.length();
+  return { fov: camera.fov, c: controles.target.clone(), th: Math.atan2(o.x, o.z), ph: Math.acos(Math.min(1, Math.max(-1, o.y / d))), d };
+}
+function cameraEnvol(u, w) {
+  const I = poseIdeale(u), e = ecartEnvol, th = I.th + e.th * w, ph = I.ph + e.ph * w, d = I.d * Math.exp(e.ld * w);
+  camera.fov = I.fov + e.fov * w; camera.updateProjectionMatrix();
+  const c = I.c.addScaledVector(e.c, w);
+  camera.position.set(c.x + d * Math.sin(ph) * Math.sin(th), c.y + d * Math.cos(ph), c.z + d * Math.sin(ph) * Math.cos(th));
+  camera.lookAt(c); controles.target.copy(c);
+}
+function basculer(v) {
+  if (v === cible && t === cible) return;                                   // déjà dans ce mode
+  if (focus || focusEtage !== null) { viderAilleurs(); focus = null; s = 0; sCible = 0; focusEtage = null; se = 0; seCible = 0; fil(); }
+  if (v === 0) { grilleAVoir = false; viser(colonnesVoulues()); }           // l'envol se pose sur la grille de la fenêtre du moment
+  const P = poseCourante(), I = poseIdeale(t), dth = P.th - I.th;
+  ecartEnvol = { fov: P.fov - I.fov, c: P.c.sub(I.c), th: dth - 2 * Math.PI * Math.round(dth / (2 * Math.PI)), ph: P.ph - I.ph, ld: Math.log(P.d / I.d) };
+  vol = null; controles.enabled = false; controles.autoRotate = false; controles.minDistance = 0; controles.maxDistance = Infinity;
+  depart = t; cible = v; debut = null; boutons();
+  if (t === cible) { controles.enabled = true; if (t === 1) regler3D(); else regler2D(); }   // déjà arrivé (retour avant la première image)
+}
+// Grille ou rangée, en 2D seulement : les plateaux glissent vers leurs cases ; zoomé ou isolé, on revient à la vue
+// d'ensemble.
+// « Grille » recalcule toujours la grille pour la taille du moment, même déjà en grille.
+function disposer(grille) {
+  if (cible === 1 || (!grille && !E.grille)) return;
+  E.grille = grille; grilleAVoir = false; boutons();
+  const avant = dispo;
+  viser(colonnesVoulues(), false, 2600);   // grille <-> rangee : meme duree et meme courbe que l'envol 2D/3D
+  if (t === 0 && cible === 0) { if (!ensemble) versMaison(); else if (dispo === avant) { recadrer(); bornes(); } }
+}
+document.getElementById('b-2d').addEventListener('click', () => basculer(0));
+document.getElementById('b-3d').addEventListener('click', () => basculer(1));
+document.getElementById('e-rotation').addEventListener('click', () => { E.rotation = !E.rotation; if (t === 1) controles.autoRotate = E.rotation && sansIsolement(); boutons(); });
+document.getElementById('d-grille').addEventListener('click', () => disposer(true));
+document.getElementById('d-rangee').addEventListener('click', () => disposer(false));
+// Redimensionnement : à la vue d'ensemble seulement, la vue se recadre, et en 2D la grille se recalcule (dans la
+// boucle). Zoomé ou isolé, rien ne bouge : la grille attend le retour à la vue d'ensemble.
+// Une taille de 1 px ou moins (onglet caché, fenêtre nulle) ne choisit rien : on attend. La première vraie taille,
+// au chargement, à l'affichage de l'onglet ou au premier redimensionnement, pose la grille et cadre la vue d'ensemble,
+// sans condition d'état.
+let tailleOk = W > 1 && H > 1;
+function mesurer() {
+  const w = hote.clientWidth, h = hote.clientHeight;
+  if (w <= 1 || h <= 1 || (tailleOk && w === W && h === H)) return;
+  W = w; H = h; ASPECT = W / H;
+  rendu.setSize(W, H); camera.aspect = ASPECT; camera.updateProjectionMatrix();
+  for (const l of liensR) l.obj.material.resolution.set(W, H);
+  fermerMenu();
+  if (!tailleOk) {
+    tailleOk = true; grilleAVoir = false; viser(colonnesVoulues(), true);
+    if (t === cible) { vol = null; cameraBascule(t); if (t === 1) regler3D(); else regler2D(); }
+    return;
+  }
+  grilleAVoir = true;
+  if (ensemble) { recadrer(); bornes(); }
+}
+// Forme de fenêtre simulée : Navigateur, tout l'onglet ; sinon un cadre centré au format fixé, le plus grand qui
+// tient sous la barre, 16 px de marge. Un changement de forme se comporte comme un redimensionnement.
+const FORMES = { nav: 0, carree: 1, ordinaire: 1100 / 760, large: 2.4 };
+function poserCadre() {
+  const st = hote.style, a = FORMES[E.fenetre];
+  hote.classList.toggle('forme', !!a);
+  if (!a) { st.left = st.top = st.width = st.height = ''; return; }
+  const o = onglet.getBoundingClientRect(), haut = barreEl.getBoundingClientRect().bottom - o.top + 16;
+  const lw = Math.max(0, onglet.clientWidth - 32), lh = Math.max(0, onglet.clientHeight - haut - 16);
+  const w = Math.min(lw, lh * a), h = w / a;
+  st.left = Math.round(16 + (lw - w) / 2) + 'px'; st.top = Math.round(haut + (lh - h) / 2) + 'px';
+  st.width = Math.round(w) + 'px'; st.height = Math.round(h) + 'px';
+}
+function changerFenetre(f) { if (E.fenetre === f) return; E.fenetre = f; boutons(); poserCadre(); mesurer(); }
+for (const f in FORMES) document.getElementById('f-' + f).addEventListener('click', () => changerFenetre(f));
+window.addEventListener('resize', () => { poserCadre(); mesurer(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { poserCadre(); mesurer(); } });
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(mesurer).observe(hote);
+let dernier = 0;
+function boucle(ts) {
+  const dt = dernier ? Math.min(0.1, (ts - dernier) / 1000) : 0; dernier = ts;
+  if (t !== cible && debut === null) debut = ts;                           // l'envol commence à cette image
+  const q = Math.min(1, (ts - debut) / 2600), ancre0 = ancreCamera(), etaitEnsemble = ensemble, stable = t === cible;
+  if (grilleAVoir && etaitEnsemble && t === 0 && cible === 0) { grilleAVoir = false; viser(colonnesVoulues(W, H, true)); }
+  if (t !== cible) { const k = ease(q); t = depart + (cible - depart) * k; cameraEnvol(t, 1 - k); if (q >= 1) { t = cible; controles.enabled = true; if (t === 1) regler3D(); else regler2D(); } }
+  if (s !== sCible) { const r = Math.min(1, (ts - sDebut) / 1300); s = sDepart + (sCible - sDepart) * r; if (r >= 1) s = sCible; }
+  if (s === 0 && sCible === 0 && focus) { viderAilleurs(); focus = null; fil(); reprendreRotation(); }
+  if (se !== seCible) { const r = Math.min(1, (ts - seDebut) / 1300); se = seDepart + (seCible - seDepart) * r; if (r >= 1) se = seCible; }
+  if (se === 0 && seCible === 0 && focusEtage !== null) { focusEtage = null; fil(); reprendreRotation(); }
+  let change = glisser(ts);
+  if (geoDe) { const r = Math.min(1, (ts - geoDebut) / 900); geometrieCourante(ease(r)); change = true; if (r >= 1) { geoDe = null; bornes(); } }
+  for (const nom in blocs) { const u = blocs[nom].userData, c = focus === blocs[nom] && sCible === 1 ? 1 : 0; u.fk += (c - u.fk) * Math.min(1, dt * 3.5); if (Math.abs(c - u.fk) < 1e-3) u.fk = c; }
+  for (const dq of disques) { const u = dq.userData, c = focusEtage === u.e ? 1 : 0; u.ek += (c - u.ek) * Math.min(1, dt * 3.5); if (Math.abs(c - u.ek) < 1e-3) u.ek = c; }
+  poser();
+  if (vol) { if (vol.debut === null) vol.debut = ts; const r = Math.min(1, (ts - vol.debut) / vol.duree), k = ease(r), f = vol.fin(); camera.position.lerpVectors(vol.p0, f.pos, k); controles.target.lerpVectors(vol.c0, f.cib, k); if (r >= 1) { vol = null; reprendreRotation(); } }
+  else if (change && stable && t === cible) {
+    // La grille ou le placement change : à la vue d'ensemble, la vue se recadre ; sinon, elle suit ce qu'elle regarde.
+    if (etaitEnsemble) recadrer(); else { const d = ancreCamera().sub(ancre0); camera.position.add(d); controles.target.add(d); }
+  }
+  if (controles.enabled) controles.update();
+  camera.updateMatrixWorld();
+  ensemble = aLEnsemble();
+  tailles(); details();
+  rendu.render(scene, camera);
+  placer(obstacles()); niveau();
+  const et = etatGrille(); if (etatEl.textContent !== et) etatEl.textContent = et;
+  requestAnimationFrame(boucle);
+}
+// Paramètres de relecture : ?vue=3d (départ en 3D, sans envol), ?jardin=a (zones à côté dans la maison) ou b (hors de
+// la maison, comme au départ), ?rot=0 (sans rotation lente), ?rangee=1 (rangée), ?etage=N (étage N isolé au départ).
+const PARAMS = new URLSearchParams(location.search);
+if (PARAMS.get('rot') === '0') E.rotation = false;
+if (FORMES[PARAMS.get('fenetre')]) { E.fenetre = PARAMS.get('fenetre'); poserCadre(); mesurer(); grilleAVoir = false; viser(colonnesVoulues(), true); }   // ?fenetre=carree|ordinaire|large
+if (PARAMS.get('rangee') === '1') { E.grille = false; viser(colonnesVoulues()); }
+if (PARAMS.get('jardin') === 'a' || PARAMS.get('jardin') === 'b') { dehors = new Set(PARAMS.get('jardin') === 'b' ? DEHORS0 : []); lieu = lieux(); geoVers = geometrie(); geometrieCourante(1); }
+if (PARAMS.get('vue') === '3d') { t = depart = cible = 1; cameraBascule(1); regler3D(); }
+else { cameraBascule(0); regler2D(); }
+boutons(); fil();
+// ?etage=N : l'état final tout de suite, sans vol ni fondu (pour les rendus de relecture).
+function sauterAuBout() {
+  s = sCible; se = seCible;
+  for (const nom in blocs) blocs[nom].userData.fk = focus === blocs[nom] && sCible === 1 ? 1 : 0;
+  for (const dq of disques) dq.userData.ek = focusEtage === dq.userData.e ? 1 : 0;
+  poser();
+  if (vol) { const f = vol.fin(); camera.position.copy(f.pos); controles.target.copy(f.cib); vol = null; }
+}
+if (PARAMS.get('etage') !== null) setTimeout(() => { allerEtage(+PARAMS.get('etage')); sauterAuBout(); }, 50);
+window.__grille = () => ({ W, H, choix: colonnesVoulues(), enPlace: dispo && dispo.c, rayons: zones.map((Z, e) => rayon(e)), cands: zones.map((Z, k) => { const d = disposition(k + 1); return { c: k + 1, L: d.L, H: d.H, ech: Math.min(W / d.L, H / d.H) }; }) });
+requestAnimationFrame(boucle);
+</script>
