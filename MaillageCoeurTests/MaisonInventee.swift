@@ -1,7 +1,8 @@
 import Foundation
 @testable import MaillageCoeur
 
-/// Maison inventee pour les tests de la scene : `pieces` pieces reparties sur deux etages,
+/// Maison inventee pour les tests de la scene : `pieces` pieces reparties sur deux etages (ou sur un seul
+/// plateau, `unSeulPlateau`),
 /// `routeurs` routeurs de bordure relies en chaine (le premier est le chef), le routeur k dans la
 /// piece k ; `appareils` appareils, l'appareil j dans la piece j modulo `pieces`, enfant du routeur
 /// de numero (sa piece) modulo `routeurs`. Noms : 7 px par caractere, plus 10 px de marges.
@@ -46,7 +47,8 @@ enum MaisonInventee {
     }
 
     /// La scene et ses cartes.
-    static func scene(pieces: Int, appareils: Int, routeurs: Int) -> (scene: ScenePieces, cartes: [CartesPieces.Carte]) {
+    static func scene(pieces: Int, appareils: Int, routeurs: Int,
+                      unSeulPlateau: Bool = false) -> (scene: ScenePieces, cartes: [CartesPieces.Carte]) {
         let g = graphe(pieces: pieces, routeurs: routeurs, appareils: appareils)
         func nomPiece(_ p: Int) -> String { String(format: "Pièce %02d", p) }
         var piecesNoeuds: [String: String] = [:]
@@ -62,7 +64,7 @@ enum MaisonInventee {
         let bas = (0..<pieces / 2).map(nomPiece)
         let haut = (pieces / 2..<pieces).map(nomPiece)
         let s = ScenePieces(graphe: g, libelles: libelles, piecesNoeuds: piecesNoeuds,
-                            zones: [ZoneMaison(nom: "Bas", pieces: bas), ZoneMaison(nom: "Haut", pieces: haut)],
+                            zones: unSeulPlateau ? nil : [ZoneMaison(nom: "Bas", pieces: bas), ZoneMaison(nom: "Haut", pieces: haut)],
                             chefs: [routeur(0)], piecesMaison: true)
         let largeurs = libelles.mapValues { Double($0.count) * 7 + 10 }
         return (s, CartesPieces.cartes(s, largeurs: largeurs))

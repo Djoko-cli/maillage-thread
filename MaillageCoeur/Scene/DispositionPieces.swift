@@ -4,7 +4,8 @@ import Foundation
 /// espacees, tassees de facon organique, puis placees pour que les liens evitent les autres pieces
 /// et se croisent peu. Deterministe : memes entrees, meme disposition, sur toutes les machines (le
 /// budget compte des coups, pas du temps). Calcul hors du fil principal : il peut prendre une
-/// fraction de seconde.
+/// fraction de seconde. Depuis le polissage C (section 4), son cout voit la maison de dessus, niveau par
+/// niveau : elle ne depend ni de la fenetre, ni de la disposition 2D des plateaux (grille ou rangee).
 public struct DispositionPieces: Hashable, Sendable {
     /// Ecart entre cartes, bande du nom au-dessus d'une carte, marge du plateau, ecart entre plateaux
     /// en 2D (unites).
@@ -196,6 +197,9 @@ public struct DispositionPieces: Hashable, Sendable {
         let d: [Double]
         let etage: [Int]
         let nbEtages: Int
+        /// Niveau de chaque plateau, et de chaque piece (polissage C, section 1).
+        let niveauEtage: [Int]
+        let niveau: [Int]
         /// Pieces de chaque etage, par aire decroissante.
         let parEtage: [[Int]]
         let fixe: [Bool]
@@ -210,6 +214,8 @@ public struct DispositionPieces: Hashable, Sendable {
             d = profondeurs
             etage = scene.pieces.map(\.etage)
             nbEtages = scene.etages.count
+            niveauEtage = scene.etages.map(\.niveau)
+            niveau = scene.pieces.map { scene.etages[$0.etage].niveau }
             fixe = (0..<n).map { fixees[$0] != nil }
             parEtage = scene.etages.map { e in e.pieces.sorted { (-aire[$0], $0) < (-aire[$1], $1) } }
             // Place de chaque noeud dans sa carte.
@@ -430,10 +436,16 @@ public struct DispositionPieces: Hashable, Sendable {
             }
         }
 
-        /// Rectangles des cartes et extremites des liens dans la vue 2D des etages cote a cote.
-        func vue2D(_ pos: [SIMD2<Double>]) -> (rayons: [Double], rects: [Rect], segments: [(SIMD2<Double>, SIMD2<Double>)]) {
+        /// Rectangles des cartes et extremites des liens dans la vue de reference du cout (polissage C, section 4) :
+        /// la maison vue de dessus, niveau par niveau. Chaque niveau est une rangee : son etage principal en x = 0,
+        /// puis ses zones a cote, a sa droite, `esp` entre les bords ; les niveaux sont superposes. Les plateaux d'un
+        /// niveau se suivent dans la scene, l'etage principal d'abord.
+        func vueReference(_ pos: [SIMD2<Double>]) -> (rayons: [Double], rects: [Rect], segments: [(SIMD2<Double>, SIMD2<Double>)]) {
             let rayons = (0..<nbEtages).map { rayon(pos, $0) }
-            let cx = DispositionPieces.centres2D(rayons: rayons)
+            var cx = [Double](repeating: 0, count: nbEtages)
+            for e in cx.indices.dropFirst() where niveauEtage[e] == niveauEtage[e - 1] {
+                cx[e] = cx[e - 1] + rayons[e - 1] + DispositionPieces.esp + rayons[e]
+            }
             let rects = pos.indices.map { i in
                 let x = cx[etage[i]] + pos[i].x, z = pos[i].y
                 return Rect(x0: x - w[i] / 2, x1: x + w[i] / 2, z0: z - d[i] / 2 - lab, z1: z + d[i] / 2)
@@ -444,30 +456,33 @@ public struct DispositionPieces: Hashable, Sendable {
             return (rayons, rects, segments)
         }
 
-        /// Cout d'une disposition, vue en 2D : la somme des rayons des plateaux ; 0,3 fois la longueur
-        /// de chaque lien ; 6 + 4 fois la longueur traversee pour chaque lien qui passe sur une carte
-        /// autre que celles de ses bouts ; 5 par croisement de deux liens sans bout commun ; 0,1 fois
-        /// l'ecart horizontal de chaque lien entre etages, une fois les etages empiles.
+        /// Cout d'une disposition, dans la vue de reference (polissage C, section 4) : la somme des rayons des
+        /// plateaux ; pour chaque lien dont les deux bouts sont au meme niveau, 0,3 fois sa longueur, et 6 + 4 fois
+        /// la longueur traversee pour chaque carte de ce niveau autre que celles de ses bouts qu'il traverse ; 5 par
+        /// croisement de deux liens du meme niveau sans bout commun ; pour chaque lien entre deux niveaux, 0,1 fois
+        /// son ecart horizontal. Pour une maison d'un seul plateau, le cout du plan 4b, au bit pres.
         func cout(_ pos: [SIMD2<Double>]) -> Double {
-            let v = vue2D(pos)
+            let v = vueReference(pos)
             var c = v.rayons.reduce(0, +)
             for (k, l) in liens.enumerated() {
                 let (p, q) = v.segments[k]
+                guard niveau[l.pa] == niveau[l.pb] else {
+                    let h = p - q
+                    c += 0.1 * (h.x * h.x + h.y * h.y).squareRoot()
+                    continue
+                }
                 let dl = q - p
                 c += 0.3 * (dl.x * dl.x + dl.y * dl.y).squareRoot()
-                for (r, rect) in v.rects.enumerated() where r != l.pa && r != l.pb {
+                for (r, rect) in v.rects.enumerated() where r != l.pa && r != l.pb && niveau[r] == niveau[l.pa] {
                     let t = DispositionPieces.dedans(p, q, rect)
                     if t > 0 { c += 6 + 4 * t }
                 }
-                if etage[l.pa] != etage[l.pb] {
-                    let h = (pos[l.pa] + l.la) - (pos[l.pb] + l.lb)
-                    c += 0.1 * (h.x * h.x + h.y * h.y).squareRoot()
-                }
             }
-            for i in liens.indices {
+            for i in liens.indices where niveau[liens[i].pa] == niveau[liens[i].pb] {
                 let s = liens[i], (p, q) = v.segments[i]
                 for j in liens.indices where j > i {
                     let t = liens[j]
+                    if niveau[t.pa] != niveau[s.pa] || niveau[t.pb] != niveau[s.pa] { continue }
                     if s.na == t.na || s.na == t.nb || s.nb == t.na || s.nb == t.nb { continue }
                     let (r, u) = v.segments[j]
                     if max(p.x, q.x) < min(r.x, u.x) || max(r.x, u.x) < min(p.x, q.x)
@@ -478,13 +493,14 @@ public struct DispositionPieces: Hashable, Sendable {
             return c
         }
 
-        /// Liens qui passent sur une carte autre que celles de leurs bouts (tests).
+        /// Liens d'un niveau qui passent sur une carte de ce niveau autre que celles de leurs bouts, dans la vue
+        /// de reference (tests).
         func traversees(_ pos: [SIMD2<Double>]) -> Int {
-            let v = vue2D(pos)
+            let v = vueReference(pos)
             var n = 0
-            for (k, l) in liens.enumerated() {
+            for (k, l) in liens.enumerated() where niveau[l.pa] == niveau[l.pb] {
                 let (p, q) = v.segments[k]
-                for (r, rect) in v.rects.enumerated() where r != l.pa && r != l.pb
+                for (r, rect) in v.rects.enumerated() where r != l.pa && r != l.pb && niveau[r] == niveau[l.pa]
                     && DispositionPieces.dedans(p, q, rect) > 0 {
                     n += 1
                 }

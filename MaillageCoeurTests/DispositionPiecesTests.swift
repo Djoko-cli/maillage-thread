@@ -1,4 +1,5 @@
 import Foundation
+import simd
 import Testing
 @testable import MaillageCoeur
 
@@ -169,6 +170,99 @@ struct DispositionPiecesTests {
         print("mesure : disposition de la grande maison en \(secondes) s, \(d.coups) coups")
         #expect(secondes < 1, "\(secondes) s pour \(d.coups) coups")
         #expect(Self.recouvrements(s, c, d) == [])
+    }
+
+    /// Le cout du plan 4b, recopie tel qu'il etait : la vue 2D des etages cote a cote (`centres2D`), tous les
+    /// liens, toutes les cartes, tous les croisements.
+    static func coutDuPlan4b(_ k: DispositionPieces.Calcul, _ pos: [SIMD2<Double>]) -> Double {
+        let rayons = (0..<k.nbEtages).map { k.rayon(pos, $0) }
+        let cx = DispositionPieces.centres2D(rayons: rayons)
+        let rects = pos.indices.map { i in
+            let x = cx[k.etage[i]] + pos[i].x, z = pos[i].y
+            return DispositionPieces.Rect(x0: x - k.w[i] / 2, x1: x + k.w[i] / 2, z0: z - k.d[i] / 2 - DispositionPieces.lab,
+                                          z1: z + k.d[i] / 2)
+        }
+        let segments = k.liens.map { l in
+            (SIMD2(cx[k.etage[l.pa]], 0) + pos[l.pa] + l.la, SIMD2(cx[k.etage[l.pb]], 0) + pos[l.pb] + l.lb)
+        }
+        var c = rayons.reduce(0, +)
+        for (n, l) in k.liens.enumerated() {
+            let (p, q) = segments[n]
+            let dl = q - p
+            c += 0.3 * (dl.x * dl.x + dl.y * dl.y).squareRoot()
+            for (r, rect) in rects.enumerated() where r != l.pa && r != l.pb {
+                let t = DispositionPieces.dedans(p, q, rect)
+                if t > 0 { c += 6 + 4 * t }
+            }
+            if k.etage[l.pa] != k.etage[l.pb] {
+                let h = (pos[l.pa] + l.la) - (pos[l.pb] + l.lb)
+                c += 0.1 * (h.x * h.x + h.y * h.y).squareRoot()
+            }
+        }
+        for i in k.liens.indices {
+            let s = k.liens[i], (p, q) = segments[i]
+            for j in k.liens.indices where j > i {
+                let t = k.liens[j]
+                if s.na == t.na || s.na == t.nb || s.nb == t.na || s.nb == t.nb { continue }
+                let (r, u) = segments[j]
+                if max(p.x, q.x) < min(r.x, u.x) || max(r.x, u.x) < min(p.x, q.x)
+                    || max(p.y, q.y) < min(r.y, u.y) || max(r.y, u.y) < min(p.y, q.y) { continue }
+                if DispositionPieces.croise(p, q, r, u) { c += 5 }
+            }
+        }
+        return c
+    }
+
+    /// Pour une maison d'un seul plateau, le cout de reference (polissage C, section 4) est celui du plan 4b, au
+    /// bit pres : au depart de chaque essai, et sur la disposition retenue, qui est donc la meme.
+    @Test func coutDUnSeulPlateau() {
+        let (s, c) = MaisonInventee.scene(pieces: 8, appareils: 30, routeurs: 4, unSeulPlateau: true)
+        #expect(s.etages.count == 1)
+        let k = DispositionPieces.Calcul(scene: s, cartes: c, fixees: [:])
+        let d = DispositionPieces(scene: s, cartes: c)
+        for pos in (0..<DispositionPieces.departs).map({ k.depart($0, fixees: [:]) }) + [d.positions] {
+            #expect(k.cout(pos) == Self.coutDuPlan4b(k, pos))
+        }
+        #expect(d.cout == Self.coutDuPlan4b(k, d.positions))
+    }
+
+    /// La vue de reference du cout (polissage C, section 4) : chaque niveau est une rangee, son etage principal en
+    /// x = 0, ses zones a cote a droite, `esp` entre les bords. Un lien entre deux niveaux ne coute que 0,1 fois
+    /// son ecart horizontal : ni longueur, ni carte traversee, ni croisement ; un lien du meme niveau, entre un
+    /// etage et sa zone a cote, coute sa longueur dans cette vue.
+    @Test func vueDeReference() throws {
+        let pieces = ["Apple TV": "Salon", "HomePod": "Chambre", "E000000000000002": "Terrasse",
+                      "E000000000000003": "Terrasse", "E000000000000004": "Salon", "E000000000000005": "Salon"]
+        let zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon"]), ZoneMaison(nom: "Étage", pieces: ["Chambre"]),
+                     ZoneMaison(nom: "Jardin", pieces: ["Terrasse"])]
+        let s = ScenePieces(graphe: try ScenePiecesTests.graphe(sonde: true), libelles: ScenePiecesTests.libelles,
+                            piecesNoeuds: pieces, zones: zones, chefs: ["Apple TV"], piecesMaison: true,
+                            aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée", dehors: true)])
+        #expect(s.etages.map(\.id) == ["zone:Rez-de-chaussée", "zone:Jardin", "zone:Étage"])
+        let c = CartesPieces.cartes(s, largeurs: [:])
+        let k = DispositionPieces.Calcul(scene: s, cartes: c, fixees: [:])
+        let d = DispositionPieces(scene: s, cartes: c)
+        let v = k.vueReference(d.positions)
+        let terrasse = try #require(s.pieces.firstIndex { $0.nom == .maison("Terrasse") })
+        let chambre = try #require(s.pieces.firstIndex { $0.nom == .maison("Chambre") })
+        let cx = d.rayons[0] + DispositionPieces.esp + d.rayons[1]
+        #expect(abs(v.rects[terrasse].x0 - (cx + d.positions[terrasse].x - c[terrasse].largeur / 2)) < 1e-12)
+        #expect(abs(v.rects[chambre].x0 - (d.positions[chambre].x - c[chambre].largeur / 2)) < 1e-12, "l'etage, en x = 0")
+        var attendu = v.rayons.reduce(0, +)
+        for (n, l) in k.liens.enumerated() {
+            let (p, q) = v.segments[n]
+            if k.niveau[l.pa] == k.niveau[l.pb] {
+                attendu += 0.3 * simd_length(q - p)
+                for (r, rect) in v.rects.enumerated() where r != l.pa && r != l.pb && k.niveau[r] == k.niveau[l.pa] {
+                    let t = DispositionPieces.dedans(p, q, rect)
+                    if t > 0 { attendu += 6 + 4 * t }
+                }
+            } else {
+                attendu += 0.1 * simd_length(p - q)
+            }
+        }
+        #expect(abs(k.cout(d.positions) - attendu) < 1e-9, "aucun croisement dans cette petite maison")
+        #expect(k.traversees(d.positions) == 0)
     }
 
     /// Longueur traversee (Liang-Barsky) et croisements stricts.

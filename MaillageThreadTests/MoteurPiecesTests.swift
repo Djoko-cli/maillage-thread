@@ -38,10 +38,17 @@ struct MoteurPiecesTests {
         FileManager.default.temporaryDirectory.appendingPathComponent("pieces-\(UUID().uuidString)/positions-pieces.json")
     }
 
-    /// Un point d'une piece, hors de ses pastilles et des noms : pres du coin bas droit de son dessus.
+    /// Un point d'une piece, hors de ses pastilles et des noms : pres du coin bas droit de son dessus, ou, si un
+    /// nom ou une pastille l'y couvre, le plus proche de ce coin ou un clic l'isole et ou un glisser la prend.
     static func pointDePiece(_ m: MoteurPieces, _ i: Int) throws -> CGPoint {
         let a = try #require(m.projetee?.ancresPieces[i])
-        return CGPoint(x: a.maxX - 3, y: a.maxY - 3)
+        let coin = CGPoint(x: a.maxX - 3, y: a.maxY - 3)
+        let points = [coin] + stride(from: 0.95, through: 0.05, by: -0.05).flatMap { fy in
+            stride(from: 0.95, through: 0.05, by: -0.05).map { fx in CGPoint(x: a.minX + a.width * fx, y: a.minY + a.height * fy) }
+        }
+        return try #require(points.first { p in
+            m.noeudSous(p) == nil && m.pieceSous(p) == i && m.projetee?.piece(sous: p) == i
+        })
     }
 
     static func indice(_ e: EntreeScene, _ nom: String) throws -> Int {
