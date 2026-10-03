@@ -35,6 +35,9 @@ Ses paramètres d'URL de relecture (`vue=3d`, `rot=0`, `rangee=1`, `etage=N`, `j
 | Passage grille ↔ rangée | **2,6 s, comme l'envol 2D/3D**, qui sert de référence (v5) |
 | Glissade au redimensionnement | 0,4 s, sur ma recommandation : 2,6 s traînerait derrière la souris |
 | Disposition des pièces | indépendante de la fenêtre et du mode 2D (section 4) |
+| Choix de la grille (03/10, au plan) | **sur la zone visible** de la vue, et non sur la forme de la fenêtre : la vue est toujours la plus grande possible (section 3.3) |
+| « ⌂ Maison » en 3D (03/10, au plan) | il **évite les noms d'étage**, qu'il chevauchait dans la maquette (section 2) |
+| Légende (03/10, au plan) | elle garde la taille de B |
 
 ## 1. Les niveaux
 
@@ -123,7 +126,7 @@ Elle remplace la partie 3D de la section 4.4 de la spec de la vue par pièces. A
 - la hauteur de la vue d'ensemble 3D est `2,4 × R_cadre × max(1, 1/aspect)`, centrée sur la sphère ;
 - les bornes du zoom 3D se règlent sur cette vue ;
 - la rotation lente tourne autour de l'axe vertical du centre de la sphère : les zones hors de la maison tournent autour d'elle ;
-- « ⌂ Maison » reste sous le haut de la sphère.
+- « ⌂ Maison » reste sous le haut de la sphère. **Ce qui change** (décision de Djoko, 03/10, au plan) : il se pose après les noms d'étage et les évite, avec ses places candidates habituelles. Dans la maquette, comme au plan 4b, il se posait avant eux et pouvait chevaucher le nom de l'étage du haut quand une zone est hors de la maison.
 
 ## 3. La 2D
 
@@ -158,9 +161,12 @@ C'est l'ordre des niveaux, du bas vers le haut. Dans un niveau : l'étage princi
 - parmi les grilles **à moins de 10 % de la plus grande échelle**, on prend celle qui a **le moins de cases vides**, puis le moins de rangées ;
 - **hystérésis au redimensionnement** : la grille en place reste tant que son échelle est à moins de 5 % de celle du choix ;
 - **une taille de 1 pt ou moins ne choisit rien** : on garde la disposition en place, ou on attend une vraie taille. Ce cas arrive pour une vue cachée ou en cours de mise en page. Dans la maquette v2, il bloquait la grille sur la rangée ;
-- à la première vraie taille, la grille se calcule et la vue d'ensemble se cadre, sans autre condition.
+- à la première vraie taille, la grille se calcule et la vue d'ensemble se cadre, sans autre condition ;
+- **ouvrir ou replier la légende** change le cadre : la grille se recalcule comme au redimensionnement.
 
-**Exemple de la maison de démo de la maquette**, 4 plateaux :
+**La zone visible, et non la forme de la fenêtre** (décision de Djoko, 03/10, au plan). Dans l'app, le haut de la fenêtre (capsules, fil, ligne de niveau) et la légende ouverte réduisent la hauteur du cadre, ce que la maquette ne montrait pas. Choisie sur la forme de la fenêtre, la grille 2 × 2 de la démo était près de deux fois plus petite que la rangée, à 1440 × 900, la légende ouverte. Sur la zone visible, la vue est toujours la plus grande possible. La grille se voit donc dans une fenêtre carrée ou haute, ou la légende repliée. Dans une fenêtre large, la légende ouverte, c'est souvent la rangée.
+
+**Exemple de la maison de démo de la maquette**, 4 plateaux, sur le cadre de la maquette, sans légende :
 - 2 × 2 dans une fenêtre carrée ou ordinaire (1100 × 760) ;
 - la rangée dans une fenêtre large (2,4 : 1).
 
@@ -272,7 +278,7 @@ Ces deux points (triage A, n° 8 et 9) se règlent en passant, puisque C réécr
   - « Jardin » : « Terrasse » et « Abri » ;
 - les pièces sont remplies avec des nœuds de la démo actuelle, sans nouvelle donnée radio, au plus près de la maquette : un routeur dans « Salle de jeux » et dans « Terrasse », des liens entre niveaux et au même niveau ;
 - le Jardin est **au niveau du Rez-de-chaussée, hors de la maison**. C'est un choix en mémoire, puisque la démo n'écrit rien ;
-- dans une fenêtre ordinaire, la grille montre 4 plateaux en 2 × 2.
+- dans une fenêtre carrée, la grille montre 4 plateaux en 2 × 2.
 
 **Captures de démo :** elles changent toutes. Il s'en ajoute au moins :
 - la grille dans une fenêtre carrée ;
