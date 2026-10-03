@@ -149,7 +149,7 @@ Exécuter une tâche, c'est transcrire les fichiers et les blocs donnés, compil
 | `MaillageCoeur/Scene/PlacementNoms.swift` | les noms pendant un isolement, l'état d'arrivée, le nom d'étage souligné ; « ⌂ Maison » après les noms d'étage | 5, 7 |
 | `MaillageCoeur/Demo/NomsDemo.swift` | les combles et le jardin ; `places()` | 7 |
 | `MaillageThread/Vues/Pieces/EntreeScene.swift`, `LibellesNoeuds.swift` | les choix de niveau dans la scène et dans la clé de la disposition ; le repère au même niveau | 1 |
-| `MaillageThread/Vues/Pieces/MoteurPieces.swift` | la géométrie visée et ses glissements, la grille sur la zone visible, l'isolement, le fil, les clics, le menu, ⌥ + glisser, les curseurs | 1 à 7 |
+| `MaillageThread/Vues/Pieces/MoteurPieces.swift` | la géométrie visée et ses glissements, la grille sur la zone visible, l'isolement, le fil, les clics, le menu, ⌥ + glisser, les curseurs | 1, 2, 4 à 7 |
 | `MaillageThread/Vues/Pieces/FenetrePieces.swift` | le réglage, la marge du bas de la zone visible, le menu natif, le fil à crans, la ligne de niveau, les curseurs | 4 à 7 |
 | `MaillageThread/Vues/FenetreReglages.swift` | la section « Vue par pièces » | 4 |
 | `MaillageThread/Vues/Pieces/RenduCanvas.swift` | le disque éclairci, le nom d'étage souligné | 5 |
@@ -6676,7 +6676,7 @@ Ce qui ne se voit qu'en vrai : `ImageRenderer` ne rend ni les animations, ni le 
 
 | Exigence (spec de C, et brief du plan) | Tâche | Preuve |
 |---|---|---|
-| Un fichier sans `aCote` ; l'aller-retour sur disque en version 1, `appareils` et places gardés | 1 | `zonesACote`, `etagesSeulement` |
+| Un fichier sans `aCote` ; l'aller-retour sur disque en version 1, ordre et places gardés | 1 | `zonesACote`, `etagesSeulement` |
 | Une zone à côté, dans et hors de la maison ; étage principal absent, chaîne, boucle, zone à côté d'elle-même | 1 | `zoneACote`, `casTordus` |
 | Les niveaux de la scène, dans leur ordre ; « Sans pièce » en bas | 1 | `niveaux`, `sceneDeLaDemo` |
 | « Monter » et « Descendre » d'un niveau entier ; « Au même niveau que » ; « Hors de la maison » ; « Sur son propre niveau » | 1, 5 | `monterEtDescendre`, `auMemeNiveauQue`, `dehorsEtPropreNiveau`, `choixRendus`, `menuDuClicDroit` ; vérification 2 et 3 |

@@ -19,7 +19,8 @@ Le 03/10, Djoko a aussi demandé **⌥ + glisser** en 3D, prévu pour D : il pas
 
 **Maquette de référence :** `maquettes/polissage-c-etages.html`, la v5. Elle reprend le moteur three.js de la maquette v13 de la vue par pièces, et ses noms sont inventés. **Elle se livre telle quelle**, pour tout ce qu'elle montre de la vue. Deux de ses outils ne passent pas dans l'app :
 - le groupe « Fenêtre » (Navigateur, Carrée, Ordinaire, Large), qui simule le cadre de l'app ;
-- son texte d'aide.
+- son texte d'aide ;
+- sa ligne d'état « Grille : 2 × 2 » ou « Rangée », sous sa barre, ajoutée pour expliquer la grille dans un onglet large.
 
 Ses paramètres d'URL de relecture (`vue=3d`, `rot=0`, `rangee=1`, `etage=N`, `jardin=a|b`, `fenetre=…`) ne servent qu'à la relire.
 
@@ -59,7 +60,7 @@ Chaque plateau est l'une des deux choses suivantes :
 - **La version reste 1**, comme pour `appareils` (polissage A) :
   - une app plus ancienne relit encore l'ordre et les places, et ignore le champ ;
   - un fichier sans ce champ donne des étages seulement, comme aujourd'hui.
-- **L'ordre des étages gardé** (`ordreEtages`) reste la liste de tous les plateaux, du bas vers le haut, zones à côté comprises. Quand une zone se met à côté d'un étage, elle passe juste après le groupe de cet étage.
+- **L'ordre des étages gardé** (`ordreEtages`) reste la liste de tous les plateaux, du bas vers le haut, zones à côté comprises. Quand une zone se met à côté d'un étage, elle passe juste après le groupe de cet étage : les zones déjà à côté gardent leur place, et la nouvelle vient en dernier. Écart voulu à la maquette, qui la mettait juste après l'étage principal ; il ne se voit que dans un niveau qui a déjà une zone à côté.
 - **Résolution des cas tordus :**
   - **étage principal absent de la scène** (plus de pièce montrée, renommé, retiré de Maison) : la zone redevient un étage, à sa place dans l'ordre. Son choix reste dans le fichier ;
   - **chaîne** (A à côté de B, B à côté de C) : A et B sont à côté de C ;
@@ -206,7 +207,7 @@ Pour une maison d'un seul plateau, c'est le coût d'aujourd'hui.
 
 **Conséquence, à dire à Djoko :** les pièces qu'il n'a pas déplacées peuvent changer de place une fois, à la première ouverture après C. Celles qu'il a déplacées, qui sont fixées, ne bougent pas.
 
-**Recalcul :** la disposition se recalcule quand les étages, les pièces, les nœuds ou leurs noms changent, comme aujourd'hui, et aussi quand les niveaux changent.
+**Recalcul :** la disposition se recalcule quand les étages, les pièces, les nœuds ou leurs noms changent, comme aujourd'hui, et aussi quand le regroupement des niveaux change, c'est-à-dire quelles zones partagent un niveau. L'ordre des niveaux et « Hors de la maison » ne changent pas le coût, donc pas la disposition.
 
 ## 5. L'isolement
 
@@ -243,7 +244,7 @@ C'est la pièce isolée d'aujourd'hui, avec quatre ajouts :
 
 - **Depuis une pièce isolée**, Échap et le clic à côté ramènent **d'où l'on vient** :
   - pièce ouverte depuis la vue d'ensemble : retour à la maison, d'un seul vol ;
-  - pièce ouverte depuis un étage isolé : retour à cet étage ;
+  - pièce ouverte depuis un étage isolé : retour à l'étage de la pièce, celui du fil. C'est le même si la pièce est sur l'étage isolé ; sinon c'est son propre étage, comme dans la maquette ;
   - passer d'une pièce à une autre garde la provenance, sauf vers une pièce d'un autre étage depuis un étage isolé : la provenance devient alors la maison.
 - **Depuis un étage isolé**, Échap et le clic à côté ramènent à la maison.
 - **Le clic à côté** est un clic sur le fond, hors de tout disque, pièce, nom et appareil.
@@ -305,7 +306,7 @@ Le plan fixe leurs noms et leur liste exacte.
   - un étage principal absent, une chaîne, une boucle, une zone à côté d'elle-même ;
   - « Monter » et « Descendre » d'un niveau entier ;
   - « Sur son propre niveau » ;
-  - l'aller-retour sur disque, en gardant `appareils` et les places, avec la version 1 ;
+  - l'aller-retour sur disque, en gardant l'ordre et les places, avec la version 1 ;
 - **la géométrie 3D** :
   - avec des étages seulement, exactement celle d'aujourd'hui ;
   - zones dans la maison, alternées à droite puis à gauche ;
