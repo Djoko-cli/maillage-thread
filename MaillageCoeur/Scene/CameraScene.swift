@@ -186,43 +186,145 @@ public struct ProjectionScene: Sendable {
     }
 }
 
-/// Geometrie de la maison pour la camera (spec, section 4.4) : plateaux cote a cote en 2D, empiles
-/// en 3D, sphere de la maison, boite de cadrage de la 2D.
+/// Geometrie de la maison pour la camera (spec de la vue par pieces, section 4.4, remplacee par le polissage C,
+/// sections 2 et 3) : les plateaux en 2D, en grille ou en rangee ; en 3D, les niveaux empiles, les zones a cote
+/// dans ou hors de la maison ; la sphere de la maison ; le rayon que cadre la vue d'ensemble 3D ; la boite de
+/// cadrage de la 2D. Avec des etages seulement et en rangee, les valeurs du plan 4b, au bit pres.
 public struct GeometrieMaison: Hashable, Sendable {
     public static let hauteurBloc3D = 2.4
     /// Bande des noms d'etage au-dessus des plateaux, en 2D (34 px).
     public static let bandeNomsEtages = 34 / CartesPieces.px
 
-    public let rayons: [Double]
-    public let centres2D: [Double]
-    /// Pas entre deux etages en 3D : 1,5 fois le plus grand rayon.
-    public let pasEtage: Double
-    public let centreSphere: SIMD3<Double>
-    public let rayonSphere: Double
-    public let boite: Boite
-    public let cible2D: SIMD3<Double>
+    /// La place d'un plateau dans les niveaux (`ScenePieces.Etage`) : son niveau (0 en bas), etage principal ou
+    /// zone a cote, hors de la maison.
+    public struct Plateau: Hashable, Sendable {
+        public var niveau: Int
+        public var principal: Bool
+        public var dehors: Bool
+
+        public init(niveau: Int, principal: Bool = true, dehors: Bool = false) {
+            self.niveau = niveau
+            self.principal = principal
+            self.dehors = dehors
+        }
+    }
+
+    public var rayons: [Double]
+    /// Centre de chaque plateau en 2D (x, z), et en 3D.
+    public var centres2D: [SIMD2<Double>]
+    public var centres3D: [SIMD3<Double>]
+    /// Colonnes de la grille 2D : de 1 au nombre de plateaux, la rangee.
+    public var colonnes: Int
+    /// Pas entre deux niveaux en 3D : 1,5 fois le plus grand rayon des plateaux dans la maison.
+    public var pasEtage: Double
+    public var centreSphere: SIMD3<Double>
+    public var rayonSphere: Double
+    /// Le rayon que cadre la vue d'ensemble 3D : le plus grand de la sphere et des distances a son axe des
+    /// bords exterieurs des zones hors de la maison.
+    public var rayonCadre: Double
+    public var boite: Boite
 
     public struct Boite: Hashable, Sendable {
         public var x0, x1, z0, z1: Double
     }
 
-    public init(rayons: [Double]) {
+    /// Le centre de la boite de cadrage de la 2D.
+    public var cible2D: SIMD3<Double> { SIMD3((boite.x0 + boite.x1) / 2, 0, (boite.z0 + boite.z1) / 2) }
+
+    /// `rayons` : ceux des plateaux, dans l'ordre de la scene (niveau par niveau) ; `plateaux` : leur place dans
+    /// les niveaux (nil : un etage par plateau) ; `colonnes` : celles de la grille 2D (nil : la rangee).
+    public init(rayons: [Double], plateaux: [Plateau]? = nil, colonnes: Int? = nil) {
         let r = rayons.isEmpty ? [DispositionPieces.marge] : rayons
+        let p = plateaux.flatMap { $0.count == r.count ? $0 : nil } ?? r.indices.map { Plateau(niveau: $0) }
         self.rayons = r
-        centres2D = DispositionPieces.centres2D(rayons: r)
-        let rmax = r.max() ?? 1
-        pasEtage = 1.5 * rmax
-        let yHaut = Double(r.count - 1) * pasEtage
-        centreSphere = SIMD3(0, (yHaut + Self.hauteurBloc3D) / 2, 0)
-        rayonSphere = hypot(rmax + 0.8, (yHaut + Self.hauteurBloc3D) / 2 + 1.4) + 0.4
-        boite = Boite(x0: centres2D[0] - r[0], x1: centres2D[r.count - 1] + r[r.count - 1],
-                      z0: -rmax - Self.bandeNomsEtages, z1: rmax)
-        cible2D = SIMD3((boite.x0 + boite.x1) / 2, 0, (boite.z0 + boite.z1) / 2)
+        self.colonnes = max(1, min(r.count, colonnes ?? r.count))
+        (centres2D, boite) = Self.grille(r, colonnes: self.colonnes)
+        // La pile : les etages sur l'axe, au pas de 1,5 fois le plus grand rayon dans la maison.
+        let dans = r.indices.filter { !p[$0].dehors }
+        let rmax = dans.map { r[$0] }.max() ?? 1
+        let pas = 1.5 * rmax
+        let niveaux = (p.map(\.niveau).max() ?? 0) + 1
+        let hh = (Double(niveaux - 1) * pas + Self.hauteurBloc3D) / 2
+        var c3 = r.indices.map { SIMD3(0, Double(p[$0].niveau) * pas, 0) }
+        // Les zones a cote dans la maison : la premiere a droite (+x) de l'etage principal, la deuxieme a
+        // gauche (-x), puis en alternant, de plus en plus loin, `esp` entre les bords.
+        for n in 0..<niveaux {
+            guard let e0 = r.indices.first(where: { p[$0].niveau == n && p[$0].principal }) else { continue }
+            var bord = [r[e0], r[e0]]
+            for (k, e) in r.indices.filter({ p[$0].niveau == n && !p[$0].principal && !p[$0].dehors }).enumerated() {
+                let cote = k % 2, x = bord[cote] + DispositionPieces.esp + r[e]
+                c3[e].x = cote == 0 ? x : -x
+                bord[cote] = x + r[e]
+            }
+        }
+        // La sphere englobe les plateaux dans la maison.
+        let x0 = dans.map { c3[$0].x - r[$0] }.min() ?? -1, x1 = dans.map { c3[$0].x + r[$0] }.max() ?? 1
+        let centre = SIMD3((x0 + x1) / 2, hh, 0), rs = hypot((x1 - x0) / 2 + 0.8, hh + 1.4) + 0.4
+        // Hors de la maison : autour de l'axe de la sphere, vers +x, -x, +z, -z, puis de nouveau, la premiere a
+        // R + esp + r de l'axe, mesure a plat, la suivante plus loin, `esp` entre les bords.
+        let directions: [SIMD2<Double>] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+        var loin = [Double](repeating: rs, count: 4)
+        var cadre = rs
+        for (k, e) in r.indices.filter({ p[$0].dehors }).enumerated() {
+            let d = k % 4, dist = loin[d] + DispositionPieces.esp + r[e]
+            c3[e].x = centre.x + directions[d].x * dist
+            c3[e].z = directions[d].y * dist
+            loin[d] = dist + r[e]
+            cadre = max(cadre, loin[d])
+        }
+        pasEtage = pas
+        centres3D = c3
+        centreSphere = centre
+        rayonSphere = rs
+        rayonCadre = cadre
+    }
+
+    /// La grille 2D (polissage C, section 3.3) : elle se remplit depuis la rangee du bas (vers +z), de gauche a
+    /// droite ; la rangee du haut, incomplete, est centree. Une colonne a la largeur du plus grand diametre de ses
+    /// plateaux ; une rangee, la hauteur du plus grand des siens, plus la bande des noms d'etage, au-dessus ;
+    /// `esp` entre les cases ; chaque plateau est centre dans sa case, bande comprise. La rangee du bas est en
+    /// z = 0, et une rangee est centree sur x = 0 comme la rangee du plan 4b (`DispositionPieces.centres2D`).
+    static func grille(_ r: [Double], colonnes c: Int) -> (centres: [SIMD2<Double>], boite: Boite) {
+        let rangees = stride(from: 0, to: r.count, by: c).map { Array($0..<min($0 + c, r.count)) }
+        let d = r.map { 2 * $0 }
+        let larg = (0..<c).map { k in rangees.map { k < $0.count ? d[$0[k]] : 0 }.max() ?? 0 }
+        let dmax = rangees.map { $0.map { d[$0] }.max() ?? 0 }
+        var centres = [SIMD2<Double>](repeating: .zero, count: r.count)
+        var z = 0.0, x0 = Double.infinity, x1 = -Double.infinity
+        for (i, rangee) in rangees.enumerated() {
+            if i > 0 { z = z - dmax[i - 1] / 2 - bandeNomsEtages - DispositionPieces.esp - dmax[i] / 2 }
+            let x = DispositionPieces.centres2D(rayons: rangee.indices.map { larg[$0] / 2 })
+            for (k, e) in rangee.enumerated() { centres[e] = SIMD2(x[k], z) }
+            x0 = min(x0, x[0] - larg[0] / 2)
+            x1 = max(x1, x[rangee.count - 1] + larg[rangee.count - 1] / 2)
+        }
+        return (centres, Boite(x0: x0, x1: x1, z0: z - dmax[rangees.count - 1] / 2 - bandeNomsEtages, z1: dmax[0] / 2))
+    }
+
+    /// Le nombre de colonnes de la grille (polissage C, section 3.3) pour une vue de `taille` points. L'echelle
+    /// d'une grille est min(largeur / sa largeur, hauteur / sa hauteur) ; parmi les grilles a moins de 10 % de la
+    /// plus grande echelle, celle qui a le moins de cases vides, puis le moins de rangees. `enPlace` : la grille en
+    /// place, qui reste tant que son echelle est a moins de 5 % de celle du choix (au redimensionnement). Une
+    /// taille de 1 pt ou moins ne choisit rien : la grille en place, ou nil, attendre une vraie taille.
+    public static func colonnes(rayons: [Double], taille: CGSize, enPlace: Int? = nil) -> Int? {
+        let n = rayons.count
+        guard n > 0, taille.width > 1, taille.height > 1 else { return enPlace }
+        let candidats = (1...n).map { c -> (c: Int, echelle: Double, vides: Int, rangees: Int) in
+            let b = grille(rayons, colonnes: c).boite
+            let rangees = (n + c - 1) / c
+            return (c, min(Double(taille.width) / (b.x1 - b.x0), Double(taille.height) / (b.z1 - b.z0)),
+                    c * rangees - n, rangees)
+        }
+        let meilleure = candidats.map(\.echelle).max() ?? 0
+        guard let choix = candidats.filter({ $0.echelle >= 0.9 * meilleure })
+            .min(by: { ($0.vides, $0.rangees) < ($1.vides, $1.rangees) }) else { return enPlace }
+        if let e = enPlace, let g = candidats.first(where: { $0.c == e }), g.echelle >= 0.95 * choix.echelle { return e }
+        return choix.c
     }
 
     /// Centre du plateau `e` a l'avancement `u` de la bascule (0 : 2D, 1 : 3D).
     public func centrePlateau(_ e: Int, _ u: Double) -> SIMD3<Double> {
-        let a = SIMD3(centres2D[e], 0, 0), b = SIMD3(0, Double(e) * pasEtage, 0)
+        let a = SIMD3(centres2D[e].x, 0, centres2D[e].y), b = centres3D[e]
         return a + (b - a) * u
     }
 
@@ -265,10 +367,11 @@ public enum CameraScene {
         return max((g.boite.z1 - g.boite.z0) * 1.1, (g.boite.x1 - g.boite.x0) * 1.05 / aspect)
     }
 
-    /// Hauteur de vue de la vue d'ensemble 3D, centree sur la sphere.
+    /// Hauteur de vue de la vue d'ensemble 3D, centree sur la sphere : elle cadre la sphere et les zones hors de
+    /// la maison (polissage C, section 2).
     public static func vue3D(_ g: GeometrieMaison, aspect: Double) -> Double {
         let aspect = aspectSur(aspect)
-        return 2.4 * g.rayonSphere * max(1, 1 / aspect)
+        return 2.4 * g.rayonCadre * max(1, 1 / aspect)
     }
 
     public static func vue(_ g: GeometrieMaison, aspect: Double, u: Double) -> Double {
@@ -322,6 +425,24 @@ public enum CameraScene {
         let aspect = aspectSur(aspect)
         let d = Orbite.distance(pourHauteur: max(largeur / aspect, profondeur) * 1.3 * 1.8 + 6, champ: o.champ)
         return Vol(depuis: o, oeil: centre + directionVue(o, troisD: troisD) * d, cible: centre)
+    }
+
+    /// Hauteur de vue d'un etage isole (polissage C, section 5.1), bande de son nom comprise :
+    /// max((2 r + bande) 1,1 ; 2 r 1,05 / aspect).
+    public static func vueEtage(_ g: GeometrieMaison, etage e: Int, aspect: Double) -> Double {
+        let aspect = aspectSur(aspect), r = g.rayons[e]
+        return max((2 * r + GeometrieMaison.bandeNomsEtages) * 1.1, 2 * r * 1.05 / aspect)
+    }
+
+    /// Vol vers un etage isole, a l'avancement u de la bascule (polissage C, section 5.1) : en 2D, vue de dessus,
+    /// la cible au centre de sa boite, bande du nom comprise ; en 3D, meme azimut et meme inclinaison, la cible
+    /// au centre du plateau, a sa hauteur.
+    public static func volVersEtage(_ o: Orbite, _ g: GeometrieMaison, etage e: Int, aspect: Double, u: Double,
+                                    troisD: Bool) -> Vol {
+        var c = g.centrePlateau(e, u)
+        if !troisD { c.z -= GeometrieMaison.bandeNomsEtages / 2 }
+        let d = Orbite.distance(pourHauteur: vueEtage(g, etage: e, aspect: aspect), champ: o.champ)
+        return Vol(depuis: o, oeil: c + directionVue(o, troisD: troisD) * d, cible: c)
     }
 
     /// Vol de retour a la vue d'ensemble, a l'avancement u de la bascule.

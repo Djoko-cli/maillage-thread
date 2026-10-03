@@ -125,7 +125,7 @@ struct CameraSceneTests {
     }
 
     /// Un aspect nul, negatif, non fini ou minuscule (cadre vide pendant une mise en page) laisse la
-    /// camera finie : vue d'ensemble, bornes, zoom, envol et vols.
+    /// camera finie : vue d'ensemble, bornes, zoom, envol et vols, celui vers un etage compris.
     @Test(arguments: [0, -1, Double.nan, Double.infinity, 1e-9])
     func aspectDegenere(_ aspect: Double) {
         let g = Self.geometrie
@@ -143,9 +143,11 @@ struct CameraSceneTests {
             let piece = CameraScene.volVersPiece(o, centre: SIMD3(-12, 0.5, 3), largeur: 8.75, profondeur: 9.3,
                                                  aspect: aspect, troisD: u == 1)
             let ensemble = CameraScene.volVersEnsemble(o, g, aspect: aspect, u: u, troisD: u == 1)
+            let etage = CameraScene.volVersEtage(o, g, etage: 1, aspect: aspect, u: u, troisD: u == 1)
             for q in [0.0, 0.5, 1.0] {
                 #expect(Self.finie(piece.orbite(q, depuis: o)), "vol vers une piece, u = \(u), q = \(q)")
                 #expect(Self.finie(ensemble.orbite(q, depuis: o)), "vol vers l'ensemble, u = \(u), q = \(q)")
+                #expect(Self.finie(etage.orbite(q, depuis: o)), "vol vers un etage, u = \(u), q = \(q)")
             }
         }
     }
@@ -168,8 +170,172 @@ struct CameraSceneTests {
         #expect(g.centreSphere == SIMD3(0, (24 + 2.4) / 2, 0))
         #expect(abs(g.rayonSphere - (hypot(16.8, 13.2 + 1.4) + 0.4)) < 1e-12)
         #expect(g.centrePlateau(1, 1) == SIMD3(0, 24, 0))
-        #expect(g.centrePlateau(0, 0).x == g.centres2D[0])
+        #expect(g.centrePlateau(0, 0).x == g.centres2D[0].x)
         #expect(abs(g.boite.z0 - (-16 - 34.0 / 24)) < 1e-12 && g.boite.z1 == 16)
         #expect(GeometrieMaison.hauteurBloc(0) == 0.04 && abs(GeometrieMaison.hauteurBloc(1) - 2.44) < 1e-12)
+    }
+
+    /// Avec des etages seulement, en rangee (polissage C, sections 2 et 3.4) : exactement la geometrie du plan 4b,
+    /// au bit pres, calculee ici par ses formules ; la vue d'ensemble 3D cadre la sphere.
+    @Test(arguments: [[15.2, 16.0], [7.0], [10, 4, 6, 12.5], [9.94, 15.03, 11.39, 15.91, 8.2]])
+    func etagesSeulementCommeAvant(_ r: [Double]) {
+        let g = GeometrieMaison(rayons: r)
+        let x = DispositionPieces.centres2D(rayons: r)
+        let rmax = r.max() ?? 1, pas = 1.5 * rmax, yHaut = Double(r.count - 1) * pas
+        #expect(g.colonnes == r.count && g.pasEtage == pas)
+        #expect(g.centres2D == x.map { SIMD2($0, 0) })
+        #expect(g.centres3D == r.indices.map { SIMD3(0, Double($0) * pas, 0) })
+        #expect(g.centreSphere == SIMD3(0, (yHaut + GeometrieMaison.hauteurBloc3D) / 2, 0))
+        #expect(g.rayonSphere == hypot(rmax + 0.8, (yHaut + GeometrieMaison.hauteurBloc3D) / 2 + 1.4) + 0.4)
+        #expect(g.rayonCadre == g.rayonSphere)
+        let boite = GeometrieMaison.Boite(x0: x[0] - r[0], x1: x[r.count - 1] + r[r.count - 1],
+                                          z0: -rmax - GeometrieMaison.bandeNomsEtages, z1: rmax)
+        #expect(g.boite == boite && g.cible2D == SIMD3((boite.x0 + boite.x1) / 2, 0, (boite.z0 + boite.z1) / 2))
+        for e in r.indices {
+            for u in [0, 0.3, 1.0] {
+                let a = SIMD3(x[e], 0, 0), b = SIMD3(0, Double(e) * pas, 0)
+                #expect(g.centrePlateau(e, u) == a + (b - a) * u)
+            }
+        }
+        #expect(CameraScene.vue3D(g, aspect: Self.aspect) == 2.4 * g.rayonSphere * max(1, 1 / Self.aspect))
+    }
+
+    /// Plateaux de la maison des tests de C : le rez-de-chaussee (10) et ses zones a cote dans la maison (4, 5,
+    /// 3), l'etage (12), et des zones hors de la maison au rez-de-chaussee (6, 5) et a l'etage (4, 3, 2).
+    static let rayonsC: [Double] = [10, 4, 5, 3, 6, 5, 12, 4, 3, 2]
+    static let plateauxC: [GeometrieMaison.Plateau] = [
+        .init(niveau: 0), .init(niveau: 0, principal: false), .init(niveau: 0, principal: false),
+        .init(niveau: 0, principal: false), .init(niveau: 0, principal: false, dehors: true),
+        .init(niveau: 0, principal: false, dehors: true), .init(niveau: 1), .init(niveau: 1, principal: false, dehors: true),
+        .init(niveau: 1, principal: false, dehors: true), .init(niveau: 1, principal: false, dehors: true),
+    ]
+
+    /// Zones dans la maison (polissage C, section 2) : a la hauteur de leur niveau, z = 0, la premiere a droite
+    /// de l'etage principal, la deuxieme a gauche, la troisieme a droite apres la premiere, `esp` entre les bords ;
+    /// le pas des niveaux suit le plus grand rayon dans la maison ; la sphere les englobe, centree sur leur boite.
+    @Test func zonesDansLaMaison() {
+        let g = GeometrieMaison(rayons: Self.rayonsC, plateaux: Self.plateauxC)
+        let esp = DispositionPieces.esp
+        #expect(g.pasEtage == 18, "1,5 fois 12, les zones hors de la maison n'y comptent pas")
+        #expect(g.centres3D[0] == SIMD3(0, 0, 0) && g.centres3D[6] == SIMD3(0, 18, 0))
+        #expect(g.centres3D[1] == SIMD3(10 + esp + 4, 0, 0))
+        #expect(g.centres3D[2] == SIMD3(-(10 + esp + 5), 0, 0))
+        #expect(g.centres3D[3] == SIMD3(10 + esp + 4 + 4 + esp + 3, 0, 0))
+        let x0 = -(10 + esp + 5) - 5, x1 = 10 + esp + 4 + 4 + esp + 3 + 3, hh = (18 + GeometrieMaison.hauteurBloc3D) / 2
+        #expect(abs(g.centreSphere.x - (x0 + x1) / 2) < 1e-12 && g.centreSphere.y == hh && g.centreSphere.z == 0)
+        #expect(abs(g.rayonSphere - (hypot((x1 - x0) / 2 + 0.8, hh + 1.4) + 0.4)) < 1e-12)
+        for e in Self.plateauxC.indices where !Self.plateauxC[e].dehors {
+            let c = g.centres3D[e], r = Self.rayonsC[e]
+            for p in [c + SIMD3(r, 0, 0), c - SIMD3(r, 0, 0), c + SIMD3(0, 0, r), c - SIMD3(0, 0, r),
+                      c + SIMD3(r, GeometrieMaison.hauteurBloc3D, 0), c - SIMD3(r, -GeometrieMaison.hauteurBloc3D, 0)] {
+                #expect(simd_distance(p, g.centreSphere) < g.rayonSphere, "plateau \(e) dans la sphere")
+            }
+        }
+    }
+
+    /// Zones hors de la maison : a la hauteur de leur niveau, autour de l'axe de la sphere, vers +x, -x, +z, -z,
+    /// puis de nouveau +x, plus loin ; hors de la sphere ; le cadrage les couvre (`rayonCadre`), et la vue
+    /// d'ensemble 3D les garde dans le cadre sur un tour de rotation lente.
+    @Test func zonesHorsDeLaMaison() throws {
+        let g = GeometrieMaison(rayons: Self.rayonsC, plateaux: Self.plateauxC)
+        let esp = DispositionPieces.esp, c = g.centreSphere, rs = g.rayonSphere
+        let attendus: [(Int, SIMD2<Double>, Double)] = [(4, [1, 0], rs + esp + 6), (5, [-1, 0], rs + esp + 5),
+                                                        (7, [0, 1], rs + esp + 4), (8, [0, -1], rs + esp + 3),
+                                                        (9, [1, 0], rs + esp + 6 + 6 + esp + 2)]
+        for (e, d, dist) in attendus {
+            let p = g.centres3D[e]
+            #expect(abs(p.x - (c.x + d.x * dist)) < 1e-9 && abs(p.z - d.y * dist) < 1e-9, "plateau \(e)")
+            #expect(p.y == Double(Self.plateauxC[e].niveau) * g.pasEtage)
+            #expect(hypot(p.x - c.x, p.z) - Self.rayonsC[e] > rs, "plateau \(e) hors de la sphere")
+        }
+        #expect(abs(g.rayonCadre - (rs + esp + 6 + 6 + esp + 2 + 2)) < 1e-9)
+        for k in 0..<24 {
+            var o = CameraScene.canonique(g, aspect: Self.aspect, u: 1)
+            o.azimut += Double(k) / 24 * 2 * .pi
+            let proj = ProjectionScene(o, cadre: Self.cadre)
+            for e in Self.rayonsC.indices {
+                for a in stride(from: 0.0, to: 2 * .pi, by: .pi / 8) {
+                    let p = g.centres3D[e] + SIMD3(Self.rayonsC[e] * cos(a), 0, Self.rayonsC[e] * sin(a))
+                    let q = try #require(proj.ecran(p))
+                    #expect(Self.cadre.contains(q), "plateau \(e), azimut \(k)")
+                }
+            }
+        }
+    }
+
+    /// La grille (polissage C, section 3.3) : elle se remplit depuis la rangee du bas, de gauche a droite ; la
+    /// rangee du haut, incomplete, est centree ; une colonne a le plus grand diametre de ses plateaux, une rangee
+    /// le plus grand des siens plus la bande des noms, `esp` entre les cases ; chaque plateau est centre dans sa
+    /// case, bande comprise.
+    @Test func grille() {
+        let g = GeometrieMaison(rayons: [10, 4, 6, 5, 3], colonnes: 2)
+        let esp = DispositionPieces.esp, bande = GeometrieMaison.bandeNomsEtages
+        #expect(g.colonnes == 2)
+        #expect(abs(g.centres2D[0].x - (-(20 + esp + 10) / 2 + 10)) < 1e-9 && g.centres2D[0].y == 0)
+        #expect(abs(g.centres2D[1].x - ((20 + esp + 10) / 2 - 5)) < 1e-9 && g.centres2D[1].y == 0, "en bas, a droite")
+        let z1 = -(20.0 / 2 + bande + esp + 12.0 / 2)
+        #expect(abs(g.centres2D[2].x - g.centres2D[0].x) < 1e-9 && abs(g.centres2D[2].y - z1) < 1e-9, "au-dessus")
+        #expect(abs(g.centres2D[3].x - g.centres2D[1].x) < 1e-9 && abs(g.centres2D[3].y - z1) < 1e-9)
+        let z2 = z1 - (12.0 / 2 + bande + esp + 6.0 / 2)
+        #expect(abs(g.centres2D[4].x) < 1e-9 && abs(g.centres2D[4].y - z2) < 1e-9, "la rangee du haut, centree")
+        #expect(abs(g.boite.x0 + (20 + esp + 10) / 2) < 1e-9 && abs(g.boite.x1 - (20 + esp + 10) / 2) < 1e-9)
+        #expect(g.boite.z1 == 10 && abs(g.boite.z0 - (z2 - 3 - bande)) < 1e-9)
+    }
+
+    /// Le choix des colonnes (polissage C, section 3.3), sur les rayons de la maison de la maquette de C : 2 x 2
+    /// dans une vue carree ou ordinaire (1100 x 760), la rangee dans une vue large (2,4 : 1) ; 3 + 1 en 1440 x 900,
+    /// ou 2 x 2 est a plus de 10 % de la plus grande echelle. A moins de 10 %, le moins de cases vides : 2 x 2 avant
+    /// 3 + 1 ; puis le moins de rangees : la rangee avant 2 x 2.
+    @Test func choixDesColonnes() {
+        let r = [15.91, 11.39, 15.03, 9.94]
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1100, height: 760)) == 2)
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 760, height: 760)) == 2)
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1824, height: 760)) == 4)
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1440, height: 900)) == 3)
+        #expect(GeometrieMaison.colonnes(rayons: [12, 12, 12, 12], taille: CGSize(width: 1600, height: 1000)) == 2)
+        #expect(GeometrieMaison.colonnes(rayons: [12, 12, 12, 12], taille: CGSize(width: 1900, height: 1000)) == 4)
+        #expect(GeometrieMaison.colonnes(rayons: [7], taille: CGSize(width: 800, height: 600)) == 1)
+    }
+
+    /// Hysteresis (polissage C, section 3.3) : la grille en place reste tant que son echelle est a moins de 5 % de
+    /// celle du choix. Une taille de 1 pt ou moins ne choisit rien : la grille en place, ou rien ; la premiere
+    /// vraie taille choisit.
+    @Test func hysteresisEtTailleNulle() {
+        let r = [12.0, 12, 12, 12]
+        // Vers 1,8 : la rangee entre dans les 10 % de 2 x 2 et l'emporte (moins de rangees).
+        let pres = CGSize(width: 1820, height: 1000)
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: pres) == 4)
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: pres, enPlace: 2) == 2, "2 x 2 en place, a moins de 5 %")
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 2200, height: 1000), enPlace: 2) == 4)
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1, height: 600), enPlace: 2) == 2)
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: .zero) == nil, "attendre une vraie taille")
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1100, height: 760)) == 2)
+    }
+
+    /// Cadrage d'un etage isole (polissage C, section 5.1) : en 2D, vue de dessus, la cible au centre de sa boite,
+    /// bande du nom comprise, la boite dans le cadre ; en 3D, meme azimut et meme inclinaison, la cible au centre
+    /// du plateau, a sa hauteur ; la hauteur de vue max((2 r + bande) 1,1 ; 2 r 1,05 / aspect).
+    @Test func cadrageDUnEtage() throws {
+        let g = GeometrieMaison(rayons: Self.rayonsC, plateaux: Self.plateauxC, colonnes: 4)
+        let bande = GeometrieMaison.bandeNomsEtages
+        for e in [0, 4, 6] {
+            let r = Self.rayonsC[e], vue = max((2 * r + bande) * 1.1, 2 * r * 1.05 / Self.aspect)
+            #expect(CameraScene.vueEtage(g, etage: e, aspect: Self.aspect) == vue)
+            let o2 = CameraScene.canonique(g, aspect: Self.aspect, u: 0)
+            let v2 = CameraScene.volVersEtage(o2, g, etage: e, aspect: Self.aspect, u: 0, troisD: false).orbite(1, depuis: o2)
+            let c = g.centres2D[e]
+            #expect(simd_distance(v2.cible, SIMD3(c.x, 0, c.y - bande / 2)) < 1e-9)
+            #expect(abs(v2.distance - Orbite.distance(pourHauteur: vue, champ: 2)) < 1e-6 && v2.inclinaison < 1e-3)
+            let p = ProjectionScene(v2, cadre: Self.cadre)
+            for q in [SIMD3(c.x - r, 0, c.y - r - bande), SIMD3(c.x + r, 0, c.y + r)] {
+                #expect(Self.cadre.contains(try #require(p.ecran(q))), "etage \(e) dans le cadre")
+            }
+            var o3 = CameraScene.canonique(g, aspect: Self.aspect, u: 1)
+            o3.azimut += 0.4
+            let v3 = CameraScene.volVersEtage(o3, g, etage: e, aspect: Self.aspect, u: 1, troisD: true).orbite(1, depuis: o3)
+            #expect(simd_distance(v3.cible, g.centres3D[e]) < 1e-9)
+            #expect(abs(v3.azimut - o3.azimut) < 1e-9 && abs(v3.inclinaison - o3.inclinaison) < 1e-9)
+            #expect(abs(v3.distance - Orbite.distance(pourHauteur: vue, champ: 40)) < 1e-6)
+        }
     }
 }

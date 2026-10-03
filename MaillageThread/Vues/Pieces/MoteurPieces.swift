@@ -288,7 +288,10 @@ final class MoteurPieces {
         entree = e
         cartes = scene.pieces.map { cartesCalculees[$0.id] ?? CartesPieces.carte([]) }
         positions = scene.pieces.map { placesCalculees[$0.id] ?? .zero }
-        geometrie = GeometrieMaison(rayons: scene.etages.map { rayonsCalcules[$0.id] ?? DispositionPieces.marge })
+        geometrie = GeometrieMaison(rayons: scene.etages.map { rayonsCalcules[$0.id] ?? DispositionPieces.marge },
+                                    plateaux: scene.etages.map {
+                                        GeometrieMaison.Plateau(niveau: $0.niveau, principal: $0.principal, dehors: $0.dehors)
+                                    })
         fk = Array(repeating: 0, count: scene.pieces.count)
         if let cle = ancienFocus, let i = scene.pieces.firstIndex(where: { $0.id == cle }) {
             focus = i
