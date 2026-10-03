@@ -284,8 +284,11 @@ struct CameraSceneTests {
 
     /// Le choix des colonnes (polissage C, section 3.3), sur les rayons de la maison de la maquette de C : 2 x 2
     /// dans une vue carree ou ordinaire (1100 x 760), la rangee dans une vue large (2,4 : 1) ; 3 + 1 en 1440 x 900,
-    /// ou 2 x 2 est a plus de 10 % de la plus grande echelle. A moins de 10 %, le moins de cases vides : 2 x 2 avant
-    /// 3 + 1 ; puis le moins de rangees : la rangee avant 2 x 2.
+    /// ou 2 x 2 est a plus de 10 % de la plus grande echelle. Sur quatre plateaux de 12, la rangee a 89,4 % de
+    /// l'echelle de 2 x 2 reste hors de la bande de 10 % (1790 x 1000) ; a 90,9 %, elle y entre (1820 x 1000, dans
+    /// `hysteresisEtTailleNulle`). A moins de 10 %, le moins de cases vides passe avant le moins de rangees : sur
+    /// sept plateaux de 12 (700 x 1000), 2 colonnes (4 rangees, 1 case vide) avant 3 colonnes (3 rangees, 2 cases
+    /// vides, a 0,3 % de la meme echelle) ; a cases vides egales, le moins de rangees : la rangee avant 2 x 2.
     @Test func choixDesColonnes() {
         let r = [15.91, 11.39, 15.03, 9.94]
         #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1100, height: 760)) == 2)
@@ -294,6 +297,15 @@ struct CameraSceneTests {
         #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1440, height: 900)) == 3)
         #expect(GeometrieMaison.colonnes(rayons: [12, 12, 12, 12], taille: CGSize(width: 1600, height: 1000)) == 2)
         #expect(GeometrieMaison.colonnes(rayons: [12, 12, 12, 12], taille: CGSize(width: 1900, height: 1000)) == 4)
+        // La bande de 10 % : la rangee a 89,4 % de l'echelle de 2 x 2 n'y est pas (a 90,9 %, elle y est : 1820 x 1000,
+        // dans `hysteresisEtTailleNulle`).
+        #expect(GeometrieMaison.colonnes(rayons: [12, 12, 12, 12], taille: CGSize(width: 1790, height: 1000)) == 2,
+                "la rangee a 89,4 %, hors de la bande de 10 %")
+        // Sept plateaux : 2 colonnes (4 rangees, 1 case vide) et 3 colonnes (3 rangees, 2 cases vides) sont a 0,3 %
+        // l'une de l'autre ; le moins de cases vides l'emporte sur le moins de rangees.
+        let sept = Array(repeating: 12.0, count: 7)
+        #expect(GeometrieMaison.colonnes(rayons: sept, taille: CGSize(width: 700, height: 1000)) == 2,
+                "le moins de cases vides avant le moins de rangees : 2 colonnes, pas 3")
         #expect(GeometrieMaison.colonnes(rayons: [7], taille: CGSize(width: 800, height: 600)) == 1)
     }
 
@@ -307,7 +319,18 @@ struct CameraSceneTests {
         #expect(GeometrieMaison.colonnes(rayons: r, taille: pres) == 4)
         #expect(GeometrieMaison.colonnes(rayons: r, taille: pres, enPlace: 2) == 2, "2 x 2 en place, a moins de 5 %")
         #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 2200, height: 1000), enPlace: 2) == 4)
+        // La bande de 5 %, des deux cotes : a 2050 x 1000, 2 x 2 en place est a 97,7 % de l'echelle du choix (la
+        // rangee) et reste ; a 2150 x 1000, il est a 93,2 % et la rangee l'emporte.
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 2050, height: 1000), enPlace: 2) == 2,
+                "2 x 2 en place a 97,7 % du choix : il reste")
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 2150, height: 1000), enPlace: 2) == 4,
+                "2 x 2 en place a 93,2 % du choix : la rangee l'emporte")
         #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1, height: 600), enPlace: 2) == 2)
+        // Une hauteur de 1 pt, comme une largeur de 1 pt, ne choisit rien.
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 600, height: 1), enPlace: 2) == 2,
+                "1 pt de haut : la grille en place")
+        #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 600, height: 1)) == nil,
+                "1 pt de haut : rien a choisir")
         #expect(GeometrieMaison.colonnes(rayons: r, taille: .zero) == nil, "attendre une vraie taille")
         #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1100, height: 760)) == 2)
     }
