@@ -4,8 +4,11 @@ import Foundation
 /// `positions-pieces.json` : par maison (`domicile` de Maison), l'ordre des etages et, par etage, la
 /// place (x, z) de chaque piece deplacee, par rapport au centre du plateau, en unites. Une piece est
 /// reconnue par la cle de son etage et la sienne : renommee, ou passee dans un autre etage, elle
-/// perd sa place.
+/// perd sa place. Depuis le polissage C, le choix de niveau des zones a cote (`aCote`).
 public struct PlacesGardees: Hashable, Sendable, Codable {
+    /// Version 1 : l'ordre et les places, puis, depuis le polissage C, les zones a cote (`aCote`), un champ
+    /// facultatif, comme `appareils` dans `pieces-routeurs.json`. Un fichier d'avant se lit sans perte ; une
+    /// app d'avant lit encore l'ordre et les places d'un fichier d'apres, et ignore le champ.
     public static let versionActuelle = 1
     /// Distance au centre de son plateau au-dela de laquelle une place gardee est ignoree (unites) : elle
     /// vient d'un fichier abime ou edite a la main, un glisser restant dans le plateau. Un plateau fait
@@ -23,15 +26,51 @@ public struct PlacesGardees: Hashable, Sendable, Codable {
         }
     }
 
+    /// Le choix d'une zone a cote (polissage C, section 1.2) : la cle de l'etage principal dont elle partage
+    /// le niveau, et si elle est hors de la maison.
+    public struct ACote: Hashable, Sendable, Codable {
+        public var etage: String
+        public var dehors: Bool
+
+        public init(etage: String, dehors: Bool = false) {
+            self.etage = etage
+            self.dehors = dehors
+        }
+    }
+
     public struct Maison: Hashable, Sendable, Codable {
-        /// Cles des etages, du bas vers le haut.
+        /// Cles des plateaux, du bas vers le haut, zones a cote comprises.
         public var ordreEtages: [String] = []
         /// Cle d'etage -> cle de piece -> place.
         public var etages: [String: [String: Place]] = [:]
+        /// Cle d'une zone a cote -> son choix ; un plateau qui n'y est pas est un etage.
+        public var aCote: [String: ACote] = [:]
 
-        public init(ordreEtages: [String] = [], etages: [String: [String: Place]] = [:]) {
+        public init(ordreEtages: [String] = [], etages: [String: [String: Place]] = [:], aCote: [String: ACote] = [:]) {
             self.ordreEtages = ordreEtages
             self.etages = etages
+            self.aCote = aCote
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case ordreEtages, etages, aCote
+        }
+
+        /// `aCote` manque aux fichiers d'avant le polissage C : des etages seulement. Mal forme, il est ignore
+        /// de meme : un champ facultatif ne doit pas faire perdre l'ordre ni les places.
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            ordreEtages = try c.decode([String].self, forKey: .ordreEtages)
+            etages = try c.decode([String: [String: Place]].self, forKey: .etages)
+            aCote = (try? c.decodeIfPresent([String: ACote].self, forKey: .aCote)) ?? [:]
+        }
+
+        /// Sans zone a cote, le champ n'est pas ecrit : le fichier reste celui d'avant le polissage C.
+        public func encode(to encoder: any Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(ordreEtages, forKey: .ordreEtages)
+            try c.encode(etages, forKey: .etages)
+            if !aCote.isEmpty { try c.encode(aCote, forKey: .aCote) }
         }
     }
 
@@ -67,7 +106,20 @@ public struct PlacesGardees: Hashable, Sendable, Codable {
         maisons[domicile, default: Maison()].ordreEtages = etages
     }
 
-    /// « Replacer les pieces automatiquement » : oublie les places de la maison, garde l'ordre des etages.
+    /// L'ordre des plateaux et les choix de niveau de la maison (polissage C, section 1.2).
+    public func rangement(_ domicile: String) -> Rangement {
+        let m = maison(domicile)
+        return Rangement(ordre: m.ordreEtages, aCote: m.aCote)
+    }
+
+    /// Garde l'ordre des plateaux et les choix de niveau, apres un choix du menu du clic droit.
+    public mutating func ranger(_ r: Rangement, domicile: String) {
+        maisons[domicile, default: Maison()].ordreEtages = r.ordre
+        maisons[domicile, default: Maison()].aCote = r.aCote
+    }
+
+    /// « Replacer les pieces automatiquement » : oublie les places de la maison, garde l'ordre des etages et
+    /// les choix de niveau.
     public mutating func replacer(domicile: String) {
         maisons[domicile]?.etages = [:]
     }

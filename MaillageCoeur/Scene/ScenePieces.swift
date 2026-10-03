@@ -7,6 +7,10 @@ import Foundation
 ///   zones va dans la premiere ; deux zones du meme nom n'en font qu'une, a la place de la premiere ;
 ///   les pieces hors zone forment « Autres pieces ». Sans zones (ou fichier d'avant les zones), un seul
 ///   plateau « Maison ». Un ordre garde passe avant.
+/// - Niveaux (polissage C, section 1) : un plateau est un etage, ou une zone a cote d'un etage, dont elle
+///   partage le niveau (`Niveaux`, d'apres les choix gardes). Les plateaux sont ranges niveau par niveau,
+///   du bas vers le haut, et dans un niveau l'etage principal d'abord, puis ses zones a cote : l'ordre des
+///   plateaux en 2D. Avec des etages seulement, c'est l'ordre garde.
 /// - Pieces : celles de Maison (le champ `piece` de l'accessoire du noeud) ; un noeud sans piece va
 ///   dans « Sans piece », sur le plateau du bas. Sans aucune piece dans Maison, un seul plateau
 ///   « Maison » et une carte par routeur, avec ses enfants (parents vus par la sonde).
@@ -57,6 +61,10 @@ public struct ScenePieces: Hashable, Sendable {
         public var nom: NomEtage
         /// Indices de ses pieces, par nom.
         public var pieces: [Int]
+        /// Son niveau (0 en bas) ; un etage principal, ou une zone a cote de lui ; hors de la maison.
+        public var niveau: Int
+        public var principal: Bool
+        public var dehors: Bool
 
         public var id: String { nom.cle }
     }
@@ -100,6 +108,8 @@ public struct ScenePieces: Hashable, Sendable {
     public private(set) var pieces: [Piece] = []
     public private(set) var noeuds: [Noeud] = []
     public private(set) var liens: [Lien] = []
+    /// Les niveaux de ses plateaux (polissage C, section 1).
+    public private(set) var niveaux: Niveaux
     /// Maison n'a encore aucune piece : cartes par routeur, et le bandeau du passeur.
     public private(set) var sansPiecesMaison: Bool
     private var indices: [String: Int] = [:]
@@ -107,9 +117,10 @@ public struct ScenePieces: Hashable, Sendable {
     /// `libelles` : nom affiche de chaque noeud (son id a defaut) ; `piecesNoeuds` : piece de Maison
     /// de chaque noeud qui en a une ; `zones` : celles de Maison (nil : fichier d'avant les zones) ;
     /// `chefs` : noeuds couronnes ; `piecesMaison` : Maison a au moins une piece ; `ordreEtages` :
-    /// cles des etages dans l'ordre garde, du bas vers le haut.
+    /// cles des etages dans l'ordre garde, du bas vers le haut ; `aCote` : les choix de niveau gardes.
     public init(graphe: GrapheReseau, libelles: [String: String], piecesNoeuds: [String: String],
-                zones: [ZoneMaison]?, chefs: Set<String>, piecesMaison: Bool, ordreEtages: [String] = []) {
+                zones: [ZoneMaison]?, chefs: Set<String>, piecesMaison: Bool, ordreEtages: [String] = [],
+                aCote: [String: PlacesGardees.ACote] = [:]) {
         sansPiecesMaison = !piecesMaison
         func libelle(_ id: String) -> String { libelles[id] ?? id }
         // Piece de chaque noeud.
@@ -162,13 +173,22 @@ public struct ScenePieces: Hashable, Sendable {
             }
         }
         if noms.isEmpty { noms = [.maison] }
-        // Ordre garde d'abord ; un etage qu'il ne connait pas garde son rang, au-dessus.
+        // Ordre garde d'abord ; un etage qu'il ne connait pas garde son rang, au-dessus. Puis les niveaux :
+        // chaque zone a cote rejoint son etage principal.
         let rang = Dictionary(ordreEtages.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
-        let ordre = noms.indices.sorted {
+        let garde = noms.indices.sorted {
             (rang[noms[$0].cle] ?? Int.max, $0) < (rang[noms[$1].cle] ?? Int.max, $1)
         }
+        let n = Niveaux(garde.map { noms[$0].cle }, aCote: aCote)
+        let indiceNom = Dictionary(uniqueKeysWithValues: noms.indices.map { (noms[$0].cle, $0) })
+        let ordre = n.plateaux.compactMap { indiceNom[$0] }
         let nouveau = Dictionary(uniqueKeysWithValues: ordre.enumerated().map { ($1, $0) })
-        etages = ordre.map { Etage(nom: noms[$0], pieces: []) }
+        niveaux = n
+        etages = ordre.map { i in
+            let c = noms[i].cle
+            return Etage(nom: noms[i], pieces: [], niveau: n.niveau(c) ?? 0, principal: n.estPrincipal(c),
+                         dehors: n.dehors(c))
+        }
         func etage(_ p: NomPiece) -> Int {
             if case .maison(let n) = p, let e = etageDe[n] { return nouveau[e] ?? 0 }
             return 0

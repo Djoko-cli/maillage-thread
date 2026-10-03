@@ -86,7 +86,7 @@ struct SceneProjeteeTests {
         let salon = try Self.indice(s, "Salon"), chambre = try Self.indice(s, "Chambre")
         #expect(reperes.map(\.parent) == ["Apple TV", "HomePod"])
         #expect(reperes[0].sens == .dessous && reperes[0].piece == salon)
-        #expect(reperes[1].sens == .memeEtage && reperes[1].piece == chambre)
+        #expect(reperes[1].sens == .memeNiveau && reperes[1].piece == chambre)
         #expect(p.fils.count == 2 && p.fils.allSatisfy { abs($0.opacite - 0.8) < 1e-12 })
         #expect(p.ancresAilleurs.count == 2)
         for b in p.blocs {
@@ -94,6 +94,23 @@ struct SceneProjeteeTests {
             #expect(abs(b.opaciteVerre - attendue) < 1e-12)
         }
         #expect(p.plateaux.allSatisfy { $0.opacite == 0 })
+    }
+
+    /// Le sens d'un repere « ailleurs » compare les niveaux (polissage C, section 5.2) : un parent dans l'etage
+    /// principal d'une zone a cote est au meme niveau (↗) ; un parent a l'etage, au-dessus (↑). La zone mise sur
+    /// son propre niveau, au-dessus des deux autres : ses parents sont en dessous.
+    @Test func reperesParNiveau() throws {
+        let pieces = ["Apple TV": "Salon", "HomePod": "Chambre", "E000000000000002": "Terrasse",
+                      "E000000000000003": "Terrasse"]
+        let zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon"]), ZoneMaison(nom: "Étage", pieces: ["Chambre"]),
+                     ZoneMaison(nom: "Jardin", pieces: ["Terrasse"])]
+        for aCote in [["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée", dehors: true)], [:]] {
+            let s = ScenePieces(graphe: try ScenePiecesTests.graphe(sonde: true), libelles: ScenePiecesTests.libelles,
+                                piecesNoeuds: pieces, zones: zones, chefs: ["Apple TV"], piecesMaison: true, aCote: aCote)
+            let terrasse = try Self.indice(s, "Terrasse")
+            let sens = SceneProjetee.reperes(s, focus: terrasse).sorted { $0.enfant < $1.enfant }.map(\.sens)
+            #expect(sens == (aCote.isEmpty ? [.dessous, .dessous] : [.memeNiveau, .dessus]), "\(aCote)")
+        }
     }
 
     /// Survol d'un appareil : ses liens enfant-parent s'eclairent a 0,85 ; les autres restent a 0,28.

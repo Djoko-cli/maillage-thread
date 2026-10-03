@@ -96,6 +96,49 @@ struct PlacesGardeesTests {
         #expect(p.fixees(s, domicile: "")[salon] == nil)
     }
 
+    /// Les zones a cote (polissage C, section 1.2), un champ facultatif de la version 1, comme `appareils` dans
+    /// `pieces-routeurs.json` : sans zone a cote, il n'est pas ecrit, et le fichier reste celui d'avant ; un
+    /// aller-retour sur disque garde l'ordre, les places et les choix ; une app d'avant relit l'ordre et les
+    /// places d'un fichier d'apres ; un champ mal forme est ignore, sans perdre l'ordre ni les places.
+    /// « Replacer les pieces automatiquement » garde l'ordre et les choix de niveau.
+    @Test func zonesACote() throws {
+        let url = Self.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        var p = PlacesGardees()
+        p.garder(SIMD2(1.5, -2.25), piece: "piece:Salon", etage: "zone:Rez-de-chaussée", domicile: "Maison")
+        p.ordonner(["zone:Rez-de-chaussée", "zone:Étage"], domicile: "Maison")
+        try p.ecrire(dans: url)
+        #expect(!String(decoding: try Data(contentsOf: url), as: UTF8.self).contains("aCote"), "un fichier d'avant")
+        #expect(PlacesGardees.lire(url) == p && PlacesGardees.lire(url).maison("Maison").aCote.isEmpty)
+        let r = Rangement(ordre: ["zone:Rez-de-chaussée", "zone:Jardin", "zone:Étage"],
+                          aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée", dehors: true)])
+        p.ranger(r, domicile: "Maison")
+        try p.ecrire(dans: url)
+        let relu = PlacesGardees.lire(url)
+        #expect(relu == p && relu.version == PlacesGardees.versionActuelle && PlacesGardees.versionActuelle == 1)
+        #expect(relu.rangement("Maison") == r && relu.maison("Maison").etages == p.maison("Maison").etages)
+        // Une app d'avant : son schema, sans le champ.
+        struct AncienneMaison: Decodable {
+            var ordreEtages: [String]
+            var etages: [String: [String: PlacesGardees.Place]]
+        }
+        struct Ancienne: Decodable {
+            var version: Int
+            var maisons: [String: AncienneMaison]
+        }
+        let ancienne = try JSONDecoder().decode(Ancienne.self, from: Data(contentsOf: url))
+        #expect(ancienne.version == 1 && ancienne.maisons["Maison"]?.ordreEtages == r.ordre)
+        #expect(ancienne.maisons["Maison"]?.etages == p.maison("Maison").etages)
+        // Un champ mal forme.
+        let texte = String(decoding: try Data(contentsOf: url), as: UTF8.self)
+        #expect(texte.contains("\"dehors\" : true"))
+        try Data(texte.replacingOccurrences(of: "\"dehors\" : true", with: "\"dehors\" : \"oui\"").utf8).write(to: url)
+        let abime = PlacesGardees.lire(url).maison("Maison")
+        #expect(abime.aCote.isEmpty && abime.ordreEtages == r.ordre && abime.etages == p.maison("Maison").etages)
+        p.replacer(domicile: "Maison")
+        #expect(p.maison("Maison").etages.isEmpty && p.rangement("Maison") == r)
+    }
+
     /// Ordre des etages garde, puis « Replacer les pieces automatiquement » : les places partent,
     /// l'ordre reste.
     @Test func ordreDesEtagesEtReplacement() throws {

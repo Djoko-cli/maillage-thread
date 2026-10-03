@@ -71,6 +71,29 @@ struct ScenePiecesTests {
         #expect(!s.sansPiecesMaison)
     }
 
+    /// Niveaux (polissage C, section 1) : une zone a cote rejoint son etage principal, juste apres lui, meme
+    /// rangee avant lui par Maison ; les plateaux sont ranges niveau par niveau. « Sans piece » va sur le
+    /// plateau du bas, l'etage principal du premier niveau. Sans choix, l'ordre de Maison.
+    @Test func niveaux() throws {
+        let g = try Self.graphe(sonde: false)
+        let pieces = ["Apple TV": "Salon", "HomePod": "Chambre", "E000000000000002": "Terrasse"]
+        let zones = [ZoneMaison(nom: "Jardin", pieces: ["Terrasse"]), ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon"]),
+                     ZoneMaison(nom: "Étage", pieces: ["Chambre"])]
+        let s = ScenePieces(graphe: g, libelles: Self.libelles, piecesNoeuds: pieces, zones: zones, chefs: [],
+                            piecesMaison: true,
+                            aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée", dehors: true)])
+        #expect(s.etages.map(\.id) == ["zone:Rez-de-chaussée", "zone:Jardin", "zone:Étage"])
+        #expect(s.etages.map(\.niveau) == [0, 0, 1] && s.etages.map(\.principal) == [true, false, true])
+        #expect(s.etages.map(\.dehors) == [false, true, false])
+        #expect(s.niveaux.liste == [["zone:Rez-de-chaussée", "zone:Jardin"], ["zone:Étage"]])
+        #expect(Self.noms(s, etage: 0) == [.maison("Salon"), .sansPiece], "« Sans piece » sur le plateau du bas")
+        #expect(Self.noms(s, etage: 1) == [.maison("Terrasse")])
+        let sans = ScenePieces(graphe: g, libelles: Self.libelles, piecesNoeuds: pieces, zones: zones, chefs: [],
+                               piecesMaison: true)
+        #expect(sans.etages.map(\.id) == ["zone:Jardin", "zone:Rez-de-chaussée", "zone:Étage"])
+        #expect(sans.etages.map(\.niveau) == [0, 1, 2] && sans.etages.allSatisfy(\.principal))
+    }
+
     /// Deux zones de Maison du meme nom (inattendu) : un seul etage, a la place de la premiere, avec les
     /// pieces des deux ; aucune cle d'etage en double. La premiere compte meme sans piece montree.
     @Test func zonesHomonymes() throws {

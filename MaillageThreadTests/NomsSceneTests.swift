@@ -113,9 +113,9 @@ struct NomsSceneTests {
         let a = try #require(reperes.first { $0.parent == "Apple TV 4K" })
         let salon = LibellesNoeuds.nom(e.scene.pieces[a.piece].nom, libelles: e.libelles)
         #expect(salon == "Salon")
-        let suite = a.sens == .memeEtage ? "" : ", " + LibellesNoeuds.nom(e.scene.etages[a.etage].nom)
+        let suite = a.sens == .memeNiveau ? "" : ", " + LibellesNoeuds.nom(e.scene.etages[a.etage].nom)
         let fleche = switch a.sens {
-        case .memeEtage: "↗"
+        case .memeNiveau: "↗"
         case .dessous: "↓"
         case .dessus: "↑"
         }
@@ -123,6 +123,27 @@ struct NomsSceneTests {
         var disparu = e.libelles
         disparu["Apple TV 4K"]?.texte = "Apple TV 4K 👑 ☾ ⚠︎"
         #expect(LibellesNoeuds.ailleurs(a, scene: e.scene, libelles: disparu) == "\(fleche) Apple TV 4K ☾ ⚠︎ · Salon\(suite)")
+    }
+
+    /// Repere « ailleurs » d'un parent au meme niveau, dans une autre zone (polissage C, section 5.2) : ↗, avec le
+    /// nom de sa zone. L'entree mise dans un « Jardin » a cote du rez-de-chaussee : le parent du detecteur du
+    /// couloir, l'Apple TV, est au salon. Sans le choix, le jardin est un etage au-dessus : ↓.
+    @Test func repereAuMemeNiveau() throws {
+        let (s, r, _) = try Self.demo()
+        var maison = try #require(s.noms.maison)
+        maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Buanderie"]),
+                        ZoneMaison(nom: "Jardin", pieces: ["Entrée"]),
+                        ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis"])]
+        s.noms.maison = maison
+        var places = PlacesGardees()
+        places.ranger(Rangement(ordre: [], aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée")]),
+                      domicile: maison.domicile ?? "")
+        for (p, attendu) in [(places, "↗ Apple TV 4K · Salon, Rez-de-chaussée"), (PlacesGardees(), "↓ Apple TV 4K · Salon, Rez-de-chaussée")] {
+            let e = EntreeScene(surveillance: s, reseau: r, places: p)
+            let entree = try #require(e.scene.pieces.firstIndex { $0.nom == .maison("Entrée") })
+            let a = try #require(SceneProjetee.reperes(e.scene, focus: entree).first { $0.enfant == "327DF9C45C82BBD6" })
+            #expect(LibellesNoeuds.ailleurs(a, scene: e.scene, libelles: e.libelles) == attendu)
+        }
     }
 
     /// Routeurs de bordure que Maison ne place pas : la piece de leur nom (« HomePod mini chambre »), sinon
@@ -198,12 +219,33 @@ struct NomsSceneTests {
         #expect(e.apparences["rloc:041F"]?.couleur == .appareil(.inconnu))
     }
 
-    /// La cle de la disposition ne change pas avec l'etat d'un noeud ; elle change avec son nom.
+    /// La cle de la disposition ne change pas avec l'etat d'un noeud ; elle change avec son nom. Elle suit les
+    /// niveaux tels que les voit le cout (polissage C, section 4) : une zone mise a cote d'un etage la change ;
+    /// l'ordre des niveaux au-dessus du plateau du bas (qui porte « Sans piece »), ou une zone sortie de la
+    /// maison, non.
     @Test func cleDeLaDisposition() throws {
         let (s, r, e) = try Self.demo()
         #expect(EntreeScene(surveillance: s, reseau: r, places: PlacesGardees()).cleDisposition == e.cleDisposition)
+        var maison = try #require(s.noms.maison)
+        maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Entrée", "Buanderie"]),
+                        ZoneMaison(nom: "Étage", pieces: ["Chambre", "Chambre d'amis"]),
+                        ZoneMaison(nom: "Combles", pieces: ["Bureau", "Salle de bain"])]
+        s.noms.maison = maison
+        let domicile = maison.domicile ?? ""
+        func cle(_ ordre: [String], _ aCote: [String: PlacesGardees.ACote]) -> EntreeScene.CleDisposition {
+            var p = PlacesGardees()
+            p.ranger(Rangement(ordre: ordre, aCote: aCote), domicile: domicile)
+            return EntreeScene(surveillance: s, reseau: r, places: p).cleDisposition
+        }
+        let rdc = "zone:Rez-de-chaussée", etage = "zone:Étage", combles = "zone:Combles"
+        let depart = cle([rdc, etage, combles], [:])
+        let aCote = cle([rdc, etage, combles], [combles: PlacesGardees.ACote(etage: etage)])
+        #expect(aCote != depart, "les combles a cote de l'etage")
+        #expect(cle([rdc, combles, etage], [:]) == depart, "l'ordre des niveaux")
+        #expect(cle([rdc, etage, combles], [combles: PlacesGardees.ACote(etage: etage, dehors: true)]) == aCote,
+                "hors de la maison")
         s.renommer("56B1E064401F74EF", en: "Pont Halo")
-        #expect(EntreeScene(surveillance: s, reseau: r, places: PlacesGardees()).cleDisposition != e.cleDisposition)
+        #expect(cle([rdc, etage, combles], [:]) != depart)
     }
 
     /// La scene porte ce dont elle est faite, construit une fois avec elle : le graphe, le maillage de la

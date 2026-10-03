@@ -59,7 +59,7 @@ final class MoteurPieces {
     /// Scene dont la disposition se calcule : `entree` reste affichee jusqu'a la fin du calcul.
     @ObservationIgnored private var enCalcul: EntreeScene?
     @ObservationIgnored private var calcul: Task<Void, Never>?
-    @ObservationIgnored private var cleCalculee: [String: [String: [String]]]?
+    @ObservationIgnored private var cleCalculee: EntreeScene.CleDisposition?
     @ObservationIgnored private var placesCalculees: [String: SIMD2<Double>] = [:]
     @ObservationIgnored private var rayonsCalcules: [String: Double] = [:]
     @ObservationIgnored private var cartesCalculees: [String: CartesPieces.Carte] = [:]
@@ -265,7 +265,7 @@ final class MoteurPieces {
     /// d'une autre structure ne l'a pas depassee ; a la fin du mouvement ou du glisser en cours, s'il y
     /// en a un.
     private func retenir(_ d: DispositionPieces, scene: ScenePieces, cartes: [CartesPieces.Carte],
-                         cle: [String: [String: [String]]]) {
+                         cle: EntreeScene.CleDisposition) {
         guard let e = enCalcul, e.cleDisposition == cle else { return }
         placesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { (scene.pieces[$0].id, d.positions[$0]) })
         rayonsCalcules = Dictionary(scene.etages.indices.map { (scene.etages[$0].id, d.rayons[$0]) },

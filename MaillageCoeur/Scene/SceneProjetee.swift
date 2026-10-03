@@ -55,8 +55,8 @@ public struct EtatAnime: Hashable, Sendable {
 /// Repere « ailleurs » d'un enfant de la piece isolee dont le parent est dans une autre piece.
 public struct Ailleurs: Hashable, Sendable {
     public enum Sens: Hashable, Sendable {
-        /// Parent au meme etage (↗), a un etage en dessous (↓), au-dessus (↑).
-        case memeEtage, dessous, dessus
+        /// Parent au meme niveau (↗), a un niveau en dessous (↓), au-dessus (↑) (polissage C, section 5.2).
+        case memeNiveau, dessous, dessus
     }
 
     public var enfant: String
@@ -298,15 +298,17 @@ public struct SceneProjetee: Sendable {
     }
 
     /// Reperes « ailleurs » d'une piece isolee : ses enfants dont le parent (vu par la sonde) est dans
-    /// une autre piece, dans l'ordre de ses lignes.
+    /// une autre piece, dans l'ordre de ses lignes ; leur sens compare les niveaux des deux plateaux.
     public static func reperes(_ scene: ScenePieces, focus i: Int) -> [Ailleurs] {
         let pc = scene.pieces[i]
+        let ici = scene.etages[pc.etage].niveau
         return pc.noeuds.compactMap { id in
             guard let parent = scene.liens.first(where: { $0.genre == .parent && $0.de == id })?.vers,
                   let np = scene.noeud(parent), np.piece != i else { return nil }
             let ep = scene.pieces[np.piece].etage
+            let la = scene.etages[ep].niveau
             return Ailleurs(enfant: id, parent: parent, piece: np.piece, etage: ep,
-                            sens: ep == pc.etage ? .memeEtage : ep < pc.etage ? .dessous : .dessus)
+                            sens: la == ici ? .memeNiveau : la < ici ? .dessous : .dessus)
         }
     }
 

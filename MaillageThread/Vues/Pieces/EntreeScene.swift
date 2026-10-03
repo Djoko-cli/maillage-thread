@@ -23,9 +23,9 @@ struct EntreeScene: Equatable {
     /// Appareils affiches, par id.
     var appareils: [String: AppareilAffiche]
 
-    /// `places` : les places gardees, dont l'ordre des etages de la maison ; `choix` : les pieces
-    /// choisies pour les noeuds que Maison ne place pas, routeurs de bordure (sous leur instance) et
-    /// autres noeuds (sous leur ExtMac, precision 27).
+    /// `places` : les places gardees, dont l'ordre des etages de la maison et ses choix de niveau ; `choix` :
+    /// les pieces choisies pour les noeuds que Maison ne place pas, routeurs de bordure (sous leur instance)
+    /// et autres noeuds (sous leur ExtMac, precision 27).
     @MainActor
     init(surveillance: Surveillance, reseau r: Reseau, places: PlacesGardees, choix: PiecesRouteurs = PiecesRouteurs()) {
         let affiches = surveillance.appareilsAffiches(pour: r)
@@ -44,7 +44,7 @@ struct EntreeScene: Equatable {
         let scene = ScenePieces(graphe: graphe, libelles: libelles.mapValues(\.texte), piecesNoeuds: pieces,
                                 zones: maison?.zones, chefs: chefs,
                                 piecesMaison: maison?.accessoires.contains { $0.piece?.isEmpty == false } == true,
-                                ordreEtages: places.maison(domicile).ordreEtages)
+                                ordreEtages: places.maison(domicile).ordreEtages, aCote: places.maison(domicile).aCote)
         let principale = r.partitions.first(where: \.estPrincipale)?.id
         self.scene = scene
         self.libelles = libelles
@@ -65,17 +65,30 @@ struct EntreeScene: Equatable {
         a.scene == b.scene && a.libelles == b.libelles && a.apparences == b.apparences && a.domicile == b.domicile
     }
 
-    /// Ce qui oblige a recalculer la disposition (spec, section 4.3) : les etages, leurs pieces, les
-    /// noeuds de chacune et leurs noms. L'ordre des etages seul, ou l'etat d'un noeud, non.
-    var cleDisposition: [String: [String: [String]]] {
-        var c: [String: [String: [String]]] = [:]
+    /// Ce qui oblige a recalculer la disposition (spec, section 4.3 ; polissage C, section 4).
+    struct CleDisposition: Equatable {
+        /// Etage -> piece -> ses noeuds et leurs noms.
+        var pieces: [String: [String: [String]]] = [:]
+        /// La place de chaque plateau dans la vue de reference du cout : l'etage principal de son niveau, et
+        /// son rang dans le niveau.
+        var niveaux: [String: String] = [:]
+    }
+
+    /// Les etages, leurs pieces, les noeuds de chacune et leurs noms, et les niveaux tels que les voit le cout :
+    /// qui partage le niveau de qui, dans quel ordre. L'ordre des niveaux, une zone dans ou hors de la maison,
+    /// ou l'etat d'un noeud, non.
+    var cleDisposition: CleDisposition {
+        var c = CleDisposition()
         for e in scene.etages {
             for i in e.pieces {
                 let p = scene.pieces[i]
-                c[e.id, default: [:]][p.id] = p.noeuds.map { id in
+                c.pieces[e.id, default: [:]][p.id] = p.noeuds.map { id in
                     [id, libelles[id]?.texte ?? "", libelles[id]?.pastille ?? ""].joined(separator: "|")
                 }
             }
+        }
+        for l in scene.niveaux.liste {
+            for (k, cle) in l.enumerated() { c.niveaux[cle] = l[0] + "#" + String(k) }
         }
         return c
     }

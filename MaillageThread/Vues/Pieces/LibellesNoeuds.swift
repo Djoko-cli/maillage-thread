@@ -117,17 +117,20 @@ enum LibellesNoeuds {
         n == 1 ? String(localized: "1 appareil") : String(localized: "\(n) appareils")
     }
 
-    /// Repere « ailleurs » : « ↗ HomePod Palier · Salon », « ↓ … · Salon, Rez-de-chaussée » si le
-    /// parent est a un autre etage (sans la couronne du chef).
+    /// Repere « ailleurs » (polissage C, section 5.2) : « ↗ HomePod Palier · Salon » pour un parent du meme
+    /// plateau, « ↗ … · Terrasse, Jardin » pour un parent au meme niveau, dans une autre zone ; « ↓ … · Salon,
+    /// Rez-de-chaussee » ou ↑ pour un parent a un autre niveau, avec le nom de son plateau (sans la couronne du
+    /// chef).
     static func ailleurs(_ a: Ailleurs, scene: ScenePieces, libelles: [String: Libelle]) -> String {
         let fleche = switch a.sens {
-        case .memeEtage: "↗"
+        case .memeNiveau: "↗"
         case .dessous: "↓"
         case .dessus: "↑"
         }
         let parent = (libelles[a.parent]?.texte ?? a.parent).replacingOccurrences(of: " " + couronne, with: "")
         let piece = nom(scene.pieces[a.piece].nom, libelles: libelles)
-        guard a.sens != .memeEtage else { return "\(fleche) \(parent) · \(piece)" }
+        let ici = scene.noeud(a.enfant).map { scene.pieces[$0.piece].etage }
+        guard a.etage != ici else { return "\(fleche) \(parent) · \(piece)" }
         return "\(fleche) \(parent) · \(piece), \(nom(scene.etages[a.etage].nom))"
     }
 }
