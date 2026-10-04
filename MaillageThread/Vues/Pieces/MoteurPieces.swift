@@ -75,10 +75,13 @@ struct MenuEtage: Equatable {
     var dehors: Bool
 }
 
-/// Le curseur au-dessus de la vue : une main sur ce qui se clique (polissage C, maquette).
+/// Le curseur au-dessus de la vue : une main sur ce qui se clique (polissage C, maquette) ; en 3D, une main ouverte tant
+/// que ⌥ est tenue, une main fermee pendant ⌥ + glisser (section 6).
 enum Curseur: Equatable {
     case fleche
     case main
+    case mainOuverte
+    case mainFermee
 }
 
 /// Moteur de la vue par pieces (spec, sections 4 a 7) : la scene recue et sa disposition, calculee
@@ -242,7 +245,13 @@ final class MoteurPieces {
         /// Une piece qu'on glisse (son identifiant, jamais un indice qui perimerait), sur le plan
         /// horizontal y = `hauteur`.
         case piece(String, hauteur: Double)
+        /// ⌥ + glisser en 3D : la vue glisse dans le plan de l'ecran, depuis l'orbite de l'appui.
+        case ecran(Orbite)
     }
+
+    /// ⌥ est tenue (le survol et le moniteur des touches la suivent) ; ce que le pointeur vise est cliquable.
+    @ObservationIgnored private var optionTenue = false
+    @ObservationIgnored private var surCliquable = false
 
     /// Glissement des marges du cadre, de `depart` a `arrivee`, depuis `debut`, en `duree` ; `fondu` : avec
     /// « Reduire les animations », un fondu par le fond, les marges sautant a mi-chemin.
@@ -1285,8 +1294,9 @@ final class MoteurPieces {
 
     /// Survol : le nom de l'appareil en semi-gras ; un disque cliquable s'eclaircit, le nom d'un etage se souligne ; la
     /// main sur ce qui se clique (polissage C, maquette). Rien pendant l'envol.
-    func survoler(_ p: CGPoint?) {
+    func survoler(_ p: CGPoint?, option: Bool = false) {
         curseur = p
+        optionTenue = option
         let c = envol == nil && fondu == nil ? p.map(cibleClic(en:)) ?? .fond : .fond
         let n: String? = if case .appareil(let id) = c { id } else { nil }
         let disque: Int? = if case .disque(let e) = c, disqueCliquable(e) { e } else { nil }
@@ -1297,16 +1307,36 @@ final class MoteurPieces {
             survolNomEtage = nom
             reveiller()
         }
-        let main = switch c {
+        surCliquable = switch c {
         case .appareil, .piece: true
         case .nomEtage: (scene?.etages.count ?? 0) > 1 || estIsolee
         case .disque(let e): disqueCliquable(e)
         case .fond: false
         }
-        let forme: Curseur = main ? .main : .fleche
-        if forme != curseurForme { curseurForme = forme }
+        majCurseur()
         let cible = p.map(cible(en:)) ?? .aucune
         if cible != cibleMenu { cibleMenu = cible }
+    }
+
+    /// ⌥ pressee ou relachee, le pointeur immobile (le moniteur des touches).
+    func changerOption(_ option: Bool) {
+        guard option != optionTenue else { return }
+        optionTenue = option
+        majCurseur()
+    }
+
+    /// Le curseur (polissage C, section 6) : une main fermee pendant ⌥ + glisser ; une main ouverte tant que ⌥ est
+    /// tenue au-dessus de la vue en 3D ; sinon, une main sur ce qui se clique.
+    private func majCurseur() {
+        let forme: Curseur
+        if case .ecran? = geste {
+            forme = .mainFermee
+        } else if optionTenue && curseur != nil && troisD && t == 1 && envol == nil && fondu == nil {
+            forme = .mainOuverte
+        } else {
+            forme = surCliquable ? .main : .fleche
+        }
+        if forme != curseurForme { curseurForme = forme }
     }
 
     /// Ce que vise un clic en `p`, du plus fort au plus faible (polissage C, section 5.1).
@@ -1365,7 +1395,10 @@ final class MoteurPieces {
         return .fond
     }
 
-    func glisser(_ p: CGPoint, depart d: CGPoint) {
+    /// Un glisser, a chaque deplacement du pointeur ; `option` : ⌥ tenue, lue a l'appui seulement (polissage C,
+    /// section 6) : en 3D, la vue glisse alors dans le plan de l'ecran, depuis le fond, un disque ou une piece, qui ne
+    /// bouge pas ; un vol en cours s'arrete. Relacher ⌥ en route ne change rien. En 2D, ⌥ ne change rien.
+    func glisser(_ p: CGPoint, depart d: CGPoint, option: Bool = false) {
         // Un geste reste d'un glisser annule (sans relachement), et celui-ci part d'ailleurs : il est clos.
         if geste != nil, d != departGeste { terminerGeste() }
         if geste == nil {
@@ -1373,13 +1406,18 @@ final class MoteurPieces {
             abandonApresGlisser = false
             precedent = d
             departGeste = d
-            // Les pieces de l'etage isole se glissent ; celles des autres etages se cliquent seulement.
-            if !estIsolee, !enMouvement, let scene, let i = projetee?.piece(sous: d), i < scene.pieces.count,
-               indiceEtageIsole.map({ $0 == scene.pieces[i].etage }) ?? true, let c = centrePiece(i) {
+            if option && troisD && t == 1 && envol == nil && fondu == nil {
+                vol = nil
+                viseeVol = nil
+                geste = .ecran(orbite)
+            } else if !estIsolee, !enMouvement, let scene, let i = projetee?.piece(sous: d), i < scene.pieces.count,
+                      indiceEtageIsole.map({ $0 == scene.pieces[i].etage }) ?? true, let c = centrePiece(i) {
+                // Les pieces de l'etage isole se glissent ; celles des autres etages se cliquent seulement.
                 geste = .piece(scene.pieces[i].id, hauteur: c.y)
             } else {
                 geste = .fond
             }
+            majCurseur()
         }
         if !bouge && hypot(p.x - d.x, p.y - d.y) < 5 { return }
         bouge = true
@@ -1387,6 +1425,9 @@ final class MoteurPieces {
         guard !enMouvement, let geste else { return }
         let proj = ProjectionScene(orbite, cadre: cadre)
         switch geste {
+        case .ecran(let o):
+            orbite = CameraScene.deplacerDansLEcran(o, glisse: CGSize(width: p.x - d.x, height: p.y - d.y), cadre: cadre)
+            vueTouchee = true
         case .piece(let id, let h):
             guard let scene, let i = scene.pieces.firstIndex(where: { $0.id == id }), i < positions.count,
                   i < cartes.count, scene.pieces[i].etage < geometrie.rayons.count,
@@ -1419,6 +1460,7 @@ final class MoteurPieces {
         geste = nil
         bouge = false
         abandonApresGlisser = false
+        majCurseur()
         if case .piece(let id, _)? = g, !clic {
             garder(id)
         } else if clic {
@@ -1458,6 +1500,7 @@ final class MoteurPieces {
         if case .piece(let id, _)? = geste, bouge { garder(id) }
         geste = nil
         bouge = false
+        majCurseur()
     }
 
     /// Clic sans glisser, selon sa cible (polissage C, sections 5.1 et 5.4) : un appareil ou son nom ouvre sa fiche ;
@@ -1519,7 +1562,7 @@ final class MoteurPieces {
     /// d'evenement de molette brut).
     func ecouter() {
         guard moniteur == nil else { return }
-        moniteur = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown]) { [weak self] e in
+        moniteur = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown, .flagsChanged]) { [weak self] e in
             guard let self else { return e }
             let pourMoi = MainActor.assumeIsolated { e.window != nil && e.window === self.fenetre }
             guard pourMoi else { return e }
@@ -1531,6 +1574,11 @@ final class MoteurPieces {
             case .keyDown where e.keyCode == 53:
                 MainActor.assumeIsolated { self.sortir() }
                 return nil
+            case .flagsChanged:
+                // ⌥ et la main ouverte (polissage C, section 6) : l'evenement continue son chemin.
+                let option = e.modifierFlags.contains(.option)
+                MainActor.assumeIsolated { self.changerOption(option) }
+                return e
             default:
                 return e
             }

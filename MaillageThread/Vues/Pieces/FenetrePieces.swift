@@ -265,6 +265,16 @@ struct VuePieces: View {
     /// Espace de coordonnees de la vue et de ce qui est pose dessus.
     nonisolated static let espace = "pieces"
 
+    /// Le style du pointeur pour un curseur du moteur : le lien (la main), la main ouverte, la main fermee.
+    static func style(_ c: Curseur) -> PointerStyle? {
+        switch c {
+        case .fleche: nil
+        case .main: .link
+        case .mainOuverte: .grabIdle
+        case .mainFermee: .grabActive
+        }
+    }
+
     var body: some View {
         TimelineView(.animation(minimumInterval: nil, paused: !moteur.anime)) { contexte in
             Canvas { ctx, taille in
@@ -275,17 +285,20 @@ struct VuePieces: View {
             }
         }
         .contentShape(Rectangle())
-        // La main sur ce qui se clique (polissage C, maquette).
-        .pointerStyle(moteur.curseurForme == .main ? .link : nil)
+        // La main sur ce qui se clique ; en 3D, la main ouverte tant que ⌥ est tenue, fermee pendant ⌥ + glisser
+        // (polissage C, section 6) : `NSCursor.openHand` et `closedHand`, que posent ces styles de SwiftUI.
+        .pointerStyle(VuePieces.style(moteur.curseurForme))
         .onContinuousHover { phase in
             switch phase {
-            case .active(let p): moteur.survoler(p)
+            case .active(let p): moteur.survoler(p, option: NSEvent.modifierFlags.contains(.option))
             case .ended: moteur.survoler(nil)
             }
         }
+        // ⌥ est lue au debut du geste : `DragGesture` ne donne ni l'evenement ni ses touches, mais son premier
+        // `onChanged` (distance minimale nulle) arrive a l'appui, et le moteur ne lit `option` qu'a l'appui.
         .gesture(DragGesture(minimumDistance: 0)
             .updating($glisse) { _, g, _ in g = true }
-            .onChanged { moteur.glisser($0.location, depart: $0.startLocation) }
+            .onChanged { moteur.glisser($0.location, depart: $0.startLocation, option: NSEvent.modifierFlags.contains(.option)) }
             .onEnded { moteur.relacher($0.location) })
         .simultaneousGesture(MagnifyGesture()
             .onChanged { moteur.pincer($0.magnification, en: $0.startLocation) }

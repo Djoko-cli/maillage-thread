@@ -163,6 +163,38 @@ struct CameraSceneTests {
         }
     }
 
+    /// ⌥ + glisser (polissage C, section 6) : la cible et l'oeil glissent ensemble, parallelement a l'ecran, sans
+    /// tourner ; un point a la profondeur de la cible suit le pointeur a 0,7 fois sa vitesse.
+    @Test func deplacerDansLEcran() throws {
+        var o = CameraScene.canonique(Self.geometrie, aspect: Self.aspect, u: 1)
+        o.azimut += 0.7
+        let d = CameraScene.deplacerDansLEcran(o, glisse: CGSize(width: 120, height: -45), cadre: Self.cadre)
+        #expect(d.distance == o.distance && d.azimut == o.azimut && d.inclinaison == o.inclinaison && d.champ == o.champ)
+        #expect(simd_distance(d.oeil - o.oeil, d.cible - o.cible) < 1e-9, "l'oeil suit la cible")
+        #expect(abs(simd_dot(d.cible - o.cible, o.arriere)) < 1e-9, "parallele a l'ecran")
+        let avant = try #require(ProjectionScene(o, cadre: Self.cadre).ecran(o.cible))
+        let apres = try #require(ProjectionScene(d, cadre: Self.cadre).ecran(o.cible))
+        #expect(abs((apres.x - avant.x) - 0.7 * 120) < 1e-6 && abs((apres.y - avant.y) + 0.7 * 45) < 1e-6)
+        #expect(CameraScene.vitesseDeplacement == 0.7)
+    }
+
+    /// Plus de saut (polissage C, section 6) : apres la rotation lente et ⌥ + glisser, l'envol et les vols partent de
+    /// la pose exacte de la camera (oeil, cible, champ), a 1e-6 pres.
+    @Test func envolEtVolsDepuisLaPoseExacte() {
+        let g = Self.geometrie
+        var o = CameraScene.canonique(g, aspect: Self.aspect, u: 1)
+        o.azimut -= 2.3
+        o = CameraScene.deplacerDansLEcran(o, glisse: CGSize(width: -260, height: 140), cadre: Self.cadre)
+        let debut = Envol(depuis: o, t: 1, vers: 0, geometrie: g, aspect: Self.aspect).pose(0, geometrie: g, aspect: Self.aspect)
+        #expect(debut.t == 1 && debut.orbite.champ == o.champ)
+        #expect(simd_distance(debut.orbite.oeil, o.oeil) < 1e-6 && simd_distance(debut.orbite.cible, o.cible) < 1e-6)
+        for v in [CameraScene.volVersEnsemble(o, g, aspect: Self.aspect, u: 1, troisD: true),
+                  CameraScene.volVersEtage(o, g, etage: 1, aspect: Self.aspect, u: 1, troisD: true)] {
+            let p = v.orbite(0, depuis: o)
+            #expect(simd_distance(p.oeil, o.oeil) < 1e-6 && simd_distance(p.cible, o.cible) < 1e-6 && p.champ == o.champ)
+        }
+    }
+
     /// Geometrie : plateaux empiles de 1,5 fois le plus grand rayon ; sphere et boite de la spec.
     @Test func geometrie() {
         let g = Self.geometrie

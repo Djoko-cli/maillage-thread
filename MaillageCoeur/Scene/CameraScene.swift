@@ -439,6 +439,20 @@ public enum CameraScene {
         return r
     }
 
+    /// ⌥ + glisser en 3D (polissage C, section 6) : la vue suit le pointeur a 0,7 fois sa vitesse, mesuree a la cible.
+    public static let vitesseDeplacement = 0.7
+
+    /// La vue deplacee dans le plan de l'ecran, depuis l'orbite `o` de l'appui, pour un deplacement du pointeur de
+    /// `glisse` points (vers la droite et vers le bas) : la cible et l'oeil glissent ensemble, parallelement a
+    /// l'ecran, sans tourner ; un point a la profondeur de la cible suit le pointeur a 0,7 fois sa vitesse.
+    public static func deplacerDansLEcran(_ o: Orbite, glisse: CGSize, cadre: CGRect) -> Orbite {
+        let focale = Double(max(1, cadre.height)) / 2 / tan(o.champ * .pi / 360)
+        let k = vitesseDeplacement * o.distance / focale
+        var r = o
+        r.cible += o.droite * (-Double(glisse.width) * k) + o.haut * (Double(glisse.height) * k)
+        return r
+    }
+
     /// Direction de l'oeil pour un vol : celle de la camera en 3D, la verticale en 2D.
     public static func directionVue(_ o: Orbite, troisD: Bool) -> SIMD3<Double> {
         troisD ? o.arriere : simd_normalize(SIMD3(0, 1, 0.0001))

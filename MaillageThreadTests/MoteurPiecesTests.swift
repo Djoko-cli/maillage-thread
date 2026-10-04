@@ -939,6 +939,52 @@ struct MoteurPiecesTests {
                 && depart.rayonCadre == avant.rayonCadre, "la sphere et le cadrage partent de l'image")
     }
 
+    /// ⌥ + glisser en 3D (polissage C, section 6) : le mode se fixe a l'appui ; ⌥ passe avant le glisser d'une piece,
+    /// qui ne bouge pas ; la vue suit le pointeur a 0,7 fois sa vitesse, depuis l'orbite de l'appui ; relacher ⌥ en
+    /// route ne change rien. La main ouverte tant que ⌥ est tenue, fermee pendant le geste ; la rotation lente s'arrete
+    /// pendant le geste et reprend apres ; le double-clic ramene a la vue d'ensemble. En 2D, ⌥ ne change rien.
+    @Test func optionGlisser() throws {
+        let (_, _, e) = try NomsSceneTests.demo()
+        let m = MoteurPieces(troisD: true)
+        m.marges = (84, 50)
+        m.poserTaille(Self.taille)
+        m.installerMaintenant(e)
+        for _ in 0..<2 { Self.dessiner(m) }
+        let salon = try Self.indice(e, "Salon")
+        let d = try Self.pointDePiece(m, salon)
+        let avant = m.positions[salon], depart = m.orbite
+        m.survoler(d, option: true)
+        #expect(m.curseurForme == .mainOuverte)
+        m.glisser(d, depart: d, option: true)
+        #expect(m.curseurForme == .mainFermee)
+        m.glisser(CGPoint(x: d.x + 60, y: d.y + 20), depart: d, option: false)
+        #expect(m.positions[salon] == avant, "la piece ne bouge pas")
+        #expect(m.orbite == CameraScene.deplacerDansLEcran(depart, glisse: CGSize(width: 60, height: 20), cadre: m.cadre))
+        #expect(m.vueTouchee)
+        for _ in 0..<2 { Self.dessiner(m) }
+        #expect(m.orbite.azimut == depart.azimut, "pas de rotation lente pendant le geste")
+        m.relacher(CGPoint(x: d.x + 60, y: d.y + 20))
+        #expect(m.curseurForme == .mainOuverte, "⌥ toujours tenue")
+        m.changerOption(false)
+        #expect(m.curseurForme != .mainOuverte && m.curseurForme != .mainFermee)
+        for _ in 0..<2 { Self.dessiner(m) }
+        #expect(m.orbite.azimut < depart.azimut, "la rotation lente reprend")
+        let fond = CGPoint(x: 5, y: Self.taille.height / 2)
+        m.relacher(fond, a: 100)
+        m.relacher(fond, a: 100.1)
+        #expect(!m.vueTouchee && m.enMouvement, "le double-clic : la vue d'ensemble, deplacement compris")
+        let (n, e2) = try Self.moteur()
+        let s2 = try Self.indice(e2, "Salon")
+        let p2 = try Self.pointDePiece(n, s2)
+        let avant2 = n.positions[s2]
+        n.survoler(p2, option: true)
+        #expect(n.curseurForme == .main, "en 2D, la main sur la piece")
+        n.glisser(p2, depart: p2, option: true)
+        n.glisser(CGPoint(x: p2.x + 30, y: p2.y), depart: p2, option: true)
+        n.relacher(CGPoint(x: p2.x + 30, y: p2.y))
+        #expect(n.positions[s2] != avant2, "en 2D, la piece glisse")
+    }
+
     /// Ordre des couches : plateaux et equateur, blocs, liens enfant -> parent, liens entre routeurs,
     /// pastilles, lisere de la sphere, traits, noms.
     @Test func ordreDesCouches() {
