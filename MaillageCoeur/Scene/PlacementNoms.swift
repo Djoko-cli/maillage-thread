@@ -200,13 +200,22 @@ public enum PlacementNoms {
         return traits
     }
 
-    /// Zoom semantique et priorites (spec, section 6) : noms voulus, priorites, pales et forts, selon
-    /// le niveau du zoom, le survol, la selection et l'isolement d'une piece. `fk` : part propre a
-    /// chaque piece de l'isolement ; `s` : isolement general (0 a 1) ; `t` : bascule (0 : 2D, 1 : 3D).
+    /// Zoom semantique et priorites (spec, section 6 ; polissage C, section 5) : noms voulus, priorites, pales et
+    /// forts, selon le niveau du zoom, le survol, la selection et l'isolement. `focus` : la piece en vue (isolee, ou
+    /// qui l'etait, pendant le retour) ; `isolee` : une piece est visee ; `fk` : part propre a chaque piece de
+    /// l'isolement ; `s` : isolement general (0 a 1) ; `t` : bascule (0 : 2D, 1 : 3D) ; `se` : isolement d'un
+    /// etage ; `voiles` : le voile de chaque plateau (`SceneProjetee.voilesEtages`) ; `etageIsole` : l'etage vise ;
+    /// `survolNomEtage` : le nom d'etage sous le pointeur, souligne.
+    ///
+    /// Les noms des appareils suivent l'etat d'arrivee (triage A, n° 8) : une piece visee, les siens ; sinon, selon le
+    /// zoom, ceux de la maison, ou de l'etage vise seulement. Celui de l'appareil survole ou choisi est toujours voulu.
+    /// Les noms d'etage restent voulus, pales et cliquables pendant un isolement.
     public static func regler(_ etiquettes: inout [Etiquette], scene: ScenePieces, niveau: NiveauZoom,
                               survol: String?, selection: String?, focus: Int?, isolee: Bool, fk: [Double],
-                              s: Double, t: Double) {
+                              s: Double, t: Double, se: Double = 0, voiles: [Double] = [], etageIsole: Int? = nil,
+                              survolNomEtage: Int? = nil) {
         let fo = 1 - CameraScene.rampe(s)
+        func voile(_ e: Int) -> Double { e < voiles.count ? voiles[e] : 1 }
         for j in etiquettes.indices {
             switch etiquettes[j].genre {
             case .noeud(let id):
@@ -215,19 +224,24 @@ public enum PlacementNoms {
                     continue
                 }
                 let part = n.piece < fk.count ? fk[n.piece] : 0
-                etiquettes[j].voulu = survol == id
-                    || (isolee ? part > 0.6 : focus == nil && (niveau == .tous || (niveau == .routeurs && n.rang <= 2)))
-                etiquettes[j].prio = survol == id ? 2 : n.chef ? 5 : n.rang <= 2 ? 6 : 7
-                etiquettes[j].fort = survol == id || selection == id
+                let vise = survol == id || selection == id
+                let arrivee = etageIsole.map { $0 == scene.pieces[n.piece].etage } ?? true
+                etiquettes[j].voulu = vise
+                    || (isolee ? part > 0.6 : arrivee && (niveau == .tous || (niveau == .routeurs && n.rang <= 2)))
+                etiquettes[j].prio = vise ? 2 : n.chef ? 5 : n.rang <= 2 ? 6 : 7
+                etiquettes[j].fort = vise
             case .piece(let i):
-                let pale = focus != nil && (i < fk.count ? fk[i] : 0) < 0.5 && s > 0.3
+                let pale = (focus != nil && (i < fk.count ? fk[i] : 0) < 0.5 && s > 0.3)
+                    || (i < scene.pieces.count && voile(scene.pieces[i].etage) < 0.6)
                 etiquettes[j].voulu = true
                 etiquettes[j].pale = pale
                 etiquettes[j].prio = pale ? 8 : 4
-            case .etage:
-                etiquettes[j].voulu = fo > 0.5
+            case .etage(let e):
+                etiquettes[j].voulu = true
+                etiquettes[j].pale = voile(e) < 0.6 || (focus != nil && s > 0.3)
+                etiquettes[j].fort = survolNomEtage == e
             case .maison:
-                etiquettes[j].voulu = fo > 0.5 && t > 0.4
+                etiquettes[j].voulu = fo > 0.5 && CameraScene.rampe(se) < 0.5 && t > 0.4
             case .ailleurs:
                 etiquettes[j].voulu = focus.map { $0 < fk.count && fk[$0] > 0.6 } ?? false
             }

@@ -776,7 +776,7 @@ struct FenetrePiecesTests {
         }
     }
 
-    /// Ligne de niveau : pieces seules, routeurs, noms masques (un, plusieurs), piece isolee.
+    /// Ligne de niveau : pieces seules, routeurs, noms masques (un, plusieurs), piece isolee, etage isole.
     @Test func ligneDeNiveau() {
         #expect(LigneNiveauVue.texte(.pieces) == String(localized: "Vue d'ensemble : les pièces"))
         #expect(LigneNiveauVue.texte(.routeurs) == String(localized: "Mi-distance : les pièces et les routeurs"))
@@ -784,6 +784,7 @@ struct FenetrePiecesTests {
         #expect(LigneNiveauVue.texte(.masques(3))
                 == String(localized: "\(3) noms masqués faute de place : rapprochez-vous (molette)"))
         #expect(LigneNiveauVue.texte(.isolee("Salon")).contains("Salon"))
+        #expect(LigneNiveauVue.texte(.etageIsole("Étage")).contains("Étage"))
         #expect(LigneNiveauVue.texte(.lisibles) == String(localized: "Tous les noms sont lisibles"))
     }
 

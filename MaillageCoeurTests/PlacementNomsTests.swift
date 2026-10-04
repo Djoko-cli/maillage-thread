@@ -125,6 +125,44 @@ struct PlacementNomsTests {
         #expect(e.filter(\.voulu).count == 1 + 1, "l'Apple TV, seul noeud du salon, et le nom de la piece")
     }
 
+    /// Les noms pendant un isolement (polissage C, section 5) : un etage isole ne montre que les noms de ses
+    /// appareils, selon le zoom ; les noms d'etage restent, pales et cliquables, celui sous le pointeur souligne ;
+    /// « ⌂ Maison » s'efface. Pendant le retour d'une piece a la maison (triage A, n° 8), les noms suivent l'etat
+    /// d'arrivee : ceux de la maison, selon le zoom. Celui de l'appareil choisi (sa fiche) est toujours voulu.
+    @Test func nomsPendantUnIsolement() throws {
+        let zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon"]), ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau"])]
+        let s = ScenePieces(graphe: try ScenePiecesTests.graphe(sonde: true), libelles: ScenePiecesTests.libelles,
+                            piecesNoeuds: ["Apple TV": "Salon", "HomePod": "Chambre", "E000000000000002": "Bureau",
+                                           "E000000000000004": "Salon"],
+                            zones: zones, chefs: ["Apple TV"], piecesMaison: true)
+        let etage = try #require(s.etages.firstIndex { $0.nom == .zone("Étage") })
+        var e = s.noeuds.map { Etiquette(.noeud($0.id), taille: CGSize(width: 50, height: 15)) }
+        e += s.etages.indices.map { Etiquette(.etage($0), taille: CGSize(width: 60, height: 15)) }
+        e.append(Etiquette(.maison, taille: CGSize(width: 60, height: 15)))
+        let rien = Array(repeating: 0.0, count: s.pieces.count)
+        let voiles = s.etages.indices.map { $0 == etage ? 1.0 : 0.15 }
+        PlacementNoms.regler(&e, scene: s, niveau: .tous, survol: nil, selection: nil, focus: nil, isolee: false, fk: rien,
+                             s: 0, t: 1, se: 1, voiles: voiles, etageIsole: etage, survolNomEtage: etage)
+        let noeuds = e.compactMap { l -> String? in
+            if case .noeud(let id) = l.genre, l.voulu { return id }
+            return nil
+        }
+        #expect(Set(noeuds) == ["HomePod", "E000000000000002"], "les appareils de l'etage isole")
+        let etages = e.filter { if case .etage = $0.genre { true } else { false } }
+        #expect(etages.allSatisfy(\.voulu) && etages.map(\.pale) == s.etages.indices.map { $0 != etage })
+        #expect(etages.map(\.fort) == s.etages.indices.map { $0 == etage }, "souligne sous le pointeur")
+        #expect(e.last?.voulu == false, "« ⌂ Maison » s'efface")
+        // Retour d'une piece (le salon) a la maison : la piece est encore en vue, plus visee.
+        let salon = try #require(s.pieces.firstIndex { $0.nom == .maison("Salon") })
+        var fk = rien
+        fk[salon] = 0.9
+        PlacementNoms.regler(&e, scene: s, niveau: .tous, survol: nil, selection: "E000000000000005", focus: salon,
+                             isolee: false, fk: fk, s: 0.9, t: 0, se: 0.9, voiles: s.etages.indices.map { _ in 1.0 })
+        let retour = e.filter { if case .noeud = $0.genre { $0.voulu } else { false } }.count
+        #expect(retour == s.noeuds.count, "les noms de la maison, selon le zoom, pendant le retour")
+        #expect(e.first { $0.genre == .noeud("E000000000000005") }.map { $0.prio == 2 && $0.fort } == true, "choisi")
+    }
+
     /// Temps de calcul, en Release, dans une fenetre ordinaire (noms espaces) : le placement de 150 noms
     /// tient sous 2 ms (moyenne de 20 images).
     @Test(.enabled(if: Compilation.optimisee, "mesure en Release (outils/mesurer.sh)"))

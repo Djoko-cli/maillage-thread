@@ -40,15 +40,24 @@ public struct EtatAnime: Hashable, Sendable {
     public var focus: Int?
     public var survol: String?
     public var selection: String?
+    /// Isolement d'un etage (polissage C, section 5) : 0 a 1, lineaire ; part propre a chaque plateau, de 0 a 1. Une
+    /// piece isolee isole aussi son etage, le cran « etage » du fil.
+    public var se: Double
+    public var ek: [Double]
+    /// Disque cliquable sous le pointeur : il s'eclaircit.
+    public var survolEtage: Int?
 
     public init(t: Double = 0, s: Double = 0, fk: [Double], focus: Int? = nil, survol: String? = nil,
-                selection: String? = nil) {
+                selection: String? = nil, se: Double = 0, ek: [Double] = [], survolEtage: Int? = nil) {
         self.t = t
         self.s = s
         self.fk = fk
         self.focus = focus
         self.survol = survol
         self.selection = selection
+        self.se = se
+        self.ek = ek
+        self.survolEtage = survolEtage
     }
 }
 
@@ -80,6 +89,8 @@ public struct SceneProjetee: Sendable {
         public var disque: CGAffineTransform?
         public var opacite: Double
         public var profondeur: Double
+        /// Disque cliquable sous le pointeur : une fois et demie plus clair.
+        public var eclaire: Bool
     }
 
     public struct Equateur: Sendable {
@@ -142,6 +153,8 @@ public struct SceneProjetee: Sendable {
     static let aretesBloc = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
 
     public var plateaux: [Plateau] = []
+    /// Voile de chaque plateau dans l'isolement d'un etage : 1 net, 0,15 estompe (polissage C, section 5.1).
+    public var voilesEtages: [Double] = []
     public var equateur: Equateur?
     /// Du plus loin au plus proche.
     public var blocs: [Bloc] = []
@@ -177,6 +190,12 @@ public struct SceneProjetee: Sendable {
         let h = GeometrieMaison.hauteurBloc(t)
         let es = CameraScene.rampe(etat.s), fo = 1 - es
         let oeil = orbite.oeil
+        // Isolement d'un etage (polissage C, section 5) : les autres plateaux, avec leurs pieces, leurs pastilles et
+        // leurs liens, descendent a 15 % ; la sphere s'efface. Une piece isolee laisse les disques a 15 % : on peut
+        // cliquer dessus.
+        let ee = CameraScene.rampe(etat.se)
+        let ve = g.rayons.indices.map { e in 1 - 0.85 * ee * (1 - CameraScene.rampe(e < etat.ek.count ? etat.ek[e] : 0)) }
+        voilesEtages = ve
 
         // Plateaux : polygone exact de 128 points ; degrade par l'affine du disque.
         for e in g.rayons.indices {
@@ -184,16 +203,17 @@ public struct SceneProjetee: Sendable {
             let pts = Self.cercle(c, r, 128)
             guard let poly = proj.polygone(pts) else { continue }
             plateaux.append(Plateau(etage: e, polygone: poly, contour: proj.polyligne(pts, fermee: true),
-                                    disque: proj.disque(c, r), opacite: fo, profondeur: proj.profondeur(c)))
+                                    disque: proj.disque(c, r), opacite: min(ve[e], 1 - 0.85 * es),
+                                    profondeur: proj.profondeur(c), eclaire: etat.survolEtage == e))
         }
 
         // Sphere de la maison : lisere et equateur, pendant l'envol et en 3D.
         let rs = g.rayonSphere * (0.8 + 0.2 * t)
-        if 0.18 * t * fo > 0.002 {
+        if 0.18 * t * fo * (1 - ee) > 0.002 {
             equateur = Equateur(contour: proj.polyligne(Self.cercle(g.centreSphere, rs, 192), fermee: true),
-                                opacite: 0.18 * t * fo, profondeur: proj.profondeur(g.centreSphere))
+                                opacite: 0.18 * t * fo * (1 - ee), profondeur: proj.profondeur(g.centreSphere))
         }
-        let force = t * t * fo
+        let force = t * t * fo * (1 - ee)
         if force > 0.002, let m = proj.contourSphere(g.centreSphere, rs) {
             sphere = Sphere(transfo: m, force: force)
         }
@@ -209,7 +229,7 @@ public struct SceneProjetee: Sendable {
             let voile = 1 - es * (1 - fe), f = 1 + 0.3 * fe
             voiles[i] = voile
             echelles[i] = f
-            let vis = 1 - 0.85 * (1 - voile)
+            let vis = min(1 - 0.85 * (1 - voile), pc.etage < ve.count ? ve[pc.etage] : 1)
             let bx = c.x + positions[i].x, bz = c.z + positions[i].y
             let y0 = c.y + 0.02, y1 = y0 + h
             let x0 = bx - cartes[i].largeur * f / 2, x1 = bx + cartes[i].largeur * f / 2
@@ -242,21 +262,30 @@ public struct SceneProjetee: Sendable {
         blocs.sort { $0.profondeur > $1.profondeur }
         centresNoeuds = mondes
 
+        // Le voile de l'etage d'une piece.
+        func voileEtage(_ piece: Int) -> Double {
+            let e = scene.pieces[piece].etage
+            return e < ve.count ? ve[e] : 1
+        }
+
         // Pastilles : le rayon suit l'echelle, sans depasser 1,1 fois le rayon naturel, 3 px au moins.
         for n in scene.noeuds {
             guard let p = mondes[n.id], let e = proj.ecran(p) else { continue }
             let r = min(n.rayon * 1.1, max(3, n.rayon * proj.pxParUnite(p) / CartesPieces.px))
-            disques.append(Disque(noeud: n.id, centre: e, rayon: r, opacite: 1 - 0.8 * (1 - voiles[n.piece]),
+            disques.append(Disque(noeud: n.id, centre: e, rayon: r,
+                                  opacite: min(1 - 0.8 * (1 - voiles[n.piece]), voileEtage(n.piece)),
                                   profondeur: proj.profondeur(p)))
             ancresNoeuds[n.id] = CGRect(x: Double(e.x) - r, y: Double(e.y) - r, width: 2 * r, height: 2 * r)
         }
         disques.sort { $0.profondeur > $1.profondeur }
 
-        // Liens : estompes avec leurs pieces ; eclaires au survol (ou a la selection) d'un bout.
+        // Liens : estompes avec leurs pieces ; un lien qui touche l'etage isole reste visible, meme vers un autre
+        // etage ; eclaires au survol (ou a la selection) d'un bout.
         for l in scene.liens {
             guard let a = mondes[l.de], let b = mondes[l.vers], let (pa, pb) = proj.segment(a, b),
                   let na = scene.noeud(l.de), let nb = scene.noeud(l.vers) else { continue }
-            let poids = 1 - 0.85 * (1 - max(voiles[na.piece], voiles[nb.piece]))
+            let poids = min(1 - 0.85 * (1 - max(voiles[na.piece], voiles[nb.piece])),
+                            max(voileEtage(na.piece), voileEtage(nb.piece)))
             let eclaire = [l.de, l.vers].contains { $0 == etat.survol || $0 == etat.selection }
             if l.genre == .radio {
                 liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite, opacite: 0.95 * poids,

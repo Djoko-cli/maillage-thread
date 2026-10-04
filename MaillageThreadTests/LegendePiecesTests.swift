@@ -205,7 +205,8 @@ struct LegendePiecesTests {
     /// dans une largeur trop etroite, sa hauteur ne change pas (la colonne ne change jamais de hauteur au fil des
     /// zooms), meme pour la piece isolee, dont le texte est le plus long ; sans contrainte, elle garde son texte entier.
     @Test func ligneDeNiveauSurUneLigne() {
-        let lignes: [LigneNiveau] = [.pieces, .routeurs, .masques(1), .masques(12), .lisibles, .isolee("Salon")]
+        let lignes: [LigneNiveau] = [.pieces, .routeurs, .masques(1), .masques(12), .lisibles, .isolee("Salon"),
+                                     .etageIsole("Rez-de-chaussée")]
         let seule = NSHostingView(rootView: LigneNiveauVue(ligne: .pieces).fixedSize()).fittingSize.height
         for l in lignes {
             let libre = NSHostingView(rootView: LigneNiveauVue(ligne: l).fixedSize()).fittingSize

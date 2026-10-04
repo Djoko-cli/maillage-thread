@@ -275,6 +275,8 @@ struct VuePieces: View {
             }
         }
         .contentShape(Rectangle())
+        // La main sur ce qui se clique (polissage C, maquette).
+        .pointerStyle(moteur.curseurForme == .main ? .link : nil)
         .onContinuousHover { phase in
             switch phase {
             case .active(let p): moteur.survoler(p)
@@ -306,7 +308,9 @@ struct VuePieces: View {
     }
 }
 
-/// Clics droits : sur un nom d'etage, « Monter d'un etage » et « Descendre d'un etage » ; sur le fond,
+/// Clics droits, un menu natif (polissage C, section 1.3) : sur le nom ou le disque d'un plateau, son nom en tete,
+/// grise ; « Monter d'un etage » et « Descendre d'un etage » ; « Au meme niveau que », un sous-menu des autres niveaux,
+/// celui de la zone coche ; « Hors de la maison », une case a cocher ; « Sur son propre niveau ». Sur le fond,
 /// « Replacer les pieces automatiquement ».
 struct MenuPieces: View {
     let moteur: MoteurPieces
@@ -314,10 +318,25 @@ struct MenuPieces: View {
     var body: some View {
         switch moteur.cibleMenu {
         case .etage(let i):
-            Button("Monter d'un étage") { moteur.deplacerEtage(i, de: 1) }
-                .disabled(!moteur.peutDeplacerEtage(i, de: 1))
-            Button("Descendre d'un étage") { moteur.deplacerEtage(i, de: -1) }
-                .disabled(!moteur.peutDeplacerEtage(i, de: -1))
+            if let m = moteur.menuEtage(i) {
+                Button(m.nom) {}
+                    .disabled(true)
+                Button("Monter d'un étage") { moteur.deplacerEtage(i, de: 1) }
+                    .disabled(!m.monter)
+                Button("Descendre d'un étage") { moteur.deplacerEtage(i, de: -1) }
+                    .disabled(!m.descendre)
+                Divider()
+                Menu("Au même niveau que") {
+                    ForEach(m.niveaux, id: \.niveau) { n in
+                        Toggle(n.nom, isOn: Binding(get: { n.coche }, set: { _ in moteur.mettreAuNiveau(i, de: n.niveau) }))
+                    }
+                }
+                .disabled(m.niveaux.isEmpty)
+                Toggle("Hors de la maison", isOn: Binding(get: { m.dehors }, set: { _ in moteur.basculerDehors(i) }))
+                    .disabled(!m.aCote)
+                Button("Sur son propre niveau") { moteur.mettreSurSonNiveau(i) }
+                    .disabled(!m.aCote)
+            }
         case .fond:
             Button("Replacer les pièces automatiquement") { moteur.replacerPieces() }
         case .aucune:
@@ -365,28 +384,46 @@ struct BandeauSansPieces: View {
     }
 }
 
-/// Fil, dans la colonne de gauche, sous la ligne des capsules : « Maison », puis « › Salon » en piece
-/// isolee ; « Maison » y ramene. Une capture le dessine sans bouton.
+/// Fil, dans la colonne de gauche, sous la ligne des capsules (polissage C, section 5.3) : « Maison », puis
+/// « › Etage » en etage isole, « › Etage › Salon » en piece isolee (« › Salon » dans une maison d'un seul
+/// plateau) ; chaque cran au-dessus du dernier mene a son niveau. Une capture le dessine sans bouton.
 struct FilPieces: View {
     @Environment(\.capturePieces) private var capture
     let moteur: MoteurPieces
 
     var body: some View {
+        let fil = moteur.fil
         HStack(spacing: 4) {
-            if let piece = moteur.isolee {
-                if capture {
-                    Text("Maison").foregroundStyle(.link)
-                } else {
-                    Button("Maison") { moteur.sortir() }
-                        .buttonStyle(.link)
-                }
-                Text(verbatim: "› " + piece)
-            } else {
+            if fil.etage == nil && fil.piece == nil {
                 Text("Maison")
+            } else {
+                lien(Text("Maison")) { moteur.versMaison() }
+                if let e = fil.etage {
+                    Text(verbatim: "›")
+                    if fil.piece != nil {
+                        lien(Text(verbatim: e.nom)) { moteur.allerEtage(e.etage) }
+                    } else {
+                        Text(verbatim: e.nom)
+                    }
+                }
+                if let piece = fil.piece {
+                    Text(verbatim: "› " + piece)
+                }
             }
         }
         .font(.system(size: 13))
         .foregroundStyle(.primary.opacity(0.9))
+    }
+
+    /// Un cran qui mene a son niveau : un lien ; dans une capture, son texte, de la couleur d'un lien.
+    @ViewBuilder
+    private func lien(_ texte: Text, action: @escaping () -> Void) -> some View {
+        if capture {
+            texte.foregroundStyle(.link)
+        } else {
+            Button(action: action) { texte }
+                .buttonStyle(.link)
+        }
     }
 }
 
@@ -451,6 +488,8 @@ struct LigneNiveauVue: View {
         switch l {
         case .isolee(let nom):
             String(localized: "Pièce isolée : \(nom) · clic sur une autre pièce pour y aller, clic à côté ou Échap pour revenir")
+        case .etageIsole(let nom):
+            String(localized: "Étage isolé : \(nom) · clic sur une pièce ou un autre étage pour y aller, clic à côté ou Échap pour revenir")
         case .pieces: String(localized: "Vue d'ensemble : les pièces")
         case .routeurs: String(localized: "Mi-distance : les pièces et les routeurs")
         case .masques(1): String(localized: "1 nom masqué faute de place : rapprochez-vous (molette)")

@@ -73,7 +73,8 @@ struct SceneProjeteeTests {
     }
 
     /// Piece isolee (le bureau) : les autres s'estompent a 15 % ; un repere « ailleurs » par enfant dont
-    /// le parent est dans une autre piece, avec son sens (meme etage, dessous) et son fil.
+    /// le parent est dans une autre piece, avec son sens (meme etage, dessous) et son fil. Les disques des
+    /// etages restent a 15 % : on peut cliquer dessus (polissage C, section 5.2).
     @Test func pieceIsolee() throws {
         let (s0, _) = try Self.projeter(t: 0)
         let bureau = try Self.indice(s0, "Bureau")
@@ -93,7 +94,36 @@ struct SceneProjeteeTests {
             let attendue = b.piece == bureau ? 0.13 : 0.15 * 0.13
             #expect(abs(b.opaciteVerre - attendue) < 1e-12)
         }
-        #expect(p.plateaux.allSatisfy { $0.opacite == 0 })
+        #expect(p.plateaux.allSatisfy { abs($0.opacite - 0.15) < 1e-12 })
+    }
+
+    /// Etage isole (polissage C, section 5.1), ici l'etage : les autres plateaux descendent a 15 %, avec leurs pieces,
+    /// leurs pastilles et leurs liens ; un lien qui touche l'etage isole reste visible, meme vers un autre etage ; la
+    /// sphere et l'equateur s'effacent. Le disque survole s'eclaircit.
+    @Test func etageIsole() throws {
+        let (s0, _) = try Self.projeter(t: 1)
+        let etage = try #require(s0.etages.firstIndex { $0.nom == .zone("Étage") })
+        let (s, p) = try Self.projeter(t: 1) { e in
+            e.se = 1
+            e.ek = s0.etages.indices.map { $0 == etage ? 1 : 0 }
+            e.survolEtage = etage
+        }
+        #expect(p.voilesEtages.indices.allSatisfy { abs(p.voilesEtages[$0] - ($0 == etage ? 1 : 0.15)) < 1e-12 })
+        for pl in p.plateaux {
+            #expect(abs(pl.opacite - (pl.etage == etage ? 1 : 0.15)) < 1e-12 && pl.eclaire == (pl.etage == etage))
+        }
+        for b in p.blocs {
+            let attendue = s.pieces[b.piece].etage == etage ? 0.18 : 0.15 * 0.18
+            #expect(abs(b.opaciteVerre - attendue) < 1e-12)
+        }
+        for d in p.disques {
+            let n = try #require(s.noeud(d.noeud))
+            #expect(abs(d.opacite - (s.pieces[n.piece].etage == etage ? 1 : 0.15)) < 1e-12)
+        }
+        // Apple TV (rez-de-chaussee) - HomePod (etage) touche l'etage isole ; Apple TV - E...04 reste au rez-de-chaussee.
+        let opacites = p.liensRouteurs.map(\.opacite).sorted()
+        #expect(opacites.count == 2 && abs(opacites[0] - 0.95 * 0.15) < 1e-12 && abs(opacites[1] - 0.95) < 1e-12)
+        #expect(p.sphere == nil && p.equateur == nil)
     }
 
     /// Le sens d'un repere « ailleurs » compare les niveaux (polissage C, section 5.2) : un parent dans l'etage

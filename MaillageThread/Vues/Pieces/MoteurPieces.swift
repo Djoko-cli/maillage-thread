@@ -5,20 +5,77 @@ import QuartzCore
 import SwiftUI
 import simd
 
-/// Ligne de niveau, en bas a gauche de la vue (spec de la vue par pieces, section 6).
+/// Ligne de niveau, en haut a gauche de la vue, sous le fil (spec de la vue par pieces, section 6 ; polissage C,
+/// section 5.1).
 enum LigneNiveau: Equatable {
     case isolee(String)
+    case etageIsole(String)
     case pieces
     case routeurs
     case masques(Int)
     case lisibles
 }
 
-/// Cible d'un clic droit : un nom d'etage, ou le fond (spec, section 7).
+/// Cible d'un clic droit : le nom ou le disque d'un plateau, ou le fond (spec, section 7 ; polissage C, section 1.3).
 enum CibleMenu: Equatable {
     case aucune
     case etage(Int)
     case fond
+}
+
+/// Ce que montre la vue (polissage C, section 5) : la maison, un etage isole (sa cle), ou une piece isolee (sa cle),
+/// avec sa provenance : l'etage isole d'ou on l'a ouverte, nil depuis la maison.
+enum Isolement: Equatable {
+    case maison
+    case etage(String)
+    case piece(String, provenance: String?)
+}
+
+/// Ce que vise un clic, du plus fort au plus faible (polissage C, section 5.1) : un appareil, une piece (son bloc ou
+/// son nom), le nom d'un etage, son disque (en 3D, le plus proche sur le rayon), le fond.
+enum CibleClic: Equatable {
+    case appareil(String)
+    case piece(Int)
+    case nomEtage(Int)
+    case disque(Int)
+    case fond
+}
+
+/// Le fil (polissage C, section 5.3) : « Maison », puis l'etage isole, ou l'etage et la piece isolee ; chaque cran
+/// au-dessus du dernier mene a son niveau. Une maison d'un seul plateau n'a pas de cran « etage ».
+struct Fil: Equatable {
+    struct Cran: Equatable {
+        var nom: String
+        var etage: Int
+    }
+
+    var etage: Cran?
+    var piece: String?
+}
+
+/// Le menu du clic droit sur le nom ou le disque d'un plateau (polissage C, section 1.3) : son nom, en tete ; « Monter
+/// d'un etage » et « Descendre d'un etage », actifs pour un etage hors du haut et du bas de la pile ; « Au meme niveau
+/// que », les autres niveaux, chacun nomme par son etage principal, celui de la zone coche ; « Hors de la maison » et
+/// « Sur son propre niveau », pour une zone a cote.
+struct MenuEtage: Equatable {
+    struct Niveau: Equatable {
+        var niveau: Int
+        var nom: String
+        var coche: Bool
+    }
+
+    var nom: String
+    var monter: Bool
+    var descendre: Bool
+    var niveaux: [Niveau]
+    var aCote: Bool
+    var dehors: Bool
+}
+
+/// Le curseur au-dessus de la vue : une main sur ce qui se clique (polissage C, maquette).
+enum Curseur: Equatable {
+    case fleche
+    case main
 }
 
 /// Moteur de la vue par pieces (spec, sections 4 a 7) : la scene recue et sa disposition, calculee
@@ -34,8 +91,12 @@ final class MoteurPieces {
     var rotation = true
     /// Horloge en marche : seulement pendant un mouvement, et 0,6 s apres.
     private(set) var anime = true
-    /// Nom de la piece isolee (le fil) ; nil sinon.
+    /// Nom de la piece isolee ; nil sinon.
     private(set) var isolee: String?
+    /// Ce que montre la vue, et sa provenance (polissage C, section 5) ; le fil qui le dit.
+    private(set) var isolement = Isolement.maison
+    private(set) var fil = Fil()
+    private(set) var curseurForme = Curseur.fleche
     var selection: String?
     private(set) var ligneNiveau = LigneNiveau.lisibles
     private(set) var cibleMenu = CibleMenu.aucune
@@ -114,7 +175,19 @@ final class MoteurPieces {
     @ObservationIgnored private var sDepart = 0.0
     @ObservationIgnored private var sDebut = 0.0
     @ObservationIgnored private(set) var focus: Int?
-    @ObservationIgnored private(set) var fk: [Double] = []
+    /// Part propre a chaque piece de l'isolement, gardee par cle (triage A, n° 9).
+    @ObservationIgnored private(set) var fk: [String: Double] = [:]
+    /// Isolement d'un etage (polissage C, section 5) : `se` general, `ek` propre a chaque plateau, par cle ; l'etage
+    /// en vue (isole, celui de la piece isolee, ou qui l'etait, pendant le retour).
+    @ObservationIgnored private(set) var se = 0.0
+    @ObservationIgnored private var seCible = 0.0
+    @ObservationIgnored private var seDepart = 0.0
+    @ObservationIgnored private var seDebut = 0.0
+    @ObservationIgnored private(set) var ek: [String: Double] = [:]
+    @ObservationIgnored private(set) var etageEnVue: String?
+    /// Disque cliquable et nom d'etage sous le pointeur.
+    @ObservationIgnored private(set) var survolEtage: Int?
+    @ObservationIgnored private(set) var survolNomEtage: Int?
     @ObservationIgnored private var vol: Vol?
     @ObservationIgnored private var debutVol = 0.0
     @ObservationIgnored private(set) var survol: String?
@@ -195,10 +268,11 @@ final class MoteurPieces {
         var hysteresis: Bool
     }
 
-    /// Ce que vise un vol : la vue d'ensemble, ou une piece (sa cle).
+    /// Ce que vise un vol : la vue d'ensemble, une piece ou un etage (sa cle).
     private enum Visee {
         case ensemble
         case piece(String)
+        case etage(String)
     }
 
     /// Fondu de 0,3 s par le fond (« Reduire les animations ») : la scene s'efface, la camera saute a
@@ -230,7 +304,9 @@ final class MoteurPieces {
     var estIsolee: Bool { focus != nil && sCible == 1 }
     var enMouvement: Bool { envol != nil || fondu != nil || vol != nil }
     /// La vue est a la vue d'ensemble : ni zoomee, ni deplacee, ni isolee, ni en mouvement.
-    var aLaVueDEnsemble: Bool { pret && !vueTouchee && focus == nil && !enMouvement }
+    var aLaVueDEnsemble: Bool { pret && !vueTouchee && sansIsolement && !enMouvement }
+    /// Ni piece ni etage isoles, ni en train d'etre quittes.
+    var sansIsolement: Bool { isolement == .maison && focus == nil && etageEnVue == nil }
     /// Un mouvement, ou un glisser en cours (spec, sections 5 et 7) : une scene recue attend sa fin.
     var occupe: Bool { enMouvement || geste != nil }
 
@@ -342,24 +418,35 @@ final class MoteurPieces {
         }
         viser(geometriePour(scene), depuis: anciens, duree2D: niveauxChanges ? CameraScene.dureeCases : 0,
               duree3D: niveauxChanges ? CameraScene.dureeNiveaux : 0)
-        fk = Array(repeating: 0, count: scene.pieces.count)
+        // Les parts de l'isolement sont gardees par cle (triage A, n° 9) : un releve recu pendant un fondu ne remet pas
+        // la piece a pleine taille. Une piece ou un etage isoles qui disparaissent rendent la maison.
+        let clesPieces = Set(scene.pieces.map(\.id)), clesEtages = Set(scene.etages.map(\.id))
+        fk = fk.filter { clesPieces.contains($0.key) }
+        ek = ek.filter { clesEtages.contains($0.key) }
         if let cle = ancienFocus, let i = scene.pieces.firstIndex(where: { $0.id == cle }) {
             focus = i
-            fk[i] = 1
         } else if focus != nil {
             focus = nil
             s = 0
             sCible = 0
             isolee = nil
+            if case .piece = isolement { isolement = .maison }
+        }
+        if let k = etageEnVue, !clesEtages.contains(k) {
+            etageEnVue = nil
+            se = 0
+            seCible = 0
+            if case .etage = isolement { isolement = .maison }
         }
         textes = Self.textes(e, focus: focus)
         routeurs = Set(scene.noeuds.filter { $0.rang <= 2 }.map(\.id))
         teintes = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { ($0, scene.pieces[$0].teinte) })
         construireEtiquettes()
+        majFil()
         if !pret {
             pret = true
             orbite = CameraScene.canonique(geometrie, aspect: aspect, u: t)
-        } else if !vueTouchee && focus == nil {
+        } else if !vueTouchee && sansIsolement {
             recadrer()
         }
         reveiller()
@@ -451,21 +538,57 @@ final class MoteurPieces {
         if let c = enCalcul { calculer(c) }
     }
 
-    /// « Monter d'un etage » (+1) ou « Descendre d'un etage » (-1) : echange l'etage avec son voisin,
-    /// et garde l'ordre.
-    func deplacerEtage(_ i: Int, de pas: Int) {
-        guard let e = entree else { return }
-        var ordre = e.scene.etages.map(\.id)
-        let j = i + pas
-        guard ordre.indices.contains(i), ordre.indices.contains(j) else { return }
-        ordre.swapAt(i, j)
-        places.ordonner(ordre, domicile: e.domicile)
+    // MARK: Menu du clic droit (polissage C, section 1.3)
+
+    /// Le menu du nom ou du disque du plateau `e`.
+    func menuEtage(_ e: Int) -> MenuEtage? {
+        guard let scene, e < scene.etages.count else { return nil }
+        let n = scene.niveaux, cle = scene.etages[e].id
+        guard let niveau = n.niveau(cle) else { return nil }
+        let principal = n.estPrincipal(cle)
+        func nom(_ c: String) -> String {
+            scene.etages.firstIndex { $0.id == c }.map { LibellesNoeuds.nom(scene.etages[$0].nom) } ?? c
+        }
+        let niveaux = n.liste.indices.filter { !(principal && $0 == niveau) }.map { i in
+            MenuEtage.Niveau(niveau: i, nom: nom(n.liste[i][0]), coche: !principal && i == niveau)
+        }
+        return MenuEtage(nom: nom(cle), monter: principal && niveau < n.liste.count - 1, descendre: principal && niveau > 0,
+                         niveaux: niveaux, aCote: !principal, dehors: n.dehors(cle))
+    }
+
+    /// Un choix du menu : le nouvel ordre des plateaux et les nouveaux choix de niveau, gardes ; la scene suivante les
+    /// prend (`EntreeScene`), et les plateaux glissent vers leur nouvelle place.
+    private func ranger(_ e: Int, _ operation: (Niveaux, String, [String: PlacesGardees.ACote]) -> Rangement?) {
+        guard let entree, e < entree.scene.etages.count,
+              let r = operation(entree.scene.niveaux, entree.scene.etages[e].id,
+                                places.maison(entree.domicile).aCote) else { return }
+        places.ranger(r, domicile: entree.domicile)
         enregistrer()
     }
 
-    func peutDeplacerEtage(_ i: Int, de pas: Int) -> Bool {
-        guard let n = scene?.etages.count else { return false }
-        return (0..<n).contains(i) && (0..<n).contains(i + pas)
+    /// « Monter d'un etage » (+1) ou « Descendre d'un etage » (-1) : le niveau entier de l'etage, zones a cote
+    /// comprises, change de place avec son voisin.
+    func deplacerEtage(_ e: Int, de pas: Int) {
+        ranger(e) { $0.deplacer($1, de: pas, choix: $2) }
+    }
+
+    func peutDeplacerEtage(_ e: Int, de pas: Int) -> Bool {
+        menuEtage(e).map { pas > 0 ? $0.monter : $0.descendre } ?? false
+    }
+
+    /// « Au meme niveau que » l'etage principal du niveau `niveau`, dans la maison.
+    func mettreAuNiveau(_ e: Int, de niveau: Int) {
+        ranger(e) { $0.rejoindre($1, niveau: niveau, choix: $2) }
+    }
+
+    /// « Hors de la maison », coche ou non.
+    func basculerDehors(_ e: Int) {
+        ranger(e) { $0.basculerDehors($1, choix: $2) }
+    }
+
+    /// « Sur son propre niveau ».
+    func mettreSurSonNiveau(_ e: Int) {
+        ranger(e) { $0.propreNiveau($1, choix: $2) }
     }
 
     /// « Replacer les pieces automatiquement » : oublie les places gardees de la maison (pas l'ordre
@@ -601,9 +724,10 @@ final class MoteurPieces {
         if glissementPlateaux == nil && aLaVueDEnsemble { recadrer() }   // posee tout de suite : cadree tout de suite
     }
 
-    /// Ce que la vue regarde : la piece isolee, ou la cible de la vue d'ensemble.
+    /// Ce que la vue regarde : la piece isolee, l'etage isole, ou la cible de la vue d'ensemble.
     private func ancreCamera() -> SIMD3<Double> {
         if let i = focus, let c = centrePiece(i) { return c }
+        if let k = etageEnVue, let e = scene?.etages.firstIndex(where: { $0.id == k }) { return geometrie.centrePlateau(e, t) }
         return geometrie.cible2D + (geometrie.centreSphere - geometrie.cible2D) * t
     }
 
@@ -629,6 +753,7 @@ final class MoteurPieces {
         switch v {
         case .ensemble: CameraScene.volVersEnsemble(orbite, geometrie, aspect: aspect, u: t, troisD: t == 1)
         case .piece(let cle): scene?.pieces.firstIndex { $0.id == cle }.flatMap(volVersPiece)
+        case .etage(let cle): scene?.etages.firstIndex { $0.id == cle }.map(volVersEtage)
         }
     }
 
@@ -653,13 +778,19 @@ final class MoteurPieces {
         isolee = nil
         s = 0
         sCible = 0
-        fk = fk.map { _ in 0 }
+        fk = [:]
+        etageEnVue = nil
+        se = 0
+        seCible = 0
+        ek = [:]
+        isolement = .maison
         vol = nil
         zoomEnAttente = 0
         rotationEnAttente = .zero
         vueTouchee = false
         textes = entree.map { Self.textes($0, focus: nil) } ?? textes
         construireEtiquettes()
+        majFil()
         // Vers la 2D, l'envol se pose sur la grille de la zone visible du moment (polissage C, section 3.5).
         if !v, let scene {
             grilleEnAttente = nil
@@ -677,9 +808,19 @@ final class MoteurPieces {
     }
 
     /// Isole une piece : la camera y vole en 1,3 s (tout de suite si « Reduire les animations »), les
-    /// autres s'estompent, ses reperes « ailleurs » apparaissent.
+    /// autres s'estompent, ses reperes « ailleurs » apparaissent. Son etage est celui du fil : les disques des
+    /// autres etages restent a 15 %, cliquables (polissage C, section 5.2). La provenance (section 5.4) : depuis la
+    /// maison ou un etage isole, ce que l'on quitte ; d'une piece a une autre, elle reste, sauf vers une piece d'un
+    /// autre etage : la maison.
     func isoler(_ i: Int) {
         guard let scene, i < scene.pieces.count, !(focus == i && sCible == 1) else { return }
+        let piece = scene.pieces[i], etage = scene.etages[piece.etage].id
+        let provenance: String? = switch isolement {
+        case .maison: nil
+        case .etage(let k): k
+        case .piece(_, let p): p == etage ? p : nil
+        }
+        isolement = .piece(piece.id, provenance: provenance)
         focus = i
         isolee = textes.pieces[i]?.nom
         if sCible != 1 {
@@ -687,9 +828,80 @@ final class MoteurPieces {
             sCible = 1
             sDebut = Self.maintenant()
         }
+        if scene.etages.count > 1 { viserEtage(etage) }
         if let e = entree { textes = Self.textes(e, focus: i) }
         construireEtiquettes()
-        if let v = volVersPiece(i) { voler(v, visee: .piece(scene.pieces[i].id)) }
+        majFil()
+        if let v = volVersPiece(i) { voler(v, visee: .piece(piece.id)) }
+    }
+
+    /// Isole un etage (polissage C, section 5.1) : un vol de 1,3 s cadre son plateau, bande de son nom comprise ; les
+    /// autres plateaux s'estompent a 15 %, la sphere et « ⌂ Maison » s'effacent, la rotation lente s'arrete. Une
+    /// piece isolee est relachee. Rien dans une maison d'un seul plateau, ni pendant l'envol.
+    func allerEtage(_ e: Int) {
+        guard let scene, scene.etages.count > 1, e < scene.etages.count, envol == nil, fondu == nil else { return }
+        quitterPiece()
+        let cle = scene.etages[e].id
+        isolement = .etage(cle)
+        viserEtage(cle)
+        majFil()
+        voler(volVersEtage(e), visee: .etage(cle))
+    }
+
+    /// Vol vers un etage isole.
+    private func volVersEtage(_ e: Int) -> Vol {
+        CameraScene.volVersEtage(orbite, geometrie, etage: e, aspect: aspect, u: t, troisD: t == 1)
+    }
+
+    /// L'isolement d'etage vise `cle` : son plateau reste net.
+    private func viserEtage(_ cle: String) {
+        etageEnVue = cle
+        if seCible != 1 {
+            seDepart = se
+            seCible = 1
+            seDebut = Self.maintenant()
+        }
+    }
+
+    /// La piece isolee est relachee : son isolement redescend en 1,3 s.
+    private func quitterPiece() {
+        guard focus != nil, sCible != 0 else { return }
+        sDepart = s
+        sCible = 0
+        sDebut = Self.maintenant()
+        isolee = nil
+        // Retour lance avant la premiere image de l'isolement : `s` est deja a 0, et l'horloge ne
+        // finirait jamais ce retour.
+        if s == 0 { finirRetour() }
+    }
+
+    /// L'etage isole est relache.
+    private func quitterEtage() {
+        guard seCible != 0 else { return }
+        seDepart = se
+        seCible = 0
+        seDebut = Self.maintenant()
+        if se == 0 { etageEnVue = nil }
+    }
+
+    /// Le fil de ce que montre la vue.
+    private func majFil() {
+        var f = Fil()
+        if let scene {
+            func cran(_ e: Int) -> Fil.Cran { Fil.Cran(nom: textes.etages[e] ?? "", etage: e) }
+            switch isolement {
+            case .maison:
+                break
+            case .etage(let cle):
+                f.etage = scene.etages.firstIndex { $0.id == cle }.map(cran)
+            case .piece(let cle, _):
+                if let i = scene.pieces.firstIndex(where: { $0.id == cle }) {
+                    f.piece = textes.pieces[i]?.nom
+                    if scene.etages.count > 1 { f.etage = cran(scene.pieces[i].etage) }
+                }
+            }
+        }
+        if f != fil { fil = f }
     }
 
     /// Vol vers une piece, a la hauteur de vue de la spec (section 7).
@@ -699,24 +911,42 @@ final class MoteurPieces {
                                         aspect: aspect, troisD: t == 1)
     }
 
-    /// Retour a la vue d'ensemble (clic a cote, Echap, « Maison » dans le fil, double-clic sur le fond) :
-    /// la piece isolee est relachee, le zoom et le deplacement annules, par un vol de 1,3 s. « Reduire
-    /// les animations » : tout de suite, ou par un fondu de 0,3 s (`enFondu`, le double-clic).
-    func sortir(enFondu: Bool = false) {
-        if focus != nil, sCible != 0 {
-            sDepart = s
-            sCible = 0
-            sDebut = Self.maintenant()
-            isolee = nil
-            // Retour lance avant la premiere image de l'isolement : `s` est deja a 0, et l'horloge ne
-            // finirait jamais ce retour.
-            if s == 0 { finirRetour() }
-        } else if !vueTouchee {
-            return
-        }
+    /// Retour a la maison (« Maison » dans le fil, double-clic, ou en remontant) : la piece et l'etage isoles sont
+    /// relaches, le zoom et le deplacement annules, par un vol de 1,3 s qui part de la pose courante. « Reduire les
+    /// animations » : tout de suite, ou par un fondu de 0,3 s (`enFondu`, le double-clic).
+    func versMaison(enFondu: Bool = false) {
+        guard isolement != .maison || focus != nil || etageEnVue != nil || vueTouchee else { return }
+        quitterPiece()
+        quitterEtage()
+        isolement = .maison
+        majFil()
         vueTouchee = false
         voler(CameraScene.volVersEnsemble(orbite, geometrie, aspect: aspect, u: t, troisD: t == 1), visee: .ensemble,
               enFondu: enFondu)
+    }
+
+    /// Echap et le clic a cote remontent d'ou l'on vient (polissage C, section 5.4) : une piece ouverte depuis un etage
+    /// isole, a l'etage de la piece ; une autre piece, ou un etage, a la maison. A la maison, Echap ramene une vue
+    /// zoomee ou deplacee a la vue d'ensemble (`clavier`) ; le clic a cote ne fait rien. Rien pendant l'envol.
+    func remonter(clavier: Bool = true) {
+        guard envol == nil, fondu == nil else { return }
+        switch isolement {
+        case .piece(let cle, let provenance):
+            if provenance != nil, let scene, scene.etages.count > 1, let i = scene.pieces.firstIndex(where: { $0.id == cle }) {
+                allerEtage(scene.pieces[i].etage)
+            } else {
+                versMaison()
+            }
+        case .etage:
+            versMaison()
+        case .maison:
+            if clavier { versMaison() }
+        }
+    }
+
+    /// Echap.
+    func sortir() {
+        remonter(clavier: true)
     }
 
     /// Fin du retour d'un isolement : plus de piece isolee, ni de reperes « ailleurs ».
@@ -726,11 +956,11 @@ final class MoteurPieces {
         construireEtiquettes()
     }
 
-    /// Double-clic sur le fond (precision 17 du plan 4b) : retour a la vue d'ensemble d'un geste. Le
-    /// premier clic a deja ferme la fiche et relache la piece isolee (clic a cote) ; le second annule le
-    /// zoom et le deplacement.
+    /// Double-clic sur le fond ou sur un disque (precision 17 du plan 4b ; polissage C, section 5.4) : retour a la vue
+    /// d'ensemble d'un geste, de partout. Le premier clic a deja agi seul ; le second relache ce qui reste isole et
+    /// annule le zoom et le deplacement.
     func doubleCliquer() {
-        sortir(enFondu: true)
+        versMaison(enFondu: true)
     }
 
     private func voler(_ v: Vol, visee: Visee, enFondu: Bool = false) {
@@ -770,16 +1000,19 @@ final class MoteurPieces {
         let voulu = CGRect(x: 0, y: m.haut, width: nouvelle.width, height: max(1, nouvelle.height - m.haut - m.bas))
         if voulu != cadre {
             cadre = voulu
-            if pret && !enMouvement && !vueTouchee && focus == nil && !fige { recadrer() }
+            if aLaVueDEnsemble && !fige { recadrer() }
         }
         if changee && !fige { zoneChangee() }
         if !fige { avancer(now) }
         guard pret, let scene else { return }
-        let etat = EtatAnime(t: t, s: s, fk: fk, focus: focus, survol: survol, selection: selection)
+        let parts = scene.pieces.map { fk[$0.id] ?? 0 }
+        let etat = EtatAnime(t: t, s: s, fk: parts, focus: focus, survol: survol, selection: selection, se: se,
+                             ek: scene.etages.map { ek[$0.id] ?? 0 }, survolEtage: survolEtage)
         let p = SceneProjetee(scene: scene, cartes: cartes, positions: positions, geometrie: geometrie, etat: etat,
                               orbite: orbite, cadre: cadre)
         PlacementNoms.regler(&etiquettes, scene: scene, niveau: p.niveau, survol: survol, selection: selection, focus: focus,
-                             isolee: estIsolee, fk: fk, s: s, t: t)
+                             isolee: estIsolee, fk: parts, s: s, t: t, se: se, voiles: p.voilesEtages,
+                             etageIsole: indiceEtageIsole, survolNomEtage: survolNomEtage)
         let ancres: [CGRect?] = etiquettes.map { l in
             switch l.genre {
             case .noeud(let id): p.ancresNoeuds[id]
@@ -866,8 +1099,15 @@ final class MoteurPieces {
         dureeAnnoncee = Apparition.dureeLegende
     }
 
+    /// L'etage vise par l'isolement, dans la scene ; nil : la maison ou une piece.
+    var indiceEtageIsole: Int? {
+        guard case .etage(let cle) = isolement else { return nil }
+        return scene?.etages.firstIndex { $0.id == cle }
+    }
+
     private func ligne(_ niveau: NiveauZoom, ancres: [CGRect?]) -> LigneNiveau {
         if estIsolee, let nom = isolee { return .isolee(nom) }
+        if let e = indiceEtageIsole, let nom = textes.etages[e] { return .etageIsole(nom) }
         switch niveau {
         case .pieces: return .pieces
         case .routeurs: return .routeurs
@@ -909,10 +1149,24 @@ final class MoteurPieces {
                 if s == 0 { finirRetour() }
             }
         }
-        for i in fk.indices {
-            let c: Double = focus == i && sCible == 1 ? 1 : 0
-            fk[i] += (c - fk[i]) * min(1, dt * 3.5)
-            if abs(c - fk[i]) < 1e-3 { fk[i] = c }
+        if se != seCible {
+            let r = min(1, max(0, (now - seDebut) / CameraScene.dureeVol))
+            se = seDepart + (seCible - seDepart) * r
+            if r >= 1 {
+                se = seCible
+                if se == 0 { etageEnVue = nil }
+            }
+        }
+        // Les parts propres, par cle : celle de la piece isolee et celle de l'etage en vue tendent vers 1.
+        if let scene {
+            let piece = focus.flatMap { $0 < scene.pieces.count && sCible == 1 ? scene.pieces[$0].id : nil }
+            func tendre(_ x: Double?, vers c: Double) -> Double {
+                var f = x ?? 0
+                f += (c - f) * min(1, dt * 3.5)
+                return abs(c - f) < 1e-3 ? c : f
+            }
+            for p in scene.pieces { fk[p.id] = tendre(fk[p.id], vers: p.id == piece ? 1 : 0) }
+            for e in scene.etages { ek[e.id] = tendre(ek[e.id], vers: e.id == etageEnVue ? 1 : 0) }
         }
         if glissementPlateaux != nil {
             let ancre0 = ancreCamera()
@@ -937,7 +1191,7 @@ final class MoteurPieces {
 
     /// Rotation lente, rotation amortie, zoom amorti.
     private func controles() {
-        if troisD && t == 1 && rotation && !reduire && focus == nil && geste == nil {
+        if troisD && t == 1 && rotation && !reduire && sansIsolement && geste == nil {
             orbite.azimut -= 2 * .pi / CameraScene.dureeTour * dt
         }
         if rotationEnAttente != .zero {
@@ -964,8 +1218,10 @@ final class MoteurPieces {
         if enMouvement || s != sCible || margesEnRoute || glissementPlateaux != nil || (attente != nil && geste == nil) {
             return true
         }
-        if fk.contains(where: { $0 != 0 && $0 != 1 }) { return true }
-        if troisD && t == 1 && rotation && !reduire && focus == nil { return true }
+        if se != seCible || fk.values.contains(where: { $0 != 0 && $0 != 1 }) || ek.values.contains(where: { $0 != 0 && $0 != 1 }) {
+            return true
+        }
+        if troisD && t == 1 && rotation && !reduire && sansIsolement { return true }
         if zoomEnAttente != 0 || rotationEnAttente != .zero || (geste != nil && bouge) { return true }
         if now - derniereActivite < 0.6 { return true }
         return etiquettes.contains { $0.envie > 0 }
@@ -1000,15 +1256,67 @@ final class MoteurPieces {
         return nil
     }
 
+    /// Survol : le nom de l'appareil en semi-gras ; un disque cliquable s'eclaircit, le nom d'un etage se souligne ; la
+    /// main sur ce qui se clique (polissage C, maquette). Rien pendant l'envol.
     func survoler(_ p: CGPoint?) {
         curseur = p
-        let n = p.flatMap(noeudSous)
-        if n != survol {
+        let c = envol == nil && fondu == nil ? p.map(cibleClic(en:)) ?? .fond : .fond
+        let n: String? = if case .appareil(let id) = c { id } else { nil }
+        let disque: Int? = if case .disque(let e) = c, disqueCliquable(e) { e } else { nil }
+        let nom: Int? = if case .nomEtage(let e) = c { e } else { nil }
+        if n != survol || disque != survolEtage || nom != survolNomEtage {
             survol = n
+            survolEtage = disque
+            survolNomEtage = nom
             reveiller()
         }
+        let main = switch c {
+        case .appareil, .piece: true
+        case .nomEtage: (scene?.etages.count ?? 0) > 1 || estIsolee
+        case .disque(let e): disqueCliquable(e)
+        case .fond: false
+        }
+        let forme: Curseur = main ? .main : .fleche
+        if forme != curseurForme { curseurForme = forme }
         let cible = p.map(cible(en:)) ?? .aucune
         if cible != cibleMenu { cibleMenu = cible }
+    }
+
+    /// Ce que vise un clic en `p`, du plus fort au plus faible (polissage C, section 5.1).
+    func cibleClic(en p: CGPoint) -> CibleClic {
+        if let n = noeudSous(p) { return .appareil(n) }
+        if let i = pieceSous(p) { return .piece(i) }
+        if let e = nomEtageSous(p) { return .nomEtage(e) }
+        if let e = disqueSous(p) { return .disque(e) }
+        return .fond
+    }
+
+    /// Nom d'etage sous un point (`marge` points autour).
+    func nomEtageSous(_ p: CGPoint, marge: CGFloat = 0) -> Int? {
+        for l in etiquettes where l.vu && l.rect.insetBy(dx: -marge, dy: -marge).contains(p) {
+            if case .etage(let e) = l.genre { return e }
+        }
+        return nil
+    }
+
+    /// Disque d'un plateau sous un point : en 3D, le plus proche sur le rayon, au point ou il le rencontre.
+    func disqueSous(_ p: CGPoint) -> Int? {
+        guard let projetee else { return nil }
+        let proj = ProjectionScene(orbite, cadre: cadre)
+        var meilleur: (etage: Int, profondeur: Double)?
+        for pl in projetee.plateaux where pl.etage < geometrie.rayons.count && SceneProjetee.contient(pl.polygone, p) {
+            let point = proj.sol(p, hauteur: geometrie.centrePlateau(pl.etage, t).y)
+            let d = point.map { proj.profondeur($0) } ?? pl.profondeur
+            if d < meilleur?.profondeur ?? .infinity { meilleur = (pl.etage, d) }
+        }
+        return meilleur?.etage
+    }
+
+    /// Un clic sur ce disque fait quelque chose (polissage C, section 5.4) : sauf celui de l'etage isole, entre ses
+    /// pieces ; dans une maison d'un seul plateau, seulement depuis une piece isolee, pour remonter.
+    func disqueCliquable(_ e: Int) -> Bool {
+        guard let scene, e < scene.etages.count else { return false }
+        return scene.etages.count > 1 ? estIsolee || isolement != .etage(scene.etages[e].id) : estIsolee
     }
 
     /// Piece sous un point : son nom (le nom et le compte de ses appareils), sinon sa boite, la plus proche
@@ -1021,13 +1329,13 @@ final class MoteurPieces {
         return projetee?.piece(sous: p)
     }
 
-    /// Clic droit : un nom d'etage, ou le fond (ni piece, ni son nom, ni noeud).
+    /// Clic droit (polissage C, section 1.3) : le nom d'un etage, a 2 points pres, ou son disque, hors des pieces et
+    /// des appareils ; le fond, hors de tout cela ; rien sur une piece ou un appareil.
     func cible(en p: CGPoint) -> CibleMenu {
-        for l in etiquettes where l.vu && l.rect.insetBy(dx: -2, dy: -2).contains(p) {
-            if case .etage(let i) = l.genre { return .etage(i) }
-        }
-        if noeudSous(p) == nil && pieceSous(p) == nil { return .fond }
-        return .aucune
+        if let e = nomEtageSous(p, marge: 2) { return .etage(e) }
+        if noeudSous(p) != nil || pieceSous(p) != nil { return .aucune }
+        if let e = disqueSous(p) { return .etage(e) }
+        return .fond
     }
 
     func glisser(_ p: CGPoint, depart d: CGPoint) {
@@ -1038,8 +1346,9 @@ final class MoteurPieces {
             abandonApresGlisser = false
             precedent = d
             departGeste = d
+            // Les pieces de l'etage isole se glissent ; celles des autres etages se cliquent seulement.
             if !estIsolee, !enMouvement, let scene, let i = projetee?.piece(sous: d), i < scene.pieces.count,
-               let c = centrePiece(i) {
+               indiceEtageIsole.map({ $0 == scene.pieces[i].etage }) ?? true, let c = centrePiece(i) {
                 geste = .piece(scene.pieces[i].id, hauteur: c.y)
             } else {
                 geste = .fond
@@ -1074,8 +1383,8 @@ final class MoteurPieces {
         reveiller()
     }
 
-    /// Fin d'un glisser, ou clic. Deux clics sur le fond, a moins de l'intervalle du double-clic de
-    /// macOS et de 5 points : le second est un double-clic ; le premier a agi comme un clic simple. Une
+    /// Fin d'un glisser, ou clic. Deux clics sur le fond ou sur un disque, a moins de l'intervalle du double-clic
+    /// de macOS et de 5 points : le second est un double-clic ; le premier a agi comme un clic simple. Une
     /// scene recue pendant le geste s'applique ensuite, avec la place gardee de la piece glissee.
     func relacher(_ p: CGPoint, a instant: Double = MoteurPieces.maintenant()) {
         let g = geste
@@ -1086,7 +1395,10 @@ final class MoteurPieces {
         if case .piece(let id, _)? = g, !clic {
             garder(id)
         } else if clic {
-            let fond = noeudSous(p) == nil && pieceSous(p) == nil
+            let fond = switch cibleClic(en: p) {
+            case .fond, .disque: true
+            default: false
+            }
             if fond, let c = clicFond, instant - c.instant <= NSEvent.doubleClickInterval,
                hypot(p.x - c.point.x, p.y - c.point.y) <= 5 {
                 clicFond = nil
@@ -1121,28 +1433,36 @@ final class MoteurPieces {
         bouge = false
     }
 
-    /// Clic sans glisser : un appareil ou son nom ouvre sa fiche ; une piece ou son nom l'isole (en piece isolee,
-    /// une autre piece y mene, meme pendant le vol) ; a cote des pieces, la fiche se ferme et la vue revient a la
-    /// maison. Rien pendant l'envol.
+    /// Clic sans glisser, selon sa cible (polissage C, sections 5.1 et 5.4) : un appareil ou son nom ouvre sa fiche ;
+    /// une piece ou son nom l'isole (en piece isolee, une autre piece y mene, meme pendant le vol) ; le nom ou le
+    /// disque d'un etage l'isole ; a cote, la fiche se ferme et la vue remonte d'ou elle vient. Rien pendant l'envol.
     func cliquer(_ p: CGPoint) {
         guard envol == nil, fondu == nil else { return }
-        if let n = noeudSous(p) {
+        switch cibleClic(en: p) {
+        case .appareil(let n):
             selection = n
+        case .piece(let i):
+            if !(focus == i && sCible == 1) { isoler(i) }
+        case .nomEtage(let e):
+            cliquerEtage(e, disque: false)
+        case .disque(let e):
+            cliquerEtage(e, disque: true)
+        case .fond:
+            selection = nil
+            remonter(clavier: false)
+        }
+    }
+
+    /// Clic sur le nom ou le disque d'un etage : il l'isole ; son propre disque, l'etage isole, entre les pieces, ne
+    /// fait rien. Maison d'un seul plateau : seulement depuis une piece isolee, pour remonter a la maison.
+    private func cliquerEtage(_ e: Int, disque: Bool) {
+        guard let scene, e < scene.etages.count else { return }
+        guard scene.etages.count > 1 else {
+            if estIsolee { versMaison() }
             return
         }
-        let i = pieceSous(p)
-        if focus != nil {
-            if let i {
-                if i != focus || sCible == 0 { isoler(i) }
-            } else {
-                selection = nil
-                sortir()
-            }
-        } else if let i {
-            isoler(i)
-        } else {
-            selection = nil
-        }
+        if disque, isolement == .etage(scene.etages[e].id) { return }
+        allerEtage(e)
     }
 
     func molette(_ dy: Double, precis: Bool) {
@@ -1203,21 +1523,46 @@ final class MoteurPieces {
         orbite = CameraScene.canonique(geometrie, aspect: aspect, u: t)
     }
 
-    func poserIsolement(_ i: Int) {
+    /// Une piece isolee, au bout de son vol ; `depuisEtage` : ouverte depuis son etage isole (sa provenance).
+    func poserIsolement(_ i: Int, depuisEtage: Bool = false) {
         guard let scene, i < scene.pieces.count else { return }
+        let etage = scene.etages[scene.pieces[i].etage].id
+        isolement = .piece(scene.pieces[i].id, provenance: depuisEtage ? etage : nil)
         focus = i
         isolee = textes.pieces[i]?.nom
         s = 1
         sCible = 1
-        fk[i] = 1
+        fk[scene.pieces[i].id] = 1
+        if scene.etages.count > 1 {
+            etageEnVue = etage
+            se = 1
+            seCible = 1
+            ek[etage] = 1
+        }
         if let e = entree { textes = Self.textes(e, focus: i) }
         construireEtiquettes()
+        majFil()
         if let v = volVersPiece(i) { orbite = v.orbite(1, depuis: orbite) }
+    }
+
+    /// Un etage isole, au bout de son vol.
+    func poserEtageIsole(_ e: Int) {
+        guard let scene, scene.etages.count > 1, e < scene.etages.count else { return }
+        let cle = scene.etages[e].id
+        isolement = .etage(cle)
+        etageEnVue = cle
+        se = 1
+        seCible = 1
+        ek[cle] = 1
+        majFil()
+        orbite = volVersEtage(e).orbite(1, depuis: orbite)
     }
 
     func poserSurvol(_ id: String?) { survol = id }
 
     func poserAzimut(_ decalage: Double) { orbite.azimut += decalage }
+
+    func poserInclinaison(_ i: Double) { orbite.inclinaison = i }
 
     /// Centre du bloc d'une piece, dans le monde.
     func centrePiece(_ i: Int) -> SIMD3<Double>? {

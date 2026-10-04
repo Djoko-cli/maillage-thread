@@ -881,6 +881,22 @@
         }
       }
     },
+    "Au même niveau que" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On the same level as"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Au même niveau que"
+          }
+        }
+      }
+    },
     "Aucun" : {
       "localizations" : {
         "en" : {
@@ -1613,6 +1629,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "HomeKit indisponible pour le passeur."
+          }
+        }
+      }
+    },
+    "Hors de la maison" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Outside the house"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hors de la maison"
           }
         }
       }
@@ -3473,6 +3505,22 @@
         }
       }
     },
+    "Sur son propre niveau" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On its own level"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sur son propre niveau"
+          }
+        }
+      }
+    },
     "Surnom" : {
       "localizations" : {
         "en" : {
@@ -4973,6 +5021,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Écoute du réseau local…"
+          }
+        }
+      }
+    },
+    "Étage isolé : %@ · clic sur une pièce ou un autre étage pour y aller, clic à côté ou Échap pour revenir" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Isolated floor: %@ · click a room or another floor to go there, click outside or press Esc to come back"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Étage isolé : %@ · clic sur une pièce ou un autre étage pour y aller, clic à côté ou Échap pour revenir"
           }
         }
       }

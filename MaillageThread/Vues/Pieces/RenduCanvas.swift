@@ -96,13 +96,13 @@ enum RenduCanvas {
     }
 
     /// Plateaux (degrade radial de la couleur de zone, 0,26 au centre, 0,08 au bord ; contour d'un
-    /// pixel a 0,45) et equateur, du plus loin au plus proche.
+    /// pixel a 0,45 ; une fois et demie plus clairs sous le pointeur, quand on peut cliquer le disque) et
+    /// equateur, du plus loin au plus proche.
     private static func dessinerPlateaux(_ ctx: inout GraphicsContext, _ image: ImagePieces, _ palette: Palette) {
         let pixel = 1 / image.echelle
         let p = image.projetee
         var fond = p.plateaux.indices.map { (p.plateaux[$0].profondeur, $0) }
         if let eq = p.equateur { fond.append((eq.profondeur, -1)) }
-        let degrade = Gradient(colors: [palette.zone.opacity(0.26), palette.zone.opacity(0.08)])
         for (_, i) in fond.sorted(by: { $0.0 > $1.0 }) {
             if i < 0, let eq = p.equateur {
                 for m in eq.contour {
@@ -113,6 +113,8 @@ enum RenduCanvas {
             let pl = p.plateaux[i]
             var g = ctx
             g.opacity = pl.opacite
+            let k = pl.eclaire ? 1.5 : 1
+            let degrade = Gradient(colors: [palette.zone.opacity(0.26 * k), palette.zone.opacity(0.08 * k)])
             let forme = chemin(pl.polygone, ferme: true)
             if let m = pl.disque {
                 var d = g
@@ -120,7 +122,7 @@ enum RenduCanvas {
                 d.fill(forme.applying(m.inverted()), with: .radialGradient(degrade, center: .zero, startRadius: 0, endRadius: 1))
             }
             for m in pl.contour {
-                g.stroke(chemin(m, ferme: false), with: .color(palette.zone.opacity(0.45)), lineWidth: pixel)
+                g.stroke(chemin(m, ferme: false), with: .color(palette.zone.opacity(min(1, 0.45 * k))), lineWidth: pixel)
             }
         }
     }
@@ -261,9 +263,10 @@ enum RenduCanvas {
                 g.draw(compte, at: CGPoint(x: x + 14 + ceil(tn.width) + 6, y: ligne - compte.firstBaseline(in: grand)),
                        anchor: .topLeading)
             case .etage(let i):
+                // Souligne sous le pointeur : un clic l'isole (polissage C, section 5.1).
                 guard let nom = image.textes.etages[i] else { continue }
-                let texte = cache.resolu(g, "e|" + nom, echelle: e) {
-                    StylesNoms.etage(nom).foregroundStyle(palette.zone.opacity(0.95))
+                let texte = cache.resolu(g, "e|\(l.fort)|" + nom, echelle: e) {
+                    StylesNoms.etage(nom).underline(l.fort).foregroundStyle(palette.zone.opacity(0.95))
                 }
                 g.draw(texte, at: r.origin, anchor: .topLeading)
             case .maison:
