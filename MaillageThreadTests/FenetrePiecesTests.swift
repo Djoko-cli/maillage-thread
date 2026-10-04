@@ -1363,36 +1363,67 @@ struct FenetrePiecesTests {
     }
 
     /// Le reglage « Etages en 2D » (polissage C, section 3.1) : en grille par defaut ; change dans les preferences
-    /// (Reglages › General), il s'applique tout de suite a la vue ouverte, dans une fenetre haute (820 x 1500) ou la grille
-    /// (la pile) differe de la rangee. Le test ne depend pas du mode 2D ou 3D garde de l'app et ne le touche pas : la
-    /// fenetre le lit dans `UserDefaults.standard` a sa creation, sans qu'un autre domaine puisse s'y mettre ; le test pose
-    /// donc la 2D sur le moteur de la fenetre (`basculer`, qui n'ecrit aucune preference et ne fait rien si elle y est
-    /// deja), et les preferences de la fenetre vont a un domaine a lui. En 3D, la rangee attend la 2D : voir
-    /// `reglageDeLaGrille` (`MoteurPiecesTests`).
+    /// (Reglages › General), il s'applique tout de suite a la vue ouverte. Le test ne depend pas du mode 2D ou 3D garde de
+    /// l'app et ne le touche pas : la fenetre le lit dans `UserDefaults.standard` a sa creation, sans qu'un autre domaine
+    /// puisse s'y mettre ; le test pose donc la 2D sur le moteur de la fenetre (`basculer`, qui n'ecrit aucune preference
+    /// et ne fait rien si elle y est deja), et les preferences de la fenetre vont a un domaine a lui. En 3D, la rangee
+    /// attend la 2D : voir `reglageDeLaGrille` (`MoteurPiecesTests`).
+    /// Il ne depend pas non plus de la hauteur de l'ecran : AppKit plafonne la fenetre a la hauteur visible de l'ecran, et
+    /// la grille ne differe de la rangee que dans une fenetre assez haute (a T4, la pile des deux plateaux de la demo, a
+    /// partir d'environ 1 340 pt). Le test affirme donc toujours le cablage (`moteur.grille` apres chaque changement, en
+    /// attendant ce qu'il affirme), et ne compare les colonnes de la grille et de la rangee que si la fenetre obtenue les
+    /// departage, d'apres `GeometrieMaison.colonnes` sur sa zone visible. Deux fenetres : 820 x 1500, qui les departage
+    /// sur un grand ecran, et 820 x 1000, celle d'un portable, qui ne le fait pas : le chemin des petits ecrans tourne
+    /// aussi sur un grand.
     @Test(.timeLimit(.minutes(1))) func reglageEtagesEn2D() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         let demo = Surveillance(mode: .demo, dossier: nil)
         demo.demarrer()
-        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 820, height: 1500), preferences: p, reduire: true)
-        defer { Self.fermer(fenetre) }
-        try await MoteurPiecesTests.attendre { moteur.pret }
-        // La 2D, quel que soit le mode garde : en 3D, un fondu de 0,3 s (« Reduire les animations »).
-        moteur.basculer(troisD: false)
-        try await Task.sleep(for: .milliseconds(100))
-        try await MoteurPiecesTests.attendre { !moteur.enMouvement }
-        // En grille : la pile, dans une fenetre haute, a moins de colonnes que de plateaux ; en rangee, une colonne par plateau.
-        let plateaux = moteur.geometrieVisee.rayons.count
-        try await MoteurPiecesTests.attendre { moteur.geometrieVisee.colonnes < plateaux }
-        let pile = moteur.geometrieVisee.colonnes
-        #expect(FenetrePieces.cleGrille == "etagesEnGrille" && moteur.grille, "en grille par defaut")
-        #expect(pile < plateaux, "en grille : \(pile) colonne(s) pour \(plateaux) plateaux, dans une fenetre haute")
-        p.set(false, forKey: FenetrePieces.cleGrille)
-        try await MoteurPiecesTests.attendre { moteur.geometrieVisee.colonnes == plateaux }
-        #expect(!moteur.grille && moteur.geometrieVisee.colonnes == plateaux, "en rangee : une colonne par plateau")
-        p.set(true, forKey: FenetrePieces.cleGrille)
-        try await MoteurPiecesTests.attendre { moteur.geometrieVisee.colonnes < plateaux }
-        #expect(moteur.grille && moteur.geometrieVisee.colonnes == pile, "de nouveau en grille")
+        for hauteur in [CGFloat(1500), 1000] {
+            let taille = CGSize(width: 820, height: hauteur)
+            p.removeObject(forKey: FenetrePieces.cleGrille)
+            let (fenetre, moteur) = try Self.fenetre(demo, taille: taille, preferences: p, reduire: true)
+            defer { Self.fermer(fenetre) }
+            try await MoteurPiecesTests.attendre { moteur.pret }
+            // La 2D, quel que soit le mode garde : en 3D, un fondu de 0,3 s (« Reduire les animations »).
+            moteur.basculer(troisD: false)
+            try await Task.sleep(for: .milliseconds(100))
+            try await MoteurPiecesTests.attendre { !moteur.enMouvement }
+            // La vue en place : la grille posee sur la premiere vraie taille, la legende mesuree, les marges arrivees.
+            try await MoteurPiecesTests.attendre {
+                moteur.colonnes != nil && moteur.cadresInterface["legende"] != nil && !moteur.margesEnRoute
+            }
+            try await Task.sleep(for: .milliseconds(500))
+            // Ce que la fenetre obtenue permet d'affirmer des colonnes : celles de la grille sur sa zone visible, si elles
+            // different de la rangee (une colonne par plateau) ; nil : la grille et la rangee y sont la meme chose.
+            let rayons = moteur.geometrieVisee.rayons
+            let plateaux = rayons.count
+            let colonnesDeLaGrille = GeometrieMaison.colonnes(rayons: rayons, taille: moteur.zoneVisible)
+                .flatMap { $0 != plateaux ? $0 : nil }
+            try await MoteurPiecesTests.attendre { moteur.grille }
+            #expect(FenetrePieces.cleGrille == "etagesEnGrille" && moteur.grille, "\(taille) : en grille par defaut")
+            if let pile = colonnesDeLaGrille {
+                try await MoteurPiecesTests.attendre { moteur.geometrieVisee.colonnes < plateaux }
+                #expect(moteur.geometrieVisee.colonnes < plateaux, "\(taille) : en grille, \(pile) colonne(s) pour \(plateaux) plateaux")
+            }
+            // « En rangee » : le moteur suit la preference ; une colonne par plateau.
+            p.set(false, forKey: FenetrePieces.cleGrille)
+            try await MoteurPiecesTests.attendre { !moteur.grille }
+            #expect(!moteur.grille, "\(taille) : « En rangee » arrive jusqu'au moteur")
+            if colonnesDeLaGrille != nil {
+                try await MoteurPiecesTests.attendre { moteur.geometrieVisee.colonnes == plateaux }
+                #expect(moteur.geometrieVisee.colonnes == plateaux, "\(taille) : en rangee, une colonne par plateau")
+            }
+            // De nouveau « En grille » : le choix de la zone visible.
+            p.set(true, forKey: FenetrePieces.cleGrille)
+            try await MoteurPiecesTests.attendre { moteur.grille }
+            #expect(moteur.grille, "\(taille) : « En grille » arrive jusqu'au moteur")
+            if let pile = colonnesDeLaGrille {
+                try await MoteurPiecesTests.attendre { moteur.geometrieVisee.colonnes == pile }
+                #expect(moteur.geometrieVisee.colonnes == pile, "\(taille) : de nouveau en grille, \(pile) colonne(s)")
+            }
+        }
     }
 
     /// Places des pieces : a cote des identites des routeurs, ni en demo ni sous les tests.
