@@ -13,7 +13,7 @@ Le polissage se fait en quatre sous-projets : A, B et C sont fusionnés ; **D (c
 | Périmètre | l'appareil qui glisse, la molette et Échap, les restes de C, l'allègement du moteur |
 | Rythme des glissements | **0,9 s**, la durée et la courbe des changements de niveau de C ; apparitions et disparitions en fondu de 0,3 s |
 | Un badge change (⚠︎, ☾, 👑, pastille de pile) | **l'étage ne bouge pas** : les cartes réservent la place des badges |
-| Ajouts du 04/10, pendant le plan | un routeur dont tous les candidats sont dans la même pièce va dans cette pièce (section 4.1) ; la rotation lente continue quand une pièce ou un étage est isolé (section 4.2) |
+| Ajouts du 04/10, pendant le plan | un routeur dont tous les candidats sont dans la même pièce va dans cette pièce (section 4.1) ; la rotation lente continue quand une pièce ou un étage est isolé (section 4.2) ; le signal vu par la sonde a toujours une échelle, et sa valeur se lit au survol (section 4.3) |
 
 ## 1. Le glissement d'une disposition à l'autre
 
@@ -96,6 +96,25 @@ Demande de Djoko du 04/10. Jusqu'ici, la rotation lente s'arrêtait pendant un i
 - « Rotation lente » décochée, ou « Réduire les animations » : pas de rotation, comme aujourd'hui ;
 - les repères « ailleurs » d'une pièce isolée et les noms suivent la rotation, comme à la vue d'ensemble.
 
+## 4.3 Le signal vu par la sonde, dans la fiche
+
+Constat de Djoko du 04/10 : juste après la première tournée, la courbe « Signal vu par la sonde (dBm) » n'a qu'un point. Son axe vertical n'a alors aucune graduation, et le point ne dit rien. L'échelle automatique (`.automatic(includesZero: false)`, dans `CourbesFiche`) n'a pas d'étendue quand toutes les valeurs sont égales.
+
+**L'échelle, toujours visible :**
+- le domaine vertical est calculé dans le cœur, à partir des valeurs de la période : du minimum moins 5 dB, arrondi à la dizaine inférieure, au maximum plus 5 dB, arrondi à la dizaine supérieure ;
+- il couvre donc au moins 10 dB, même pour un seul point ou des valeurs toutes égales ;
+- les graduations tombent sur les dizaines de dBm, et l'axe en montre au moins deux ;
+- exemple : un seul point à −67 dBm donne −80 … −60, gradué −80, −70, −60.
+
+**La valeur au survol :**
+- quand le pointeur passe sur la courbe du signal, le relevé le plus proche dans le temps est mis en avant : un trait vertical à son heure, un point sur sa valeur ;
+- une étiquette donne sa valeur et son heure, par exemple « −67 dBm · 14 h 32 », au format de la langue de l'app ; pour 7 j et 30 j, elle donne aussi le jour ;
+- un relevé ne compte que s'il est à moins de 2 % de la largeur de la période du pointeur ; dans un trou de la courbe, rien n'est montré ;
+- le pointeur sorti de la courbe, l'étiquette disparaît ;
+- l'étiquette reste dans le cadre du graphe, à gauche du trait quand il est près du bord droit.
+
+La courbe de la qualité des liens garde son échelle fixe de 0 à 3, sans survol.
+
 ## 5. L'allègement du moteur
 
 `MoteurPieces` compte 1 686 lignes. Deux machines d'états y sont mêlées au rendu et aux gestes. Elles sortent dans le cœur, en types purs et testables sans fenêtre ni `ImageRenderer` :
@@ -125,7 +144,11 @@ Le moteur garde le rendu, les gestes, l'horloge et les vols, et appelle ces type
   - la clé de disposition non plus ;
 - **l'isolement et la politique de la grille, sortis du moteur :** leurs règles, testées à part ;
 - **l'ordre des étages,** avec un absent qui garde son rang ;
-- **la pièce d'un routeur aux candidats :** même pièce ; pièces différentes ; un candidat sans pièce ; le choix gardé avant la règle du nom.
+- **la pièce d'un routeur aux candidats :** même pièce ; pièces différentes ; un candidat sans pièce ; le choix gardé avant la règle du nom ;
+- **le signal de la fiche :**
+  - le domaine pour un seul point, des valeurs égales, des valeurs étalées, et des valeurs déjà sur une dizaine ;
+  - le relevé le plus proche du pointeur, le seuil de 2 % des deux côtés, et un trou ;
+  - le texte de l'étiquette en 24 h et en 7 j.
 
 **Tests de l'app :**
 - la molette au-dessus de la fiche et de la légende ;
@@ -142,6 +165,7 @@ Le moteur garde le rendu, les gestes, l'horloge et les vols, et appelle ces type
 - la molette sur la fiche et la légende ; Échap ;
 - la rotation lente autour d'une pièce, puis d'un étage isolés ;
 - les deux HomePod de la paire dans leur pièce, même quand ils ne sont pas identifiés ;
+- le signal vu par la sonde : l'échelle avec un seul point, puis la valeur au survol ;
 - « Réduire les animations » ;
 - le reste de la vue, inchangé.
 
