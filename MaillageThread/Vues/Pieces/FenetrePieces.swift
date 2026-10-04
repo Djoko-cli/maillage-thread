@@ -310,31 +310,32 @@ struct VuePieces: View {
 
 /// Clics droits, un menu natif (polissage C, section 1.3) : sur le nom ou le disque d'un plateau, son nom en tete,
 /// grise ; « Monter d'un etage » et « Descendre d'un etage » ; « Au meme niveau que », un sous-menu des autres niveaux,
-/// celui de la zone coche ; « Hors de la maison », une case a cocher ; « Sur son propre niveau ». Sur le fond,
-/// « Replacer les pieces automatiquement ».
+/// celui de la zone coche ; « Hors de la maison », une case a cocher ; « Sur son propre niveau ». Le plateau et les
+/// niveaux y sont designes par leur cle : une scene qui s'installe pendant que le menu est ouvert ne change pas ce qu'un
+/// article vise. Sur le fond, « Replacer les pieces automatiquement ».
 struct MenuPieces: View {
     let moteur: MoteurPieces
 
     var body: some View {
         switch moteur.cibleMenu {
-        case .etage(let i):
-            if let m = moteur.menuEtage(i) {
+        case .etage(let cle):
+            if let m = moteur.menuEtage(cle) {
                 Button(m.nom) {}
                     .disabled(true)
-                Button("Monter d'un étage") { moteur.deplacerEtage(i, de: 1) }
+                Button("Monter d'un étage") { moteur.deplacerEtage(cle, de: 1) }
                     .disabled(!m.monter)
-                Button("Descendre d'un étage") { moteur.deplacerEtage(i, de: -1) }
+                Button("Descendre d'un étage") { moteur.deplacerEtage(cle, de: -1) }
                     .disabled(!m.descendre)
                 Divider()
                 Menu("Au même niveau que") {
                     ForEach(m.niveaux, id: \.niveau) { n in
-                        Toggle(n.nom, isOn: Binding(get: { n.coche }, set: { _ in moteur.mettreAuNiveau(i, de: n.niveau) }))
+                        Toggle(n.nom, isOn: Binding(get: { n.coche }, set: { _ in moteur.mettreAuNiveau(cle, de: n.niveau) }))
                     }
                 }
                 .disabled(m.niveaux.isEmpty)
-                Toggle("Hors de la maison", isOn: Binding(get: { m.dehors }, set: { _ in moteur.basculerDehors(i) }))
+                Toggle("Hors de la maison", isOn: Binding(get: { m.dehors }, set: { _ in moteur.basculerDehors(cle) }))
                     .disabled(!m.aCote)
-                Button("Sur son propre niveau") { moteur.mettreSurSonNiveau(i) }
+                Button("Sur son propre niveau") { moteur.mettreSurSonNiveau(cle) }
                     .disabled(!m.aCote)
             }
         case .fond:

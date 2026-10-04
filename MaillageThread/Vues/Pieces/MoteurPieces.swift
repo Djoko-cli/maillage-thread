@@ -16,10 +16,12 @@ enum LigneNiveau: Equatable {
     case lisibles
 }
 
-/// Cible d'un clic droit : le nom ou le disque d'un plateau, ou le fond (spec, section 7 ; polissage C, section 1.3).
+/// Cible d'un clic droit : le nom ou le disque d'un plateau, par sa cle, ou le fond (spec, section 7 ; polissage C,
+/// section 1.3). Jamais un indice : une scene qui s'installe pendant que le menu est ouvert peut ranger autrement ses
+/// plateaux.
 enum CibleMenu: Equatable {
     case aucune
-    case etage(Int)
+    case etage(String)
     case fond
 }
 
@@ -58,8 +60,9 @@ struct Fil: Equatable {
 /// que », les autres niveaux, chacun nomme par son etage principal, celui de la zone coche ; « Hors de la maison » et
 /// « Sur son propre niveau », pour une zone a cote.
 struct MenuEtage: Equatable {
+    /// Un niveau, designe par la cle de son etage principal (`niveau`), jamais par son rang, qui perimerait.
     struct Niveau: Equatable {
-        var niveau: Int
+        var niveau: String
         var nom: String
         var coche: Bool
     }
@@ -419,18 +422,28 @@ final class MoteurPieces {
         viser(geometriePour(scene), depuis: anciens, duree2D: niveauxChanges ? CameraScene.dureeCases : 0,
               duree3D: niveauxChanges ? CameraScene.dureeNiveaux : 0)
         // Les parts de l'isolement sont gardees par cle (triage A, n° 9) : un releve recu pendant un fondu ne remet pas
-        // la piece a pleine taille. Une piece ou un etage isoles qui disparaissent rendent la maison.
+        // la piece a pleine taille. L'etage en vue suit ce que vise la vue (polissage C, section 5) : celui de la piece
+        // isolee, qui a pu changer de zone. Une piece isolee qui disparait rend la maison, comme avant les etages :
+        // l'etage est relache, comme a la bascule, et la vue d'ensemble se recadre (plus bas). Un etage isole qui
+        // disparait rend aussi la maison.
         let clesPieces = Set(scene.pieces.map(\.id)), clesEtages = Set(scene.etages.map(\.id))
         fk = fk.filter { clesPieces.contains($0.key) }
         ek = ek.filter { clesEtages.contains($0.key) }
         if let cle = ancienFocus, let i = scene.pieces.firstIndex(where: { $0.id == cle }) {
             focus = i
+            if case .piece = isolement, scene.etages.count > 1 { viserEtage(scene.etages[scene.pieces[i].etage].id) }
         } else if focus != nil {
             focus = nil
             s = 0
             sCible = 0
             isolee = nil
             if case .piece = isolement { isolement = .maison }
+            if isolement == .maison {
+                etageEnVue = nil
+                se = 0
+                seCible = 0
+                ek = [:]
+            }
         }
         if let k = etageEnVue, !clesEtages.contains(k) {
             etageEnVue = nil
@@ -540,55 +553,69 @@ final class MoteurPieces {
 
     // MARK: Menu du clic droit (polissage C, section 1.3)
 
-    /// Le menu du nom ou du disque du plateau `e`.
-    func menuEtage(_ e: Int) -> MenuEtage? {
-        guard let scene, e < scene.etages.count else { return nil }
-        let n = scene.niveaux, cle = scene.etages[e].id
-        guard let niveau = n.niveau(cle) else { return nil }
-        let principal = n.estPrincipal(cle)
+    /// La scene la plus recente : celle qui attend la fin d'un mouvement ou d'un geste, sinon celle du calcul en cours,
+    /// sinon celle affichee. Apres un choix du menu, elle le porte avant la scene affichee.
+    private var sceneRecente: EntreeScene? { attente ?? enCalcul ?? entree }
+
+    /// Le menu du nom ou du disque du plateau `cle`, sur la scene la plus recente : ses coches et ses grises suivent le
+    /// dernier choix, meme quand la scene de ce choix attend encore.
+    func menuEtage(_ cle: String) -> MenuEtage? {
+        guard let scene = sceneRecente?.scene, let niveau = scene.niveaux.niveau(cle) else { return nil }
+        let n = scene.niveaux, principal = n.estPrincipal(cle)
         func nom(_ c: String) -> String {
             scene.etages.firstIndex { $0.id == c }.map { LibellesNoeuds.nom(scene.etages[$0].nom) } ?? c
         }
         let niveaux = n.liste.indices.filter { !(principal && $0 == niveau) }.map { i in
-            MenuEtage.Niveau(niveau: i, nom: nom(n.liste[i][0]), coche: !principal && i == niveau)
+            MenuEtage.Niveau(niveau: n.liste[i][0], nom: nom(n.liste[i][0]), coche: !principal && i == niveau)
         }
         return MenuEtage(nom: nom(cle), monter: principal && niveau < n.liste.count - 1, descendre: principal && niveau > 0,
                          niveaux: niveaux, aCote: !principal, dehors: n.dehors(cle))
     }
 
-    /// Un choix du menu : le nouvel ordre des plateaux et les nouveaux choix de niveau, gardes ; la scene suivante les
-    /// prend (`EntreeScene`), et les plateaux glissent vers leur nouvelle place.
-    private func ranger(_ e: Int, _ operation: (Niveaux, String, [String: PlacesGardees.ACote]) -> Rangement?) {
-        guard let entree, e < entree.scene.etages.count,
-              let r = operation(entree.scene.niveaux, entree.scene.etages[e].id,
-                                places.maison(entree.domicile).aCote) else { return }
-        places.ranger(r, domicile: entree.domicile)
+    /// Un choix du menu, calcule sur la scene la plus recente et sur les choix gardes : le nouvel ordre des plateaux et
+    /// les nouveaux choix de niveau, gardes ; la scene suivante les prend (`EntreeScene`), et les plateaux glissent vers
+    /// leur nouvelle place. Sur la scene affichee, un choix fait pendant que la scene du precedent attend (un vol, le
+    /// calcul de sa disposition) defaisait le precedent.
+    private func ranger(_ operation: (Niveaux, [String: PlacesGardees.ACote]) -> Rangement?) {
+        guard let e = sceneRecente, let r = operation(e.scene.niveaux, places.maison(e.domicile).aCote) else { return }
+        places.ranger(r, domicile: e.domicile)
         enregistrer()
     }
 
-    /// « Monter d'un etage » (+1) ou « Descendre d'un etage » (-1) : le niveau entier de l'etage, zones a cote
+    /// La cle du plateau `e` de la scene affichee, celle des noms et de la projection.
+    private func cleEtage(_ e: Int) -> String? {
+        guard let scene, scene.etages.indices.contains(e) else { return nil }
+        return scene.etages[e].id
+    }
+
+    /// « Monter d'un etage » (+1) ou « Descendre d'un etage » (-1) : le niveau entier de l'etage `cle`, zones a cote
     /// comprises, change de place avec son voisin.
+    func deplacerEtage(_ cle: String, de pas: Int) {
+        ranger { $0.deplacer(cle, de: pas, choix: $1) }
+    }
+
+    /// La meme chose pour le plateau `e` de la scene affichee.
     func deplacerEtage(_ e: Int, de pas: Int) {
-        ranger(e) { $0.deplacer($1, de: pas, choix: $2) }
+        if let cle = cleEtage(e) { deplacerEtage(cle, de: pas) }
     }
 
     func peutDeplacerEtage(_ e: Int, de pas: Int) -> Bool {
-        menuEtage(e).map { pas > 0 ? $0.monter : $0.descendre } ?? false
+        cleEtage(e).flatMap(menuEtage).map { pas > 0 ? $0.monter : $0.descendre } ?? false
     }
 
-    /// « Au meme niveau que » l'etage principal du niveau `niveau`, dans la maison.
-    func mettreAuNiveau(_ e: Int, de niveau: Int) {
-        ranger(e) { $0.rejoindre($1, niveau: niveau, choix: $2) }
+    /// « Au meme niveau que » le niveau de l'etage principal `niveau` (sa cle), dans la maison.
+    func mettreAuNiveau(_ cle: String, de niveau: String) {
+        ranger { n, choix in n.niveau(niveau).flatMap { n.rejoindre(cle, niveau: $0, choix: choix) } }
     }
 
     /// « Hors de la maison », coche ou non.
-    func basculerDehors(_ e: Int) {
-        ranger(e) { $0.basculerDehors($1, choix: $2) }
+    func basculerDehors(_ cle: String) {
+        ranger { $0.basculerDehors(cle, choix: $1) }
     }
 
     /// « Sur son propre niveau ».
-    func mettreSurSonNiveau(_ e: Int) {
-        ranger(e) { $0.propreNiveau($1, choix: $2) }
+    func mettreSurSonNiveau(_ cle: String) {
+        ranger { $0.propreNiveau(cle, choix: $1) }
     }
 
     /// « Replacer les pieces automatiquement » : oublie les places gardees de la maison (pas l'ordre
@@ -596,7 +623,7 @@ final class MoteurPieces {
     /// mouvement ou d'un geste, sinon celle du calcul en cours, sinon celle affichee) ; l'ancienne reste
     /// affichee pendant ce temps.
     func replacerPieces() {
-        guard let e = attente ?? enCalcul ?? entree else { return }
+        guard let e = sceneRecente else { return }
         places.replacer(domicile: e.domicile)
         enregistrer()
         cleCalculee = nil
@@ -1330,11 +1357,11 @@ final class MoteurPieces {
     }
 
     /// Clic droit (polissage C, section 1.3) : le nom d'un etage, a 2 points pres, ou son disque, hors des pieces et
-    /// des appareils ; le fond, hors de tout cela ; rien sur une piece ou un appareil.
+    /// des appareils, par la cle de son plateau ; le fond, hors de tout cela ; rien sur une piece ou un appareil.
     func cible(en p: CGPoint) -> CibleMenu {
-        if let e = nomEtageSous(p, marge: 2) { return .etage(e) }
+        if let e = nomEtageSous(p, marge: 2) { return cleEtage(e).map(CibleMenu.etage) ?? .aucune }
         if noeudSous(p) != nil || pieceSous(p) != nil { return .aucune }
-        if let e = disqueSous(p) { return .etage(e) }
+        if let e = disqueSous(p) { return cleEtage(e).map(CibleMenu.etage) ?? .aucune }
         return .fond
     }
 
