@@ -60,9 +60,9 @@ struct Fil: Equatable {
 /// que », les autres niveaux, chacun nomme par son etage principal, celui de la zone coche ; « Hors de la maison » et
 /// « Sur son propre niveau », pour une zone a cote.
 struct MenuEtage: Equatable {
-    /// Un niveau, designe par la cle de son etage principal (`niveau`), jamais par son rang, qui perimerait.
+    /// Un niveau, designe par la cle de son etage principal (`principal`), jamais par son rang, qui perimerait.
     struct Niveau: Equatable {
-        var niveau: String
+        var principal: String
         var nom: String
         var coche: Bool
     }
@@ -106,6 +106,10 @@ final class MoteurPieces {
     var selection: String?
     private(set) var ligneNiveau = LigneNiveau.lisibles
     private(set) var cibleMenu = CibleMenu.aucune
+    /// Version de la scene la plus recente (`sceneRecente`), observee : elle change avec elle, a chaque scene
+    /// recue, en calcul ou posee. Le menu du clic droit la lit (`menuEtage`) : rouvert sur la meme cible apres un
+    /// choix, il suit la scene de ce choix, que SwiftUI ne voit pas (relecture finale, Important 1).
+    private(set) var versionScene = 0
     private(set) var places: PlacesGardees
     /// La premiere disposition est calculee.
     private(set) var pret = false
@@ -120,11 +124,17 @@ final class MoteurPieces {
 
     @ObservationIgnored private let fichierPlaces: URL?
     /// Scene affichee, posee sur sa disposition.
-    @ObservationIgnored private(set) var entree: EntreeScene?
+    @ObservationIgnored private(set) var entree: EntreeScene? {
+        didSet { versionScene &+= 1 }
+    }
     /// Scene recue pendant un mouvement ou un glisser : appliquee a sa fin.
-    @ObservationIgnored private var attente: EntreeScene?
+    @ObservationIgnored private var attente: EntreeScene? {
+        didSet { versionScene &+= 1 }
+    }
     /// Scene dont la disposition se calcule : `entree` reste affichee jusqu'a la fin du calcul.
-    @ObservationIgnored private var enCalcul: EntreeScene?
+    @ObservationIgnored private var enCalcul: EntreeScene? {
+        didSet { versionScene &+= 1 }
+    }
     @ObservationIgnored private var calcul: Task<Void, Never>?
     @ObservationIgnored private var cleCalculee: EntreeScene.CleDisposition?
     @ObservationIgnored private var placesCalculees: [String: SIMD2<Double>] = [:]
@@ -427,7 +437,14 @@ final class MoteurPieces {
         let anciens = entree?.scene.etages.map(\.id) ?? []
         let niveauxChanges = pret && entree?.scene.niveaux != scene.niveaux
         let ensemble = aLaVueDEnsemble && t == 0
+        let image = geometrie
         entree = e
+        // Un autre ordre des plateaux : le disque et le nom d'etage survoles, des indices, en designeraient
+        // d'autres ; le prochain mouvement du pointeur les reprend.
+        if scene.etages.map(\.id) != anciens {
+            survolEtage = nil
+            survolNomEtage = nil
+        }
         cartes = scene.pieces.map { cartesCalculees[$0.id] ?? CartesPieces.carte([]) }
         positions = scene.pieces.map { placesCalculees[$0.id] ?? .zero }
         if grille && (!pret || (niveauxChanges && ensemble)) {
@@ -477,6 +494,12 @@ final class MoteurPieces {
             orbite = CameraScene.canonique(geometrie, aspect: aspect, u: t)
         } else if !vueTouchee && sansIsolement {
             recadrer()
+        } else if niveauxChanges && glissementPlateaux == nil {
+            // Des niveaux changes, avec « Reduire les animations » : les plateaux sont poses tout de suite
+            // (section 1.3). La vue isolee ou zoomee suit ce qu'elle regarde, d'un coup, depuis sa place au depart du
+            // glissement qu'il n'y a pas : comme le glissement le lui fait suivre image apres image (`suivre`), sans
+            // « Reduire ».
+            suivre(depuis: ancreCamera(dans: depart(image, anciens: anciens, vers: geometrie)))
         }
         reveiller()
     }
@@ -574,18 +597,21 @@ final class MoteurPieces {
     private var sceneRecente: EntreeScene? { attente ?? enCalcul ?? entree }
 
     /// Le menu du nom ou du disque du plateau `cle`, sur la scene la plus recente : ses coches et ses grises suivent le
-    /// dernier choix, meme quand la scene de ce choix attend encore.
+    /// dernier choix, meme quand la scene de ce choix attend encore. Il lit la version de cette scene, observee : une
+    /// vue qui le montre se refait quand elle change, meme si la cible du clic droit, elle, ne change pas.
     func menuEtage(_ cle: String) -> MenuEtage? {
+        _ = versionScene
         guard let scene = sceneRecente?.scene, let niveau = scene.niveaux.niveau(cle) else { return nil }
-        let n = scene.niveaux, principal = n.estPrincipal(cle)
+        let n = scene.niveaux, estPrincipal = n.estPrincipal(cle)
         func nom(_ c: String) -> String {
             scene.etages.firstIndex { $0.id == c }.map { LibellesNoeuds.nom(scene.etages[$0].nom) } ?? c
         }
-        let niveaux = n.liste.indices.filter { !(principal && $0 == niveau) }.map { i in
-            MenuEtage.Niveau(niveau: n.liste[i][0], nom: nom(n.liste[i][0]), coche: !principal && i == niveau)
+        let niveaux = n.liste.indices.filter { !(estPrincipal && $0 == niveau) }.map { i in
+            MenuEtage.Niveau(principal: n.liste[i][0], nom: nom(n.liste[i][0]), coche: !estPrincipal && i == niveau)
         }
-        return MenuEtage(nom: nom(cle), monter: principal && niveau < n.liste.count - 1, descendre: principal && niveau > 0,
-                         niveaux: niveaux, aCote: !principal, dehors: n.dehors(cle))
+        return MenuEtage(nom: nom(cle), monter: estPrincipal && niveau < n.liste.count - 1,
+                         descendre: estPrincipal && niveau > 0, niveaux: niveaux, aCote: !estPrincipal,
+                         dehors: n.dehors(cle))
     }
 
     /// Un choix du menu, calcule sur la scene la plus recente et sur les choix gardes : le nouvel ordre des plateaux et
@@ -619,9 +645,9 @@ final class MoteurPieces {
         cleEtage(e).flatMap(menuEtage).map { pas > 0 ? $0.monter : $0.descendre } ?? false
     }
 
-    /// « Au meme niveau que » le niveau de l'etage principal `niveau` (sa cle), dans la maison.
-    func mettreAuNiveau(_ cle: String, de niveau: String) {
-        ranger { n, choix in n.niveau(niveau).flatMap { n.rejoindre(cle, niveau: $0, choix: choix) } }
+    /// « Au meme niveau que » le niveau de l'etage principal `principal` (sa cle), dans la maison.
+    func mettreAuNiveau(_ cle: String, de principal: String) {
+        ranger { n, choix in n.niveau(principal).flatMap { n.rejoindre(cle, niveau: $0, choix: choix) } }
     }
 
     /// « Hors de la maison », coche ou non.
@@ -684,14 +710,23 @@ final class MoteurPieces {
             d3 = max(d3, gl.duree3D - (now - gl.debut))
         }
         geometrieVisee = g
-        guard pret, d2 > 0 || d3 > 0, let cles = scene?.etages.map(\.id) else {
+        guard pret, d2 > 0 || d3 > 0, scene != nil else {
             geometrie = g
             glissementPlateaux = nil
             return
         }
-        let image = geometrie
+        let depart = self.depart(geometrie, anciens: anciens, vers: g)
+        geometrie = depart
+        glissementPlateaux = GlissementPlateaux(depart: depart, debut: now, duree2D: d2, duree3D: d3)
+        reveiller()
+    }
+
+    /// Le depart d'un glissement vers `g`, la geometrie de la scene : la geometrie `image`, remise dans l'ordre des
+    /// plateaux de la scene (`anciens` : celui de l'image), chaque plateau a sa place d'avant, retrouvee par sa cle ;
+    /// la boite, le pas, la sphere et le cadrage de l'image. Un plateau nouveau part de sa place d'arrivee.
+    private func depart(_ image: GeometrieMaison, anciens: [String], vers g: GeometrieMaison) -> GeometrieMaison {
         var depart = g
-        for (i, c) in cles.enumerated() {
+        for (i, c) in (scene?.etages.map(\.id) ?? []).enumerated() {
             guard let j = anciens.firstIndex(of: c), j < image.centres2D.count else { continue }
             depart.centres2D[i] = image.centres2D[j]
             depart.centres3D[i] = image.centres3D[j]
@@ -701,9 +736,7 @@ final class MoteurPieces {
         depart.centreSphere = image.centreSphere
         depart.rayonSphere = image.rayonSphere
         depart.rayonCadre = image.rayonCadre
-        geometrie = depart
-        glissementPlateaux = GlissementPlateaux(depart: depart, debut: now, duree2D: d2, duree3D: d3)
-        reveiller()
+        return depart
     }
 
     /// La geometrie de l'image a l'instant `now` : en route vers la geometrie visee, ou elle.
@@ -767,11 +800,13 @@ final class MoteurPieces {
         if glissementPlateaux == nil && aLaVueDEnsemble { recadrer() }   // posee tout de suite : cadree tout de suite
     }
 
-    /// Ce que la vue regarde : la piece isolee, l'etage isole, ou la cible de la vue d'ensemble.
-    private func ancreCamera() -> SIMD3<Double> {
-        if let i = focus, let c = centrePiece(i) { return c }
-        if let k = etageEnVue, let e = scene?.etages.firstIndex(where: { $0.id == k }) { return geometrie.centrePlateau(e, t) }
-        return geometrie.cible2D + (geometrie.centreSphere - geometrie.cible2D) * t
+    /// Ce que la vue regarde : la piece isolee, l'etage isole, ou la cible de la vue d'ensemble ; dans la geometrie de
+    /// l'image, ou dans `g`.
+    private func ancreCamera(dans g: GeometrieMaison? = nil) -> SIMD3<Double> {
+        let g = g ?? geometrie
+        if let i = focus, let c = centrePiece(i, dans: g) { return c }
+        if let k = etageEnVue, let e = scene?.etages.firstIndex(where: { $0.id == k }) { return g.centrePlateau(e, t) }
+        return g.cible2D + (g.centreSphere - g.cible2D) * t
     }
 
     /// Les plateaux glissent : un vol rejoint l'arrivee de ce qu'il vise ; a la vue d'ensemble, elle se recadre ; sinon,
@@ -813,10 +848,12 @@ final class MoteurPieces {
     }
 
     /// Bascule 2D / 3D : un envol de 2,6 s depuis la vue courante (un fondu de 0,3 s si « Reduire
-    /// les animations ») ; une piece isolee est relachee.
+    /// les animations ») ; une piece isolee est relachee. Pas de menu du clic droit pendant l'envol, meme sous un
+    /// pointeur immobile : sa cible tombe, et le survol ne la reprend qu'apres lui.
     func basculer(troisD v: Bool) {
         guard v != troisD else { return }
         troisD = v
+        if cibleMenu != .aucune { cibleMenu = .aucune }
         focus = nil
         isolee = nil
         s = 0
@@ -1301,11 +1338,12 @@ final class MoteurPieces {
     }
 
     /// Survol : le nom de l'appareil en semi-gras ; un disque cliquable s'eclaircit, le nom d'un etage se souligne ; la
-    /// main sur ce qui se clique (polissage C, maquette). Rien pendant l'envol.
+    /// main sur ce qui se clique (polissage C, maquette). Rien pendant l'envol : ni clic, ni menu du clic droit.
     func survoler(_ p: CGPoint?, option: Bool = false) {
         curseur = p
         optionTenue = option
-        let c = envol == nil && fondu == nil ? p.map(cibleClic(en:)) ?? .fond : .fond
+        let libre = envol == nil && fondu == nil
+        let c = libre ? p.map(cibleClic(en:)) ?? .fond : .fond
         let n: String? = if case .appareil(let id) = c { id } else { nil }
         let disque: Int? = if case .disque(let e) = c, disqueCliquable(e) { e } else { nil }
         let nom: Int? = if case .nomEtage(let e) = c { e } else { nil }
@@ -1322,7 +1360,7 @@ final class MoteurPieces {
         case .fond: false
         }
         majCurseur()
-        let cible = p.map(cible(en:)) ?? .aucune
+        let cible = libre ? p.map(cible(en:)) ?? .aucune : .aucune
         if cible != cibleMenu { cibleMenu = cible }
     }
 
@@ -1651,10 +1689,10 @@ final class MoteurPieces {
 
     func poserInclinaison(_ i: Double) { orbite.inclinaison = i }
 
-    /// Centre du bloc d'une piece, dans le monde.
-    func centrePiece(_ i: Int) -> SIMD3<Double>? {
+    /// Centre du bloc d'une piece, dans le monde ; dans la geometrie de l'image, ou dans `g`.
+    func centrePiece(_ i: Int, dans g: GeometrieMaison? = nil) -> SIMD3<Double>? {
         guard let scene, i < scene.pieces.count, i < positions.count else { return nil }
-        let c = geometrie.centrePlateau(scene.pieces[i].etage, t)
+        let c = (g ?? geometrie).centrePlateau(scene.pieces[i].etage, t)
         return SIMD3(c.x + positions[i].x, c.y + 0.02 + GeometrieMaison.hauteurBloc(t) / 2, c.z + positions[i].y)
     }
 

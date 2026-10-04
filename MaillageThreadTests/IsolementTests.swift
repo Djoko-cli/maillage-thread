@@ -265,13 +265,13 @@ struct IsolementTests {
         #expect(m.cible(en: CGPoint(x: 3, y: MoteurPiecesTests.taille.height - 3)) == .fond)
         typealias N = MenuEtage.Niveau
         #expect(m.menuEtage(Self.rdc) == MenuEtage(nom: "Rez-de-chaussée", monter: true, descendre: false,
-                                                   niveaux: [N(niveau: Self.etage, nom: "Étage", coche: false),
-                                                             N(niveau: Self.combles, nom: "Combles", coche: false)],
+                                                   niveaux: [N(principal: Self.etage, nom: "Étage", coche: false),
+                                                             N(principal: Self.combles, nom: "Combles", coche: false)],
                                                    aCote: false, dehors: false))
         #expect(m.menuEtage(Self.jardin) == MenuEtage(nom: "Jardin", monter: false, descendre: false,
-                                                      niveaux: [N(niveau: Self.rdc, nom: "Rez-de-chaussée", coche: true),
-                                                                N(niveau: Self.etage, nom: "Étage", coche: false),
-                                                                N(niveau: Self.combles, nom: "Combles", coche: false)],
+                                                      niveaux: [N(principal: Self.rdc, nom: "Rez-de-chaussée", coche: true),
+                                                                N(principal: Self.etage, nom: "Étage", coche: false),
+                                                                N(principal: Self.combles, nom: "Combles", coche: false)],
                                                       aCote: true, dehors: true))
         #expect(m.menuEtage(Self.combles).map { !$0.monter && $0.descendre } == true)
         #expect(m.menuEtage(Self.etage).map { $0.monter && $0.descendre } == true)
@@ -334,7 +334,7 @@ struct IsolementTests {
         m.mettreSurSonNiveau(jardin)
         let versEtage = try #require(m.menuEtage(combles)?.niveaux.first { $0.nom == "Étage" })
         m.installerMaintenant(try MoteurPiecesTests.quatrePlateaux(m.places))
-        m.mettreAuNiveau(combles, de: versEtage.niveau)
+        m.mettreAuNiveau(combles, de: versEtage.principal)
         #expect(rangement().aCote[Self.combles] == PlacesGardees.ACote(etage: Self.etage), "le niveau, par sa cle")
         let (n, _) = try Self.jardinDehors(url)
         guard case .etage(let jardinN) = try Self.cibleDuNom(n, e, Self.jardin),
@@ -491,5 +491,246 @@ struct IsolementTests {
         #expect(p.voilesEtages[etage] > 0.99 && p.voilesEtages[rdc] < 0.2, "\(p.voilesEtages)")
         let pastilles = p.disques.filter { montee.scene.noeud($0.noeud)?.piece == cuisine }
         #expect(!pastilles.isEmpty && pastilles.allSatisfy { $0.opacite > 0.99 }, "la piece isolee, nette")
+    }
+
+    /// Le menu natif du clic droit (polissage C, section 1.3 ; relecture finale, Important 1 et mineur T5-1) : celui
+    /// qu'AppKit demande a une vue hebergee hors ecran, ou `MenuPieces` est pose comme dans `VuePieces`. Article par
+    /// article, sur le nom du jardin, chacun fait son operation sur ce plateau, gardee dans le fichier. Le pointeur
+    /// reste sur le jardin : apres chaque choix, la scene de ce choix recue (comme la fenetre la remet au moteur), le
+    /// menu rouvert suit l'etat garde, coches et grises compris : « Hors de la maison » decoche, « Monter » grise en
+    /// haut de la pile, « Sur son propre niveau » actif pour une zone qui vient de passer a cote. Sur le fond,
+    /// « Replacer les pieces automatiquement » oublie la place d'une piece glissee, et garde l'ordre et les niveaux.
+    @Test(.timeLimit(.minutes(1))) func menuNatif() async throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (m, e) = try Self.jardinDehors(url)
+        func rangement() -> Rangement { PlacesGardees.lire(url).rangement(e.domicile) }
+        // Le salon glisse : sa place est gardee, « Replacer » l'oubliera.
+        let d = try MoteurPiecesTests.pointDePiece(m, try MoteurPiecesTests.indice(e, "Salon"))
+        m.glisser(d, depart: d)
+        m.glisser(CGPoint(x: d.x + 30, y: d.y), depart: d)
+        m.relacher(CGPoint(x: d.x + 30, y: d.y))
+        #expect(!PlacesGardees.lire(url).maison(e.domicile).etages.isEmpty, "la place du salon est gardee")
+        let hote = NSHostingView(rootView: HoteMenu(moteur: m))
+        let fenetre = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: 300, height: 300), styleMask: [.titled],
+                               backing: .buffered, defer: false)
+        fenetre.isReleasedWhenClosed = false
+        fenetre.contentView = hote
+        fenetre.orderFrontRegardless()
+        defer { FenetrePiecesTests.fermer(fenetre) }
+        hote.layoutSubtreeIfNeeded()
+        var numero = 0
+        // Le menu d'un clic droit au milieu de la vue, tel qu'AppKit le demande a la vue hebergee.
+        func clicDroit() -> NSMenu? {
+            numero += 1
+            let clic = NSEvent.mouseEvent(with: .rightMouseDown, location: NSPoint(x: 150, y: 150), modifierFlags: [],
+                                          timestamp: ProcessInfo.processInfo.systemUptime,
+                                          windowNumber: fenetre.windowNumber, context: nil, eventNumber: numero,
+                                          clickCount: 1, pressure: 1)
+            return clic.flatMap { hote.menu(for: $0) }
+        }
+        // Les articles, comme Djoko les voit : le titre, « ✓ » coche, « (grise) » grise ; sans les separateurs.
+        func lire(_ mn: NSMenu?) -> [String] {
+            (mn?.items ?? []).filter { !$0.isSeparatorItem }.map { a in
+                a.title + (a.state == .on ? " ✓" : "") + (a.isEnabled ? "" : " (grise)")
+            }
+        }
+        // Le menu, des qu'il se lit comme `attendu` : SwiftUI le refait a sa prochaine mise a jour (3 s au plus).
+        func rouvrir(_ attendu: [String]) async throws -> NSMenu? {
+            for _ in 0..<300 {
+                if let mn = clicDroit(), lire(mn) == attendu { return mn }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            return clicDroit()
+        }
+        let monter = String(localized: "Monter d'un étage"), descendre = String(localized: "Descendre d'un étage")
+        let memeNiveau = String(localized: "Au même niveau que"), dehors = String(localized: "Hors de la maison")
+        let propre = String(localized: "Sur son propre niveau")
+        let replacer = String(localized: "Replacer les pièces automatiquement")
+        // Le menu du jardin : le nom en tete, grise ; « Monter » et « Descendre » ; « Au meme niveau que » ; « Hors de
+        // la maison », coche ou non ; « Sur son propre niveau ». Les deux derniers, pour une zone a cote seulement.
+        func menuDuJardin(monte: Bool, descend: Bool, aCote: Bool, horsCoche: Bool) -> [String] {
+            ["Jardin (grise)", monter + (monte ? "" : " (grise)"), descendre + (descend ? "" : " (grise)"), memeNiveau,
+             dehors + (horsCoche ? " ✓" : "") + (aCote ? "" : " (grise)"), propre + (aCote ? "" : " (grise)")]
+        }
+        func sousMenu(_ mn: NSMenu?) -> NSMenu? { mn?.items.first { $0.title == memeNiveau }?.submenu }
+        // Un choix : l'article declenche, puis la scene de ce choix, que la fenetre remet au moteur (`recevoir`).
+        func choisir(_ titre: String, dans mn: NSMenu?) throws {
+            let mn = try #require(mn, "le menu de « \(titre) »")
+            let i = try #require(mn.items.firstIndex { $0.title == titre }, "l'article « \(titre) »")
+            mn.performActionForItem(at: i)
+            m.recevoir(try MoteurPiecesTests.quatrePlateaux(m.places))
+        }
+        m.survoler(try Self.nomDEtage(m, try Self.indiceEtage(e, Self.jardin)))
+        #expect(m.cibleMenu == .etage(Self.jardin))
+        var attendu = menuDuJardin(monte: false, descend: false, aCote: true, horsCoche: true)
+        var mn = try await rouvrir(attendu)
+        #expect(lire(mn) == attendu, "a cote du rez-de-chaussee, hors de la maison")
+        #expect(lire(sousMenu(mn)) == ["Rez-de-chaussée ✓", "Étage", "Combles"])
+        // « Hors de la maison » : le jardin rentre dans la maison.
+        try choisir(dehors, dans: mn)
+        #expect(rangement().aCote[Self.jardin] == PlacesGardees.ACote(etage: Self.rdc, dehors: false))
+        attendu = menuDuJardin(monte: false, descend: false, aCote: true, horsCoche: false)
+        mn = try await rouvrir(attendu)
+        #expect(lire(mn) == attendu, "rouvert sur le jardin : « Hors de la maison » decoche")
+        // « Sur son propre niveau » : le jardin redevient un etage, au-dessus du rez-de-chaussee.
+        try choisir(propre, dans: mn)
+        #expect(rangement() == Rangement(ordre: [Self.rdc, Self.jardin, Self.etage, Self.combles], aCote: [:]))
+        attendu = menuDuJardin(monte: true, descend: true, aCote: false, horsCoche: false)
+        mn = try await rouvrir(attendu)
+        #expect(lire(mn) == attendu, "rouvert : un etage, « Monter » et « Descendre » actifs")
+        #expect(lire(sousMenu(mn)) == ["Rez-de-chaussée", "Étage", "Combles"])
+        // « Monter d'un etage », deux fois : en haut de la pile, « Monter » est grise.
+        try choisir(monter, dans: mn)
+        #expect(rangement().ordre == [Self.rdc, Self.etage, Self.jardin, Self.combles])
+        mn = try await rouvrir(attendu)
+        #expect(lire(mn) == attendu)
+        try choisir(monter, dans: mn)
+        #expect(rangement().ordre == [Self.rdc, Self.etage, Self.combles, Self.jardin])
+        attendu = menuDuJardin(monte: false, descend: true, aCote: false, horsCoche: false)
+        mn = try await rouvrir(attendu)
+        #expect(lire(mn) == attendu, "rouvert en haut de la pile : « Monter » grise")
+        // « Descendre d'un etage ».
+        try choisir(descendre, dans: mn)
+        #expect(rangement().ordre == [Self.rdc, Self.etage, Self.jardin, Self.combles])
+        attendu = menuDuJardin(monte: true, descend: true, aCote: false, horsCoche: false)
+        mn = try await rouvrir(attendu)
+        #expect(lire(mn) == attendu)
+        // « Au meme niveau que › Etage » : le jardin passe a cote de l'etage, dans la maison.
+        try choisir("Étage", dans: sousMenu(mn))
+        #expect(rangement() == Rangement(ordre: [Self.rdc, Self.etage, Self.jardin, Self.combles],
+                                         aCote: [Self.jardin: PlacesGardees.ACote(etage: Self.etage)]))
+        attendu = menuDuJardin(monte: false, descend: false, aCote: true, horsCoche: false)
+        mn = try await rouvrir(attendu)
+        #expect(lire(mn) == attendu, "rouvert : a cote de l'etage, « Sur son propre niveau » actif")
+        #expect(lire(sousMenu(mn)) == ["Rez-de-chaussée", "Étage ✓", "Combles"])
+        // Sur le fond : « Replacer les pieces automatiquement ».
+        m.survoler(CGPoint(x: 3, y: MoteurPiecesTests.taille.height - 3))
+        #expect(m.cibleMenu == .fond)
+        mn = try await rouvrir([replacer])
+        #expect(lire(mn) == [replacer])
+        try choisir(replacer, dans: mn)
+        #expect(PlacesGardees.lire(url).maison(e.domicile).etages.isEmpty, "la place du salon est oubliee")
+        #expect(rangement() == Rangement(ordre: [Self.rdc, Self.etage, Self.jardin, Self.combles],
+                                         aCote: [Self.jardin: PlacesGardees.ACote(etage: Self.etage)]),
+                "l'ordre et les niveaux restent")
+    }
+
+    /// Pas de menu du clic droit pendant l'envol, comme pas de clic (relecture finale, mineur nouveau 2 ; la maquette
+    /// n'en ouvre aucun tant que la bascule n'est pas arrivee) : le pointeur reste sur le nom d'un etage, ou y passe,
+    /// et la cible du menu est vide ; avec « Reduire les animations », pendant le fondu de meme. Au bout du fondu, le
+    /// survol reprend le menu.
+    @Test func pasDeMenuPendantLEnvol() throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        for reduire in [false, true] {
+            let (m, e) = try Self.jardinDehors(url)
+            m.reduire = reduire
+            let nom = try Self.nomDEtage(m, try Self.indiceEtage(e, Self.etage))
+            m.survoler(nom)
+            #expect(m.cibleMenu == .etage(Self.etage))
+            m.basculer(troisD: true)
+            #expect(m.enMouvement && m.cibleMenu == .aucune, "reduire \(reduire) : le pointeur reste sur le nom")
+            m.survoler(nom)
+            #expect(m.cibleMenu == .aucune, "reduire \(reduire) : le pointeur passe sur le nom pendant l'envol")
+            guard reduire else { continue }
+            // Au bout du fondu de 0,3 s, en 3D : le nom d'un etage ouvre de nouveau son menu.
+            Thread.sleep(forTimeInterval: CameraScene.dureeFondu + 0.1)
+            for _ in 0..<2 { MoteurPiecesTests.dessiner(m) }
+            #expect(!m.enMouvement && m.t == 1)
+            m.survoler(try Self.nomDEtage(m, try Self.indiceEtage(e, Self.etage)))
+            #expect(m.cibleMenu == .etage(Self.etage), "au bout du fondu")
+        }
+    }
+
+    /// Le disque et le nom d'etage survoles sont des indices (relecture de la tache 5, ronde 1, observation 2) : quand
+    /// l'ordre des plateaux change, ils sont oublies ; sinon, un autre disque s'eclaircirait, un autre nom se
+    /// soulignerait, jusqu'au prochain mouvement du pointeur. Une scene dans le meme ordre les garde.
+    @Test func survolQuandLOrdreChange() throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (m, e) = try Self.jardinDehors(url)
+        m.reduire = true
+        let etage = try Self.indiceEtage(e, Self.etage)
+        m.survoler(try Self.pointDeDisque(m, etage))
+        #expect(m.survolEtage == etage)
+        m.installerMaintenant(try MoteurPiecesTests.quatrePlateaux(m.places))
+        #expect(m.survolEtage == etage, "le meme ordre : le disque survole reste")
+        m.deplacerEtage(Self.etage, de: 1)
+        m.installerMaintenant(try MoteurPiecesTests.quatrePlateaux(m.places))
+        let montee = try #require(m.entree)
+        #expect(montee.scene.etages.map(\.id) == [Self.rdc, Self.jardin, Self.combles, Self.etage])
+        #expect(m.survolEtage == nil, "un autre ordre : le disque survole est oublie")
+        for _ in 0..<2 { MoteurPiecesTests.dessiner(m) }
+        let combles = try Self.indiceEtage(montee, Self.combles)
+        m.survoler(try Self.nomDEtage(m, combles))
+        #expect(m.survolNomEtage == combles)
+        m.deplacerEtage(Self.combles, de: 1)
+        m.installerMaintenant(try MoteurPiecesTests.quatrePlateaux(m.places))
+        #expect(m.entree?.scene.etages.map(\.id) == [Self.rdc, Self.jardin, Self.etage, Self.combles])
+        #expect(m.survolNomEtage == nil, "un autre ordre : le nom d'etage survole est oublie")
+    }
+
+    /// Apres un changement de niveau, la vue isolee suit son plateau (polissage C, section 1.3 ; relecture finale,
+    /// Important 2), en 2D comme en 3D, avec « Reduire les animations » comme sans : l'etage isole, puis la chambre
+    /// isolee depuis lui ; « Monter d'un etage » sur l'etage, dont le niveau passe au-dessus des combles. La cible de
+    /// la vue se deplace comme le plateau, et ce que la vue regarde reste a sa place a l'ecran. Sans « Reduire », le
+    /// glissement le fait image apres image ; avec, les plateaux sont poses tout de suite, et la vue les suit d'un
+    /// coup.
+    @Test(.timeLimit(.minutes(1)), arguments: [false, true], [false, true])
+    func vueIsoleeQuiSuitSonPlateau(troisD: Bool, reduire: Bool) throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        for piece in [false, true] {
+            let (m, e) = try Self.jardinDehors(url, troisD: troisD)
+            m.reduire = reduire
+            if piece {
+                m.poserIsolement(try MoteurPiecesTests.indice(e, "Chambre"), depuisEtage: true)
+            } else {
+                m.poserEtageIsole(try Self.indiceEtage(e, Self.etage))
+            }
+            MoteurPiecesTests.dessiner(m)
+            let isolement = m.isolement
+            // Ce que la vue regarde : le plateau de l'etage, ou la chambre ; et sa place a l'ecran.
+            func ancre() throws -> SIMD3<Double> {
+                let s = try #require(m.entree)
+                if piece { return try #require(m.centrePiece(try MoteurPiecesTests.indice(s, "Chambre"))) }
+                return m.geometrie.centrePlateau(try Self.indiceEtage(s, Self.etage), m.t)
+            }
+            func aLEcran(_ p: SIMD3<Double>) throws -> CGPoint {
+                try #require(ProjectionScene(m.orbite, cadre: m.cadre).ecran(p))
+            }
+            let avant = try ancre(), cibleAvant = m.orbite.cible, ecranAvant = try aLEcran(avant)
+            m.deplacerEtage(Self.etage, de: 1)
+            m.installerMaintenant(try MoteurPiecesTests.quatrePlateaux(m.places))
+            #expect(m.entree?.scene.niveaux.liste == [[Self.rdc, Self.jardin], [Self.combles], [Self.etage]])
+            #expect((m.glissementPlateaux == nil) == reduire, "« Reduire » : poses tout de suite ; sinon, ils glissent")
+            // Le glissement, image apres image, jusqu'a sa fin (0,9 s au plus).
+            for _ in 0..<30 where m.glissementPlateaux != nil {
+                Thread.sleep(forTimeInterval: 0.1)
+                MoteurPiecesTests.dessiner(m)
+            }
+            MoteurPiecesTests.dessiner(m)
+            let cas = "3D \(troisD), reduire \(reduire), \(piece ? "la chambre" : "l'etage")"
+            let apres = try ancre(), ecranApres = try aLEcran(apres)
+            #expect(m.isolement == isolement && m.glissementPlateaux == nil, "\(cas)")
+            #expect(simd_length(apres - avant) > 1, "\(cas) : le plateau a bouge")
+            #expect(simd_distance(m.orbite.cible - cibleAvant, apres - avant) < 1e-6,
+                    "\(cas) : la vue suit (plateau \(apres - avant), vue \(m.orbite.cible - cibleAvant))")
+            #expect(hypot(ecranApres.x - ecranAvant.x, ecranApres.y - ecranAvant.y) < 1e-6,
+                    "\(cas) : a sa place a l'ecran (\(ecranAvant), puis \(ecranApres))")
+        }
+    }
+}
+
+/// Une vue hebergee hors ecran, avec le menu natif de la vue par pieces, pose comme dans `VuePieces`.
+struct HoteMenu: View {
+    let moteur: MoteurPieces
+
+    var body: some View {
+        Color.clear
+            .frame(width: 300, height: 300)
+            .contentShape(Rectangle())
+            .contextMenu { MenuPieces(moteur: moteur) }
     }
 }

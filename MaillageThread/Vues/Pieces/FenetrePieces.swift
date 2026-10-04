@@ -327,7 +327,9 @@ struct VuePieces: View {
 /// grise ; « Monter d'un etage » et « Descendre d'un etage » ; « Au meme niveau que », un sous-menu des autres niveaux,
 /// celui de la zone coche ; « Hors de la maison », une case a cocher ; « Sur son propre niveau ». Le plateau et les
 /// niveaux y sont designes par leur cle : une scene qui s'installe pendant que le menu est ouvert ne change pas ce qu'un
-/// article vise. Sur le fond, « Replacer les pieces automatiquement ».
+/// article vise. Ses coches et ses grises suivent la scene la plus recente (`MoteurPieces.menuEtage`, qui lit sa
+/// version) : rouvert sur la meme cible apres un choix, le menu en montre l'effet. Sur le fond, « Replacer les pieces
+/// automatiquement ».
 struct MenuPieces: View {
     let moteur: MoteurPieces
 
@@ -343,8 +345,9 @@ struct MenuPieces: View {
                     .disabled(!m.descendre)
                 Divider()
                 Menu("Au même niveau que") {
-                    ForEach(m.niveaux, id: \.niveau) { n in
-                        Toggle(n.nom, isOn: Binding(get: { n.coche }, set: { _ in moteur.mettreAuNiveau(cle, de: n.niveau) }))
+                    ForEach(m.niveaux, id: \.principal) { n in
+                        Toggle(n.nom, isOn: Binding(get: { n.coche },
+                                                    set: { _ in moteur.mettreAuNiveau(cle, de: n.principal) }))
                     }
                 }
                 .disabled(m.niveaux.isEmpty)
