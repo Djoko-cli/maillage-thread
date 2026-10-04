@@ -328,6 +328,25 @@ public struct GeometrieMaison: Hashable, Sendable {
         return a + (b - a) * u
     }
 
+    /// La geometrie en route de celle-ci, au depart, vers `b`, qui a les memes plateaux dans le meme ordre
+    /// (polissage C, sections 1.3 et 3.5) : en 2D a l'avancement `k2` (les centres et la boite), en 3D a `k3`
+    /// (les centres, le pas, la sphere et le cadrage) ; les rayons et les colonnes sont ceux de `b`.
+    public func vers(_ b: GeometrieMaison, k2: Double, k3: Double) -> GeometrieMaison {
+        func m(_ x: Double, _ y: Double, _ k: Double) -> Double { x + (y - x) * k }
+        var g = b
+        for i in g.rayons.indices where i < centres2D.count {
+            g.centres2D[i] = centres2D[i] + (b.centres2D[i] - centres2D[i]) * k2
+            g.centres3D[i] = centres3D[i] + (b.centres3D[i] - centres3D[i]) * k3
+        }
+        g.boite = Boite(x0: m(boite.x0, b.boite.x0, k2), x1: m(boite.x1, b.boite.x1, k2), z0: m(boite.z0, b.boite.z0, k2),
+                        z1: m(boite.z1, b.boite.z1, k2))
+        g.pasEtage = m(pasEtage, b.pasEtage, k3)
+        g.centreSphere = centreSphere + (b.centreSphere - centreSphere) * k3
+        g.rayonSphere = m(rayonSphere, b.rayonSphere, k3)
+        g.rayonCadre = m(rayonCadre, b.rayonCadre, k3)
+        return g
+    }
+
     /// Hauteur des blocs : 0,04 en 2D, 2,44 en 3D.
     public static func hauteurBloc(_ u: Double) -> Double { 0.04 + hauteurBloc3D * u }
 }
@@ -340,6 +359,12 @@ public enum CameraScene {
     public static let orbite3D = -0.75
     public static let dureeEnvol = 2.6
     public static let dureeVol = 1.3
+    /// Glissement des plateaux vers leur nouvelle case en 2D : au redimensionnement, et apres un changement de
+    /// niveau (polissage C, sections 1.3 et 3.5) ; au changement du reglage, celui de l'envol (`dureeEnvol`).
+    public static let dureeCases = 0.4
+    /// Glissement des plateaux, de la sphere et du cadrage vers leur nouvelle place en 3D, apres un changement de
+    /// niveau (polissage C, section 1.3).
+    public static let dureeNiveaux = 0.9
     /// « Reduire les animations » : l'envol devient un fondu.
     public static let dureeFondu = 0.3
     /// Rotation lente : un tour en deux minutes.

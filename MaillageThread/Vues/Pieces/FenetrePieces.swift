@@ -14,6 +14,11 @@ struct FenetrePieces: View {
     @Environment(\.accessibilityReduceMotion) private var reduire
     /// Le mode 2D ou 3D, garde d'un lancement a l'autre.
     @AppStorage(FenetrePieces.cleMode) private var troisD = false
+    /// Les etages en 2D, en grille (par defaut) ou en rangee (polissage C, section 3.1) : le reglage de Reglages ›
+    /// General, garde d'un lancement a l'autre.
+    @AppStorage(FenetrePieces.cleGrille) private var etagesEnGrille = true
+    /// Le repli de la legende, tel que Djoko l'a laisse (la preference de `LigneDuBas`) : la zone visible de la grille.
+    @AppStorage(LegendePieces.cleRepliee) private var legendeRepliee = false
     @State private var moteur: MoteurPieces
     @State private var piecesChoisies: PiecesChoisies
     @State private var aRenommer: NoeudChoisi?
@@ -39,6 +44,8 @@ struct FenetrePieces: View {
 
     /// Preference du mode 2D ou 3D.
     static let cleMode = "vuePieces3D"
+    /// Preference des etages en 2D : en grille (vrai, par defaut) ou en rangee.
+    static let cleGrille = "etagesEnGrille"
     /// Taille minimale de la fenetre (polissage B, section 3) : avec la fiche et ses courbes, la scene
     /// garde environ 230 pt de haut (88 pour 820 x 560, tri du sous-projet A, n° 11 ; 234 mesures, ligne de niveau
     /// comprise, sur le jeu de l'historique). 820 x 680 pt sous la barre de titre cachee, de 52 pt avec la barre d'outils
@@ -93,6 +100,15 @@ struct FenetrePieces: View {
         return max(30, bord + ceil(pile) + espacement)
     }
 
+    /// Marge du bas de la zone visible ou se choisit la grille (polissage C, section 3.3, decision de Djoko du 03/10) :
+    /// celle de la legende telle que Djoko l'a laissee, ouverte ou repliee, sans la fiche, ni le repli de la legende
+    /// faute de place sous elle, qui vont et viennent avec elle. `fiche` : une fiche est ouverte ; `repliee` : le repli
+    /// garde ; `legende` : la hauteur mesuree de la rangee du bas, ouverte (nil : repliee) ; `legendeOuverte` : sa
+    /// derniere mesure, ouverte. Ouvrir ou replier la legende change donc la grille ; ouvrir une fiche, non.
+    static func margeBasGrille(fiche: Bool, repliee: Bool, legende: CGFloat?, legendeOuverte: CGFloat?) -> CGFloat {
+        margeBas(pile: fiche ? (repliee ? nil : legendeOuverte) : legende)
+    }
+
     /// Hauteur de scene en dessous de laquelle la legende ouverte se replie d'elle-meme sous une fiche (pt) : les
     /// 230 pt environ que la spec de B garde a la scene dans la plus petite fenetre, avec la fiche et ses courbes
     /// (section 3) ; la legende ne la fait pas descendre plus bas. Mesure sur la demo (reverification du 02/10, apres la
@@ -133,7 +149,9 @@ struct FenetrePieces: View {
                 RadialGradient(gradient: palette.fond, center: UnitPoint(x: 0.3, y: 0.35), startRadius: 0, endRadius: 900)
                 if let entree {
                     VuePieces(moteur: moteur, entree: entree, palette: palette,
-                              marges: (margeHautMesuree, Self.margeBas(pile: hauteurPile ?? hauteurLegende)))
+                              marges: (margeHautMesuree, Self.margeBas(pile: hauteurPile ?? hauteurLegende)),
+                              basGrille: Self.margeBasGrille(fiche: fiche, repliee: legendeRepliee, legende: hauteurLegende,
+                                                             legendeOuverte: legendeOuverteMesuree))
                     if !moteur.pret {
                         ProgressView().controlSize(.small)
                     }
@@ -201,6 +219,8 @@ struct FenetrePieces: View {
         .background(SuiviFenetre { c in Task { @MainActor in feux = c } })
         .sheet(item: $aRenommer) { FeuilleRenommer(id: $0.id) }
         .onChange(of: reduire, initial: true) { _, r in moteur.reduire = r }
+        // Le reglage s'applique tout de suite a la vue ouverte.
+        .onChange(of: etagesEnGrille, initial: true) { _, g in moteur.reglerGrille(g) }
         // La fiche parait ou se ferme : la legende reprend son repli garde, et un « rouvert » anterieur ne vaut plus.
         .onChange(of: moteur.selection == nil) { _, _ in
             legendeRouverte = false
@@ -235,6 +255,8 @@ struct VuePieces: View {
     let entree: EntreeScene
     let palette: Palette
     let marges: (haut: CGFloat, bas: CGFloat)
+    /// Marge du bas de la zone visible ou se choisit la grille (`FenetrePieces.margeBasGrille`).
+    let basGrille: CGFloat
     @Environment(\.displayScale) private var echelle
     /// Un glisser est en cours. SwiftUI le remet a faux a la fin du geste, meme annule (sans `onEnded`) :
     /// le moteur clot alors un geste qui serait reste ouvert.
@@ -248,6 +270,7 @@ struct VuePieces: View {
             Canvas { ctx, taille in
                 _ = contexte.date
                 moteur.marges = marges
+                moteur.basGrille = basGrille
                 moteur.image(&ctx, taille: taille, echelle: echelle, palette: palette)
             }
         }

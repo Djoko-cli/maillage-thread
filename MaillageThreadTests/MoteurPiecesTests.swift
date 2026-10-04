@@ -18,12 +18,12 @@ struct MoteurPiecesTests {
     }
 
     /// Un moteur sur la scene `e`, dispose, et une premiere image dessinee (hors fenetre).
-    static func moteur(_ e: EntreeScene, fichier: URL? = nil) -> MoteurPieces {
+    static func moteur(_ e: EntreeScene, fichier: URL? = nil, taille: CGSize = MoteurPiecesTests.taille) -> MoteurPieces {
         let m = MoteurPieces(fichierPlaces: fichier)
         m.marges = (84, 50)
         m.poserTaille(taille)
         m.installerMaintenant(e)
-        dessiner(m)
+        dessiner(m, taille: taille)
         return m
     }
 
@@ -696,6 +696,166 @@ struct MoteurPiecesTests {
         r.relacher(fond, a: 300.1)
         #expect(!r.vueTouchee && r.enMouvement)
         #expect(r.orbite == zoomee, "la camera ne saute qu'a mi-chemin du fondu")
+    }
+
+    /// La demo sur quatre plateaux (polissage C) : le rez-de-chaussee, le jardin, l'etage et les combles, chacun sur
+    /// son niveau, sans choix ; `places` : les places gardees, dont les choix de niveau.
+    static func quatrePlateaux(_ places: PlacesGardees = PlacesGardees()) throws -> EntreeScene {
+        let (s, r, _) = try NomsSceneTests.demo()
+        var maison = try #require(s.noms.maison)
+        maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Buanderie"]),
+                        ZoneMaison(nom: "Jardin", pieces: ["Entrée"]),
+                        ZoneMaison(nom: "Étage", pieces: ["Chambre", "Salle de bain"]),
+                        ZoneMaison(nom: "Combles", pieces: ["Bureau", "Chambre d'amis"])]
+        s.noms.maison = maison
+        return EntreeScene(surveillance: s, reseau: r, places: places)
+    }
+
+    /// Une vue large (2,4 : 1).
+    static let large = CGSize(width: 1824, height: 760)
+    /// Une vue carree : sur sa zone visible (1000 x 866, sous les marges des tests), la grille de quatre plateaux est
+    /// 2 x 2.
+    static let carree = CGSize(width: 1000, height: 1000)
+
+    /// La grille suit la zone visible de la vue (polissage C, section 3.3) : la vue moins ses marges du haut et du bas,
+    /// par la fonction du coeur, sur les rayons de la disposition ; 2 x 2 dans une vue carree, la rangee dans une vue
+    /// large ; « En rangee », la rangee. La disposition des pieces, elle, ne depend ni de la taille, ni du reglage
+    /// (section 4).
+    @Test func grilleSelonLaTaille() throws {
+        let e = try Self.quatrePlateaux()
+        let m = Self.moteur(e, taille: Self.carree)
+        #expect(m.grille && m.colonnes == 2 && m.geometrie.colonnes == 2)
+        #expect(m.zoneVisible == CGSize(width: 1000, height: 1000 - 84 - 50))
+        #expect(m.colonnes == GeometrieMaison.colonnes(rayons: m.geometrie.rayons, taille: m.zoneVisible))
+        let l = MoteurPieces()
+        l.marges = (84, 50)
+        l.poserTaille(Self.large)
+        l.installerMaintenant(e)
+        #expect(l.colonnes == 4 && l.geometrie.colonnes == 4)
+        let r = MoteurPieces()
+        r.reglerGrille(false)
+        r.marges = (84, 50)
+        r.poserTaille(Self.carree)
+        r.installerMaintenant(e)
+        #expect(!r.grille && r.geometrie.colonnes == 4)
+        for autre in [l, r] {
+            #expect(autre.positions == m.positions && autre.cartes == m.cartes && autre.geometrie.rayons == m.geometrie.rayons)
+        }
+    }
+
+    /// La zone visible change avec les marges sans la fiche (polissage C, section 3.3, decision de Djoko du 03/10) :
+    /// ouvrir ou replier la legende recalcule la grille, a la vue d'ensemble, comme au redimensionnement, les plateaux
+    /// glissant en 0,4 s ; une fiche ouverte, qui ne change que la marge du cadre, ne la change pas.
+    @Test func grilleSurLaZoneVisible() throws {
+        let m = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
+        #expect(m.colonnes == 2 && m.basGrille == nil)
+        m.basGrille = 50
+        m.marges.bas = 600
+        Self.dessiner(m, taille: Self.carree)
+        #expect(m.glissementPlateaux == nil && m.geometrieVisee.colonnes == 2, "une fiche ouverte : la grille reste")
+        m.basGrille = 600
+        Self.dessiner(m, taille: Self.carree)
+        let g = try #require(m.glissementPlateaux)
+        #expect(g.duree2D == CameraScene.dureeCases && m.geometrieVisee.colonnes == 4 && m.colonnes == 4)
+        #expect(m.zoneVisible == CGSize(width: 1000, height: 1000 - 84 - 600))
+    }
+
+    /// Redimensionnement a la vue d'ensemble (polissage C, section 3.5) : la grille se recalcule, les plateaux glissent
+    /// en 0,4 s, en cubique, et la vue se recadre a chaque image ; avec « Reduire les animations », tout de suite.
+    @Test func redimensionnement() throws {
+        let m = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
+        let depart = m.geometrie
+        Self.dessiner(m, taille: Self.large)
+        let g = try #require(m.glissementPlateaux)
+        #expect(g.duree2D == CameraScene.dureeCases && g.duree3D == 0 && CameraScene.dureeCases == 0.4)
+        #expect(m.geometrieVisee.colonnes == 4 && m.colonnes == 4)
+        // A mi-temps, a mi-chemin (`(debut + 0,2) - debut` n'est pas exactement 0,2 : l'heure est grande).
+        let mi = m.geometrie(a: g.debut + 0.2)
+        let x0 = depart.centres2D[1].x, x1 = m.geometrieVisee.centres2D[1].x
+        #expect(abs(mi.centres2D[1].x - (x0 + (x1 - x0) * 0.5)) < 1e-6 && abs(x1 - x0) > 1)
+        #expect(m.geometrie(a: g.debut + 0.41) == m.geometrieVisee)
+        #expect(m.orbite == CameraScene.canonique(m.geometrie, aspect: m.aspect, u: 0), "la vue se recadre a chaque image")
+        let r = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
+        r.reduire = true
+        Self.dessiner(r, taille: Self.large)
+        #expect(r.glissementPlateaux == nil && r.geometrie == r.geometrieVisee && r.geometrie.colonnes == 4)
+    }
+
+    /// Zoomee ou isolee, la grille attend le retour a la vue d'ensemble (polissage C, section 3.5) ; elle s'y pose
+    /// ensuite, avec l'hysteresis du redimensionnement.
+    @Test func grilleQuiAttend() throws {
+        let m = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
+        m.reduire = true
+        m.molette(-20, precis: false)
+        Self.dessiner(m, taille: Self.large)
+        #expect(m.vueTouchee && m.geometrieVisee.colonnes == 2)
+        #expect(m.grilleEnAttente == MoteurPieces.GrilleEnAttente(duree: CameraScene.dureeCases, hysteresis: true))
+        m.sortir()
+        Self.dessiner(m, taille: Self.large)
+        #expect(m.grilleEnAttente == nil && m.geometrieVisee.colonnes == 4 && m.geometrie == m.geometrieVisee)
+        let i = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
+        i.isoler(try Self.indice(try #require(i.entree), "Salon"))
+        Self.dessiner(i, taille: Self.large)
+        #expect(i.grilleEnAttente != nil && i.geometrieVisee.colonnes == 2, "isolee, la grille attend")
+    }
+
+    /// Le reglage « Etages en 2D » (polissage C, section 3.1) s'applique tout de suite a la vue ouverte : les plateaux
+    /// glissent en 2,6 s, comme l'envol ; avec « Reduire les animations », tout de suite. En 3D, il attend la 2D : l'envol
+    /// vers la 2D se pose sur la grille de la zone visible du moment.
+    @Test func reglageDeLaGrille() throws {
+        let m = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
+        m.reglerGrille(false)
+        let g = try #require(m.glissementPlateaux)
+        #expect(!m.grille && g.duree2D == CameraScene.dureeEnvol && g.duree3D == 0 && m.geometrieVisee.colonnes == 4)
+        m.reglerGrille(true)
+        #expect(m.geometrieVisee.colonnes == 2)
+        let r = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
+        r.reduire = true
+        r.reglerGrille(false)
+        #expect(r.glissementPlateaux == nil && r.geometrie.colonnes == 4)
+        let trois = MoteurPieces(troisD: true)
+        trois.marges = (84, 50)
+        trois.poserTaille(Self.carree)
+        trois.installerMaintenant(try Self.quatrePlateaux())
+        trois.reglerGrille(false)
+        #expect(trois.glissementPlateaux == nil && trois.grilleEnAttente != nil && trois.geometrieVisee.colonnes == 2)
+        trois.basculer(troisD: false)
+        #expect(trois.grilleEnAttente == nil && trois.geometrieVisee.colonnes == 4 && trois.enMouvement)
+    }
+
+    /// Une taille nulle ne choisit rien (polissage C, section 3.3) : la rangee en attendant ; la premiere vraie taille
+    /// pose la grille et cadre la vue d'ensemble, sans autre condition.
+    @Test func premiereVraieTaille() throws {
+        let m = MoteurPieces()
+        m.marges = (84, 50)
+        m.poserTaille(.zero)
+        m.installerMaintenant(try Self.quatrePlateaux())
+        #expect(m.pret && m.colonnes == nil && m.geometrie.colonnes == 4)
+        Self.dessiner(m, taille: Self.carree)
+        #expect(m.colonnes == 2 && m.geometrie.colonnes == 2 && m.glissementPlateaux == nil)
+        #expect(m.orbite == CameraScene.canonique(m.geometrie, aspect: m.aspect, u: 0))
+    }
+
+    /// Des niveaux changes (une zone mise a cote d'un etage) : les plateaux glissent vers leur nouvelle place, en 0,4 s
+    /// en 2D et en 0,9 s en 3D (polissage C, section 1.3) ; avec « Reduire les animations », tout de suite.
+    @Test func glissementApresUnChangementDeNiveau() throws {
+        let e = try Self.quatrePlateaux()
+        var places = PlacesGardees()
+        places.ranger(Rangement(ordre: [], aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée")]),
+                      domicile: e.domicile)
+        let aCote = try Self.quatrePlateaux(places)
+        for reduire in [false, true] {
+            let m = Self.moteur(e)
+            m.reduire = reduire
+            m.installerMaintenant(aCote)
+            #expect(m.geometrieVisee.colonnes == m.colonnes)
+            if reduire {
+                #expect(m.glissementPlateaux == nil && m.geometrie == m.geometrieVisee)
+            } else {
+                let g = try #require(m.glissementPlateaux)
+                #expect(g.duree2D == CameraScene.dureeCases && g.duree3D == CameraScene.dureeNiveaux && CameraScene.dureeNiveaux == 0.9)
+            }
+        }
     }
 
     /// Ordre des couches : plateaux et equateur, blocs, liens enfant -> parent, liens entre routeurs,

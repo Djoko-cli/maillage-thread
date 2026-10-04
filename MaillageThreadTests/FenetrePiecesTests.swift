@@ -1334,6 +1334,40 @@ struct FenetrePiecesTests {
         #expect(FicheNoeud.couronne(choisi, entree: e))
     }
 
+    /// La marge du bas de la zone visible ou se choisit la grille (polissage C, section 3.3, decision de Djoko du
+    /// 03/10) : celle de la legende telle que Djoko l'a laissee, sans la fiche ; ouverte, sa hauteur mesuree ; repliee,
+    /// 30 pt. Une fiche ouverte n'y change rien, ni le repli de la legende faute de place sous elle.
+    @Test func margeDeLaGrille() {
+        let ouverte = FenetrePieces.margeBas(pile: 223)
+        #expect(FenetrePieces.margeBasGrille(fiche: false, repliee: false, legende: 223, legendeOuverte: 223) == ouverte)
+        #expect(FenetrePieces.margeBasGrille(fiche: false, repliee: true, legende: nil, legendeOuverte: 223) == 30)
+        #expect(FenetrePieces.margeBasGrille(fiche: true, repliee: false, legende: nil, legendeOuverte: 223) == ouverte,
+                "la legende repliee faute de place sous la fiche")
+        #expect(FenetrePieces.margeBasGrille(fiche: true, repliee: false, legende: 223, legendeOuverte: 223) == ouverte)
+        #expect(FenetrePieces.margeBasGrille(fiche: true, repliee: true, legende: nil, legendeOuverte: 223) == 30)
+    }
+
+    /// Le reglage « Etages en 2D » (polissage C, section 3.1) : en grille par defaut ; change dans les preferences
+    /// (Reglages › General), il s'applique tout de suite a la vue ouverte. La fenetre s'ouvre dans le mode garde de
+    /// l'app (`UserDefaults.standard`, lu a sa creation) : en 3D, la rangee attend la vue d'ensemble 2D.
+    @Test(.timeLimit(.minutes(1))) func reglageEtagesEn2D() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let demo = Surveillance(mode: .demo, dossier: nil)
+        demo.demarrer()
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p)
+        defer { Self.fermer(fenetre) }
+        try await MoteurPiecesTests.attendre { moteur.pret }
+        #expect(FenetrePieces.cleGrille == "etagesEnGrille" && moteur.grille, "en grille par defaut")
+        p.set(false, forKey: FenetrePieces.cleGrille)
+        try await MoteurPiecesTests.attendre { !moteur.grille }
+        #expect(!moteur.grille && (moteur.troisD ? moteur.grilleEnAttente?.duree == CameraScene.dureeEnvol
+                                                 : moteur.geometrieVisee.colonnes == moteur.geometrieVisee.rayons.count))
+        p.set(true, forKey: FenetrePieces.cleGrille)
+        try await MoteurPiecesTests.attendre { moteur.grille }
+        #expect(moteur.grille)
+    }
+
     /// Places des pieces : a cote des identites des routeurs, ni en demo ni sous les tests.
     @Test func fichierDesPlaces() {
         #expect(FenetrePieces.fichierPlaces(demo: true, sousTests: false) == nil)

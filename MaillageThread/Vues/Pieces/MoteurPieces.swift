@@ -65,7 +65,19 @@ final class MoteurPieces {
     @ObservationIgnored private var cartesCalculees: [String: CartesPieces.Carte] = [:]
     @ObservationIgnored private(set) var cartes: [CartesPieces.Carte] = []
     @ObservationIgnored private(set) var positions: [SIMD2<Double>] = []
+    /// La geometrie de l'image ; elle rejoint la geometrie visee (`geometrieVisee`) quand les plateaux glissent.
     @ObservationIgnored private(set) var geometrie = GeometrieMaison(rayons: [])
+    /// La geometrie de la scene, avec les rayons de sa disposition et la grille du reglage.
+    @ObservationIgnored private(set) var geometrieVisee = GeometrieMaison(rayons: [])
+    @ObservationIgnored private(set) var glissementPlateaux: GlissementPlateaux?
+    /// Etages en 2D (polissage C, section 3.1) : en grille, ou en rangee ; le reglage, pose par la fenetre.
+    @ObservationIgnored private(set) var grille = true
+    /// Colonnes de la grille ; nil : pas encore de vraie taille, la rangee en attendant.
+    @ObservationIgnored private(set) var colonnes: Int?
+    /// Une grille voulue attend la vue d'ensemble 2D (zoomee, isolee, en 3D, en mouvement).
+    @ObservationIgnored private(set) var grilleEnAttente: GrilleEnAttente?
+    /// Ce que vise le vol en cours : son arrivee suit les plateaux qui glissent.
+    @ObservationIgnored private var viseeVol: Visee?
     @ObservationIgnored private(set) var orbite = Orbite(cible: .zero, distance: 1000, azimut: 0, inclinaison: 0.0001, champ: 2)
     @ObservationIgnored private var taille = CGSize.zero
     /// Marges du haut (le haut de la fenetre, mesure) et du bas (la pile du bas, mesuree : la legende et la ligne
@@ -74,6 +86,11 @@ final class MoteurPieces {
     /// ou descend sous un bandeau ; en 0,45 s quand la legende s'ouvre ou se replie (`legendeBasculee`) ; avec
     /// « Reduire les animations », par un fondu.
     @ObservationIgnored var marges: (haut: CGFloat, bas: CGFloat) = (0, 0)
+    /// Marge du bas de la zone visible ou se choisit la grille (polissage C, section 3.3) : celle de la legende, ouverte
+    /// ou repliee, sans la fiche, qui va et vient (`FenetrePieces.margeBasGrille`) ; nil : celle du cadre.
+    @ObservationIgnored var basGrille: CGFloat?
+    /// La zone visible de la derniere image : une autre recalcule la grille.
+    @ObservationIgnored private var zoneGrille = CGSize.zero
     /// Marges du cadre, et leur glissement en cours vers `marges`.
     @ObservationIgnored private var margesCadre: (haut: CGFloat, bas: CGFloat)?
     @ObservationIgnored private var glissement: GlissementMarges?
@@ -161,6 +178,29 @@ final class MoteurPieces {
         var fondu: Bool
     }
 
+    /// Glissement des plateaux (polissage C, sections 1.3 et 3.5) : de `depart`, la geometrie de l'image a son debut,
+    /// remise dans l'ordre des plateaux de la scene, vers la geometrie visee ; en 2D en `duree2D`, en 3D en
+    /// `duree3D` (0 : sans glissement), en cubique entree-sortie.
+    struct GlissementPlateaux {
+        var depart: GeometrieMaison
+        var debut: Double
+        var duree2D: Double
+        var duree3D: Double
+    }
+
+    /// Une grille voulue qui attend la vue d'ensemble 2D : la duree du glissement de ses plateaux, et si elle garde
+    /// la grille en place tant qu'elle est a moins de 5 % du choix (un redimensionnement).
+    struct GrilleEnAttente: Equatable {
+        var duree: Double
+        var hysteresis: Bool
+    }
+
+    /// Ce que vise un vol : la vue d'ensemble, ou une piece (sa cle).
+    private enum Visee {
+        case ensemble
+        case piece(String)
+    }
+
     /// Fondu de 0,3 s par le fond (« Reduire les animations ») : la scene s'efface, la camera saute a
     /// mi-chemin, la scene revient.
     private struct Fondu {
@@ -189,6 +229,8 @@ final class MoteurPieces {
     /// Une piece est isolee (et non en train d'etre quittee).
     var estIsolee: Bool { focus != nil && sCible == 1 }
     var enMouvement: Bool { envol != nil || fondu != nil || vol != nil }
+    /// La vue est a la vue d'ensemble : ni zoomee, ni deplacee, ni isolee, ni en mouvement.
+    var aLaVueDEnsemble: Bool { pret && !vueTouchee && focus == nil && !enMouvement }
     /// Un mouvement, ou un glisser en cours (spec, sections 5 et 7) : une scene recue attend sa fin.
     var occupe: Bool { enMouvement || geste != nil }
 
@@ -285,13 +327,21 @@ final class MoteurPieces {
     private func installer(_ e: EntreeScene) {
         let scene = e.scene
         let ancienFocus = focus.flatMap { $0 < clesPieces.count ? clesPieces[$0] : nil }
+        // Des niveaux changes (le menu du clic droit) : les plateaux glissent vers leur nouvelle place (polissage C,
+        // section 1.3) ; a la vue d'ensemble 2D, la grille se recalcule, sinon elle l'attend.
+        let anciens = entree?.scene.etages.map(\.id) ?? []
+        let niveauxChanges = pret && entree?.scene.niveaux != scene.niveaux
+        let ensemble = aLaVueDEnsemble && t == 0
         entree = e
         cartes = scene.pieces.map { cartesCalculees[$0.id] ?? CartesPieces.carte([]) }
         positions = scene.pieces.map { placesCalculees[$0.id] ?? .zero }
-        geometrie = GeometrieMaison(rayons: scene.etages.map { rayonsCalcules[$0.id] ?? DispositionPieces.marge },
-                                    plateaux: scene.etages.map {
-                                        GeometrieMaison.Plateau(niveau: $0.niveau, principal: $0.principal, dehors: $0.dehors)
-                                    })
+        if grille && (!pret || (niveauxChanges && ensemble)) {
+            colonnes = colonnesVoulues(scene, enPlace: nil) ?? colonnes
+        } else if niveauxChanges {
+            attendreGrille(CameraScene.dureeCases, hysteresis: false)
+        }
+        viser(geometriePour(scene), depuis: anciens, duree2D: niveauxChanges ? CameraScene.dureeCases : 0,
+              duree3D: niveauxChanges ? CameraScene.dureeNiveaux : 0)
         fk = Array(repeating: 0, count: scene.pieces.count)
         if let cle = ancienFocus, let i = scene.pieces.firstIndex(where: { $0.id == cle }) {
             focus = i
@@ -431,6 +481,156 @@ final class MoteurPieces {
         appliquer(e)
     }
 
+    // MARK: Plateaux
+
+    /// La geometrie d'une scene : les rayons de sa disposition, ses niveaux, et la grille du reglage (en grille, les
+    /// colonnes choisies, la rangee en attendant une vraie taille).
+    private func geometriePour(_ scene: ScenePieces) -> GeometrieMaison {
+        GeometrieMaison(rayons: scene.etages.map { rayonsCalcules[$0.id] ?? DispositionPieces.marge },
+                        plateaux: scene.etages.map {
+                            GeometrieMaison.Plateau(niveau: $0.niveau, principal: $0.principal, dehors: $0.dehors)
+                        },
+                        colonnes: grille ? colonnes : nil)
+    }
+
+    /// Les colonnes de la grille pour la zone visible de la vue (polissage C, section 3.3) ; nil sans vraie taille.
+    private func colonnesVoulues(_ scene: ScenePieces, enPlace: Int?) -> Int? {
+        GeometrieMaison.colonnes(rayons: scene.etages.map { rayonsCalcules[$0.id] ?? DispositionPieces.marge },
+                                 taille: zoneVisible, enPlace: enPlace)
+    }
+
+    /// La zone visible ou se choisit la grille (polissage C, section 3.3, decision de Djoko du 03/10) : la vue moins la
+    /// marge du haut et celle du bas, la legende ouverte ou repliee, sans la fiche (`basGrille`). La vue d'ensemble y est
+    /// toujours la plus grande possible.
+    var zoneVisible: CGSize {
+        CGSize(width: taille.width, height: taille.height - marges.haut - (basGrille ?? marges.bas))
+    }
+
+    /// Pose la geometrie visee : tout de suite, ou en glissant (« Reduire les animations » : tout de suite) depuis la
+    /// geometrie de l'image, remise dans l'ordre des plateaux de la scene (`anciens` : celui de l'image). Un
+    /// glissement en cours repart de l'image, avec le temps qui lui restait s'il est plus long.
+    private func viser(_ g: GeometrieMaison, depuis anciens: [String], duree2D: Double, duree3D: Double) {
+        let now = Self.maintenant()
+        var d2 = reduire ? 0 : duree2D
+        var d3 = reduire ? 0 : duree3D
+        if let gl = glissementPlateaux, !reduire {
+            d2 = max(d2, gl.duree2D - (now - gl.debut))
+            d3 = max(d3, gl.duree3D - (now - gl.debut))
+        }
+        geometrieVisee = g
+        guard pret, d2 > 0 || d3 > 0, let cles = scene?.etages.map(\.id) else {
+            geometrie = g
+            glissementPlateaux = nil
+            return
+        }
+        let image = geometrie
+        var depart = g
+        for (i, c) in cles.enumerated() {
+            guard let j = anciens.firstIndex(of: c), j < image.centres2D.count else { continue }
+            depart.centres2D[i] = image.centres2D[j]
+            depart.centres3D[i] = image.centres3D[j]
+        }
+        depart.boite = image.boite
+        depart.pasEtage = image.pasEtage
+        depart.centreSphere = image.centreSphere
+        depart.rayonSphere = image.rayonSphere
+        depart.rayonCadre = image.rayonCadre
+        geometrie = depart
+        glissementPlateaux = GlissementPlateaux(depart: depart, debut: now, duree2D: d2, duree3D: d3)
+        reveiller()
+    }
+
+    /// La geometrie de l'image a l'instant `now` : en route vers la geometrie visee, ou elle.
+    func geometrie(a now: Double) -> GeometrieMaison {
+        guard let gl = glissementPlateaux else { return geometrieVisee }
+        let q2 = gl.duree2D > 0 ? min(1, max(0, (now - gl.debut) / gl.duree2D)) : 1
+        let q3 = gl.duree3D > 0 ? min(1, max(0, (now - gl.debut) / gl.duree3D)) : 1
+        if q2 >= 1 && q3 >= 1 { return geometrieVisee }
+        return gl.depart.vers(geometrieVisee, k2: CameraScene.rampe(q2), k3: CameraScene.rampe(q3))
+    }
+
+    /// Le reglage « Etages en 2D » (polissage C, section 3.1) : en grille ou en rangee. Il s'applique tout de suite a
+    /// la vue ouverte, les plateaux glissant comme l'envol, en 2,6 s ; zoomee, isolee ou en 3D, au retour a la vue
+    /// d'ensemble 2D.
+    func reglerGrille(_ g: Bool) {
+        guard g != grille else { return }
+        grille = g
+        guard pret else { return }
+        demanderGrille(CameraScene.dureeEnvol, hysteresis: false)
+    }
+
+    /// La zone visible a change (polissage C, sections 3.3 et 3.5) : la taille de la vue, ou ses marges sans la fiche
+    /// (la legende ouverte ou repliee, un bandeau). La premiere vraie zone pose la grille et cadre la vue d'ensemble,
+    /// sans autre condition ; ensuite, la grille se recalcule a la vue d'ensemble 2D, avec l'hysteresis, et les plateaux
+    /// glissent en 0,4 s ; zoomee, isolee ou en 3D, elle attend.
+    private func zoneChangee() {
+        guard pret, let scene else { return }
+        if grille && colonnes == nil {
+            guard let c = colonnesVoulues(scene, enPlace: nil) else { return }
+            colonnes = c
+            viser(geometriePour(scene), depuis: scene.etages.map(\.id), duree2D: 0, duree3D: 0)
+            vueTouchee = false
+            orbite = CameraScene.canonique(geometrie, aspect: aspect, u: t)
+            return
+        }
+        demanderGrille(CameraScene.dureeCases, hysteresis: true)
+    }
+
+    /// Une grille voulue : posee a la vue d'ensemble 2D, ses plateaux glissant en `duree` ; sinon elle attend.
+    private func demanderGrille(_ duree: Double, hysteresis: Bool) {
+        if t == 0 && aLaVueDEnsemble {
+            poserGrille(duree, hysteresis: hysteresis)
+        } else {
+            attendreGrille(duree, hysteresis: hysteresis)
+        }
+    }
+
+    /// Une grille attend la vue d'ensemble 2D : la plus longue duree, et l'hysteresis si toutes la demandent.
+    private func attendreGrille(_ duree: Double, hysteresis: Bool) {
+        let a = grilleEnAttente
+        grilleEnAttente = GrilleEnAttente(duree: max(a?.duree ?? 0, duree), hysteresis: (a?.hysteresis ?? true) && hysteresis)
+    }
+
+    private func poserGrille(_ duree: Double, hysteresis: Bool) {
+        grilleEnAttente = nil
+        guard let scene else { return }
+        if grille, let c = colonnesVoulues(scene, enPlace: hysteresis ? colonnes : nil) { colonnes = c }
+        let g = geometriePour(scene)
+        guard g != geometrieVisee else { return }
+        viser(g, depuis: scene.etages.map(\.id), duree2D: duree, duree3D: 0)
+    }
+
+    /// Ce que la vue regarde : la piece isolee, ou la cible de la vue d'ensemble.
+    private func ancreCamera() -> SIMD3<Double> {
+        if let i = focus, let c = centrePiece(i) { return c }
+        return geometrie.cible2D + (geometrie.centreSphere - geometrie.cible2D) * t
+    }
+
+    /// Les plateaux glissent : un vol rejoint l'arrivee de ce qu'il vise ; a la vue d'ensemble, elle se recadre ; sinon,
+    /// la vue suit ce qu'elle regarde (`ancre0` : sa place a l'image d'avant).
+    private func suivre(depuis ancre0: SIMD3<Double>) {
+        if vol != nil {
+            if let v = viseeVol, let fin = volVers(v) {
+                vol?.oeil1 = fin.oeil1
+                vol?.cible1 = fin.cible1
+            }
+        } else if envol == nil && fondu == nil {
+            if aLaVueDEnsemble {
+                recadrer()
+            } else {
+                orbite.cible += ancreCamera() - ancre0
+            }
+        }
+    }
+
+    /// Le vol vers ce que l'on vise, depuis la camera du moment.
+    private func volVers(_ v: Visee) -> Vol? {
+        switch v {
+        case .ensemble: CameraScene.volVersEnsemble(orbite, geometrie, aspect: aspect, u: t, troisD: t == 1)
+        case .piece(let cle): scene?.pieces.firstIndex { $0.id == cle }.flatMap(volVersPiece)
+        }
+    }
+
     // MARK: Camera
 
     /// Cadre la vue d'ensemble a l'avancement courant, en gardant l'orbite en 3D.
@@ -459,6 +659,12 @@ final class MoteurPieces {
         vueTouchee = false
         textes = entree.map { Self.textes($0, focus: nil) } ?? textes
         construireEtiquettes()
+        // Vers la 2D, l'envol se pose sur la grille de la zone visible du moment (polissage C, section 3.5).
+        if !v, let scene {
+            grilleEnAttente = nil
+            if grille, let c = colonnesVoulues(scene, enPlace: nil) { colonnes = c }
+            viser(geometriePour(scene), depuis: scene.etages.map(\.id), duree2D: 0, duree3D: 0)
+        }
         let arrivee = v ? 1.0 : 0.0
         if reduire {
             fondu = Fondu(debut: Self.maintenant(), arrivee: arrivee)
@@ -482,7 +688,7 @@ final class MoteurPieces {
         }
         if let e = entree { textes = Self.textes(e, focus: i) }
         construireEtiquettes()
-        if let v = volVersPiece(i) { voler(v) }
+        if let v = volVersPiece(i) { voler(v, visee: .piece(scene.pieces[i].id)) }
     }
 
     /// Vol vers une piece, a la hauteur de vue de la spec (section 7).
@@ -508,7 +714,8 @@ final class MoteurPieces {
             return
         }
         vueTouchee = false
-        voler(CameraScene.volVersEnsemble(orbite, geometrie, aspect: aspect, u: t, troisD: t == 1), enFondu: enFondu)
+        voler(CameraScene.volVersEnsemble(orbite, geometrie, aspect: aspect, u: t, troisD: t == 1), visee: .ensemble,
+              enFondu: enFondu)
     }
 
     /// Fin du retour d'un isolement : plus de piece isolee, ni de reperes « ailleurs ».
@@ -525,9 +732,10 @@ final class MoteurPieces {
         sortir(enFondu: true)
     }
 
-    private func voler(_ v: Vol, enFondu: Bool = false) {
+    private func voler(_ v: Vol, visee: Visee, enFondu: Bool = false) {
         zoomEnAttente = 0
         rotationEnAttente = .zero
+        viseeVol = nil
         if reduire && enFondu {
             fondu = Fondu(debut: Self.maintenant(), arrivee: t, orbite: v.orbite(1, depuis: orbite))
             vol = nil
@@ -536,6 +744,7 @@ final class MoteurPieces {
             vol = nil
         } else {
             vol = v
+            viseeVol = visee
             debutVol = Self.maintenant()
         }
         reveiller()
@@ -550,8 +759,11 @@ final class MoteurPieces {
 
     /// Une image du `Canvas` : avance l'etat, projette la scene, place les noms, dessine.
     func image(_ ctx: inout GraphicsContext, taille nouvelle: CGSize, echelle: Double, palette: Palette) {
-        // Taille ou marges changees : la vue d'ensemble se recadre, sauf si Djoko a zoome ou isole une piece.
+        // Taille ou marges changees : la vue d'ensemble se recadre, sauf si Djoko a zoome ou isole une piece ; une
+        // nouvelle zone visible recalcule la grille (polissage C, sections 3.3 et 3.5).
         taille = nouvelle
+        let changee = zoneVisible != zoneGrille
+        zoneGrille = zoneVisible
         let now = Self.maintenant()
         let m = margesDuCadre(now)
         let voulu = CGRect(x: 0, y: m.haut, width: nouvelle.width, height: max(1, nouvelle.height - m.haut - m.bas))
@@ -559,6 +771,7 @@ final class MoteurPieces {
             cadre = voulu
             if pret && !enMouvement && !vueTouchee && focus == nil && !fige { recadrer() }
         }
+        if changee && !fige { zoneChangee() }
         if !fige { avancer(now) }
         guard pret, let scene else { return }
         let etat = EtatAnime(t: t, s: s, fk: fk, focus: focus, survol: survol, selection: selection)
@@ -700,13 +913,24 @@ final class MoteurPieces {
             fk[i] += (c - fk[i]) * min(1, dt * 3.5)
             if abs(c - fk[i]) < 1e-3 { fk[i] = c }
         }
+        if glissementPlateaux != nil {
+            let ancre0 = ancreCamera()
+            geometrie = geometrie(a: now)
+            if geometrie == geometrieVisee { glissementPlateaux = nil }
+            suivre(depuis: ancre0)
+        }
         if let v = vol {
             let q = min(1, max(0, (now - debutVol) / CameraScene.dureeVol))
             orbite = v.orbite(q, depuis: orbite)
-            if q >= 1 { vol = nil }
+            if q >= 1 {
+                vol = nil
+                viseeVol = nil
+            }
         } else if envol == nil && fondu == nil {
             controles()
         }
+        // Une grille qui attendait la vue d'ensemble 2D s'y pose.
+        if let g = grilleEnAttente, t == 0, aLaVueDEnsemble { poserGrille(g.duree, hysteresis: g.hysteresis) }
         if !occupe, let e = attente { appliquer(e) }
     }
 
@@ -736,7 +960,9 @@ final class MoteurPieces {
 
     func doitContinuer(_ now: Double) -> Bool {
         // Une scene qui attend la fin d'un glisser s'applique au relachement : pas d'image pour elle.
-        if enMouvement || s != sCible || margesEnRoute || (attente != nil && geste == nil) { return true }
+        if enMouvement || s != sCible || margesEnRoute || glissementPlateaux != nil || (attente != nil && geste == nil) {
+            return true
+        }
         if fk.contains(where: { $0 != 0 && $0 != 1 }) { return true }
         if troisD && t == 1 && rotation && !reduire && focus == nil { return true }
         if zoomEnAttente != 0 || rotationEnAttente != .zero || (geste != nil && bouge) { return true }
@@ -1008,13 +1234,20 @@ final class MoteurPieces {
         vueTouchee = true
     }
 
-    /// Pose le cadre sans image (captures, tests).
+    /// Pose le cadre sans image, et la grille de cette zone visible, tout de suite (captures, tests).
     func poserTaille(_ nouvelle: CGSize) {
         taille = nouvelle
+        zoneGrille = zoneVisible
         margesCadre = marges
         glissement = nil
         cadre = CGRect(x: 0, y: marges.haut, width: nouvelle.width,
                        height: max(1, nouvelle.height - marges.haut - marges.bas))
-        if pret { recadrer() }
+        guard pret, let scene else { return }
+        if grille, let c = colonnesVoulues(scene, enPlace: colonnes) { colonnes = c }
+        glissementPlateaux = nil
+        grilleEnAttente = nil
+        geometrieVisee = geometriePour(scene)
+        geometrie = geometrieVisee
+        recadrer()
     }
 }

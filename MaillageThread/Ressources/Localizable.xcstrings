@@ -1377,6 +1377,38 @@
         }
       }
     },
+    "En grille" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In a grid"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En grille"
+          }
+        }
+      }
+    },
+    "En rangée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In a row"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En rangée"
+          }
+        }
+      }
+    },
     "Enregistrer" : {
       "localizations" : {
         "en" : {
@@ -3697,6 +3729,22 @@
         }
       }
     },
+    "Vue par pièces" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Room view"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vue par pièces"
+          }
+        }
+      }
+    },
     "Zones" : {
       "localizations" : {
         "en" : {
@@ -4925,6 +4973,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Écoute du réseau local…"
+          }
+        }
+      }
+    },
+    "Étages en 2D" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Floors in 2D"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Étages en 2D"
           }
         }
       }

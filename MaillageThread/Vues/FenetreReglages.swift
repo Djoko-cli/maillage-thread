@@ -48,6 +48,7 @@ struct FenetreReglages: View {
     @AppStorage(Notifications.cle(.routeurDisparu)) private var routeurDisparu = CategorieAlerte.routeurDisparu.parDefaut
     @AppStorage(Notifications.cle(.pertes)) private var pertes = CategorieAlerte.pertes.parDefaut
     @AppStorage(Notifications.cle(.informations)) private var informations = CategorieAlerte.informations.parDefaut
+    @AppStorage(FenetrePieces.cleGrille) private var etagesEnGrille = true
     @State private var messageCapture: String?
     @State private var langue = LangueApp.lire()
     @State private var messageLangue: String?
@@ -59,6 +60,7 @@ struct FenetreReglages: View {
                 page {
                     ouvertureALaConnexion
                     choixDeLangue
+                    vueParPieces
                 }
             case .notifications: page { notifications }
             case .maison: page { nomsDeMaison }
@@ -128,6 +130,17 @@ struct FenetreReglages: View {
             }
             if let messageLangue {
                 Text(messageLangue).foregroundStyle(.red)
+            }
+        }
+    }
+
+    /// Onglet General : la vue par pieces (polissage C, section 3.1) ; les etages en 2D, en grille ou en rangee,
+    /// s'appliquent tout de suite a la vue ouverte.
+    private var vueParPieces: some View {
+        Section("Vue par pièces") {
+            Picker("Étages en 2D", selection: $etagesEnGrille) {
+                Text("En grille").tag(true)
+                Text("En rangée").tag(false)
             }
         }
     }
