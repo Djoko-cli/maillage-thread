@@ -139,6 +139,13 @@ final class MoteurPieces {
     /// La geometrie de la scene, avec les rayons de sa disposition et la grille du reglage.
     @ObservationIgnored private(set) var geometrieVisee = GeometrieMaison(rayons: [])
     @ObservationIgnored private(set) var glissementPlateaux: GlissementPlateaux?
+    /// Le glissement d'une disposition a l'autre (polissage D, section 1) : les pieces, les noeuds et les liens qui
+    /// changent, de leur pose affichee a leur nouvelle pose ; nil au repos.
+    @ObservationIgnored private(set) var transition: TransitionScene?
+    /// Les poses de l'image, de ce qui est en transition : la scene projetee les prend, la camera les suit.
+    @ObservationIgnored private(set) var posesAffichees = PosesScene()
+    /// Le dessin des pastilles qui s'effacent, absentes de la scene : celui de la scene d'avant.
+    @ObservationIgnored private var apparencesParties: [String: DessinNoeud.Apparence] = [:]
     /// La politique de la grille 2D (polissage C, section 3 ; dans le coeur depuis le polissage D, section 5) : le
     /// reglage « Etages en 2D », pose par la fenetre, les colonnes choisies, une demande qui attend la vue d'ensemble 2D.
     @ObservationIgnored private(set) var politique = PolitiqueGrille()
@@ -427,6 +434,12 @@ final class MoteurPieces {
         let niveauxChanges = pret && entree?.scene.niveaux != scene.niveaux
         let ensemble = aLaVueDEnsemble && t == 0
         let image = geometrie
+        // La pose affichee de la scene d'avant, et sa pose d'arrivee (polissage D, section 1).
+        let avant = entree.map { PosesScene(scene: $0.scene, cartes: cartes, positions: positions) }
+        let affichee = avant?.recouvertes(par: posesAffichees)
+        let rayonsAvant = entree.map { Dictionary(zip($0.scene.etages.map(\.id), geometrieVisee.rayons).map { ($0, $1) },
+                                                  uniquingKeysWith: { a, _ in a }) }
+        let ancienne = entree
         entree = e
         // Un autre ordre des plateaux : le disque et le nom d'etage survoles, des indices, en designeraient
         // d'autres ; le prochain mouvement du pointeur les reprend.
@@ -436,13 +449,37 @@ final class MoteurPieces {
         }
         cartes = scene.pieces.map { cartesCalculees[$0.id] ?? CartesPieces.carte([]) }
         positions = scene.pieces.map { placesCalculees[$0.id] ?? .zero }
+        // Une nouvelle disposition glisse (polissage D, section 1) : de la pose affichee a la nouvelle, en 0,9 s ; une
+        // disposition qui ne change rien laisse le glissement en cours. Avec « Reduire les animations », tout de suite.
+        let arrivee = PosesScene(scene: scene, cartes: cartes, positions: positions)
+        if pret, let affichee, let avant, arrivee != avant || transition == nil {
+            transition = TransitionScene(de: affichee, vers: arrivee, a: Self.maintenant(), reduire: reduire)
+            if let tr = transition {
+                posesAffichees = tr.poses(a: tr.debut)
+                apparencesParties = (ancienne?.apparences ?? [:]).merging(apparencesParties) { a, _ in a }
+            } else {
+                posesAffichees = PosesScene()
+                apparencesParties = [:]
+            }
+        }
+        // Les rayons changent sans les niveaux : la grille se rechoisit, a la vue d'ensemble 2D, avec l'hysteresis ;
+        // sinon elle attend (polissage D, section 4).
+        let rayonsChanges = pret && !niveauxChanges
+            && Dictionary(zip(scene.etages.map(\.id), rayons(scene)).map { ($0, $1) }, uniquingKeysWith: { a, _ in a }) != rayonsAvant
         if grille && (!pret || (niveauxChanges && ensemble)) {
             politique.choisir(rayons: rayons(scene), zone: zoneVisible, enPlace: false)
         } else if niveauxChanges {
             politique.attendre(PolitiqueGrille.niveaux)
+        } else if rayonsChanges && grille {
+            if ensemble {
+                politique.choisir(rayons: rayons(scene), zone: zoneVisible, enPlace: true)
+            } else {
+                politique.attendre(PolitiqueGrille.redimensionnement)
+            }
         }
-        viser(geometriePour(scene), depuis: anciens, duree2D: niveauxChanges ? CameraScene.dureeCases : 0,
-              duree3D: niveauxChanges ? CameraScene.dureeNiveaux : 0)
+        let glisse = pret ? TransitionScene.duree : 0
+        viser(geometriePour(scene), depuis: anciens, duree2D: niveauxChanges ? CameraScene.dureeCases : glisse,
+              duree3D: niveauxChanges ? CameraScene.dureeNiveaux : glisse)
         // Les parts de l'isolement sont gardees par cle (triage A, n° 9) : un releve recu pendant un fondu ne remet pas
         // la piece a pleine taille. L'etage en vue suit ce que vise la vue (polissage C, section 5) : celui de la piece
         // isolee, qui a pu changer de zone. Une piece isolee qui disparait rend la maison, comme avant les etages :
@@ -697,12 +734,13 @@ final class MoteurPieces {
             d3 = max(d3, gl.duree3D - (now - gl.debut))
         }
         geometrieVisee = g
-        guard pret, d2 > 0 || d3 > 0, scene != nil else {
+        let depart = self.depart(geometrie, anciens: anciens, vers: g)
+        // Rien ne bouge : pas de glissement (une nouvelle disposition aux memes plateaux).
+        guard pret, d2 > 0 || d3 > 0, scene != nil, depart != g || glissementPlateaux != nil else {
             geometrie = g
             glissementPlateaux = nil
             return
         }
-        let depart = self.depart(geometrie, anciens: anciens, vers: g)
         geometrie = depart
         glissementPlateaux = GlissementPlateaux(depart: depart, debut: now, duree2D: d2, duree3D: d3)
         reveiller()
@@ -1069,7 +1107,7 @@ final class MoteurPieces {
         let etat = EtatAnime(t: t, s: s, fk: parts, focus: focus, survol: survol, selection: selection, se: se,
                              ek: scene.etages.map { ek[$0.id] ?? 0 }, survolEtage: survolEtage)
         let p = SceneProjetee(scene: scene, cartes: cartes, positions: positions, geometrie: geometrie, etat: etat,
-                              orbite: orbite, cadre: cadre)
+                              orbite: orbite, cadre: cadre, poses: posesAffichees)
         PlacementNoms.regler(&etiquettes, scene: scene, niveau: p.niveau, survol: survol, selection: selection, focus: focus,
                              isolee: estIsolee, fk: parts, s: s, t: t, se: se, voiles: p.voilesEtages,
                              etageIsole: indiceEtageIsole, survolNomEtage: survolNomEtage)
@@ -1091,7 +1129,7 @@ final class MoteurPieces {
         var g = ctx
         g.opacity = opaciteFondu * opaciteMarges
         RenduCanvas.dessiner(&g, ImagePieces(projetee: p, etiquettes: etiquettes, traits: traits, textes: textes,
-                                             apparences: entree?.apparences ?? [:], routeurs: routeurs,
+                                             apparences: apparences, routeurs: routeurs,
                                              teintesPieces: teintes, selection: selection, echelle: echelle),
                              palette: palette, cache: cache)
         let nouvelle = ligne(p.niveau, ancres: ancres)
@@ -1104,6 +1142,12 @@ final class MoteurPieces {
             }
         }
         if !fige && !doitContinuer(now) { endormir() }
+    }
+
+    /// Le dessin des pastilles : celles de la scene, et celles qui s'effacent, de la scene d'avant.
+    private var apparences: [String: DessinNoeud.Apparence] {
+        let a = entree?.apparences ?? [:]
+        return apparencesParties.isEmpty ? a : a.merging(apparencesParties) { x, _ in x }
     }
 
     /// Marges du cadre a l'instant `now` : les marges visees, ou en route vers elles quand elles changent, pendant
@@ -1228,10 +1272,20 @@ final class MoteurPieces {
             for p in scene.pieces { fk[p.id] = tendre(fk[p.id], vers: p.id == piece ? 1 : 0) }
             for e in scene.etages { ek[e.id] = tendre(ek[e.id], vers: e.id == etageEnVue ? 1 : 0) }
         }
-        if glissementPlateaux != nil {
+        // Les plateaux et les pieces glissent ; la vue suit ce qu'elle regarde.
+        if glissementPlateaux != nil || transition != nil {
             let ancre0 = ancreCamera()
-            geometrie = geometrie(a: now)
-            if geometrie == geometrieVisee { glissementPlateaux = nil }
+            if glissementPlateaux != nil {
+                geometrie = geometrie(a: now)
+                if geometrie == geometrieVisee { glissementPlateaux = nil }
+            }
+            if let tr = transition {
+                if tr.finie(a: now) {
+                    finirTransition()
+                } else {
+                    posesAffichees = tr.poses(a: now)
+                }
+            }
             suivre(depuis: ancre0)
         }
         if let v = vol {
@@ -1277,11 +1331,19 @@ final class MoteurPieces {
         }
     }
 
+    /// Fin du glissement d'une disposition : tout est pose.
+    private func finirTransition() {
+        transition = nil
+        posesAffichees = PosesScene()
+        apparencesParties = [:]
+    }
+
     // MARK: Horloge
 
     func doitContinuer(_ now: Double) -> Bool {
         // Une scene qui attend la fin d'un glisser s'applique au relachement : pas d'image pour elle.
-        if enMouvement || s != sCible || margesEnRoute || glissementPlateaux != nil || (attente != nil && geste == nil) {
+        if enMouvement || s != sCible || margesEnRoute || glissementPlateaux != nil || transition != nil
+            || (attente != nil && geste == nil) {
             return true
         }
         if se != seCible || fk.values.contains(where: { $0 != 0 && $0 != 1 }) || ek.values.contains(where: { $0 != 0 && $0 != 1 }) {
@@ -1450,9 +1512,12 @@ final class MoteurPieces {
                 viseeVol = nil
                 geste = .ecran(orbite)
             } else if !estIsolee, !enMouvement, let scene, let i = projetee?.piece(sous: d), i < scene.pieces.count,
-                      indiceEtageIsole.map({ $0 == scene.pieces[i].etage }) ?? true, let c = centrePiece(i) {
-                // Les pieces de l'etage isole se glissent ; celles des autres etages se cliquent seulement.
-                geste = .piece(scene.pieces[i].id, hauteur: c.y)
+                      indiceEtageIsole.map({ $0 == scene.pieces[i].etage }) ?? true {
+                // Les pieces de l'etage isole se glissent ; celles des autres etages se cliquent seulement. Une piece en
+                // route vers sa place y est posee, avec ses noeuds : elle suit le pointeur depuis sa place.
+                transition?.oublier(pieces: [scene.pieces[i].id], noeuds: Set(scene.pieces[i].noeuds))
+                if let tr = transition { posesAffichees = tr.poses(a: Self.maintenant()) }
+                geste = .piece(scene.pieces[i].id, hauteur: centrePiece(i)?.y ?? 0)
             } else {
                 geste = .fond
             }
@@ -1675,6 +1740,21 @@ final class MoteurPieces {
 
     func poserSurvol(_ id: String?) { survol = id }
 
+    /// Le glissement d'une disposition, pose a `q` (de 0 a 1) de son temps, sans horloge : les poses des pieces et des
+    /// noeuds, et les plateaux qui glissent avec eux.
+    func poserTransition(_ q: Double) {
+        guard let tr = transition else { return }
+        posesAffichees = tr.poses(a: tr.debut + q * TransitionScene.duree)
+        if let gl = glissementPlateaux { geometrie = geometrie(a: gl.debut + q * max(gl.duree2D, gl.duree3D)) }
+    }
+
+    /// Le glissement d'une disposition et celui des plateaux, commences `dt` secondes plus tot (tests) : l'image suivante
+    /// les avance d'autant, par l'horloge.
+    func reculerTransition(de dt: Double) {
+        transition?.debut -= dt
+        glissementPlateaux?.debut -= dt
+    }
+
     func poserAzimut(_ decalage: Double) { orbite.azimut += decalage }
 
     func poserInclinaison(_ i: Double) { orbite.inclinaison = i }
@@ -1682,8 +1762,19 @@ final class MoteurPieces {
     /// Centre du bloc d'une piece, dans le monde ; dans la geometrie de l'image, ou dans `g`.
     func centrePiece(_ i: Int, dans g: GeometrieMaison? = nil) -> SIMD3<Double>? {
         guard let scene, i < scene.pieces.count, i < positions.count else { return nil }
-        let c = (g ?? geometrie).centrePlateau(scene.pieces[i].etage, t)
+        let g = g ?? geometrie
+        // En route (polissage D, section 1) : sa pose affichee.
+        if let pose = posesAffichees.pieces[scene.pieces[i].id],
+           let m = PosesScene.centre(pose.ancres, geometrie: g, plateaux: plateaux(scene), t: t) {
+            return SIMD3(m.x, m.y + 0.02 + GeometrieMaison.hauteurBloc(t) / 2, m.z)
+        }
+        let c = g.centrePlateau(scene.pieces[i].etage, t)
         return SIMD3(c.x + positions[i].x, c.y + 0.02 + GeometrieMaison.hauteurBloc(t) / 2, c.z + positions[i].y)
+    }
+
+    /// L'indice de chaque plateau de la scene, par cle.
+    private func plateaux(_ scene: ScenePieces) -> [String: Int] {
+        Dictionary(scene.etages.indices.map { (scene.etages[$0].id, $0) }, uniquingKeysWith: { a, _ in a })
     }
 
     /// Zoom a l'echelle `k` (points par unite a la cible, divises par 24), vers le point `vers`.
