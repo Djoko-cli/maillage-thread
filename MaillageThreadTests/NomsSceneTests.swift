@@ -126,14 +126,15 @@ struct NomsSceneTests {
     }
 
     /// Repere « ailleurs » d'un parent au meme niveau, dans une autre zone (polissage C, section 5.2) : ↗, avec le
-    /// nom de sa zone. L'entree mise dans un « Jardin » a cote du rez-de-chaussee : le parent du detecteur du
-    /// couloir, l'Apple TV, est au salon. Sans le choix, le jardin est un etage au-dessus : ↓.
+    /// nom de sa zone. L'entree mise dans un « Jardin » a cote du rez-de-chaussee : le parent de la serrure, l'Apple
+    /// TV, est au salon. Sans le choix, le jardin est un etage au-dessus : ↓.
     @Test func repereAuMemeNiveau() throws {
         let (s, r, _) = try Self.demo()
         var maison = try #require(s.noms.maison)
         maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Buanderie"]),
                         ZoneMaison(nom: "Jardin", pieces: ["Entrée"]),
-                        ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis"])]
+                        ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis"]),
+                        ZoneMaison(nom: "Combles", pieces: ["Terrasse", "Abri", "Grenier", "Salle de jeux"])]
         s.noms.maison = maison
         var places = PlacesGardees()
         places.ranger(Rangement(ordre: [], aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée")]),
@@ -141,7 +142,7 @@ struct NomsSceneTests {
         for (p, attendu) in [(places, "↗ Apple TV 4K · Salon, Rez-de-chaussée"), (PlacesGardees(), "↓ Apple TV 4K · Salon, Rez-de-chaussée")] {
             let e = EntreeScene(surveillance: s, reseau: r, places: p)
             let entree = try #require(e.scene.pieces.firstIndex { $0.nom == .maison("Entrée") })
-            let a = try #require(SceneProjetee.reperes(e.scene, focus: entree).first { $0.enfant == "327DF9C45C82BBD6" })
+            let a = try #require(SceneProjetee.reperes(e.scene, focus: entree).first { $0.enfant == "86E7BD1A75F28E6D" })
             #expect(LibellesNoeuds.ailleurs(a, scene: e.scene, libelles: e.libelles) == attendu)
         }
     }
@@ -199,15 +200,28 @@ struct NomsSceneTests {
         #expect(e.cleDisposition != avant.cleDisposition)
     }
 
-    /// La maison de demo : les deux etages et les huit pieces de la maquette, « Sans piece » sur le
-    /// plateau du bas ; les apparences du graphe d'avant.
+    /// La maison de demo (polissage C, section 7) : les quatre plateaux et les douze pieces des maquettes, « Sans piece »
+    /// sur le plateau du bas ; avec son choix de niveau, le jardin au niveau du rez-de-chaussee, hors de la maison ; les
+    /// apparences du graphe d'avant.
     @Test func sceneDeLaDemo() throws {
-        let (_, _, e) = try Self.demo()
-        #expect(e.scene.etages.map(\.nom) == [.zone("Rez-de-chaussée"), .zone("Étage")])
-        let bas = e.scene.etages[0].pieces.map { e.scene.pieces[$0].nom }
-        #expect(bas == [.maison("Buanderie"), .maison("Cuisine"), .maison("Entrée"), .maison("Salon"), .sansPiece])
-        let haut = e.scene.etages[1].pieces.map { e.scene.pieces[$0].nom }
-        #expect(haut == [.maison("Bureau"), .maison("Chambre"), .maison("Chambre d'amis"), .maison("Salle de bain")])
+        let (s, r, e) = try Self.demo()
+        #expect(e.scene.etages.map(\.nom) == [.zone("Rez-de-chaussée"), .zone("Jardin"), .zone("Étage"), .zone("Combles")])
+        func pieces(_ k: Int) -> [ScenePieces.NomPiece] { e.scene.etages[k].pieces.map { e.scene.pieces[$0].nom } }
+        #expect(pieces(0) == [.maison("Buanderie"), .maison("Cuisine"), .maison("Entrée"), .maison("Salon"), .sansPiece])
+        #expect(pieces(1) == [.maison("Abri"), .maison("Terrasse")])
+        #expect(pieces(2) == [.maison("Bureau"), .maison("Chambre"), .maison("Chambre d'amis"), .maison("Salle de bain")])
+        #expect(pieces(3) == [.maison("Grenier"), .maison("Salle de jeux")])
+        let niveaux = EntreeScene(surveillance: s, reseau: r, places: NomsDemo.places()).scene
+        #expect(niveaux.niveaux.liste == [["zone:Rez-de-chaussée", "zone:Jardin"], ["zone:Étage"], ["zone:Combles"]])
+        #expect(niveaux.etages.map(\.dehors) == [false, true, false, false])
+        // Un routeur dans la salle de jeux et sur la terrasse ; des liens entre niveaux et au meme niveau.
+        for (id, piece) in [("02A8C3C5600F136B", "Salle de jeux"), ("0A84D1254BD246AD", "Terrasse")] {
+            let n = try #require(niveaux.noeud(id))
+            #expect(n.routeur && niveaux.pieces[n.piece].nom == .maison(piece))
+        }
+        let niveau = { (id: String) in niveaux.noeud(id).map { niveaux.etages[niveaux.pieces[$0.piece].etage].niveau } }
+        let liens = niveaux.liens.filter { $0.genre == .radio }.map { (niveau($0.de), niveau($0.vers)) }
+        #expect(liens.contains { $0.0 != $0.1 } && liens.contains { $0.0 == $0.1 })
         #expect(!e.scene.sansPiecesMaison)
         #expect(e.domicile == "Maison (démo)")
         #expect(e.apparences["Apple TV 4K"] == DessinNoeud.Apparence(forme: .sphere(halo: 10),

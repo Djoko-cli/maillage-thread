@@ -305,12 +305,13 @@ final class MoteurPieces {
         var saute = false
     }
 
-    /// `troisD` : le mode garde ; `fichierPlaces` : `positions-pieces.json` (nil : ni lu ni ecrit).
-    init(troisD: Bool = false, fichierPlaces: URL? = nil, selection: String? = nil) {
+    /// `troisD` : le mode garde ; `fichierPlaces` : `positions-pieces.json` (nil : ni lu ni ecrit) ; `places` : sans
+    /// fichier, les places de depart, en memoire (la demo et son choix de niveau).
+    init(troisD: Bool = false, fichierPlaces: URL? = nil, selection: String? = nil, places depart: PlacesGardees? = nil) {
         self.troisD = troisD
         t = troisD ? 1 : 0
         self.fichierPlaces = fichierPlaces
-        places = fichierPlaces.map(PlacesGardees.lire) ?? PlacesGardees()
+        places = fichierPlaces.map(PlacesGardees.lire) ?? depart ?? PlacesGardees()
         self.selection = selection
     }
 

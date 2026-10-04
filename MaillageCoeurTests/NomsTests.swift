@@ -13,12 +13,21 @@ struct NomsTests {
         #expect(ResolveurNoms().fabriqueApple(appareils: instantane.appareils) == nil, "sans Maison")
     }
 
-    /// Maison de demo : les zones et les pieces de la maquette de la vue par pieces ; chaque piece a un
-    /// accessoire ; les routeurs de bordure y sont des accessoires du nom de leur annonce, sans noeud Matter.
+    /// Maison de demo : les zones et les pieces de la maquette de la vue par pieces, puis le jardin et les combles de
+    /// la maquette des etages (polissage C) ; chaque piece a un accessoire ; les routeurs de bordure y sont des
+    /// accessoires du nom de leur annonce, sans noeud Matter. Son choix de niveau, en memoire : le jardin a cote du
+    /// rez-de-chaussee, hors de la maison.
     @Test func maisonDeDemo() {
         let m = NomsDemo.maison
         #expect(m.zones == [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Entrée", "Buanderie"]),
-                            ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis"])])
+                            ZoneMaison(nom: "Jardin", pieces: ["Terrasse", "Abri"]),
+                            ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis"]),
+                            ZoneMaison(nom: "Combles", pieces: ["Grenier", "Salle de jeux"])])
+        #expect(m.domicile == NomsDemo.domicile)
+        #expect(NomsDemo.places().rangement(NomsDemo.domicile)
+                == Rangement(ordre: ["zone:Rez-de-chaussée", "zone:Jardin", "zone:Étage", "zone:Combles"],
+                             aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée", dehors: true)]))
+        #expect(NomsDemo.places(dehors: false).rangement(NomsDemo.domicile).aCote["zone:Jardin"]?.dehors == false)
         let pieces = Set(m.accessoires.compactMap(\.piece))
         #expect(pieces == Set((m.zones ?? []).flatMap(\.pieces)))
         let routeurs = Set(instantane.routeurs.map(\.instance))

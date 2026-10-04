@@ -58,12 +58,14 @@ struct FenetrePieces: View {
     static let espacementNiveau: CGFloat = 4
 
     /// `fichierPlaces` : `positions-pieces.json` (`fichierPlaces(demo:sousTests:)`) ; `fichierPieces` :
-    /// `pieces-routeurs.json` (`PiecesChoisies.fichier(demo:sousTests:)`) ; nil : ni lu ni ecrit.
+    /// `pieces-routeurs.json` (`PiecesChoisies.fichier(demo:sousTests:)`) ; nil : ni lu ni ecrit. `places` : sans
+    /// fichier, celles de depart, en memoire (la demo : `NomsDemo.places()`).
     /// `--args -selection <id>` : fiche ouverte au lancement (captures d'ecran).
-    init(fichierPlaces: URL?, fichierPieces: URL? = nil) {
+    init(fichierPlaces: URL?, fichierPieces: URL? = nil, places: PlacesGardees? = nil) {
         _moteur = State(initialValue: MoteurPieces(troisD: UserDefaults.standard.bool(forKey: Self.cleMode),
                                                    fichierPlaces: fichierPlaces,
-                                                   selection: UserDefaults.standard.string(forKey: "selection")))
+                                                   selection: UserDefaults.standard.string(forKey: "selection"),
+                                                   places: places))
         _piecesChoisies = State(initialValue: PiecesChoisies(fichier: fichierPieces))
     }
 

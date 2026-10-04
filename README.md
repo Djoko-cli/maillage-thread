@@ -70,12 +70,14 @@ open "…/Maillage Thread.app" --args -demo -selection 86E7BD1A75F28E6D   # card
 open "…/Maillage Thread.app" --args -demo -captures ~/Library/Containers/fr.djoko.maillage/Data/tmp/captures
 ```
 
-With `-captures <folder>`, the app writes fourteen PNG images of the room view
+With `-captures <folder>`, the app writes twenty PNG images of the room view
 (2D, flight, 3D, zooms, isolated rooms, hover, the leader's card, the folded
-legend), then quits, with no window. Its renderer draws neither the window nor
-glass: the top of the window, the legend and the card are drawn as in their
-mockups, with the window's three buttons in place. The app is sandboxed: the
-folder must be inside its container.
+legend; then the floors: the 2 × 2 grid in a square window, the same window
+in a row, 3D with the garden inside the house, a floor isolated in 2D and in
+3D, a room isolated from its floor), then quits, with no window. Its renderer
+draws neither the window nor glass: the top of the window, the legend and the
+card are drawn as in their mockups, with the window's three buttons in place.
+The app is sandboxed: the folder must be inside its container.
 
 The demo replays the September 27 outage, rebuilt from the real survey of
 September 28 (`docs/releves/2026-09-28/`): nothing is written, nothing is
@@ -134,11 +136,12 @@ catalog match.
 
 ## Room view (2D and 3D)
 
-The window shows the network in the house: a round platform per floor, a glass
-card per room with one line per device, and the real radio links on top. It
-stays dark, like its mockup, even when the Mac is in light mode. Design:
-`docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md` (in
-French).
+The window shows the network in the house: a round platform per floor or zone,
+a glass card per room with one line per device, and the real radio links on
+top. It stays dark, like its mockup, even when the Mac is in light mode.
+Design: `docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md`,
+and for the floors `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-c-design.md`
+(in French).
 
 - **The window** has no title bar: the view goes up to the top, under the
   window's three buttons. An empty, invisible toolbar, as in Maps, lowers
@@ -181,22 +184,38 @@ French).
   the choice is kept under the device's ExtMac, and "No room" clears it. Nodes
   still without a room go to "No room", on the bottom platform. With no Home
   room at all (Passeur Noms never ran), one card per router, with its children.
+- **Levels.** A zone can sit on a floor's level, next to it, inside or outside
+  the house, like a garden next to the ground floor; this choice is kept with
+  the floor order (`positions-pieces.json`, never in the demo), and a zone
+  whose floor disappears becomes a floor again.
 - **2D and 3D** (right capsule; the mode is kept from one launch to the next):
-  2D is a top view, floors side by side; 3D stacks them inside the house
-  sphere, with a slow rotation you can turn off. Switching is a 2.6 s flight.
+  2D is a top view, the platforms in a grid filled from the bottom, or in a
+  row (Settings › General › Room view › Floors in 2D). The grid is chosen on
+  the visible area, the window minus its top and the legend, so that the view
+  is as large as possible: 2 × 2 in a square or tall window, often the row in
+  a wide window with the legend open. 3D stacks the levels inside the house
+  sphere, the zones next to a floor at its height, inside the sphere or around
+  it, with a slow rotation you can turn off. Switching is a 2.6 s flight; the
+  platforms slide to their place when the window is resized, when the legend
+  opens or folds, when the setting changes, and after a level change.
 - **Gestures.** Scroll wheel or pinch: zoom, towards the pointer in 2D. Drag
   the background: pan in 2D, orbit around the house in 3D. Drag a room: move
   it within its floor; its place is kept (`positions-pieces.json` in the app
   folder, never in the demo). Click a room or its name: isolate it (the others
-  fade, a tag points to a parent elsewhere); click outside, Esc or "Home" in
-  the path: come back. Double-click the background: back to the overview, zoom
+  fade, a tag points to a parent elsewhere); click a floor, its name or its
+  disc: isolate it the same way. Click outside or Esc: go up one step, from a
+  room to its floor if you opened it from there, otherwise to the house; the
+  "Home › Floor › Room" path leads there too. In 3D, ⌥ + drag pans the view in
+  the screen plane. Double-click the background: back to the overview, zoom
   and pan undone. Click a device or its name: its card, which slides up from
   the bottom as the view rises; the card of the Thread network's leader shows
   "👑 Thread network leader, elected automatically". The first click works
   even when the window is inactive.
-- **Right clicks**: on a floor name, "Move up one floor" and "Move down one
-  floor"; on the background, "Arrange rooms automatically" (kept places go,
-  not the floor order); on a room (its box or its name) or a device, no menu.
+- **Right clicks**: on a floor's name or disc, the menu of its level, under
+  its name: "Move up one floor" and "Move down one floor" (the whole level),
+  "On the same level as ▸", "Outside the house" and "On its own level"; on the
+  background, "Arrange rooms automatically" (kept places go, not the floor
+  order nor the levels); on a room (its box or its name) or a device, no menu.
 - **Semantic zoom**: from afar, rooms only; then routers; up close, every name
   that fits. The line at the top left, under "Home", gives the level, or how
   many names are hidden for lack of room.

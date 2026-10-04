@@ -6,25 +6,40 @@ import UniformTypeIdentifiers
 
 /// Images de la vue par pieces rendues par l'app elle-meme, en mode demo (`--args -demo -captures
 /// <dossier>`), pour la relecture (spec de la vue par pieces, section 10) : 2D, envol, 3D, zooms,
-/// pieces isolees, survol, la fiche du chef, la legende repliee. Sans fenetre ni capture d'ecran ;
+/// pieces isolees, survol, la fiche du chef, la legende repliee ; puis les etages (polissage C, section 7) :
+/// la grille 2 x 2 dans une fenetre carree, la meme fenetre en rangee, le jardin dans la maison, un etage isole en 2D
+/// et en 3D, une piece isolee depuis son etage. La maison de demo a son jardin au niveau du rez-de-chaussee, hors de
+/// la maison (`NomsDemo.places()`) ; dans la fenetre des images, la legende ouverte ou repliee, sa grille est la
+/// rangee (la zone visible, section 3.3). Sans fenetre ni capture d'ecran ;
 /// l'app quitte ensuite. `ImageRenderer` ne rend ni la fenetre ni le verre : le haut de la fenetre et la
 /// fiche y sont dessines comme dans les maquettes (`capturePieces`), avec les trois boutons de la
 /// fenetre a leur place (`FeuxDeCapture`).
 @MainActor
 enum CapturesPieces {
     /// Contenu d'une fenetre de 1440 x 900, en 2x.
-    static let taille = CGSize(width: 1440, height: 900)
+    nonisolated static let taille = CGSize(width: 1440, height: 900)
+    /// Une fenetre carree, ou la grille de la demo est 2 x 2, la legende ouverte (polissage C, sections 3.3 et 7).
+    nonisolated static let carree = CGSize(width: 1000, height: 1000)
 
-    /// Une image : son nom, l'etat a poser sur le moteur, et la legende repliee.
+    /// Une image : son nom, l'etat a poser sur le moteur, et la legende repliee ; la taille de la fenetre, les etages
+    /// en grille ou en rangee, et les places gardees, dont le choix de niveau du jardin.
     struct Cas {
         var nom: String
         var poser: (MoteurPieces, ScenePieces) -> Void
         var legendeRepliee = false
+        var taille = CapturesPieces.taille
+        var grille = true
+        var places = NomsDemo.places()
     }
 
     /// Indice d'une piece de Maison de la scene (la premiere, sans elle).
     static func piece(_ scene: ScenePieces, _ nom: String) -> Int {
         scene.pieces.firstIndex { $0.nom == .maison(nom) } ?? 0
+    }
+
+    /// Indice d'un etage, une zone de Maison, de la scene (le premier, sans elle).
+    static func etage(_ scene: ScenePieces, _ nom: String) -> Int {
+        scene.etages.firstIndex { $0.nom == .zone(nom) } ?? 0
     }
 
     /// Les images, dans l'ordre : 2D, envol, 3D, zooms, pieces isolees, survol ; puis la fiche du chef de
@@ -50,6 +65,18 @@ enum CapturesPieces {
         Cas(nom: "12-2d-survol") { m, _ in m.poserSurvol("9A28601B74FF90A7") },
         Cas(nom: "13-2d-fiche-du-chef") { m, _ in m.selection = "Apple TV 4K" },
         Cas(nom: "14-2d-legende-repliee", poser: { _, _ in }, legendeRepliee: true),
+        Cas(nom: "15-2d-carree-2x2", poser: { _, _ in }, taille: CapturesPieces.carree),
+        Cas(nom: "16-2d-carree-en-rangee", poser: { _, _ in }, taille: CapturesPieces.carree, grille: false),
+        Cas(nom: "17-3d-jardin-dedans", poser: { m, _ in m.poserBascule(1) }, places: NomsDemo.places(dehors: false)),
+        Cas(nom: "18-2d-etage-isole") { m, sc in m.poserEtageIsole(etage(sc, "Étage")) },
+        Cas(nom: "19-3d-etage-isole") { m, sc in
+            m.poserBascule(1)
+            m.poserEtageIsole(etage(sc, "Étage"))
+        },
+        Cas(nom: "20-3d-terrasse-depuis-le-jardin") { m, sc in
+            m.poserBascule(1)
+            m.poserIsolement(piece(sc, "Terrasse"), depuisEtage: true)
+        },
     ]
 
     /// Ecrit les images dans `dossier` ; rend leurs noms.
@@ -68,18 +95,19 @@ enum CapturesPieces {
         let marges = (FenetrePieces.margeHaut(bas: haut), FenetrePieces.margeBas(pile: nil))
         var noms: [String] = []
         for c in cas {
-            let m = MoteurPieces()
+            let taille = c.taille
+            let m = MoteurPieces(places: c.places)
             m.fige = true
-            m.marges = marges
-            m.poserTaille(taille)
+            m.reglerGrille(c.grille)
             let e = EntreeScene(surveillance: s, reseau: r, places: m.places)
-            m.installerMaintenant(e)
             // La vue d'ensemble se cadre au-dessus de la legende ouverte : la hauteur mesuree de la rangee du bas,
-            // comme dans la fenetre ; repliee, la marge d'avant.
+            // comme dans la fenetre ; repliee, la marge d'avant. La grille se choisit sur cette zone visible, sans la
+            // fiche (polissage C, section 3.3).
             let ouverte = hauteur(LigneDuBas(moteur: MoteurPieces(), entree: e, legendeForcee: false))
-            if !c.legendeRepliee {
-                m.marges.bas = FenetrePieces.margeBas(pile: ouverte)
-            }
+            m.marges = (marges.0, c.legendeRepliee ? marges.1 : FenetrePieces.margeBas(pile: ouverte))
+            m.basGrille = m.marges.bas
+            m.poserTaille(taille)
+            m.installerMaintenant(e)
             m.poserTaille(taille)
             c.poser(m, e.scene)
             // La fiche : la legende reste au-dessus d'elle (repliee si la place manque, comme dans la fenetre), et la

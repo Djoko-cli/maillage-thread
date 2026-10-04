@@ -84,8 +84,10 @@ struct MaillageThreadApp: App {
         // masque, et les garde a chaque mise a jour de la fenetre ; les trois boutons restent, et le titre reste
         // celui de la fenetre (Mission Control, menu Fenetre).
         Window("Maillage Thread", id: "graphe") {
+            // En demo, le jardin au niveau du rez-de-chaussee, hors de la maison (polissage C, section 7), en memoire.
             FenetrePieces(fichierPlaces: FenetrePieces.fichierPlaces(demo: Self.demo, sousTests: Surveillance.sousTests),
-                          fichierPieces: PiecesChoisies.fichier(demo: Self.demo, sousTests: Surveillance.sousTests))
+                          fichierPieces: PiecesChoisies.fichier(demo: Self.demo, sousTests: Surveillance.sousTests),
+                          places: Self.demo ? NomsDemo.places() : nil)
                 .environment(surveillance)
                 .environment(nomsMaison)
                 .environment(sonde)

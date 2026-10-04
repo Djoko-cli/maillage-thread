@@ -1221,7 +1221,8 @@ struct FenetrePiecesTests {
         s.noms.maison = NomsSceneTests.maisonSansRouteurs(s)
         let entree = try #require(Self.entree(s))
         let pieces = try #require(PiecesChoisies.placement("HomePod Palier", dans: s, entree: entree)?.pieces)
-        #expect(pieces == ["Buanderie", "Bureau", "Chambre", "Chambre d'amis", "Cuisine", "Entrée", "Salle de bain", "Salon"])
+        #expect(pieces == ["Abri", "Buanderie", "Bureau", "Chambre", "Chambre d'amis", "Cuisine", "Entrée", "Grenier",
+                           "Salle de bain", "Salle de jeux", "Salon", "Terrasse"])
         #expect(PiecesChoisies.placement("56B1E064401F74EF", dans: s, entree: entree) == nil, "un appareil")
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("routeurs-\(UUID().uuidString)/pieces-routeurs.json")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -1246,8 +1247,8 @@ struct FenetrePiecesTests {
     @Test func placerUnAppareil() throws {
         let (s, _) = try NomsSceneTests.demoAvecInconnus()
         let e = try #require(Self.entree(s))
-        let pieces = ["Buanderie", "Bureau", "Chambre", "Chambre d'amis", "Cuisine", "Entrée", "Salle de bain",
-                      "Salon"]
+        let pieces = ["Abri", "Buanderie", "Bureau", "Chambre", "Chambre d'amis", "Cuisine", "Entrée", "Grenier",
+                      "Salle de bain", "Salle de jeux", "Salon", "Terrasse"]
         let appareil = try #require(PiecesChoisies.placement("rloc:041F", dans: s, entree: e))
         #expect(appareil == PiecesChoisies.Placement(cle: .appareil("E0000000000000FF"), pieces: pieces))
         #expect(PiecesChoisies.placement("1E5019DAC2638F92", dans: s, entree: e)?.cle == .appareil("1E5019DAC2638F92"))
@@ -1335,12 +1336,14 @@ struct FenetrePiecesTests {
     }
 
     /// Les images de la demo : les douze de la vue par pieces, puis la fiche du chef, avec sa pastille, et
-    /// la legende repliee. La fiche est celle d'un noeud couronne de la demo.
+    /// la legende repliee ; puis les six des etages (polissage C, section 7). La fiche est celle d'un noeud couronne de
+    /// la demo.
     @Test func imagesDeDemo() throws {
         #expect(CapturesPieces.cas.map(\.nom) == [
             "01-2d", "02-envol-30", "03-envol-55", "04-envol-80", "05-3d", "06-3d-tournee", "07-2d-zoom-salon",
             "08-2d-mi-distance", "09-2d-loin", "10-3d-isolee-salon", "11-2d-isolee-chambre", "12-2d-survol",
-            "13-2d-fiche-du-chef", "14-2d-legende-repliee",
+            "13-2d-fiche-du-chef", "14-2d-legende-repliee", "15-2d-carree-2x2", "16-2d-carree-en-rangee",
+            "17-3d-jardin-dedans", "18-2d-etage-isole", "19-3d-etage-isole", "20-3d-terrasse-depuis-le-jardin",
         ])
         #expect(CapturesPieces.cas.filter(\.legendeRepliee).map(\.nom) == ["14-2d-legende-repliee"])
         let (_, _, e) = try NomsSceneTests.demo()

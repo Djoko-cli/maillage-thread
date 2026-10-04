@@ -68,7 +68,7 @@ struct MoteurPiecesTests {
     @Test func installerEtDessiner() throws {
         let (m, e) = try Self.moteur()
         #expect(m.pret)
-        #expect(m.positions.count == e.scene.pieces.count && m.geometrie.rayons.count == 2)
+        #expect(m.positions.count == e.scene.pieces.count && m.geometrie.rayons.count == 4)
         #expect(m.etiquettes.count == e.scene.noeuds.count + e.scene.etages.count + e.scene.pieces.count + 1)
         #expect(m.projetee?.blocs.count == e.scene.pieces.count)
         #expect(m.etiquettes.contains { $0.vu })
@@ -330,8 +330,9 @@ struct MoteurPiecesTests {
     @Test func zonesHomonymes() throws {
         let (s, r, _) = try NomsSceneTests.demo()
         var maison = try #require(s.noms.maison)
-        maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine"]),
-                        ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis"]),
+        maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Terrasse", "Abri"]),
+                        ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis",
+                                                          "Grenier", "Salle de jeux"]),
                         ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Entrée", "Buanderie"])]
         s.noms.maison = maison
         let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
@@ -418,29 +419,29 @@ struct MoteurPiecesTests {
         // Disposition finie pendant le geste (`installerMaintenant` : comme un calcul qui se termine).
         let (m, e) = try Self.moteur()
         #expect(autre.scene.pieces.count == e.scene.pieces.count - 1)
-        let sdb = try Self.indice(e, "Salle de bain")
-        #expect(sdb >= autre.scene.pieces.count, "son indice n'existe plus dans la nouvelle scene")
-        let depart = try Self.pointDePiece(m, sdb)
+        let jeux = try Self.indice(e, "Salle de jeux")
+        #expect(jeux >= autre.scene.pieces.count, "son indice n'existe plus dans la nouvelle scene")
+        let depart = try Self.pointDePiece(m, jeux)
         m.glisser(depart, depart: depart)
         m.glisser(CGPoint(x: depart.x + 20, y: depart.y), depart: depart)
         m.installerMaintenant(autre)
         #expect(m.entree == e, "pendant le glisser, la scene attend")
         m.glisser(CGPoint(x: depart.x + 40, y: depart.y), depart: depart)
-        let fin = m.positions[sdb]
+        let fin = m.positions[jeux]
         m.relacher(CGPoint(x: depart.x + 40, y: depart.y))
         #expect(m.entree == autre && m.positions.count == autre.scene.pieces.count)
-        #expect(m.positions[try Self.indice(autre, "Salle de bain")] == fin)
+        #expect(m.positions[try Self.indice(autre, "Salle de jeux")] == fin)
         // Releve recu pendant le geste : sa disposition, lancee au relachement, garde la place du geste.
         let (n, _) = try Self.moteur()
-        let depart2 = try Self.pointDePiece(n, sdb)
+        let depart2 = try Self.pointDePiece(n, jeux)
         n.glisser(depart2, depart: depart2)
         n.glisser(CGPoint(x: depart2.x + 20, y: depart2.y), depart: depart2)
         n.recevoir(autre)
         n.glisser(CGPoint(x: depart2.x + 40, y: depart2.y), depart: depart2)
-        let fin2 = n.positions[sdb]
+        let fin2 = n.positions[jeux]
         n.relacher(CGPoint(x: depart2.x + 40, y: depart2.y))
         while n.entree != autre { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(n.positions[try Self.indice(autre, "Salle de bain")] == fin2)
+        #expect(n.positions[try Self.indice(autre, "Salle de jeux")] == fin2)
     }
 
     /// Clics droits : l'ordre des etages change et se garde ; « Replacer les pieces automatiquement »
@@ -449,9 +450,10 @@ struct MoteurPiecesTests {
         let url = Self.fichier()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let (m, e) = try Self.moteur(fichier: url)
-        #expect(m.peutDeplacerEtage(0, de: 1) && !m.peutDeplacerEtage(1, de: 1) && !m.peutDeplacerEtage(0, de: -1))
+        #expect(m.peutDeplacerEtage(0, de: 1) && !m.peutDeplacerEtage(3, de: 1) && !m.peutDeplacerEtage(0, de: -1))
         m.deplacerEtage(0, de: 1)
-        #expect(m.places.maison(e.domicile).ordreEtages == ["zone:Étage", "zone:Rez-de-chaussée"])
+        let ordre = ["zone:Jardin", "zone:Rez-de-chaussée", "zone:Étage", "zone:Combles"]
+        #expect(m.places.maison(e.domicile).ordreEtages == ordre)
         let depart = try Self.pointDePiece(m, 0)
         m.glisser(depart, depart: depart)
         m.glisser(CGPoint(x: depart.x + 20, y: depart.y), depart: depart)
@@ -459,7 +461,7 @@ struct MoteurPiecesTests {
         #expect(!m.places.maison(e.domicile).etages.isEmpty)
         m.replacerPieces()
         #expect(m.places.maison(e.domicile).etages.isEmpty)
-        #expect(PlacesGardees.lire(url).maison(e.domicile).ordreEtages == ["zone:Étage", "zone:Rez-de-chaussée"])
+        #expect(PlacesGardees.lire(url).maison(e.domicile).ordreEtages == ordre)
     }
 
     /// « Replacer les pieces automatiquement » pendant un geste, un releve en attente de sa fin : c'est
@@ -600,9 +602,10 @@ struct MoteurPiecesTests {
     @Test(.timeLimit(.minutes(1))) func ordreDesEtagesPendantUnCalcul() async throws {
         let (s, r, _) = try NomsSceneTests.demo()
         var maison = try #require(s.noms.maison)
-        maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Entrée", "Buanderie"]),
+        maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Entrée", "Buanderie", "Terrasse",
+                                                                    "Abri"]),
                         ZoneMaison(nom: "Étage", pieces: ["Chambre", "Chambre d'amis"]),
-                        ZoneMaison(nom: "Combles", pieces: ["Bureau", "Salle de bain"])]
+                        ZoneMaison(nom: "Combles", pieces: ["Bureau", "Salle de bain", "Grenier", "Salle de jeux"])]
         s.noms.maison = maison
         let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
         let m = Self.moteur(e)
@@ -699,14 +702,15 @@ struct MoteurPiecesTests {
     }
 
     /// La demo sur quatre plateaux (polissage C) : le rez-de-chaussee, le jardin, l'etage et les combles, chacun sur
-    /// son niveau, sans choix ; `places` : les places gardees, dont les choix de niveau.
+    /// son niveau, sans choix ; `places` : les places gardees, dont les choix de niveau. Les zones prennent toutes les
+    /// pieces de la demo, celles du jardin et des combles de sa maquette comprises.
     static func quatrePlateaux(_ places: PlacesGardees = PlacesGardees()) throws -> EntreeScene {
         let (s, r, _) = try NomsSceneTests.demo()
         var maison = try #require(s.noms.maison)
         maison.zones = [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Buanderie"]),
-                        ZoneMaison(nom: "Jardin", pieces: ["Entrée"]),
+                        ZoneMaison(nom: "Jardin", pieces: ["Entrée", "Terrasse", "Abri"]),
                         ZoneMaison(nom: "Étage", pieces: ["Chambre", "Salle de bain"]),
-                        ZoneMaison(nom: "Combles", pieces: ["Bureau", "Chambre d'amis"])]
+                        ZoneMaison(nom: "Combles", pieces: ["Bureau", "Chambre d'amis", "Grenier", "Salle de jeux"])]
         s.noms.maison = maison
         return EntreeScene(surveillance: s, reseau: r, places: places)
     }
@@ -758,6 +762,52 @@ struct MoteurPiecesTests {
         let g = try #require(m.glissementPlateaux)
         #expect(g.duree2D == CameraScene.dureeCases && m.geometrieVisee.colonnes == 4 && m.colonnes == 4)
         #expect(m.zoneVisible == CGSize(width: 1000, height: 1000 - 84 - 600))
+    }
+
+    /// Les marges de la demo, mesurees comme dans les images : le haut de la fenetre, puis le bas, la legende ouverte ou
+    /// repliee.
+    static let margesDemo = (haut: CGFloat(139), ouverte: CGFloat(249), repliee: CGFloat(30))
+
+    /// La grille de la demo sur la zone visible (polissage C, sections 3.3 et 7), le jardin au niveau du
+    /// rez-de-chaussee, hors de la maison : la rangee dans une fenetre ordinaire (1100 x 760) et dans celle des images
+    /// (1440 x 900), la legende ouverte ou repliee, et dans une vue large (2,4 : 1) ; dans une fenetre carree de 900 pt,
+    /// la rangee, la legende ouverte, 2 x 2 repliee ; dans une de 1000 pt, 2 x 2, la legende ouverte.
+    @Test func grilleDeLaDemo() throws {
+        let (s, r, _) = try NomsSceneTests.demo()
+        let e = EntreeScene(surveillance: s, reseau: r, places: NomsDemo.places())
+        let ordinaire = CGSize(width: 1100, height: 760), carree = CGSize(width: 900, height: 900)
+        let cas: [(CGSize, Bool, Int)] = [(ordinaire, false, 4), (ordinaire, true, 4), (CapturesPieces.taille, false, 4),
+                                         (CapturesPieces.taille, true, 4), (Self.large, false, 4), (carree, false, 4),
+                                         (carree, true, 2), (CGSize(width: 1000, height: 1000), false, 2)]
+        for (taille, repliee, colonnes) in cas {
+            let m = MoteurPieces(places: NomsDemo.places())
+            m.marges = (Self.margesDemo.haut, repliee ? Self.margesDemo.repliee : Self.margesDemo.ouverte)
+            m.poserTaille(taille)
+            m.installerMaintenant(e)
+            #expect(m.colonnes == colonnes && m.geometrie.colonnes == colonnes, "\(taille), repliee : \(repliee)")
+        }
+    }
+
+    /// « ⌂ Maison » evite les noms d'etage (polissage C, section 2, decision de Djoko du 03/10) : il se pose apres eux,
+    /// a l'une de ses places candidates. Le cas de l'image `05-3d` : la demo en 3D, son jardin hors de la maison, dans
+    /// la fenetre des images, la legende ouverte ; la maison y est petite, et son nom tombait sur celui des combles.
+    @Test func maisonEviteLesEtages() throws {
+        let (s, r, _) = try NomsSceneTests.demo()
+        let e = EntreeScene(surveillance: s, reseau: r, places: NomsDemo.places())
+        let m = MoteurPieces(places: NomsDemo.places())
+        m.fige = true
+        m.marges = (Self.margesDemo.haut, Self.margesDemo.ouverte)
+        m.poserTaille(CapturesPieces.taille)
+        m.installerMaintenant(e)
+        m.poserTaille(CapturesPieces.taille)
+        m.poserBascule(1)
+        for _ in 0..<2 { Self.dessiner(m, taille: CapturesPieces.taille) }
+        let maison = try #require(m.etiquettes.first { $0.genre == .maison && $0.vu })
+        let etages = m.etiquettes.filter { if case .etage = $0.genre { $0.vu } else { false } }
+        #expect(etages.count == e.scene.etages.count)
+        for l in etages {
+            #expect(!PlacementNoms.chevauche(l.rect, maison.rect), "\(l.genre) et la maison")
+        }
     }
 
     /// Redimensionnement a la vue d'ensemble (polissage C, section 3.5) : la grille se recalcule, les plateaux glissent

@@ -90,9 +90,11 @@ public struct Etiquette: Sendable {
             fixe = true
             prio = 1
         case .maison:
+            // Apres les noms d'etage, qu'il evite (polissage C, section 2, decision de Djoko du 03/10) : dans une petite
+            // vue 3D, il tombait sur le nom de l'etage du haut.
             candidats = Candidats.maison
             fixe = false
-            prio = 0
+            prio = 2
         case .ailleurs:
             candidats = Candidats.appareil
             fixe = false

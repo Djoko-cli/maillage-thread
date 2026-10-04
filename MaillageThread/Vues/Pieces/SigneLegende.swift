@@ -26,8 +26,10 @@ extension LegendePieces {
 
     /// Hauteur d'une ligne de la legende : un texte de 11 pt, mesure.
     static let hauteurLigne: CGFloat = 14
-    /// Zoom de la vue d'ensemble de reference (k : points par unite a la cible, divises par 24) : celui de la demo a
-    /// la taille des images (1440 x 900, en 2D), mesure (`LegendePiecesTests.tailleDesSignes`).
+    /// Zoom de la vue d'ensemble de reference (k : points par unite a la cible, divises par 24) : celui de la demo de
+    /// deux etages de B a la taille des images (1440 x 900, en 2D), mesure le 02/10. La demo de C, a quatre plateaux, a
+    /// une vue d'ensemble plus petite (0,47, en rangee) : la legende garde cette taille, decision de Djoko du 03/10
+    /// (`LegendePiecesTests.tailleDesSignes`).
     static let zoomVueDEnsemble: CGFloat = 0.53
     /// Un noeud de la legende a la taille d'un noeud de la scene a ce zoom : son rayon naturel (`ScenePieces` : 13 pt
     /// pour un routeur de bordure, 7 pour un appareil) fois le zoom, et au plus la demi-hauteur d'une ligne de la

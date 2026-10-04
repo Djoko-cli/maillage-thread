@@ -303,13 +303,14 @@ struct LegendePiecesTests {
             RenduCanvas.dessinerNom(&ctx, couronne, dans: cadre, palette: p)
             DessinNoeud.dessinerPastille(&ctx, "12 %", gauche: .zero, palette: p)
         }
-        // Chaque signe, et la fonction du rendu avec les parametres de la scene : les memes pixels, a un ou deux pixels
-        // pres (le flou d'un halo peut varier d'un rendu a l'autre) ; un autre dessin en changerait des milliers.
+        // Chaque signe, et la fonction du rendu avec les parametres de la scene : les memes pixels, a quelques pixels
+        // pres (le flou d'un halo ou d'une ombre varie d'un rendu a l'autre, selon ce que le processus a rendu avant :
+        // jusqu'a 14 octets apres la scene de la demo de C) ; un autre dessin en changerait des milliers.
         func memes(_ signe: LegendePieces.Signe, _ reference: @escaping (inout GraphicsContext) -> Void) throws {
             let legende = try image { SigneLegende.dessiner(signe, &$0, dans: cadre, echelle: 2, palette: p) }
             let scene = try image(reference)
             let ecarts = zip(legende, scene).filter { $0 != $1 }.count
-            #expect(ecarts <= 8, "\(signe) : \(ecarts) octets differents")
+            #expect(ecarts <= 32, "\(signe) : \(ecarts) octets differents")
         }
         try memes(.noeud(routeur, rayon: 7)) {
             DessinNoeud.dessiner(&$0, centre: CGPoint(x: 27, y: 17), rayon: 7, apparence: routeur, palette: p)
@@ -331,9 +332,11 @@ struct LegendePiecesTests {
         }
     }
 
-    /// Les noeuds de la legende ont la taille d'un noeud de la scene dans la vue d'ensemble (verification du 02/10) :
-    /// celle de la demo a la taille des images (1440 x 900, en 2D), ramenee au plus a la hauteur d'une ligne de la
-    /// legende. Un routeur de bordure y mesure 13 fois le zoom, un appareil 7 fois.
+    /// Les noeuds de la legende ont la taille d'un noeud de la scene dans la vue d'ensemble (verification du 02/10),
+    /// ramenee au plus a la hauteur d'une ligne de la legende : un routeur de bordure y mesure 13 fois le zoom, un
+    /// appareil 7 fois (3 pt au moins dans la scene), au zoom de la vue d'ensemble de reference, celle de la demo de
+    /// deux etages de B (0,53 a la taille des images, 1440 x 900, en 2D). La demo de C, a quatre plateaux, a une vue
+    /// d'ensemble plus petite (0,47, en rangee) : la legende garde la taille de B (decision de Djoko du 03/10).
     @Test func tailleDesSignes() throws {
         let (_, _, e) = try NomsSceneTests.demo()
         #expect(LegendePieces.hauteurLigne == NSHostingView(rootView: Text(verbatim: "joignable").font(.system(size: 11))).fittingSize.height)
@@ -347,15 +350,17 @@ struct LegendePiecesTests {
         m.poserTaille(taille)
         MoteurPiecesTests.dessiner(m, taille: taille)
         let p = try #require(m.projetee)
-        #expect(abs(p.echelle - LegendePieces.zoomVueDEnsemble) < 0.02, "le zoom de la vue d'ensemble : \(p.echelle)")
+        #expect(p.echelle < LegendePieces.zoomVueDEnsemble, "la vue d'ensemble de la demo de C : \(p.echelle)")
         func rayon(_ garder: (ScenePieces.Noeud) -> Bool) throws -> Double {
             let id = try #require(e.scene.noeuds.first(where: garder)?.id)
             return try #require(p.disques.first { $0.noeud == id }).rayon
         }
         let routeur = try rayon { $0.genre == .routeur && $0.bordure }
         let appareil = try rayon { $0.genre == .appareil && !$0.routeur }
-        #expect(abs(LegendePieces.rayonRouteur - min(routeur, LegendePieces.hauteurLigne / 2)) < 0.15, "\(routeur)")
-        #expect(abs(LegendePieces.rayonAppareil - min(appareil, LegendePieces.hauteurLigne / 2)) < 0.15, "\(appareil)")
+        #expect(abs(routeur - max(3, 13 * p.echelle)) < 0.15 && abs(appareil - max(3, 7 * p.echelle)) < 0.15,
+                "\(routeur) et \(appareil) au zoom \(p.echelle)")
+        #expect(abs(LegendePieces.rayonRouteur - min(13 * LegendePieces.zoomVueDEnsemble, LegendePieces.hauteurLigne / 2)) < 0.01)
+        #expect(abs(LegendePieces.rayonAppareil - min(7 * LegendePieces.zoomVueDEnsemble, LegendePieces.hauteurLigne / 2)) < 0.01)
         #expect(2 * LegendePieces.rayonRouteur <= LegendePieces.hauteurLigne && LegendePieces.rayonAppareil >= 3)
     }
 

@@ -3,8 +3,10 @@ import Foundation
 /// Noms de Maison du mode demo : inventes (ce ne sont pas les vrais noms de la
 /// maison), attaches aux vrais noeuds du releve du 28/09 sur la fabrique
 /// 30FC8F95E0E1A385, qui joue la fabrique d'Apple. Les pieces et les etages sont
-/// ceux de la maquette de la vue par pieces ; les routeurs de bordure y sont des
-/// accessoires du nom de leur annonce, qui leur donnent leur piece.
+/// ceux de la maquette de la vue par pieces, et, depuis le polissage C, les combles et
+/// le jardin de sa maquette, remplis avec des noeuds de la demo (aucune donnee radio
+/// nouvelle) ; les routeurs de bordure y sont des accessoires du nom de leur annonce,
+/// qui leur donnent leur piece.
 public enum NomsDemo {
     public static let fabrique = "30FC8F95E0E1A385"
 
@@ -12,22 +14,26 @@ public enum NomsDemo {
     static let table: [String: (String, String, String, String, String)] = [
         "56B1E064401F74EF": ("Halo", "Bureau", "Djoko-CLI", "Pont ScreenBar Halo", "Ampoule"),
         "86E7BD1A75F28E6D": ("Nuki Ultra", "Entrée", "Nuki", "Smart Lock Ultra", "Serrure"),
-        "02A8C3C5600F136B": ("Eve Door", "Entrée", "Eve Systems", "Eve Door & Window", "Capteur"),
-        "3A5DFAFCAB581AAF": ("Eve Motion", "Buanderie", "Eve Systems", "Eve Motion", "Capteur"),
-        "C656F369B620027F": ("Thermo salon", "Salon", "Eve Systems", "Eve Thermo", "Thermostat"),
+        // Polissage C : un routeur dans la salle de jeux, et un enfant de lui.
+        "02A8C3C5600F136B": ("Prise console", "Salle de jeux", "Eve Systems", "Eve Energy", "Prise"),
+        "3A5DFAFCAB581AAF": ("Eve Motion", "Grenier", "Eve Systems", "Eve Motion", "Capteur"),
+        // Polissage C : les deux enfants du routeur de la terrasse, a l'abri.
+        "C656F369B620027F": ("Capteur porte de l'abri", "Abri", "Aqara", "Door and Window Sensor P2", "Capteur"),
         "D661EE20B3E97C66": ("Thermo chambre", "Chambre", "Eve Systems", "Eve Thermo", "Thermostat"),
-        "DAEF22ACB58F651C": ("Météo terrasse", "Salon", "Eve Systems", "Eve Weather", "Capteur"),
-        "0A84D1254BD246AD": ("Capteur salon", "Salon", "Aqara", "Climate Sensor W100", "Capteur"),
-        "327DF9C45C82BBD6": ("Détecteur couloir", "Entrée", "Aqara", "Motion Sensor P2", "Capteur"),
+        "DAEF22ACB58F651C": ("Météo terrasse", "Terrasse", "Eve Systems", "Eve Weather", "Capteur"),
+        // Polissage C : un routeur sur la terrasse.
+        "0A84D1254BD246AD": ("Prise terrasse", "Terrasse", "Eve Systems", "Eve Energy Outdoor", "Prise"),
+        // Polissage C : le grenier.
+        "327DF9C45C82BBD6": ("Capteur d'humidité", "Grenier", "Aqara", "Climate Sensor W100", "Capteur"),
         "462DA5B311AFFCC7": ("Fenêtre chambre", "Chambre", "Aqara", "Door and Window Sensor P2", "Capteur"),
         "7A3D0C7512F8E0A5": ("Capteur salle de bain", "Salle de bain", "Aqara", "Climate Sensor W100", "Capteur"),
         "8A7E6F2665F737C6": ("Porte-fenêtre", "Salon", "Aqara", "Door and Window Sensor P2", "Capteur"),
-        "9A5C1F9FDFAB242D": ("Fumée cuisine", "Cuisine", "Aqara", "Smoke Detector", "Capteur"),
-        "AA3D322B8A4500C4": ("Bouton chevet", "Chambre", "Aqara", "Wireless Mini Switch", "Interrupteur"),
-        "C663573E49A1EC90": ("Capteur bureau", "Bureau", "Aqara", "Climate Sensor W100", "Capteur"),
+        "9A5C1F9FDFAB242D": ("Détecteur de chaleur allée", "Grenier", "Aqara", "Smoke Detector", "Capteur"),
+        "AA3D322B8A4500C4": ("Lampe arcade", "Salle de jeux", "Nanoleaf", "Essentials A19", "Ampoule"),
+        "C663573E49A1EC90": ("Capteur de lucarne", "Salle de jeux", "Aqara", "Door and Window Sensor P2", "Capteur"),
         "46F77B36E071F8D0": ("Prise bureau", "Bureau", "Eve Systems", "Eve Energy", "Prise"),
         "7AF0B6D5006CF95F": ("Prise salon", "Salon", "Eve Systems", "Eve Energy", "Prise"),
-        "82570DF21CF3784B": ("Volet chambre", "Chambre", "Nanoleaf", "Blinds", "Store"),
+        "82570DF21CF3784B": ("Vanne d'arrosage", "Abri", "Eve Systems", "Eve Aqua", "Vanne"),
         "724CC16B32D8F820": ("Volet salon", "Salon", "Nanoleaf", "Blinds", "Store"),
         "9A28601B74FF90A7": ("Lampe chambre d'amis", "Chambre d'amis", "Nanoleaf", "Essentials A19", "Ampoule"),
         "D6ECDD6EF9C0CB0C": ("Interrupteur cuisine", "Cuisine", "Eve Systems", "Eve Light Switch", "Interrupteur"),
@@ -61,10 +67,12 @@ public enum NomsDemo {
         "Aqara HubM100 #DFEB": ("Buanderie", "Aqara", "Hub M100"),
     ]
 
-    /// Zones de la maquette, dans l'ordre de Maison : le rez-de-chaussee, puis l'etage.
+    /// Zones des maquettes, dans l'ordre de Maison : le rez-de-chaussee, le jardin, l'etage, les combles.
     public static let zones = [
         ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Entrée", "Buanderie"]),
+        ZoneMaison(nom: "Jardin", pieces: ["Terrasse", "Abri"]),
         ZoneMaison(nom: "Étage", pieces: ["Chambre", "Bureau", "Salle de bain", "Chambre d'amis"]),
+        ZoneMaison(nom: "Combles", pieces: ["Grenier", "Salle de jeux"]),
     ]
 
     public static let maison: NomsMaison = {
@@ -80,7 +88,19 @@ public enum NomsDemo {
             accessoires.append(AccessoireMaison(nom: nom, piece: r.0, fabricant: r.1, modele: r.2, categorie: "Concentrateur"))
         }
         // Dans le temps de la demo (la fin de la panne rejouee) : « releve il y a 5 minutes ».
-        return NomsMaison(date: ScenarioPanne.fin.addingTimeInterval(-5 * 60), domicile: "Maison (démo)",
+        return NomsMaison(date: ScenarioPanne.fin.addingTimeInterval(-5 * 60), domicile: domicile,
                           accessoires: accessoires.sorted { $0.nom < $1.nom }, zones: zones)
     }()
+
+    public static let domicile = "Maison (démo)"
+
+    /// Le choix de niveau de la demo (polissage C, section 7) : le jardin au niveau du rez-de-chaussee, hors de la
+    /// maison ; en memoire, la demo n'ecrivant rien. `dehors` : faux, dans la maison.
+    public static func places(dehors: Bool = true) -> PlacesGardees {
+        var p = PlacesGardees()
+        p.ranger(Rangement(ordre: zones.map { "zone:" + $0.nom },
+                           aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Rez-de-chaussée", dehors: dehors)]),
+                 domicile: domicile)
+        return p
+    }
 }

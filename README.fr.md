@@ -71,13 +71,15 @@ open "…/Maillage Thread.app" --args -demo -selection 86E7BD1A75F28E6D   # fich
 open "…/Maillage Thread.app" --args -demo -captures ~/Library/Containers/fr.djoko.maillage/Data/tmp/captures
 ```
 
-Avec `-captures <dossier>`, l'app écrit quatorze images PNG de la vue par
+Avec `-captures <dossier>`, l'app écrit vingt images PNG de la vue par
 pièces (2D, envol, 3D, zooms, pièces isolées, survol, la fiche du chef, la
-légende repliée), puis quitte, sans fenêtre. Son rendu ne dessine ni la
-fenêtre ni le verre : le haut de la fenêtre, la légende et la fiche y sont
-dessinés comme dans leurs maquettes, avec les trois boutons de la fenêtre à
-leur place. L'app vit dans un bac à sable : le dossier doit être dans son
-conteneur.
+légende repliée ; puis les étages : la grille 2 × 2 dans une fenêtre carrée,
+la même fenêtre en rangée, la 3D avec le jardin dans la maison, un étage isolé
+en 2D et en 3D, une pièce isolée depuis son étage), puis quitte, sans fenêtre.
+Son rendu ne dessine ni la fenêtre ni le verre : le haut de la fenêtre, la
+légende et la fiche y sont dessinés comme dans leurs maquettes, avec les trois
+boutons de la fenêtre à leur place. L'app vit dans un bac à sable : le dossier
+doit être dans son conteneur.
 
 La démo rejoue la panne du 27 septembre, reconstituée à partir du relevé réel
 du 28 septembre (`docs/releves/2026-09-28/`) : rien n'est écrit, rien n'est
@@ -136,11 +138,12 @@ catalogue vont ensemble.
 
 ## Vue par pièces (2D et 3D)
 
-La fenêtre montre le réseau dans la maison : un plateau rond par étage, une
-carte de verre par pièce avec une ligne par appareil, et les vrais liens radio
-par-dessus. Elle reste sombre, comme sa maquette, même quand le Mac est en
-clair. Conception :
-`docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md`.
+La fenêtre montre le réseau dans la maison : un plateau rond par étage ou par
+zone, une carte de verre par pièce avec une ligne par appareil, et les vrais
+liens radio par-dessus. Elle reste sombre, comme sa maquette, même quand le Mac
+est en clair. Conception :
+`docs/superpowers/specs/2026-09-30-maillage-thread-vue-pieces-design.md`, et
+pour les étages `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-c-design.md`.
 
 - **La fenêtre** n'a pas de barre de titre : la vue monte jusqu'en haut, sous
   les trois boutons de la fenêtre. Une barre d'outils vide et invisible, comme
@@ -187,25 +190,42 @@ clair. Conception :
   et « Sans pièce » l'efface. Les nœuds qui restent sans pièce vont dans
   « Sans pièce », sur le plateau du bas. Sans aucune pièce de Maison (Passeur
   Noms jamais passé), une carte par routeur, avec ses enfants.
+- **Niveaux.** Une zone peut se mettre au niveau d'un étage, à côté de lui,
+  dans la maison ou hors d'elle, comme un jardin à côté du rez-de-chaussée ;
+  ce choix est gardé avec l'ordre des étages (`positions-pieces.json`, jamais
+  en démo), et une zone dont l'étage disparaît redevient un étage.
 - **2D et 3D** (capsule de droite ; le mode est gardé d'un lancement à
-  l'autre) : la 2D est une vue de dessus, les étages côte à côte ; la 3D les
-  empile dans la sphère de la maison, avec une rotation lente qu'on peut
-  couper. La bascule est un envol de 2,6 s.
+  l'autre) : la 2D est une vue de dessus, les plateaux en grille, remplie
+  depuis le bas, ou en rangée (Réglages › Général › Vue par pièces › Étages en
+  2D). La grille se choisit sur la zone visible, la fenêtre moins son haut et
+  la légende, pour que la vue soit la plus grande possible : 2 × 2 dans une
+  fenêtre carrée ou haute, souvent la rangée dans une fenêtre large, la légende
+  ouverte. La 3D empile les niveaux dans la sphère de la maison, les zones à
+  côté d'un étage à sa hauteur, dans la sphère ou autour d'elle, avec une
+  rotation lente qu'on peut couper. La bascule est un envol de 2,6 s ; les
+  plateaux glissent vers leur place quand la fenêtre change de taille, quand la
+  légende s'ouvre ou se replie, quand le réglage change, et après un changement
+  de niveau.
 - **Gestes.** Molette ou pincement : zoom, vers le curseur en 2D. Glisser le
   fond : déplacer la vue en 2D, tourner autour de la maison en 3D. Glisser une
   pièce : la déplacer dans son étage ; sa place est gardée
   (`positions-pieces.json` dans le dossier de l'app, jamais en démo). Clic sur
   une pièce ou sur son nom : l'isoler (les autres s'estompent, un repère
-  montre un parent situé ailleurs) ; clic à côté, Échap ou « Maison » dans le
-  fil : revenir. Double-clic sur le fond : retour à la vue d'ensemble, zoom et
-  déplacement annulés. Clic sur un appareil ou sur son nom : sa fiche, qui
+  montre un parent situé ailleurs) ; clic sur un étage, son nom ou son
+  disque : l'isoler de même. Clic à côté ou Échap : remonter d'un cran, d'une
+  pièce à son étage si on l'a ouverte depuis lui, sinon à la maison ; le fil
+  « Maison › Étage › Pièce » y mène aussi. En 3D, ⌥ + glisser déplace la vue
+  dans le plan de l'écran. Double-clic sur le fond : retour à la vue
+  d'ensemble, zoom et déplacement annulés. Clic sur un appareil ou sur son nom : sa fiche, qui
   glisse depuis le bas pendant que la vue se relève ; la fiche du chef du
   réseau Thread porte « 👑 Chef du réseau Thread, élu automatiquement ». Le
   premier clic agit aussi quand la fenêtre est inactive.
-- **Clics droits** : sur un nom d'étage, « Monter d'un étage » et « Descendre
-  d'un étage » ; sur le fond, « Replacer les pièces automatiquement » (les
-  places gardées partent, pas l'ordre des étages) ; sur une pièce (sa boîte ou
-  son nom) ou un appareil, aucun menu.
+- **Clics droits** : sur le nom ou le disque d'un étage, le menu de son
+  niveau, sous son nom : « Monter d'un étage » et « Descendre d'un étage »
+  (tout le niveau), « Au même niveau que ▸ », « Hors de la maison » et « Sur
+  son propre niveau » ; sur le fond, « Replacer les pièces automatiquement »
+  (les places gardées partent, pas l'ordre des étages ni les niveaux) ; sur
+  une pièce (sa boîte ou son nom) ou un appareil, aucun menu.
 - **Zoom sémantique** : de loin, les pièces seules ; puis les routeurs ; de
   près, tous les noms qui tiennent. La ligne en haut à gauche, sous
   « Maison », dit le niveau, ou combien de noms sont masqués faute de place.
