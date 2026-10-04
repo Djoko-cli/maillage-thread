@@ -336,7 +336,8 @@ struct LegendePiecesTests {
     /// ramenee au plus a la hauteur d'une ligne de la legende : un routeur de bordure y mesure 13 fois le zoom, un
     /// appareil 7 fois (3 pt au moins dans la scene), au zoom de la vue d'ensemble de reference, celle de la demo de
     /// deux etages de B (0,53 a la taille des images, 1440 x 900, en 2D). La demo de C, a quatre plateaux, a une vue
-    /// d'ensemble plus petite (0,47, en rangee) : la legende garde la taille de B (decision de Djoko du 03/10).
+    /// d'ensemble plus petite (0,47, en rangee) : la legende garde la taille de B (decision de Djoko du 03/10), que
+    /// le test epingle par des valeurs fixes, non par la formule de `SigneLegende`.
     @Test func tailleDesSignes() throws {
         let (_, _, e) = try NomsSceneTests.demo()
         #expect(LegendePieces.hauteurLigne == NSHostingView(rootView: Text(verbatim: "joignable").font(.system(size: 11))).fittingSize.height)
@@ -359,8 +360,12 @@ struct LegendePiecesTests {
         let appareil = try rayon { $0.genre == .appareil && !$0.routeur }
         #expect(abs(routeur - max(3, 13 * p.echelle)) < 0.15 && abs(appareil - max(3, 7 * p.echelle)) < 0.15,
                 "\(routeur) et \(appareil) au zoom \(p.echelle)")
-        #expect(abs(LegendePieces.rayonRouteur - min(13 * LegendePieces.zoomVueDEnsemble, LegendePieces.hauteurLigne / 2)) < 0.01)
-        #expect(abs(LegendePieces.rayonAppareil - min(7 * LegendePieces.zoomVueDEnsemble, LegendePieces.hauteurLigne / 2)) < 0.01)
+        // La legende garde la taille de B (decision de Djoko du 03/10) : des valeurs fixes, non la formule de
+        // `SigneLegende`, qui ne pourrait pas echouer. Le zoom de B, 0,53 : un rayon naturel de 13 et de 7 pt y donne
+        // 6,89 et 3,71 pt.
+        #expect(LegendePieces.zoomVueDEnsemble == 0.53)
+        #expect(abs(LegendePieces.rayonRouteur - 6.89) < 0.005 && abs(LegendePieces.rayonAppareil - 3.71) < 0.005,
+                "\(LegendePieces.rayonRouteur) et \(LegendePieces.rayonAppareil)")
         #expect(2 * LegendePieces.rayonRouteur <= LegendePieces.hauteurLigne && LegendePieces.rayonAppareil >= 3)
     }
 

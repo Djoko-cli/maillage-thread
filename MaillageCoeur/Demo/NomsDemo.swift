@@ -14,10 +14,11 @@ public enum NomsDemo {
     static let table: [String: (String, String, String, String, String)] = [
         "56B1E064401F74EF": ("Halo", "Bureau", "Djoko-CLI", "Pont ScreenBar Halo", "Ampoule"),
         "86E7BD1A75F28E6D": ("Nuki Ultra", "Entrée", "Nuki", "Smart Lock Ultra", "Serrure"),
-        // Polissage C : un routeur dans la salle de jeux, et un enfant de lui.
+        // Polissage C : un routeur dans la salle de jeux ; ses enfants : la lampe arcade (meme piece) et le capteur de
+        // la salle de bain (un autre niveau).
         "02A8C3C5600F136B": ("Prise console", "Salle de jeux", "Eve Systems", "Eve Energy", "Prise"),
         "3A5DFAFCAB581AAF": ("Eve Motion", "Grenier", "Eve Systems", "Eve Motion", "Capteur"),
-        // Polissage C : les deux enfants du routeur de la terrasse, a l'abri.
+        // Polissage C : a l'abri, avec la vanne d'arrosage, les deux enfants du routeur de la terrasse.
         "C656F369B620027F": ("Capteur porte de l'abri", "Abri", "Aqara", "Door and Window Sensor P2", "Capteur"),
         "D661EE20B3E97C66": ("Thermo chambre", "Chambre", "Eve Systems", "Eve Thermo", "Thermostat"),
         "DAEF22ACB58F651C": ("Météo terrasse", "Terrasse", "Eve Systems", "Eve Weather", "Capteur"),
@@ -42,18 +43,17 @@ public enum NomsDemo {
         "C4E7AE91A29B": ("Prise Wi-Fi bureau", "Bureau", "Meross", "Smart Plug", "Prise"),
     ]
 
-    /// Hote -> batterie : une faible par son niveau, une par l'alerte seule, un volet en charge.
+    /// Hote -> batterie : une faible par son niveau, une par l'alerte seule, deux non rechargeables (le detecteur de
+    /// fumee, la vanne) ; ni prise, ni ampoule, ni concentrateur n'en a, sur secteur (`NomsTests.maisonDeDemo`).
     static let batteries: [String: BatterieMaison] = [
         "86E7BD1A75F28E6D": BatterieMaison(niveau: 52, charge: .horsCharge, alerte: false),
-        "02A8C3C5600F136B": BatterieMaison(niveau: 88, alerte: false),
         "3A5DFAFCAB581AAF": BatterieMaison(niveau: 12, alerte: false),
         "C656F369B620027F": BatterieMaison(niveau: 45, alerte: false),
         "D661EE20B3E97C66": BatterieMaison(niveau: 40, alerte: false),
         "327DF9C45C82BBD6": BatterieMaison(niveau: 100, alerte: false),
         "462DA5B311AFFCC7": BatterieMaison(alerte: true),
         "9A5C1F9FDFAB242D": BatterieMaison(niveau: 97, charge: .nonRechargeable, alerte: false),
-        "AA3D322B8A4500C4": BatterieMaison(alerte: false),
-        "82570DF21CF3784B": BatterieMaison(niveau: 81, charge: .enCharge, alerte: false),
+        "82570DF21CF3784B": BatterieMaison(niveau: 81, charge: .nonRechargeable, alerte: false),
         "724CC16B32D8F820": BatterieMaison(niveau: 64, charge: .horsCharge, alerte: false),
     ]
 

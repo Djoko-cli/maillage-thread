@@ -16,7 +16,8 @@ struct NomsTests {
     /// Maison de demo : les zones et les pieces de la maquette de la vue par pieces, puis le jardin et les combles de
     /// la maquette des etages (polissage C) ; chaque piece a un accessoire ; les routeurs de bordure y sont des
     /// accessoires du nom de leur annonce, sans noeud Matter. Son choix de niveau, en memoire : le jardin a cote du
-    /// rez-de-chaussee, hors de la maison.
+    /// rez-de-chaussee, hors de la maison. Sur secteur (prise, ampoule, concentrateur, pont), pas de pile : les noms
+    /// de la demo ont change avec ses pieces, sa table des piles doit les suivre.
     @Test func maisonDeDemo() {
         let m = NomsDemo.maison
         #expect(m.zones == [ZoneMaison(nom: "Rez-de-chaussée", pieces: ["Salon", "Cuisine", "Entrée", "Buanderie"]),
@@ -30,6 +31,10 @@ struct NomsTests {
         #expect(NomsDemo.places(dehors: false).rangement(NomsDemo.domicile).aCote["zone:Jardin"]?.dehors == false)
         let pieces = Set(m.accessoires.compactMap(\.piece))
         #expect(pieces == Set((m.zones ?? []).flatMap(\.pieces)))
+        // Sur secteur : ni prise, ni ampoule, ni concentrateur, ni pont ne porte une pile.
+        let surSecteur: Set<String> = ["Prise", "Ampoule", "Concentrateur", "Pont"]
+        let piles = m.accessoires.filter { surSecteur.contains($0.categorie ?? "") && $0.batterie != nil }.map(\.nom)
+        #expect(piles.isEmpty, "sur secteur, sans pile : \(piles)")
         let routeurs = Set(instantane.routeurs.map(\.instance))
         let accessoiresRouteurs = m.accessoires.filter { routeurs.contains($0.nom) }
         #expect(accessoiresRouteurs.count == 6 && accessoiresRouteurs.allSatisfy { $0.noeudMatter == nil && $0.piece != nil })

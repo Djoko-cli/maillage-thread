@@ -46,7 +46,8 @@ struct PlacementNomsTests {
     }
 
     /// Priorites : a place egale, la plus forte (le plus petit nombre) passe d'abord et prend la
-    /// premiere place ; un nom d'etage (fixe) se pose meme sur un obstacle.
+    /// premiere place ; un nom d'etage (fixe) se pose meme sur un obstacle ; « ⌂ Maison » a la priorite de l'appareil
+    /// survole ou choisi, vient apres lui dans l'ordre des noms, et l'evite (polissage C, section 2).
     @Test func prioritesRespectees() {
         var faible = Self.noeud("faible")
         faible.prio = 7
@@ -59,6 +60,16 @@ struct PlacementNomsTests {
         #expect(e[1].place == 0, "le plus fort a droite")
         #expect(e[0].vu && e[0].place == 1, "le plus faible a gauche")
         #expect(e[2].vu && e[2].place == 0 && PlacementNoms.chevauche(e[2].rect, b), "etage : pose sur la pastille")
+        // « ⌂ Maison » apres l'appareil vise : meme priorite (2, celle que `regler` donne a l'appareil survole ou
+        // choisi), la maison venant derniere (`MoteurPieces.construireEtiquettes`). Les deux au meme point : posee la
+        // premiere, la maison (au-dessous) prendrait sa place a l'appareil (a droite).
+        var vise = Self.noeud("vise")
+        vise.prio = 2
+        var noms = [vise, Etiquette(.maison, taille: CGSize(width: 55, height: 16))]
+        let ancre = CGRect(x: 400, y: 300, width: 0, height: 0)
+        _ = PlacementNoms.placer(&noms, ancres: [ancre, ancre], obstacles: [], cadre: Self.cadre, dt: 0)
+        #expect(noms[0].vu && noms[0].place == 0, "l'appareil vise garde sa premiere place")
+        #expect(noms[1].vu && !PlacementNoms.chevauche(noms[0].rect, noms[1].rect), "la maison l'evite")
     }
 
     /// Stabilite : un nom deplace par un obstacle garde sa nouvelle place tant qu'elle est libre ; il
