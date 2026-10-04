@@ -150,7 +150,12 @@ public struct SceneProjetee: Sendable {
         return normales.map { (2.2 + 1.6 * max(0, simd_dot($0, l))) / .pi }
     }()
 
-    static let aretesBloc = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
+    /// Opacite d'un lien entre routeurs, et d'un lien enfant ou de rattachement, au repos et sans voile.
+    static let opaciteLienRadio = 0.95
+    static let opaciteLienEnfant = 0.28
+
+    static let aretesBloc = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4),
+                             (0, 4), (1, 5), (2, 6), (3, 7)]
 
     public var plateaux: [Plateau] = []
     /// Voile de chaque plateau dans l'isolement d'un etage : 1 net, 0,15 estompe (polissage C, section 5.1).
@@ -174,7 +179,7 @@ public struct SceneProjetee: Sendable {
     public var ancresAilleurs: [String: CGRect] = [:]
     /// Reperes « ailleurs » de la piece isolee.
     public var ailleurs: [Ailleurs] = []
-    /// Centre de chaque noeud dans le monde.
+    /// Centre de chaque noeud dans le monde, y compris ceux qui s'effacent (`fantomes`).
     public var centresNoeuds: [String: SIMD3<Double>] = [:]
     /// Noeuds qui s'effacent pendant une transition (polissage D, section 1) : absents de la scene, ils ne se cliquent
     /// pas et n'ont pas de nom.
@@ -188,8 +193,9 @@ public struct SceneProjetee: Sendable {
     /// de `scene`, et `g.rayons` ses etages, memes effectifs et meme ordre. `poses` : ce qui est en transition
     /// (polissage D, section 1), par cle, qui l'emporte sur la disposition ; ce qui s'efface, absent de la scene, s'y
     /// dessine aussi, a sa derniere place, sans se cliquer.
-    public init(scene: ScenePieces, cartes: [CartesPieces.Carte], positions: [SIMD2<Double>], geometrie g: GeometrieMaison,
-                etat: EtatAnime, orbite: Orbite, cadre: CGRect, poses: PosesScene = PosesScene()) {
+    public init(scene: ScenePieces, cartes: [CartesPieces.Carte], positions: [SIMD2<Double>],
+                geometrie g: GeometrieMaison, etat: EtatAnime, orbite: Orbite, cadre: CGRect,
+                poses: PosesScene = PosesScene()) {
         let proj = ProjectionScene(orbite, cadre: cadre)
         let t = etat.t
         let h = GeometrieMaison.hauteurBloc(t)
@@ -199,7 +205,9 @@ public struct SceneProjetee: Sendable {
         // leurs liens, descendent a 15 % ; la sphere s'efface. Une piece isolee laisse les disques a 15 % : on peut
         // cliquer dessus.
         let ee = CameraScene.rampe(etat.se)
-        let ve = g.rayons.indices.map { e in 1 - 0.85 * ee * (1 - CameraScene.rampe(e < etat.ek.count ? etat.ek[e] : 0)) }
+        let ve = g.rayons.indices.map { e in
+            1 - 0.85 * ee * (1 - CameraScene.rampe(e < etat.ek.count ? etat.ek[e] : 0))
+        }
         voilesEtages = ve
 
         // Plateaux : polygone exact de 128 points ; degrade par l'affine du disque.
@@ -225,7 +233,8 @@ public struct SceneProjetee: Sendable {
 
         // Pieces : blocs de verre ; noeuds a mi-hauteur de leur bloc en 3D. Une piece ou un noeud en transition prend
         // sa pose ; une piece qui s'efface, absente de la scene, se dessine a sa derniere place (`piece` -1).
-        let plateaux = Dictionary(scene.etages.indices.map { (scene.etages[$0].id, $0) }, uniquingKeysWith: { a, _ in a })
+        let plateaux = Dictionary(scene.etages.indices.map { (scene.etages[$0].id, $0) },
+                                  uniquingKeysWith: { a, _ in a })
         var voiles = [Double](repeating: 1, count: scene.pieces.count)
         var mondes: [String: SIMD3<Double>] = [:]
         var centres = [SIMD3<Double>](repeating: .zero, count: scene.pieces.count)
@@ -253,15 +262,24 @@ public struct SceneProjetee: Sendable {
             if oeil.z > z1 { face([3, 7, 6, 2], 4) }
             if oeil.z < z0 { face([0, 1, 5, 4], 5) }
             let aretes = Self.aretesBloc.compactMap { proj.segment(k[$0.0], k[$0.1]) }
-            blocs.append(Bloc(piece: i, faces: faces, aretes: aretes, teinte: teinte, opaciteVerre: vis * (0.13 + 0.05 * t),
-                              opaciteAretes: vis * 0.75, profondeur: proj.profondeur(centre)))
+            blocs.append(Bloc(piece: i, faces: faces, aretes: aretes, teinte: teinte,
+                              opaciteVerre: vis * (0.13 + 0.05 * t), opaciteAretes: vis * 0.75,
+                              profondeur: proj.profondeur(centre)))
             let coins = k.compactMap { proj.ecran($0) }
             if i >= 0, coins.count == 8 { ancresPieces[i] = Self.boite(coins) }
         }
-        // Un noeud en transition : le centre de sa piece, puis sa place dans la carte, a l'echelle `f`.
+        // La place d'un noeud dans le monde, la seule : le centre de sa piece, puis sa place dans la carte, a l'echelle
+        // `f`, a mi-hauteur du bloc en 3D. Celle d'un noeud en transition, et celle d'un noeud pose.
+        func place(_ centre: SIMD3<Double>, _ decalage: SIMD2<Double>, f: Double) -> SIMD3<Double> {
+            SIMD3(centre.x + decalage.x * f, centre.y + 0.1 + 0.5 * h * t, centre.z + decalage.y * f)
+        }
         func monde(_ n: PosesScene.Noeud, f: Double) -> SIMD3<Double>? {
             guard let c = PosesScene.centre(n.ancres, geometrie: g, plateaux: plateaux, t: t) else { return nil }
-            return SIMD3(c.x + n.decalage.x * f, c.y + 0.1 + 0.5 * h * t, c.z + n.decalage.y * f)
+            return place(c, n.decalage, f: f)
+        }
+        // Le rayon d'une pastille, le seul : il suit l'echelle, sans depasser 1,1 fois le rayon naturel, 3 px au moins.
+        func rayonPastille(_ naturel: Double, en p: SIMD3<Double>) -> Double {
+            min(naturel * 1.1, max(3, naturel * proj.pxParUnite(p) / CartesPieces.px))
         }
         for (i, pc) in scene.pieces.enumerated() where i < cartes.count && i < positions.count {
             let c = g.centrePlateau(pc.etage, t)
@@ -272,7 +290,8 @@ public struct SceneProjetee: Sendable {
             var vis = min(1 - 0.85 * (1 - voile), pc.etage < ve.count ? ve[pc.etage] : 1)
             var m = SIMD3(c.x + positions[i].x, c.y, c.z + positions[i].y)
             var taille = SIMD2(cartes[i].largeur, cartes[i].profondeur)
-            if let pose = poses.pieces[pc.id], let centre = PosesScene.centre(pose.ancres, geometrie: g, plateaux: plateaux, t: t) {
+            if let pose = poses.pieces[pc.id],
+               let centre = PosesScene.centre(pose.ancres, geometrie: g, plateaux: plateaux, t: t) {
                 m = centre
                 taille = pose.taille
                 vis *= pose.opacite
@@ -286,8 +305,7 @@ public struct SceneProjetee: Sendable {
                         continue
                     }
                 }
-                let l = cartes[i].places[r]
-                mondes[id] = SIMD3(m.x + l.x * f, m.y + 0.1 + 0.5 * h * t, m.z + l.y * f)
+                mondes[id] = place(m, cartes[i].places[r], f: f)
             }
         }
         let presentes = Set(scene.pieces.map(\.id))
@@ -309,19 +327,20 @@ public struct SceneProjetee: Sendable {
             return e < ve.count ? ve[e] : 1
         }
 
-        // Pastilles : le rayon suit l'echelle, sans depasser 1,1 fois le rayon naturel, 3 px au moins.
+        // Pastilles.
         for n in scene.noeuds {
             guard let p = mondes[n.id], let e = proj.ecran(p) else { continue }
-            let r = min(n.rayon * 1.1, max(3, n.rayon * proj.pxParUnite(p) / CartesPieces.px))
+            let r = rayonPastille(n.rayon, en: p)
             disques.append(Disque(noeud: n.id, centre: e, rayon: r,
-                                  opacite: min(1 - 0.8 * (1 - voiles[n.piece]), voileEtage(n.piece)) * (apparitions[n.id] ?? 1),
+                                  opacite: min(1 - 0.8 * (1 - voiles[n.piece]), voileEtage(n.piece))
+                                      * (apparitions[n.id] ?? 1),
                                   profondeur: proj.profondeur(p)))
             ancresNoeuds[n.id] = CGRect(x: Double(e.x) - r, y: Double(e.y) - r, width: 2 * r, height: 2 * r)
         }
         for id in fantomes.sorted() {
             guard let n = poses.noeuds[id], let p = mondes[id], let e = proj.ecran(p) else { continue }
-            let r = min(n.rayon * 1.1, max(3, n.rayon * proj.pxParUnite(p) / CartesPieces.px))
-            disques.append(Disque(noeud: id, centre: e, rayon: r, opacite: n.opacite, profondeur: proj.profondeur(p)))
+            disques.append(Disque(noeud: id, centre: e, rayon: rayonPastille(n.rayon, en: p), opacite: n.opacite,
+                                  profondeur: proj.profondeur(p)))
         }
         disques.sort { $0.profondeur > $1.profondeur }
 
@@ -335,11 +354,12 @@ public struct SceneProjetee: Sendable {
             let eclaire = [l.de, l.vers].contains { $0 == etat.survol || $0 == etat.selection }
             let fondu = poses.liens[PosesScene.cle(l)]?.opacite ?? 1
             if l.genre == .radio {
-                liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite, opacite: 0.95 * poids * fondu,
-                                          eclaire: eclaire))
+                liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite,
+                                          opacite: Self.opaciteLienRadio * poids * fondu, eclaire: eclaire))
             } else {
                 liensEnfants.append(Lien(a: pa, b: pb, genre: l.genre, qualite: l.qualite,
-                                         opacite: (eclaire ? 0.85 : 0.28 * poids) * fondu, eclaire: eclaire))
+                                         opacite: (eclaire ? 0.85 : Self.opaciteLienEnfant * poids) * fondu,
+                                         eclaire: eclaire))
             }
         }
         // Les liens qui s'effacent, absents de la scene, entre les places affichees de leurs bouts.
@@ -347,11 +367,11 @@ public struct SceneProjetee: Sendable {
         for (k, l) in poses.liens.sorted(by: { $0.key < $1.key }) where !presents.contains(k) {
             guard let a = mondes[l.de], let b = mondes[l.vers], let (pa, pb) = proj.segment(a, b) else { continue }
             if l.genre == .radio {
-                liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite, opacite: 0.95 * l.opacite,
-                                          eclaire: false))
+                liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite,
+                                          opacite: Self.opaciteLienRadio * l.opacite, eclaire: false))
             } else {
-                liensEnfants.append(Lien(a: pa, b: pb, genre: l.genre, qualite: l.qualite, opacite: 0.28 * l.opacite,
-                                         eclaire: false))
+                liensEnfants.append(Lien(a: pa, b: pb, genre: l.genre, qualite: l.qualite,
+                                         opacite: Self.opaciteLienEnfant * l.opacite, eclaire: false))
             }
         }
 
@@ -367,7 +387,9 @@ public struct SceneProjetee: Sendable {
                 var m = centres[i] + dir * (max(cartes[i].largeur, cartes[i].profondeur) * echelles[i] / 2 + 2.6)
                 m.y = e.y
                 if let (pa, pb) = proj.segment(e, m) { fils.append(Fil(a: pa, b: pb, opacite: 0.8 * fe)) }
-                if let q = proj.ecran(m) { ancresAilleurs[a.enfant] = CGRect(x: q.x - 3, y: q.y - 3, width: 6, height: 6) }
+                if let q = proj.ecran(m) {
+                    ancresAilleurs[a.enfant] = CGRect(x: q.x - 3, y: q.y - 3, width: 6, height: 6)
+                }
             }
         }
 

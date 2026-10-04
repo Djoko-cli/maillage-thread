@@ -76,9 +76,11 @@ public struct PosesScene: Hashable, Sendable {
     /// Les poses de `scene` posee : chaque piece a sa place (`positions`), de la taille de sa carte (`cartes`) ; chaque
     /// noeud a sa place dans la carte de sa piece ; chaque lien. Tout est opaque.
     public init(scene: ScenePieces, cartes: [CartesPieces.Carte], positions: [SIMD2<Double>]) {
-        for (i, p) in scene.pieces.enumerated() where i < cartes.count && i < positions.count && p.etage < scene.etages.count {
+        for (i, p) in scene.pieces.enumerated()
+        where i < cartes.count && i < positions.count && p.etage < scene.etages.count {
             let ancres = [Ancre(plateau: scene.etages[p.etage].id, place: positions[i])]
-            pieces[p.id] = Piece(ancres: ancres, taille: SIMD2(cartes[i].largeur, cartes[i].profondeur), teinte: p.teinte)
+            pieces[p.id] = Piece(ancres: ancres, taille: SIMD2(cartes[i].largeur, cartes[i].profondeur),
+                                 teinte: p.teinte)
             for (r, id) in p.noeuds.enumerated() where r < cartes[i].places.count {
                 noeuds[id] = Noeud(ancres: ancres, decalage: cartes[i].places[r], rayon: scene.noeud(id)?.rayon ?? 7)
             }
@@ -100,6 +102,15 @@ public struct PosesScene: Hashable, Sendable {
         return r
     }
 
+    /// Ces poses sans ce qui est deja efface (opacite 0) et absent de `arrivee` : cela n'existe plus.
+    fileprivate func sansEfface(devant arrivee: PosesScene) -> PosesScene {
+        var r = self
+        r.pieces = pieces.filter { $0.value.opacite > 0 || arrivee.pieces[$0.key] != nil }
+        r.noeuds = noeuds.filter { $0.value.opacite > 0 || arrivee.noeuds[$0.key] != nil }
+        r.liens = liens.filter { $0.value.opacite > 0 || arrivee.liens[$0.key] != nil }
+        return r
+    }
+
     /// Le centre dans le monde d'ancres, sur la geometrie `g` a l'avancement `t` de la bascule : la moyenne, ponderee,
     /// du centre de chaque plateau plus sa place ; `plateaux` : l'indice de chaque plateau de `g`, par cle. Une ancre
     /// sur un plateau absent ne compte pas ; nil sans aucune.
@@ -116,8 +127,8 @@ public struct PosesScene: Hashable, Sendable {
     }
 
     /// Le melange de deux poses d'ancres, a `e` du chemin de `a` a `b` : chaque ancre garde son plateau, son poids
-    /// multiplie par 1 - e (celles de `a`) ou par e (celles de `b`) ; deux ancres du meme plateau n'en font qu'une, a la
-    /// moyenne ponderee de leurs places. A 0, les ancres de `a` ; a 1, celles de `b`, exactement.
+    /// multiplie par 1 - e (celles de `a`) ou par e (celles de `b`) ; deux ancres du meme plateau n'en font qu'une, a
+    /// la moyenne ponderee de leurs places. A 0, les ancres de `a` ; a 1, celles de `b`, exactement.
     public static func melange(_ a: [Ancre], _ b: [Ancre], _ e: Double) -> [Ancre] {
         if e <= 0 { return a }
         if e >= 1 { return b }
@@ -143,8 +154,8 @@ public struct PosesScene: Hashable, Sendable {
 /// affichee (`PosesScene.recouvertes`), sans saut. Avec « Reduire les animations », pas de transition : tout est
 /// immediat, sans fondu.
 public struct TransitionScene: Hashable, Sendable {
-    /// Le glissement, celui des changements de niveau de C (`CameraScene.dureeNiveaux`).
-    public static let duree = 0.9
+    /// Le glissement, celui des changements de niveau de C.
+    public static let duree = CameraScene.dureeNiveaux
     /// Les apparitions et les disparitions.
     public static let dureeFondu = 0.3
 
@@ -157,6 +168,8 @@ public struct TransitionScene: Hashable, Sendable {
     /// `debut` ; nil si rien ne change, ou avec « Reduire les animations ».
     public init?(de affichee: PosesScene, vers arrivee: PosesScene, a debut: Double, reduire: Bool = false) {
         guard !reduire else { return nil }
+        // Ce qui est deja efface (opacite 0) et absent de l'arrivee n'existe plus : ce n'est pas un changement.
+        let affichee = affichee.sansEfface(devant: arrivee)
         var d = PosesScene(), a = PosesScene()
         for k in Set(affichee.pieces.keys).union(arrivee.pieces.keys) where affichee.pieces[k] != arrivee.pieces[k] {
             d.pieces[k] = affichee.pieces[k]
@@ -166,7 +179,8 @@ public struct TransitionScene: Hashable, Sendable {
             d.noeuds[k] = affichee.noeuds[k]
             a.noeuds[k] = arrivee.noeuds[k]
         }
-        for k in Set(affichee.liens.keys).union(arrivee.liens.keys) where affichee.liens[k]?.opacite != arrivee.liens[k]?.opacite {
+        for k in Set(affichee.liens.keys).union(arrivee.liens.keys)
+        where affichee.liens[k]?.opacite != arrivee.liens[k]?.opacite {
             d.liens[k] = affichee.liens[k]
             a.liens[k] = arrivee.liens[k]
         }
@@ -179,8 +193,8 @@ public struct TransitionScene: Hashable, Sendable {
     /// Le glissement est fini a l'instant `now`.
     public func finie(a now: Double) -> Bool { now - debut >= Self.duree }
 
-    /// Les poses de ce qui change, a l'instant `now` : en route en cubique entree-sortie ; l'opacite en route, en 0,3 s,
-    /// vers 1 pour ce qui arrive, vers 0 pour ce qui part, depuis celle du depart (une transition interrompue).
+    /// Les poses de ce qui change, a l'instant `now` : en route en cubique entree-sortie ; l'opacite en route, en
+    /// 0,3 s, vers 1 pour ce qui arrive, vers 0 pour ce qui part, depuis celle du depart (une transition interrompue).
     public func poses(a now: Double) -> PosesScene {
         let e = CameraScene.rampe(min(1, max(0, (now - debut) / Self.duree)))
         let f = min(1, max(0, (now - debut) / Self.dureeFondu))
