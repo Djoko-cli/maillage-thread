@@ -25,14 +25,6 @@ enum CibleMenu: Equatable {
     case fond
 }
 
-/// Ce que montre la vue (polissage C, section 5) : la maison, un etage isole (sa cle), ou une piece isolee (sa cle),
-/// avec sa provenance : l'etage isole d'ou on l'a ouverte, nil depuis la maison.
-enum Isolement: Equatable {
-    case maison
-    case etage(String)
-    case piece(String, provenance: String?)
-}
-
 /// Ce que vise un clic, du plus fort au plus faible (polissage C, section 5.1) : un appareil, une piece (son bloc ou
 /// son nom), le nom d'un etage, son disque (en 3D, le plus proche sur le rayon), le fond.
 enum CibleClic: Equatable {
@@ -147,12 +139,12 @@ final class MoteurPieces {
     /// La geometrie de la scene, avec les rayons de sa disposition et la grille du reglage.
     @ObservationIgnored private(set) var geometrieVisee = GeometrieMaison(rayons: [])
     @ObservationIgnored private(set) var glissementPlateaux: GlissementPlateaux?
-    /// Etages en 2D (polissage C, section 3.1) : en grille, ou en rangee ; le reglage, pose par la fenetre.
-    @ObservationIgnored private(set) var grille = true
-    /// Colonnes de la grille ; nil : pas encore de vraie taille, la rangee en attendant.
-    @ObservationIgnored private(set) var colonnes: Int?
-    /// Une grille voulue attend la vue d'ensemble 2D (zoomee, isolee, en 3D, en mouvement).
-    @ObservationIgnored private(set) var grilleEnAttente: GrilleEnAttente?
+    /// La politique de la grille 2D (polissage C, section 3 ; dans le coeur depuis le polissage D, section 5) : le
+    /// reglage « Etages en 2D », pose par la fenetre, les colonnes choisies, une demande qui attend la vue d'ensemble 2D.
+    @ObservationIgnored private(set) var politique = PolitiqueGrille()
+    var grille: Bool { politique.grille }
+    var colonnes: Int? { politique.colonnes }
+    var grilleEnAttente: GrilleEnAttente? { politique.attente }
     /// Ce que vise le vol en cours : son arrivee suit les plateaux qui glissent.
     @ObservationIgnored private var viseeVol: Visee?
     @ObservationIgnored private(set) var orbite = Orbite(cible: .zero, distance: 1000, azimut: 0, inclinaison: 0.0001, champ: 2)
@@ -291,10 +283,7 @@ final class MoteurPieces {
 
     /// Une grille voulue qui attend la vue d'ensemble 2D : la duree du glissement de ses plateaux, et si elle garde
     /// la grille en place tant qu'elle est a moins de 5 % du choix (un redimensionnement).
-    struct GrilleEnAttente: Equatable {
-        var duree: Double
-        var hysteresis: Bool
-    }
+    typealias GrilleEnAttente = PolitiqueGrille.Demande
 
     /// Ce que vise un vol : la vue d'ensemble, une piece ou un etage (sa cle).
     private enum Visee {
@@ -448,9 +437,9 @@ final class MoteurPieces {
         cartes = scene.pieces.map { cartesCalculees[$0.id] ?? CartesPieces.carte([]) }
         positions = scene.pieces.map { placesCalculees[$0.id] ?? .zero }
         if grille && (!pret || (niveauxChanges && ensemble)) {
-            colonnes = colonnesVoulues(scene, enPlace: nil) ?? colonnes
+            politique.choisir(rayons: rayons(scene), zone: zoneVisible, enPlace: false)
         } else if niveauxChanges {
-            attendreGrille(CameraScene.dureeCases, hysteresis: false)
+            politique.attendre(PolitiqueGrille.niveaux)
         }
         viser(geometriePour(scene), depuis: anciens, duree2D: niveauxChanges ? CameraScene.dureeCases : 0,
               duree3D: niveauxChanges ? CameraScene.dureeNiveaux : 0)
@@ -462,6 +451,7 @@ final class MoteurPieces {
         let clesPieces = Set(scene.pieces.map(\.id)), clesEtages = Set(scene.etages.map(\.id))
         fk = fk.filter { clesPieces.contains($0.key) }
         ek = ek.filter { clesEtages.contains($0.key) }
+        isolement = isolement.recaler(pieces: clesPieces, etages: clesEtages)
         if let cle = ancienFocus, let i = scene.pieces.firstIndex(where: { $0.id == cle }) {
             focus = i
             if case .piece = isolement, scene.etages.count > 1 { viserEtage(scene.etages[scene.pieces[i].etage].id) }
@@ -470,7 +460,6 @@ final class MoteurPieces {
             s = 0
             sCible = 0
             isolee = nil
-            if case .piece = isolement { isolement = .maison }
             if isolement == .maison {
                 etageEnVue = nil
                 se = 0
@@ -482,7 +471,6 @@ final class MoteurPieces {
             etageEnVue = nil
             se = 0
             seCible = 0
-            if case .etage = isolement { isolement = .maison }
         }
         textes = Self.textes(e, focus: focus)
         routeurs = Set(scene.noeuds.filter { $0.rang <= 2 }.map(\.id))
@@ -678,17 +666,16 @@ final class MoteurPieces {
     /// La geometrie d'une scene : les rayons de sa disposition, ses niveaux, et la grille du reglage (en grille, les
     /// colonnes choisies, la rangee en attendant une vraie taille).
     private func geometriePour(_ scene: ScenePieces) -> GeometrieMaison {
-        GeometrieMaison(rayons: scene.etages.map { rayonsCalcules[$0.id] ?? DispositionPieces.marge },
+        GeometrieMaison(rayons: rayons(scene),
                         plateaux: scene.etages.map {
                             GeometrieMaison.Plateau(niveau: $0.niveau, principal: $0.principal, dehors: $0.dehors)
                         },
-                        colonnes: grille ? colonnes : nil)
+                        colonnes: politique.colonnesDeLaGeometrie)
     }
 
-    /// Les colonnes de la grille pour la zone visible de la vue (polissage C, section 3.3) ; nil sans vraie taille.
-    private func colonnesVoulues(_ scene: ScenePieces, enPlace: Int?) -> Int? {
-        GeometrieMaison.colonnes(rayons: scene.etages.map { rayonsCalcules[$0.id] ?? DispositionPieces.marge },
-                                 taille: zoneVisible, enPlace: enPlace)
+    /// Les rayons des plateaux d'une scene, ceux de sa disposition : la grille se choisit sur eux.
+    private func rayons(_ scene: ScenePieces) -> [Double] {
+        scene.etages.map { rayonsCalcules[$0.id] ?? DispositionPieces.marge }
     }
 
     /// La zone visible ou se choisit la grille (polissage C, section 3.3, decision de Djoko du 03/10) : la vue moins la
@@ -752,10 +739,8 @@ final class MoteurPieces {
     /// la vue ouverte, les plateaux glissant comme l'envol, en 2,6 s ; zoomee, isolee ou en 3D, au retour a la vue
     /// d'ensemble 2D.
     func reglerGrille(_ g: Bool) {
-        guard g != grille else { return }
-        grille = g
-        guard pret else { return }
-        demanderGrille(CameraScene.dureeEnvol, hysteresis: false)
+        guard politique.regler(g), pret else { return }
+        demanderGrille(PolitiqueGrille.reglage)
     }
 
     /// La zone visible a change (polissage C, sections 3.3 et 3.5) : la taille de la vue, ou ses marges sans la fiche
@@ -764,36 +749,35 @@ final class MoteurPieces {
     /// glissent en 0,4 s ; zoomee, isolee ou en 3D, elle attend.
     private func zoneChangee() {
         guard pret, let scene else { return }
-        if grille && colonnes == nil {
-            guard let c = colonnesVoulues(scene, enPlace: nil) else { return }
-            colonnes = c
+        if politique.sansVraieTaille {
+            guard politique.premiereZone(rayons: rayons(scene), zone: zoneVisible) else { return }
             viser(geometriePour(scene), depuis: scene.etages.map(\.id), duree2D: 0, duree3D: 0)
             vueTouchee = false
             orbite = CameraScene.canonique(geometrie, aspect: aspect, u: t)
             return
         }
-        demanderGrille(CameraScene.dureeCases, hysteresis: true)
+        demanderGrille(PolitiqueGrille.redimensionnement)
     }
 
-    /// Une grille voulue : posee a la vue d'ensemble 2D, ses plateaux glissant en `duree` ; sinon elle attend.
-    private func demanderGrille(_ duree: Double, hysteresis: Bool) {
-        if t == 0 && aLaVueDEnsemble {
-            poserGrille(duree, hysteresis: hysteresis)
-        } else {
-            attendreGrille(duree, hysteresis: hysteresis)
+    /// Une grille voulue : posee a la vue d'ensemble 2D, ses plateaux glissant en `d.duree` ; sinon elle attend
+    /// (`PolitiqueGrille`).
+    private func demanderGrille(_ d: PolitiqueGrille.Demande) {
+        guard let scene else { return }
+        if politique.demander(d, ensemble2D: t == 0 && aLaVueDEnsemble, rayons: rayons(scene), zone: zoneVisible) {
+            poserGeometrie(d.duree)
         }
     }
 
-    /// Une grille attend la vue d'ensemble 2D : la plus longue duree, et l'hysteresis si toutes la demandent.
-    private func attendreGrille(_ duree: Double, hysteresis: Bool) {
-        let a = grilleEnAttente
-        grilleEnAttente = GrilleEnAttente(duree: max(a?.duree ?? 0, duree), hysteresis: (a?.hysteresis ?? true) && hysteresis)
+    /// Pose la grille d'une demande, puis sa geometrie.
+    private func poserGrille(_ d: PolitiqueGrille.Demande) {
+        guard let scene else { return }
+        politique.poser(d, rayons: rayons(scene), zone: zoneVisible)
+        poserGeometrie(d.duree)
     }
 
-    private func poserGrille(_ duree: Double, hysteresis: Bool) {
-        grilleEnAttente = nil
+    /// La geometrie de la grille choisie : ses plateaux glissent en `duree`.
+    private func poserGeometrie(_ duree: Double) {
         guard let scene else { return }
-        if grille, let c = colonnesVoulues(scene, enPlace: hysteresis ? colonnes : nil) { colonnes = c }
         let g = geometriePour(scene)
         guard g != geometrieVisee else { return }
         viser(g, depuis: scene.etages.map(\.id), duree2D: duree, duree3D: 0)
@@ -873,8 +857,8 @@ final class MoteurPieces {
         majFil()
         // Vers la 2D, l'envol se pose sur la grille de la zone visible du moment (polissage C, section 3.5).
         if !v, let scene {
-            grilleEnAttente = nil
-            if grille, let c = colonnesVoulues(scene, enPlace: nil) { colonnes = c }
+            politique.oublierAttente()
+            politique.choisir(rayons: rayons(scene), zone: zoneVisible, enPlace: false)
             viser(geometriePour(scene), depuis: scene.etages.map(\.id), duree2D: 0, duree3D: 0)
         }
         let arrivee = v ? 1.0 : 0.0
@@ -895,12 +879,7 @@ final class MoteurPieces {
     func isoler(_ i: Int) {
         guard let scene, i < scene.pieces.count, !(focus == i && sCible == 1) else { return }
         let piece = scene.pieces[i], etage = scene.etages[piece.etage].id
-        let provenance: String? = switch isolement {
-        case .maison: nil
-        case .etage(let k): k
-        case .piece(_, let p): p == etage ? p : nil
-        }
-        isolement = .piece(piece.id, provenance: provenance)
+        isolement = isolement.isoler(piece: piece.id, etage: etage)
         focus = i
         isolee = textes.pieces[i]?.nom
         if sCible != 1 {
@@ -1010,17 +989,18 @@ final class MoteurPieces {
     /// zoomee ou deplacee a la vue d'ensemble (`clavier`) ; le clic a cote ne fait rien. Rien pendant l'envol.
     func remonter(clavier: Bool = true) {
         guard envol == nil, fondu == nil else { return }
-        switch isolement {
-        case .piece(let cle, let provenance):
-            if provenance != nil, let scene, scene.etages.count > 1, let i = scene.pieces.firstIndex(where: { $0.id == cle }) {
-                allerEtage(scene.pieces[i].etage)
-            } else {
-                versMaison()
-            }
-        case .etage:
-            versMaison()
+        var etageDeLaPiece: String?
+        if case .piece(let cle, _) = isolement, let scene, let i = scene.pieces.firstIndex(where: { $0.id == cle }) {
+            etageDeLaPiece = scene.etages[scene.pieces[i].etage].id
+        }
+        switch isolement.remonter(etageDeLaPiece: etageDeLaPiece, plusieursPlateaux: (scene?.etages.count ?? 0) > 1,
+                                  clavier: clavier) {
+        case .etage(let cle):
+            if let e = scene?.etages.firstIndex(where: { $0.id == cle }) { allerEtage(e) }
         case .maison:
-            if clavier { versMaison() }
+            versMaison()
+        case .rien:
+            break
         }
     }
 
@@ -1265,14 +1245,19 @@ final class MoteurPieces {
             controles()
         }
         // Une grille qui attendait la vue d'ensemble 2D s'y pose.
-        if let g = grilleEnAttente, t == 0, aLaVueDEnsemble { poserGrille(g.duree, hysteresis: g.hysteresis) }
+        if let g = politique.attente, t == 0, aLaVueDEnsemble { poserGrille(g) }
         if !occupe, let e = attente { appliquer(e) }
+    }
+
+    /// La rotation lente tourne (`Isolement.rotationLente`).
+    private var rotationLente: Bool {
+        Isolement.rotationLente(troisD: troisD, bascule: t, cochee: rotation, reduire: reduire, sansIsolement: sansIsolement)
     }
 
     /// Rotation lente, rotation amortie, zoom amorti ; rien pendant ⌥ + glisser : ce qui attend reprend au relachement.
     private func controles() {
         guard !deplaceDansLEcran else { return }
-        if troisD && t == 1 && rotation && !reduire && sansIsolement && geste == nil {
+        if rotationLente && geste == nil {
             orbite.azimut -= 2 * .pi / CameraScene.dureeTour * dt
         }
         if rotationEnAttente != .zero {
@@ -1302,7 +1287,7 @@ final class MoteurPieces {
         if se != seCible || fk.values.contains(where: { $0 != 0 && $0 != 1 }) || ek.values.contains(where: { $0 != 0 && $0 != 1 }) {
             return true
         }
-        if troisD && t == 1 && rotation && !reduire && sansIsolement { return true }
+        if rotationLente { return true }
         if zoomEnAttente != 0 || rotationEnAttente != .zero || (geste != nil && bouge) { return true }
         if now - derniereActivite < 0.6 { return true }
         return etiquettes.contains { $0.envie > 0 }
@@ -1355,7 +1340,7 @@ final class MoteurPieces {
         }
         surCliquable = switch c {
         case .appareil, .piece: true
-        case .nomEtage: (scene?.etages.count ?? 0) > 1 || estIsolee
+        case .nomEtage(let e): clicEtage(e, disque: false) != .rien
         case .disque(let e): disqueCliquable(e)
         case .fond: false
         }
@@ -1418,8 +1403,15 @@ final class MoteurPieces {
     /// Un clic sur ce disque fait quelque chose (polissage C, section 5.4) : sauf celui de l'etage isole, entre ses
     /// pieces ; dans une maison d'un seul plateau, seulement depuis une piece isolee, pour remonter.
     func disqueCliquable(_ e: Int) -> Bool {
-        guard let scene, e < scene.etages.count else { return false }
-        return scene.etages.count > 1 ? estIsolee || isolement != .etage(scene.etages[e].id) : estIsolee
+        clicEtage(e, disque: true) != .rien
+    }
+
+    /// Ce que fait un clic sur le nom ou le disque du plateau `e` (`Isolement.clicEtage`) : la regle du clic et de la
+    /// main du pointeur.
+    private func clicEtage(_ e: Int, disque: Bool) -> Isolement.ClicEtage {
+        guard let scene, e < scene.etages.count else { return .rien }
+        return isolement.clicEtage(scene.etages[e].id, disque: disque, plusieursPlateaux: scene.etages.count > 1,
+                                   pieceIsolee: estIsolee)
     }
 
     /// Piece sous un point : son nom (le nom et le compte de ses appareils), sinon sa boite, la plus proche
@@ -1573,13 +1565,11 @@ final class MoteurPieces {
     /// Clic sur le nom ou le disque d'un etage : il l'isole ; son propre disque, l'etage isole, entre les pieces, ne
     /// fait rien. Maison d'un seul plateau : seulement depuis une piece isolee, pour remonter a la maison.
     private func cliquerEtage(_ e: Int, disque: Bool) {
-        guard let scene, e < scene.etages.count else { return }
-        guard scene.etages.count > 1 else {
-            if estIsolee { versMaison() }
-            return
+        switch clicEtage(e, disque: disque) {
+        case .isoler: allerEtage(e)
+        case .maison: versMaison()
+        case .rien: break
         }
-        if disque, isolement == .etage(scene.etages[e].id) { return }
-        allerEtage(e)
     }
 
     /// La molette zoome, sauf pendant un vol et pendant ⌥ + glisser : elle est alors ignoree, non differee.
@@ -1714,9 +1704,9 @@ final class MoteurPieces {
         cadre = CGRect(x: 0, y: marges.haut, width: nouvelle.width,
                        height: max(1, nouvelle.height - marges.haut - marges.bas))
         guard pret, let scene else { return }
-        if grille, let c = colonnesVoulues(scene, enPlace: colonnes) { colonnes = c }
+        politique.choisir(rayons: rayons(scene), zone: zoneVisible, enPlace: true)
         glissementPlateaux = nil
-        grilleEnAttente = nil
+        politique.oublierAttente()
         geometrieVisee = geometriePour(scene)
         geometrie = geometrieVisee
         recadrer()

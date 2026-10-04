@@ -854,6 +854,8 @@ struct MoteurPiecesTests {
         }, "une taille ou l'hysteresis garde la grille en place")
         Self.dessiner(h, taille: CGSize(width: largeur, height: hauteur))
         #expect(h.colonnes == enPlace && h.glissementPlateaux == nil, "l'hysteresis garde la grille en place")
+        h.poserTaille(CGSize(width: largeur, height: hauteur))
+        #expect(h.colonnes == enPlace, "la taille posee a la main la garde aussi")
     }
 
     /// Zoomee ou isolee, la grille attend le retour a la vue d'ensemble (polissage C, section 3.5) ; elle s'y pose

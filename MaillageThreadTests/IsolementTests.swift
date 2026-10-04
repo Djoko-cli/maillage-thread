@@ -247,6 +247,8 @@ struct IsolementTests {
         m.allerEtage(etage)
         m.survoler(disque)
         #expect(m.survolEtage == nil && m.curseurForme == .fleche, "le disque de l'etage isole")
+        m.survoler(try Self.nomDEtage(m, etage))
+        #expect(m.survolNomEtage == etage && m.curseurForme == .main, "son nom, lui, se clique")
     }
 
     /// Le menu du clic droit (polissage C, section 1.3), article par article, sur le nom et sur le disque, par la cle de
