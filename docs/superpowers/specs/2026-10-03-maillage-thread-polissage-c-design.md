@@ -370,3 +370,20 @@ Liste indicative, le plan fait foi.
 - `NomsDemo` et la démo ;
 - `CapturesPieces` ;
 - le catalogue.
+
+## 11. Vérifié avec Djoko le 04/10
+
+Sur sa maison, en mode direct, avec l'app de la branche (`e3e2b79`) :
+- son extérieur au niveau du rez-de-chaussée, dans puis hors de la maison, par le clic droit sur le nom et sur le disque ; le choix est gardé après un redémarrage ;
+- grille et rangée par le réglage, isolement d'un étage, remontée selon la provenance, ⌥ + glisser et l'envol sans saut : « tout parfait » ;
+- « Réduire les animations » : validé.
+
+Décisions de la fin d'exécution, validées avec lui :
+- **Pas de ☾ pour un nœud qui route** (vague de correction finale) : un routeur Thread n'est jamais endormi. Dans la démo, la fiche de deux prises routeurs dit encore « endormi », à cause de ses données ; ses vrais routeurs n'ont pas ce statut, donc rien ne change.
+- Le nom de zone « Cabane » des tests est inventé.
+
+Restent pour D, ou plus tard :
+- la grille n'est pas rechoisie quand seuls les rayons changent ;
+- `MoteurPieces` dépasse 1 600 lignes ; l'isolement et la politique de la grille sont à sortir dans le cœur ;
+- un étage absent perd son rang au premier choix du menu ;
+- après l'envol, le menu du clic droit ne revient qu'au prochain mouvement du pointeur.
