@@ -598,6 +598,7 @@ final class MoteurPieces {
         let g = geometriePour(scene)
         guard g != geometrieVisee else { return }
         viser(g, depuis: scene.etages.map(\.id), duree2D: duree, duree3D: 0)
+        if glissementPlateaux == nil && aLaVueDEnsemble { recadrer() }   // posee tout de suite : cadree tout de suite
     }
 
     /// Ce que la vue regarde : la piece isolee, ou la cible de la vue d'ensemble.

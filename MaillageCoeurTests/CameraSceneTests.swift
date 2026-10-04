@@ -173,6 +173,34 @@ struct CameraSceneTests {
         #expect(g.centrePlateau(0, 0).x == g.centres2D[0].x)
         #expect(abs(g.boite.z0 - (-16 - 34.0 / 24)) < 1e-12 && g.boite.z1 == 16)
         #expect(GeometrieMaison.hauteurBloc(0) == 0.04 && abs(GeometrieMaison.hauteurBloc(1) - 2.44) < 1e-12)
+        // `vers` (polissage C, section 3.5) : le chemin d'une geometrie a l'autre, champ par champ, avec deux avancements
+        // distincts : en 2D (`k2`) les centres et la boite, en 3D (`k3`) les centres, le pas, la sphere et le cadrage ; les
+        // rayons et les colonnes sont ceux de l'arrivee. Trois etages empiles, en une rangee, puis deux etages et une zone
+        // hors de la maison, en une pile : chaque champ change.
+        let depart = GeometrieMaison(rayons: [6, 8, 10], plateaux: [.init(niveau: 0), .init(niveau: 1), .init(niveau: 2)],
+                                     colonnes: 3)
+        let arrivee = GeometrieMaison(rayons: [6, 8, 10], plateaux: [.init(niveau: 0), .init(niveau: 1),
+                                                                     .init(niveau: 1, principal: false, dehors: true)],
+                                      colonnes: 1)
+        #expect(depart.pasEtage != arrivee.pasEtage && depart.centreSphere != arrivee.centreSphere
+                && depart.rayonSphere != arrivee.rayonSphere && depart.rayonCadre != arrivee.rayonCadre
+                && depart.boite.x0 != arrivee.boite.x0 && depart.boite.x1 != arrivee.boite.x1
+                && depart.boite.z0 != arrivee.boite.z0 && depart.boite.z1 != arrivee.boite.z1, "chaque champ change")
+        let (k2, k3) = (0.25, 0.75)
+        let v = depart.vers(arrivee, k2: k2, k3: k3)
+        func m(_ x: Double, _ y: Double, _ k: Double) -> Double { x + (y - x) * k }
+        for i in depart.rayons.indices {
+            #expect(v.centres2D[i] == depart.centres2D[i] + (arrivee.centres2D[i] - depart.centres2D[i]) * k2, "centre 2D \(i)")
+            #expect(v.centres3D[i] == depart.centres3D[i] + (arrivee.centres3D[i] - depart.centres3D[i]) * k3, "centre 3D \(i)")
+        }
+        let (a, b) = (depart.boite, arrivee.boite)
+        #expect(v.boite == GeometrieMaison.Boite(x0: m(a.x0, b.x0, k2), x1: m(a.x1, b.x1, k2), z0: m(a.z0, b.z0, k2),
+                                                 z1: m(a.z1, b.z1, k2)), "la boite, en 2D")
+        #expect(v.pasEtage == m(depart.pasEtage, arrivee.pasEtage, k3), "le pas des etages, en 3D")
+        #expect(v.centreSphere == depart.centreSphere + (arrivee.centreSphere - depart.centreSphere) * k3, "le centre de la sphere")
+        #expect(v.rayonSphere == m(depart.rayonSphere, arrivee.rayonSphere, k3), "le rayon de la sphere")
+        #expect(v.rayonCadre == m(depart.rayonCadre, arrivee.rayonCadre, k3), "le cadrage")
+        #expect(v.rayons == arrivee.rayons && v.colonnes == arrivee.colonnes, "les rayons et les colonnes de l'arrivee")
     }
 
     /// Avec des etages seulement, en rangee (polissage C, sections 2 et 3.4) : exactement la geometrie du plan 4b,

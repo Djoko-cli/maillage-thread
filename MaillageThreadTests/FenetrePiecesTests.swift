@@ -282,7 +282,9 @@ struct FenetrePiecesTests {
     /// laissait a la scene que moins de 230 pt (`FenetrePieces.sceneMinimale`) ; elle se rouvre a la fermeture de la
     /// fiche. Elle ne se replie que si c'est necessaire : pas dans la fenetre par defaut avec une fiche de la demo.
     /// Son repli garde (la preference) ne change pas, et une legende repliee par Djoko reste repliee. La plus petite
-    /// fenetre (`tailleMinimale`) : la vue y fait 732 pt de haut, barre de titre de 52 pt comprise.
+    /// fenetre (`tailleMinimale`) : la vue y fait 732 pt de haut, barre de titre de 52 pt comprise. La zone visible de la
+    /// grille (`basGrille`, polissage C, section 3.3) garde la legende telle que Djoko l'a laissee : ni la fiche, ni le
+    /// repli de la legende sous elle n'y changent rien.
     @Test(.timeLimit(.minutes(2))) func repliDeLaLegendeFauteDePlace() async throws {
         // Le seuil.
         let m = FenetrePieces.sceneMinimale
@@ -303,14 +305,20 @@ struct FenetrePiecesTests {
             defer { Self.fermer(fenetre) }
             try await MoteurPiecesTests.attendre { moteur.cadresInterface["legende"] != nil && moteur.pret }
             try await Task.sleep(for: .milliseconds(200))
+            // La zone de la grille : la legende telle que Djoko l'a laissee, ouverte (sa hauteur mesuree) ou repliee (30 pt).
+            let zone = FenetrePieces.margeBas(pile: repliee ? nil : moteur.cadresInterface["legende"]?.height)
+            #expect(moteur.basGrille == zone, "\(id), \(taille) : la legende, sans fiche")
             moteur.selection = id
             try await MoteurPiecesTests.attendre { moteur.cadresInterface["fiche"] != nil }
             try await Task.sleep(for: .milliseconds(400))
             let ouverte = try #require(moteur.cadresInterface["legende"], "la legende reste, repliee ou non").height
+            // Sous la fiche, la marge du cadre compte la fiche ; celle de la grille, non (decision de Djoko du 03/10).
+            #expect(moteur.basGrille == zone && moteur.marges.bas != zone, "\(id), \(taille) : la fiche ne compte pas dans la zone de la grille")
             moteur.selection = nil
             try await MoteurPiecesTests.attendre { moteur.cadresInterface["fiche"] == nil }
             try await Task.sleep(for: .milliseconds(400))
             let apres = try #require(moteur.cadresInterface["legende"]).height
+            #expect(moteur.basGrille == zone, "\(id), \(taille) : la fiche fermee")
             #expect(p.bool(forKey: LegendePieces.cleRepliee) == repliee, "\(id), \(taille) : le repli garde ne change pas")
             return (ouverte, apres)
         }
@@ -334,7 +342,9 @@ struct FenetrePiecesTests {
     /// Une legende que Djoko ouvre a la main, sans fiche, n'empeche pas son repli faute de place sous la fiche qui
     /// parait ensuite : seul compte un « rouvert » fait sous une fiche (`FenetrePieces.legendeRouverte`), et la fiche
     /// qui parait efface le drapeau. Dans la plus petite fenetre, la legende, repliee par la preference, est ouverte
-    /// d'un vrai clic sur son etiquette ; la fiche de l'Apple TV 4K ouverte, elle se replie quand meme.
+    /// d'un vrai clic sur son etiquette ; la fiche de l'Apple TV 4K ouverte, elle se replie quand meme. La zone visible de
+    /// la grille garde alors la legende ouverte, le repli faute de place n'y comptant pas ; si Djoko la replie sous la
+    /// fiche (le repli garde), elle suit son choix : 30 pt.
     @Test(.timeLimit(.minutes(2))) func ouvertureManuelleSansFicheLaisseLeRepliAutomatique() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
@@ -349,10 +359,15 @@ struct FenetrePiecesTests {
         try await Self.cliquer(fenetre, en: CGPoint(x: etiquette.midX, y: etiquette.midY))
         try await MoteurPiecesTests.attendre { (moteur.cadresInterface["legende"]?.height ?? 0) > 150 }
         #expect((moteur.cadresInterface["legende"]?.height ?? 0) > 150, "ouverte d'un clic")
+        let ouverte = try #require(moteur.cadresInterface["legende"]).height
         moteur.selection = "Apple TV 4K"
         try await Task.sleep(for: .milliseconds(1000))
         #expect((moteur.cadresInterface["legende"]?.height ?? 999) < 40,
                 "sous la fiche, dans la plus petite fenetre, la legende se replie : scene de \(moteur.cadre.height) pt")
+        #expect(moteur.basGrille == FenetrePieces.margeBas(pile: ouverte), "repli de place : la zone de la grille ne bouge pas")
+        p.set(true, forKey: LegendePieces.cleRepliee)
+        try await MoteurPiecesTests.attendre { moteur.basGrille == 30 }
+        #expect(moteur.basGrille == 30, "repli garde par Djoko, sous la fiche : 30 pt")
     }
 
     /// Taille minimale du contenu de la fenetre : 820 x 680 pt, sous la barre de titre cachee (la fenetre, elle, fait
@@ -1348,24 +1363,36 @@ struct FenetrePiecesTests {
     }
 
     /// Le reglage « Etages en 2D » (polissage C, section 3.1) : en grille par defaut ; change dans les preferences
-    /// (Reglages › General), il s'applique tout de suite a la vue ouverte. La fenetre s'ouvre dans le mode garde de
-    /// l'app (`UserDefaults.standard`, lu a sa creation) : en 3D, la rangee attend la vue d'ensemble 2D.
+    /// (Reglages › General), il s'applique tout de suite a la vue ouverte, dans une fenetre haute (820 x 1500) ou la grille
+    /// (la pile) differe de la rangee. Le test ne depend pas du mode 2D ou 3D garde de l'app et ne le touche pas : la
+    /// fenetre le lit dans `UserDefaults.standard` a sa creation, sans qu'un autre domaine puisse s'y mettre ; le test pose
+    /// donc la 2D sur le moteur de la fenetre (`basculer`, qui n'ecrit aucune preference et ne fait rien si elle y est
+    /// deja), et les preferences de la fenetre vont a un domaine a lui. En 3D, la rangee attend la 2D : voir
+    /// `reglageDeLaGrille` (`MoteurPiecesTests`).
     @Test(.timeLimit(.minutes(1))) func reglageEtagesEn2D() async throws {
         let (p, domaine) = try SondeMaillageTests.preferences()
         defer { p.removePersistentDomain(forName: domaine) }
         let demo = Surveillance(mode: .demo, dossier: nil)
         demo.demarrer()
-        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 1100, height: 760), preferences: p)
+        let (fenetre, moteur) = try Self.fenetre(demo, taille: CGSize(width: 820, height: 1500), preferences: p, reduire: true)
         defer { Self.fermer(fenetre) }
         try await MoteurPiecesTests.attendre { moteur.pret }
+        // La 2D, quel que soit le mode garde : en 3D, un fondu de 0,3 s (« Reduire les animations »).
+        moteur.basculer(troisD: false)
+        try await Task.sleep(for: .milliseconds(100))
+        try await MoteurPiecesTests.attendre { !moteur.enMouvement }
+        // En grille : la pile, dans une fenetre haute, a moins de colonnes que de plateaux ; en rangee, une colonne par plateau.
+        let plateaux = moteur.geometrieVisee.rayons.count
+        try await MoteurPiecesTests.attendre { moteur.geometrieVisee.colonnes < plateaux }
+        let pile = moteur.geometrieVisee.colonnes
         #expect(FenetrePieces.cleGrille == "etagesEnGrille" && moteur.grille, "en grille par defaut")
+        #expect(pile < plateaux, "en grille : \(pile) colonne(s) pour \(plateaux) plateaux, dans une fenetre haute")
         p.set(false, forKey: FenetrePieces.cleGrille)
-        try await MoteurPiecesTests.attendre { !moteur.grille }
-        #expect(!moteur.grille && (moteur.troisD ? moteur.grilleEnAttente?.duree == CameraScene.dureeEnvol
-                                                 : moteur.geometrieVisee.colonnes == moteur.geometrieVisee.rayons.count))
+        try await MoteurPiecesTests.attendre { moteur.geometrieVisee.colonnes == plateaux }
+        #expect(!moteur.grille && moteur.geometrieVisee.colonnes == plateaux, "en rangee : une colonne par plateau")
         p.set(true, forKey: FenetrePieces.cleGrille)
-        try await MoteurPiecesTests.attendre { moteur.grille }
-        #expect(moteur.grille)
+        try await MoteurPiecesTests.attendre { moteur.geometrieVisee.colonnes < plateaux }
+        #expect(moteur.grille && moteur.geometrieVisee.colonnes == pile, "de nouveau en grille")
     }
 
     /// Places des pieces : a cote des identites des routeurs, ni en demo ni sous les tests.

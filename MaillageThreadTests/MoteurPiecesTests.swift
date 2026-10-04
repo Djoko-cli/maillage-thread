@@ -761,7 +761,8 @@ struct MoteurPiecesTests {
     }
 
     /// Redimensionnement a la vue d'ensemble (polissage C, section 3.5) : la grille se recalcule, les plateaux glissent
-    /// en 0,4 s, en cubique, et la vue se recadre a chaque image ; avec « Reduire les animations », tout de suite.
+    /// en 0,4 s, en cubique, et la vue se recadre a chaque image ; avec « Reduire les animations », tout de suite, la vue
+    /// cadree avec eux. La grille en place reste a moins de 5 % du choix (hysteresis).
     @Test func redimensionnement() throws {
         let m = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
         let depart = m.geometrie
@@ -773,12 +774,36 @@ struct MoteurPiecesTests {
         let mi = m.geometrie(a: g.debut + 0.2)
         let x0 = depart.centres2D[1].x, x1 = m.geometrieVisee.centres2D[1].x
         #expect(abs(mi.centres2D[1].x - (x0 + (x1 - x0) * 0.5)) < 1e-6 && abs(x1 - x0) > 1)
+        // Au quart du temps, a 6,25 % du chemin : la rampe est cubique (4 k^3), et non lineaire, ni une autre rampe
+        // symetrique, qui valent toutes 0,5 a mi-temps.
+        let quart = m.geometrie(a: g.debut + 0.1)
+        #expect(abs(quart.centres2D[1].x - (x0 + (x1 - x0) * 0.0625)) < 1e-6, "cubique entree-sortie : 6,25 % au quart du temps")
         #expect(m.geometrie(a: g.debut + 0.41) == m.geometrieVisee)
         #expect(m.orbite == CameraScene.canonique(m.geometrie, aspect: m.aspect, u: 0), "la vue se recadre a chaque image")
+        // A la premiere image, le glissement vient de naitre et la vue vient d'etre cadree sur la geometrie de depart ; une
+        // image plus tard, les plateaux ont avance, et la vue d'ensemble avec eux.
+        Thread.sleep(forTimeInterval: 0.1)
+        Self.dessiner(m, taille: Self.large)
+        #expect(m.glissementPlateaux != nil && m.geometrie != m.geometrieVisee, "les plateaux sont en route")
+        #expect(m.orbite == CameraScene.canonique(m.geometrie, aspect: m.aspect, u: 0), "la vue suit les plateaux en route")
         let r = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
         r.reduire = true
         Self.dessiner(r, taille: Self.large)
         #expect(r.glissementPlateaux == nil && r.geometrie == r.geometrieVisee && r.geometrie.colonnes == 4)
+        #expect(r.orbite == CameraScene.canonique(r.geometrie, aspect: r.aspect, u: 0), "« Reduire » : la vue d'ensemble suit la grille")
+        // L'hysteresis : une taille ou le choix, sans la grille en place, serait autre, mais ou elle reste a moins de 5 % du
+        // choix, est cherchee sur les rayons de la scene ; le moteur la garde, sans glissement.
+        let h = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
+        let enPlace = try #require(h.colonnes)
+        let rayons = h.geometrie.rayons
+        let hauteur: CGFloat = 760
+        let largeur = try #require(stride(from: 900.0, through: 2400, by: 10).first { l in
+            let zone = CGSize(width: l, height: hauteur - 84 - 50)
+            return GeometrieMaison.colonnes(rayons: rayons, taille: zone) != enPlace
+                && GeometrieMaison.colonnes(rayons: rayons, taille: zone, enPlace: enPlace) == enPlace
+        }, "une taille ou l'hysteresis garde la grille en place")
+        Self.dessiner(h, taille: CGSize(width: largeur, height: hauteur))
+        #expect(h.colonnes == enPlace && h.glissementPlateaux == nil, "l'hysteresis garde la grille en place")
     }
 
     /// Zoomee ou isolee, la grille attend le retour a la vue d'ensemble (polissage C, section 3.5) ; elle s'y pose
@@ -793,6 +818,7 @@ struct MoteurPiecesTests {
         m.sortir()
         Self.dessiner(m, taille: Self.large)
         #expect(m.grilleEnAttente == nil && m.geometrieVisee.colonnes == 4 && m.geometrie == m.geometrieVisee)
+        #expect(m.orbite == CameraScene.canonique(m.geometrie, aspect: m.aspect, u: 0), "« Reduire » : la vue d'ensemble suit la grille")
         let i = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
         i.isoler(try Self.indice(try #require(i.entree), "Salon"))
         Self.dessiner(i, taille: Self.large)
@@ -800,8 +826,9 @@ struct MoteurPiecesTests {
     }
 
     /// Le reglage « Etages en 2D » (polissage C, section 3.1) s'applique tout de suite a la vue ouverte : les plateaux
-    /// glissent en 2,6 s, comme l'envol ; avec « Reduire les animations », tout de suite. En 3D, il attend la 2D : l'envol
-    /// vers la 2D se pose sur la grille de la zone visible du moment.
+    /// glissent en 2,6 s, comme l'envol ; avec « Reduire les animations », tout de suite, la vue d'ensemble cadree avec
+    /// eux. En 3D, il attend la 2D : l'envol vers la 2D se pose sur la grille de la zone visible du moment. Un vol
+    /// commence pendant le glissement arrive la ou les plateaux arrivent : la vue isolee rejoint la piece.
     @Test func reglageDeLaGrille() throws {
         let m = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
         m.reglerGrille(false)
@@ -813,6 +840,7 @@ struct MoteurPiecesTests {
         r.reduire = true
         r.reglerGrille(false)
         #expect(r.glissementPlateaux == nil && r.geometrie.colonnes == 4)
+        #expect(r.orbite == CameraScene.canonique(r.geometrie, aspect: r.aspect, u: 0), "« Reduire » : la vue d'ensemble suit la grille")
         let trois = MoteurPieces(troisD: true)
         trois.marges = (84, 50)
         trois.poserTaille(Self.carree)
@@ -821,6 +849,19 @@ struct MoteurPiecesTests {
         #expect(trois.glissementPlateaux == nil && trois.grilleEnAttente != nil && trois.geometrieVisee.colonnes == 2)
         trois.basculer(troisD: false)
         #expect(trois.grilleEnAttente == nil && trois.geometrieVisee.colonnes == 4 && trois.enMouvement)
+        // Le salon isole pendant le glissement : le vol de 1,3 s vise sa place d'arrivee, que `suivre` remet a jour a chaque
+        // image. A 1,4 s, le vol est fini, les plateaux glissent encore, et la cible est le salon la ou il est.
+        let v = Self.moteur(try Self.quatrePlateaux(), taille: Self.carree)
+        let salon = try Self.indice(try #require(v.entree), "Salon")
+        let avant = try #require(v.centrePiece(salon))
+        v.reglerGrille(false)
+        v.isoler(salon)
+        Thread.sleep(forTimeInterval: 1.4)
+        Self.dessiner(v, taille: Self.carree)
+        #expect(v.glissementPlateaux != nil && !v.enMouvement, "le vol est fini, les plateaux glissent encore")
+        let c = try #require(v.centrePiece(salon))
+        #expect(abs(c.x - avant.x) > 1, "le salon s'est deplace avec sa grille")
+        #expect(abs(v.orbite.cible.x - c.x) < 1e-6 && abs(v.orbite.cible.z - c.z) < 1e-6, "le vol arrive sur le salon la ou il est")
     }
 
     /// Une taille nulle ne choisit rien (polissage C, section 3.3) : la rangee en attendant ; la premiere vraie taille
@@ -837,7 +878,9 @@ struct MoteurPiecesTests {
     }
 
     /// Des niveaux changes (une zone mise a cote d'un etage) : les plateaux glissent vers leur nouvelle place, en 0,4 s
-    /// en 2D et en 0,9 s en 3D (polissage C, section 1.3) ; avec « Reduire les animations », tout de suite.
+    /// en 2D et en 0,9 s en 3D (polissage C, section 1.3) ; avec « Reduire les animations », tout de suite. Chaque plateau
+    /// part de sa place d'avant, retrouvee par sa cle, meme si leur ordre change ; un glissement en cours repart de
+    /// l'image, avec le temps qui lui restait ; zoomee, la vue attend la grille.
     @Test func glissementApresUnChangementDeNiveau() throws {
         let e = try Self.quatrePlateaux()
         var places = PlacesGardees()
@@ -856,6 +899,44 @@ struct MoteurPiecesTests {
                 #expect(g.duree2D == CameraScene.dureeCases && g.duree3D == CameraScene.dureeNiveaux && CameraScene.dureeNiveaux == 0.9)
             }
         }
+        // Le reglage glisse en 2,6 s ; des niveaux changes en cours de route : le glissement repart de l'image, avec le
+        // temps qui lui restait en 2D (presque 2,6 s : plus que la moitie, et non les 0,4 s des niveaux), et les 0,9 s des
+        // niveaux en 3D.
+        let enCours = Self.moteur(e, taille: Self.carree)
+        enCours.reglerGrille(false)
+        let reglage = try #require(enCours.glissementPlateaux)
+        #expect(reglage.duree2D == CameraScene.dureeEnvol)
+        enCours.installerMaintenant(aCote)
+        let reste = try #require(enCours.glissementPlateaux)
+        #expect(reste.duree2D > CameraScene.dureeEnvol / 2 && reste.duree2D <= CameraScene.dureeEnvol
+                && reste.duree3D == CameraScene.dureeNiveaux, "le temps qui restait : \(reste.duree2D) s")
+        // Zoomee, la vue d'ensemble n'est pas la : la grille des niveaux changes attend, sans hysteresis.
+        let zoomee = Self.moteur(e, taille: Self.carree)
+        zoomee.reduire = true
+        zoomee.molette(-20, precis: false)
+        #expect(zoomee.vueTouchee && zoomee.grilleEnAttente == nil)
+        zoomee.installerMaintenant(aCote)
+        #expect(zoomee.grilleEnAttente == MoteurPieces.GrilleEnAttente(duree: CameraScene.dureeCases, hysteresis: false))
+        // Le jardin a cote de l'etage change l'ordre des plateaux : le depart de chacun est sa place d'avant, retrouvee par
+        // sa cle et non par sa position ; la boite, le pas, la sphere et le cadrage partent de l'image.
+        var autres = PlacesGardees()
+        autres.ranger(Rangement(ordre: [], aCote: ["zone:Jardin": PlacesGardees.ACote(etage: "zone:Étage")]),
+                      domicile: e.domicile)
+        let reordonne = Self.moteur(e, taille: Self.carree)
+        let avant = reordonne.geometrie
+        let anciens = e.scene.etages.map(\.id)
+        reordonne.installerMaintenant(try Self.quatrePlateaux(autres))
+        let nouveaux = try #require(reordonne.scene).etages.map(\.id)
+        #expect(nouveaux != anciens, "l'ordre des plateaux a change")
+        let glissement = try #require(reordonne.glissementPlateaux)
+        let depart = reordonne.geometrie(a: glissement.debut)
+        for (i, cle) in nouveaux.enumerated() {
+            let j = try #require(anciens.firstIndex(of: cle))
+            #expect(depart.centres2D[i] == avant.centres2D[j] && depart.centres3D[i] == avant.centres3D[j], "depart de \(cle)")
+        }
+        #expect(depart.boite == avant.boite && depart.pasEtage == avant.pasEtage, "la boite et le pas partent de l'image")
+        #expect(depart.centreSphere == avant.centreSphere && depart.rayonSphere == avant.rayonSphere
+                && depart.rayonCadre == avant.rayonCadre, "la sphere et le cadrage partent de l'image")
     }
 
     /// Ordre des couches : plateaux et equateur, blocs, liens enfant -> parent, liens entre routeurs,
