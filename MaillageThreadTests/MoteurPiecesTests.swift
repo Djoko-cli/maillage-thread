@@ -942,7 +942,9 @@ struct MoteurPiecesTests {
     /// ⌥ + glisser en 3D (polissage C, section 6) : le mode se fixe a l'appui ; ⌥ passe avant le glisser d'une piece,
     /// qui ne bouge pas ; la vue suit le pointeur a 0,7 fois sa vitesse, depuis l'orbite de l'appui ; relacher ⌥ en
     /// route ne change rien. La main ouverte tant que ⌥ est tenue, fermee pendant le geste ; la rotation lente s'arrete
-    /// pendant le geste et reprend apres ; le double-clic ramene a la vue d'ensemble. En 2D, ⌥ ne change rien.
+    /// pendant le geste et reprend apres ; le double-clic ramene a la vue d'ensemble. En 2D, ⌥ ne change rien. Pendant le
+    /// geste, la camera n'obeit qu'au pointeur (la maquette coupe ses controles) : l'inertie d'une rotation relachee, la
+    /// molette et le pincement n'y touchent pas ; au relachement, ils reprennent.
     @Test func optionGlisser() throws {
         let (_, _, e) = try NomsSceneTests.demo()
         let m = MoteurPieces(troisD: true)
@@ -983,6 +985,55 @@ struct MoteurPiecesTests {
         n.glisser(CGPoint(x: p2.x + 30, y: p2.y), depart: p2, option: true)
         n.relacher(CGPoint(x: p2.x + 30, y: p2.y))
         #expect(n.positions[s2] != avant2, "en 2D, la piece glisse")
+        // La camera n'obeit qu'au pointeur : ce qui attendait (le reste d'une rotation au glisser, le zoom d'un coup de
+        // molette) attend et reprend au relachement ; la molette et le pincement du geste sont ignores, non differes, et
+        // agissent de nouveau apres. Un moteur par cas, sans rotation lente : rien d'autre ne tourne ni ne zoome.
+        let arrivee = CGPoint(x: fond.x + 60, y: fond.y)
+        for cas in ["rotation amortie", "zoom amorti", "molette", "pincement"] {
+            let k = MoteurPieces(troisD: true)
+            k.rotation = false
+            k.marges = (84, 50)
+            k.poserTaille(Self.taille)
+            k.installerMaintenant(e)
+            for _ in 0..<2 { Self.dessiner(k) }
+            if cas == "rotation amortie" {
+                k.glisser(fond, depart: fond)
+                k.glisser(CGPoint(x: fond.x + 300, y: fond.y), depart: fond)
+                k.relacher(CGPoint(x: fond.x + 300, y: fond.y))
+            } else if cas == "zoom amorti" {
+                k.molette(20, precis: false)
+            }
+            let appui = k.orbite
+            k.glisser(fond, depart: fond, option: true)
+            k.glisser(arrivee, depart: fond, option: true)
+            let attendue = CameraScene.deplacerDansLEcran(appui, glisse: CGSize(width: 60, height: 0), cadre: k.cadre)
+            if cas == "molette" {
+                k.molette(20, precis: false)
+            } else if cas == "pincement" {
+                k.pincer(1, en: fond)
+                k.pincer(1.5, en: fond)
+            }
+            for _ in 0..<3 { Self.dessiner(k) }
+            #expect(k.orbite == attendue, "\(cas) : pendant le geste, la camera ne suit que le pointeur")
+            k.relacher(arrivee)
+            for _ in 0..<2 { Self.dessiner(k) }
+            if cas == "rotation amortie" || cas == "zoom amorti" {
+                #expect(k.orbite != attendue, "\(cas) : au relachement, ce qui attendait reprend")
+                continue
+            }
+            #expect(k.orbite == attendue, "\(cas) : ignore pendant le geste, non differe")
+            if cas == "molette" {
+                k.molette(20, precis: false)
+                for _ in 0..<2 { Self.dessiner(k) }
+                #expect(k.orbite.distance < attendue.distance, "apres le geste, la molette zoome de nouveau")
+            } else {
+                // Le pincement continue apres le geste : il n'agit que de son increment (0,03 %), sans sauter de ce qu'il
+                // a fait pendant.
+                k.pincer(1.5005, en: fond)
+                Self.dessiner(k)
+                #expect(abs(k.orbite.distance / attendue.distance - 1.5 / 1.5005) < 1e-9, "le pincement qui continue ne saute pas")
+            }
+        }
     }
 
     /// Ordre des couches : plateaux et equateur, blocs, liens enfant -> parent, liens entre routeurs,

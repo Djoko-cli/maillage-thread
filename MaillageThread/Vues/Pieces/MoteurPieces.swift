@@ -253,6 +253,12 @@ final class MoteurPieces {
     @ObservationIgnored private var optionTenue = false
     @ObservationIgnored private var surCliquable = false
 
+    /// ⌥ + glisser en cours : la camera n'obeit qu'au pointeur. La maquette coupe alors ses controles : l'inertie de
+    /// rotation et le zoom amorti attendent, la molette et le pincement sont ignores ; au relachement, tout reprend.
+    private var deplaceDansLEcran: Bool {
+        if case .ecran? = geste { true } else { false }
+    }
+
     /// Glissement des marges du cadre, de `depart` a `arrivee`, depuis `debut`, en `duree` ; `fondu` : avec
     /// « Reduire les animations », un fondu par le fond, les marges sautant a mi-chemin.
     private struct GlissementMarges {
@@ -1225,8 +1231,9 @@ final class MoteurPieces {
         if !occupe, let e = attente { appliquer(e) }
     }
 
-    /// Rotation lente, rotation amortie, zoom amorti.
+    /// Rotation lente, rotation amortie, zoom amorti ; rien pendant ⌥ + glisser : ce qui attend reprend au relachement.
     private func controles() {
+        guard !deplaceDansLEcran else { return }
         if troisD && t == 1 && rotation && !reduire && sansIsolement && geste == nil {
             orbite.azimut -= 2 * .pi / CameraScene.dureeTour * dt
         }
@@ -1397,7 +1404,8 @@ final class MoteurPieces {
 
     /// Un glisser, a chaque deplacement du pointeur ; `option` : ⌥ tenue, lue a l'appui seulement (polissage C,
     /// section 6) : en 3D, la vue glisse alors dans le plan de l'ecran, depuis le fond, un disque ou une piece, qui ne
-    /// bouge pas ; un vol en cours s'arrete. Relacher ⌥ en route ne change rien. En 2D, ⌥ ne change rien.
+    /// bouge pas ; un vol en cours s'arrete, et pendant le geste la camera n'obeit qu'au pointeur (`deplaceDansLEcran`).
+    /// Relacher ⌥ en route ne change rien. En 2D, ⌥ ne change rien.
     func glisser(_ p: CGPoint, depart d: CGPoint, option: Bool = false) {
         // Un geste reste d'un glisser annule (sans relachement), et celui-ci part d'ailleurs : il est clos.
         if geste != nil, d != departGeste { terminerGeste() }
@@ -1535,15 +1543,18 @@ final class MoteurPieces {
         allerEtage(e)
     }
 
+    /// La molette zoome, sauf pendant un vol et pendant ⌥ + glisser : elle est alors ignoree, non differee.
     func molette(_ dy: Double, precis: Bool) {
-        guard !enMouvement else { return }
+        guard !enMouvement, !deplaceDansLEcran else { return }
         zoomer(precis ? -dy * 0.004 : -dy * 0.08, en: curseur)
     }
 
+    /// Le pincement zoome de son increment depuis le dernier `m`, sauf pendant un vol et pendant ⌥ + glisser : il est
+    /// alors ignore, mais suivi, pour que celui qui continue apres ne saute pas de ce qu'il a fait pendant.
     func pincer(_ m: Double, en p: CGPoint) {
-        guard !enMouvement else { return }
         let l = -log(max(0.05, m) / max(0.05, dernierPincement))
         dernierPincement = m
+        guard !enMouvement, !deplaceDansLEcran else { return }
         zoomer(l, en: p)
     }
 
