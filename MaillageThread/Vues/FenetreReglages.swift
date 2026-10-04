@@ -32,10 +32,10 @@ enum OngletReglages: String, CaseIterable {
     }
 }
 
-/// Une page des Reglages, celle d'un onglet : General (ouverture a la connexion, langue),
-/// Notifications (par categorie), Maison (noms releves par le passeur), Sonde (liaison USB ou
-/// reseau Thread, acces reseau), Diagnostic (ecoute, capture, journal). La fenetre et ses
-/// onglets sont dans `ControleurReglages`.
+/// Une page des Reglages, celle d'un onglet : General (ouverture a la connexion, langue, vue par
+/// pieces : les etages en 2D), Notifications (par categorie), Maison (noms releves par le passeur),
+/// Sonde (liaison USB ou reseau Thread, acces reseau), Diagnostic (ecoute, capture, journal). La
+/// fenetre et ses onglets sont dans `ControleurReglages`.
 struct FenetreReglages: View {
     let onglet: OngletReglages
     /// Appele a chaque changement de hauteur de la page : la fenetre la suit (`ControleurReglages`).

@@ -202,15 +202,15 @@ and for the floors `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-
   the background: pan in 2D, orbit around the house in 3D. Drag a room: move
   it within its floor; its place is kept (`positions-pieces.json` in the app
   folder, never in the demo). Click a room or its name: isolate it (the others
-  fade, a tag points to a parent elsewhere); click a floor, its name or its
-  disc: isolate it the same way. Click outside or Esc: go up one step, from a
-  room to its floor if you opened it from there, otherwise to the house; the
+  fade, a tag points to a parent elsewhere); click a floor's name or disc:
+  isolate it the same way. Click outside or Esc: go up one step, from a room
+  to its floor if you opened it from there, otherwise to the house; the
   "Home › Floor › Room" path leads there too. In 3D, ⌥ + drag pans the view in
-  the screen plane. Double-click the background: back to the overview, zoom
-  and pan undone. Click a device or its name: its card, which slides up from
-  the bottom as the view rises; the card of the Thread network's leader shows
-  "👑 Thread network leader, elected automatically". The first click works
-  even when the window is inactive.
+  the screen plane. Double-click the background or a disc: back to the
+  overview, zoom and pan undone. Click a device or its name: its card, which
+  slides up from the bottom as the view rises; the card of the Thread
+  network's leader shows "👑 Thread network leader, elected automatically".
+  The first click works even when the window is inactive.
 - **Right clicks**: on a floor's name or disc, the menu of its level, under
   its name: "Move up one floor" and "Move down one floor" (the whole level),
   "On the same level as ▸", "Outside the house" and "On its own level"; on the

@@ -211,15 +211,15 @@ pour les étages `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-c-
   pièce : la déplacer dans son étage ; sa place est gardée
   (`positions-pieces.json` dans le dossier de l'app, jamais en démo). Clic sur
   une pièce ou sur son nom : l'isoler (les autres s'estompent, un repère
-  montre un parent situé ailleurs) ; clic sur un étage, son nom ou son
-  disque : l'isoler de même. Clic à côté ou Échap : remonter d'un cran, d'une
-  pièce à son étage si on l'a ouverte depuis lui, sinon à la maison ; le fil
+  montre un parent situé ailleurs) ; clic sur le nom ou le disque d'un étage :
+  l'isoler de même. Clic à côté ou Échap : remonter d'un cran, d'une pièce à
+  son étage si on l'a ouverte depuis lui, sinon à la maison ; le fil
   « Maison › Étage › Pièce » y mène aussi. En 3D, ⌥ + glisser déplace la vue
-  dans le plan de l'écran. Double-clic sur le fond : retour à la vue
-  d'ensemble, zoom et déplacement annulés. Clic sur un appareil ou sur son nom : sa fiche, qui
-  glisse depuis le bas pendant que la vue se relève ; la fiche du chef du
-  réseau Thread porte « 👑 Chef du réseau Thread, élu automatiquement ». Le
-  premier clic agit aussi quand la fenêtre est inactive.
+  dans le plan de l'écran. Double-clic sur le fond ou sur un disque : retour à
+  la vue d'ensemble, zoom et déplacement annulés. Clic sur un appareil ou sur
+  son nom : sa fiche, qui glisse depuis le bas pendant que la vue se relève ;
+  la fiche du chef du réseau Thread porte « 👑 Chef du réseau Thread, élu
+  automatiquement ». Le premier clic agit aussi quand la fenêtre est inactive.
 - **Clics droits** : sur le nom ou le disque d'un étage, le menu de son
   niveau, sous son nom : « Monter d'un étage » et « Descendre d'un étage »
   (tout le niveau), « Au même niveau que ▸ », « Hors de la maison » et « Sur
