@@ -263,7 +263,8 @@ extension LegendePieces.Lecture {
                               uniquingKeysWith: { a, _ in a })
         inconnus = Set(e.scene.noeuds.filter(\.inconnu).map(\.id))
         chefs = Set(e.scene.noeuds.filter(\.chef).map(\.id))
-        endormis = Set(ids.filter { e.appareils[$0]?.endormi == true })
+        endormis = Set(e.scene.noeuds.filter { LibellesNoeuds.endormi(e.appareils[$0.id], routeur: $0.routeur) }
+            .map(\.id))
         piles = Set(ids.filter { e.libelles[$0]?.pastille != nil })
         candidats = Set(ids.filter { id in
             e.maillage?.noeud(id).map { $0.genre == .routeur && !$0.candidats.isEmpty } == true

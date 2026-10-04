@@ -44,7 +44,8 @@ public enum NomsDemo {
     ]
 
     /// Hote -> batterie : une faible par son niveau, une par l'alerte seule, deux non rechargeables (le detecteur de
-    /// fumee, la vanne) ; ni prise, ni ampoule, ni concentrateur n'en a, sur secteur (`NomsTests.maisonDeDemo`).
+    /// fumee, la vanne), un volet en charge ; ni prise, ni ampoule, ni concentrateur n'en a, sur secteur
+    /// (`NomsTests.maisonDeDemo`).
     static let batteries: [String: BatterieMaison] = [
         "86E7BD1A75F28E6D": BatterieMaison(niveau: 52, charge: .horsCharge, alerte: false),
         "3A5DFAFCAB581AAF": BatterieMaison(niveau: 12, alerte: false),
@@ -54,7 +55,7 @@ public enum NomsDemo {
         "462DA5B311AFFCC7": BatterieMaison(alerte: true),
         "9A5C1F9FDFAB242D": BatterieMaison(niveau: 97, charge: .nonRechargeable, alerte: false),
         "82570DF21CF3784B": BatterieMaison(niveau: 81, charge: .nonRechargeable, alerte: false),
-        "724CC16B32D8F820": BatterieMaison(niveau: 64, charge: .horsCharge, alerte: false),
+        "724CC16B32D8F820": BatterieMaison(niveau: 64, charge: .enCharge, alerte: false),
     ]
 
     /// Routeurs de bordure (instance de l'annonce) -> (piece, fabricant, modele).

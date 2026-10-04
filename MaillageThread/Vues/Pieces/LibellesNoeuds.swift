@@ -47,8 +47,15 @@ enum LibellesNoeuds {
         return c
     }
 
-    /// Libelle de chaque noeud : son nom (coupe a 40 caracteres), la couronne du chef, ☾ endormi,
-    /// ⚠︎ sans adresse ou disparu ; la pastille d'une batterie faible.
+    /// Un noeud endormi, qui porte ☾ : un appareil qui s'annonce a veille, sauf s'il route. Un routeur Thread n'est
+    /// jamais endormi, meme si son annonce Matter le dit (relecture finale du polissage C) ; la legende suit cette
+    /// regle.
+    static func endormi(_ a: AppareilAffiche?, routeur: Bool) -> Bool {
+        a?.endormi == true && !routeur
+    }
+
+    /// Libelle de chaque noeud : son nom (coupe a 40 caracteres), la couronne du chef, ☾ endormi (pas pour un noeud
+    /// qui route), ⚠︎ sans adresse ou disparu ; la pastille d'une batterie faible.
     static func libelles(graphe: GrapheReseau, appareils: [String: AppareilAffiche], nomsRouteurs: [String: String],
                          maillage: MaillageAffiche?, chefs: Set<String>) -> [String: Libelle] {
         func inconnu(_ n: NoeudSonde) -> String { Self.inconnu(n, noms: nomsRouteurs) }
@@ -58,7 +65,7 @@ enum LibellesNoeuds {
             let nom = a?.nom ?? nomsRouteurs[n.id] ?? maillage?.noeud(n.id).map(inconnu) ?? n.id
             var texte = CartesPieces.couper(nom)
             if chefs.contains(n.id) { texte += " " + couronne }
-            if a?.endormi == true { texte += " " + lune }
+            if endormi(a, routeur: n.routeur) { texte += " " + lune }
             if a?.etat == .sansAdresse || a?.etat == .disparu { texte += " ⚠︎" }
             libelles[n.id] = Libelle(texte: texte, pastille: pastilleBatterie(a?.batterie))
         }

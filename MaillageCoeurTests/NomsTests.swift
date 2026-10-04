@@ -35,6 +35,9 @@ struct NomsTests {
         let surSecteur: Set<String> = ["Prise", "Ampoule", "Concentrateur", "Pont"]
         let piles = m.accessoires.filter { surSecteur.contains($0.categorie ?? "") && $0.batterie != nil }.map(\.nom)
         #expect(piles.isEmpty, "sur secteur, sans pile : \(piles)")
+        // La fiche montre chaque etat de pile en demo : un volet en charge, rechargeable.
+        let enCharge = m.accessoires.filter { $0.batterie?.charge == .enCharge }.map(\.nom)
+        #expect(enCharge == ["Volet salon"], "en charge : \(enCharge)")
         let routeurs = Set(instantane.routeurs.map(\.instance))
         let accessoiresRouteurs = m.accessoires.filter { routeurs.contains($0.nom) }
         #expect(accessoiresRouteurs.count == 6 && accessoiresRouteurs.allSatisfy { $0.noeudMatter == nil && $0.piece != nil })

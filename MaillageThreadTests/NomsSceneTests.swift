@@ -68,6 +68,25 @@ struct NomsSceneTests {
                                                   bordure: false)) == String(localized: "Routeur · \("5000")"))
     }
 
+    /// Pas de ☾ pour un noeud qui route (relecture finale, mineur T7-2) : un routeur Thread n'est jamais endormi, meme
+    /// si son annonce Matter le dit a veille. Dans la demo, les deux appareils qui routent, « Prise console » et
+    /// « Prise terrasse », s'annoncent ainsi : leur nom n'a pas de ☾, et la legende, qui reprend les signes de la
+    /// scene, ne les compte pas parmi les endormis. Un enfant endormi, la serrure, garde sa lune.
+    @Test func pasDeLunePourUnNoeudQuiRoute() throws {
+        let (_, _, e) = try Self.demo()
+        let prises = ["02A8C3C5600F136B", "0A84D1254BD246AD"]
+        for id in prises {
+            let n = try #require(e.scene.noeuds.first { $0.id == id })
+            #expect(n.routeur && e.appareils[id]?.endormi == true, "\(id) : route, et s'annonce endormi")
+            let texte = e.libelles[id]?.texte ?? ""
+            #expect(!texte.isEmpty && !texte.contains(LibellesNoeuds.lune), "\(id) : \(texte)")
+        }
+        #expect(e.libelles["86E7BD1A75F28E6D"]?.texte == "Nuki Ultra ☾", "un enfant endormi garde sa lune")
+        let lecture = LegendePieces.Lecture(e, ailleurs: false)
+        #expect(lecture.endormis.isDisjoint(with: prises) && lecture.endormis.contains("86E7BD1A75F28E6D"),
+                "la legende : \(lecture.endormis.sorted())")
+    }
+
     /// Pieces : celle de l'accessoire d'un appareil ; celle de l'accessoire du nom de l'annonce d'un
     /// routeur de bordure. Noms des etages, des pieces, compte, repere « ailleurs ».
     @Test func piecesEtNoms() throws {
