@@ -176,15 +176,20 @@ public struct SceneProjetee: Sendable {
     public var ailleurs: [Ailleurs] = []
     /// Centre de chaque noeud dans le monde.
     public var centresNoeuds: [String: SIMD3<Double>] = [:]
+    /// Noeuds qui s'effacent pendant une transition (polissage D, section 1) : absents de la scene, ils ne se cliquent
+    /// pas et n'ont pas de nom.
+    public var fantomes: Set<String> = []
 
     public init() {}
 
     /// Pose la scene a l'etat `etat` et la projette par `orbite` dans `cadre` (la place utile de la
     /// vue). `positions` : centre de chaque piece dans son plateau (celles de la disposition, ou la
     /// piece qu'on glisse). Invariant, tenu par le moteur : `cartes` et `positions` suivent les pieces
-    /// de `scene`, et `g.rayons` ses etages, memes effectifs et meme ordre.
+    /// de `scene`, et `g.rayons` ses etages, memes effectifs et meme ordre. `poses` : ce qui est en transition
+    /// (polissage D, section 1), par cle, qui l'emporte sur la disposition ; ce qui s'efface, absent de la scene, s'y
+    /// dessine aussi, a sa derniere place, sans se cliquer.
     public init(scene: ScenePieces, cartes: [CartesPieces.Carte], positions: [SIMD2<Double>], geometrie g: GeometrieMaison,
-                etat: EtatAnime, orbite: Orbite, cadre: CGRect) {
+                etat: EtatAnime, orbite: Orbite, cadre: CGRect, poses: PosesScene = PosesScene()) {
         let proj = ProjectionScene(orbite, cadre: cadre)
         let t = etat.t
         let h = GeometrieMaison.hauteurBloc(t)
@@ -218,26 +223,24 @@ public struct SceneProjetee: Sendable {
             sphere = Sphere(transfo: m, force: force)
         }
 
-        // Pieces : blocs de verre ; noeuds a mi-hauteur de leur bloc en 3D.
+        // Pieces : blocs de verre ; noeuds a mi-hauteur de leur bloc en 3D. Une piece ou un noeud en transition prend
+        // sa pose ; une piece qui s'efface, absente de la scene, se dessine a sa derniere place (`piece` -1).
+        let plateaux = Dictionary(scene.etages.indices.map { (scene.etages[$0].id, $0) }, uniquingKeysWith: { a, _ in a })
         var voiles = [Double](repeating: 1, count: scene.pieces.count)
         var mondes: [String: SIMD3<Double>] = [:]
         var centres = [SIMD3<Double>](repeating: .zero, count: scene.pieces.count)
         var echelles = [Double](repeating: 1, count: scene.pieces.count)
-        for (i, pc) in scene.pieces.enumerated() where i < cartes.count && i < positions.count {
-            let c = g.centrePlateau(pc.etage, t)
-            let fe = CameraScene.rampe(i < etat.fk.count ? etat.fk[i] : 0)
-            let voile = 1 - es * (1 - fe), f = 1 + 0.3 * fe
-            voiles[i] = voile
-            echelles[i] = f
-            let vis = min(1 - 0.85 * (1 - voile), pc.etage < ve.count ? ve[pc.etage] : 1)
-            let bx = c.x + positions[i].x, bz = c.z + positions[i].y
-            let y0 = c.y + 0.02, y1 = y0 + h
-            let x0 = bx - cartes[i].largeur * f / 2, x1 = bx + cartes[i].largeur * f / 2
-            let z0 = bz - cartes[i].profondeur * f / 2, z1 = bz + cartes[i].profondeur * f / 2
-            centres[i] = SIMD3(bx, (y0 + y1) / 2, bz)
+        var apparitions: [String: Double] = [:]
+        func bloc(_ i: Int, centre m: SIMD3<Double>, taille: SIMD2<Double>, f: Double, teinte n: Int, vis: Double) {
+            let bx = m.x, bz = m.z
+            let y0 = m.y + 0.02, y1 = y0 + h
+            let x0 = bx - taille.x * f / 2, x1 = bx + taille.x * f / 2
+            let z0 = bz - taille.y * f / 2, z1 = bz + taille.y * f / 2
+            let centre = SIMD3(bx, (y0 + y1) / 2, bz)
+            if i >= 0 { centres[i] = centre }
             let k: [SIMD3<Double>] = [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1],
                                       [x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]]
-            let teinte = Teinte(hexa: ScenePieces.teintes[pc.teinte % ScenePieces.teintes.count])
+            let teinte = Teinte(hexa: ScenePieces.teintes[n % ScenePieces.teintes.count])
             var faces: [Face] = []
             func face(_ q: [Int], _ n: Int) {
                 guard let p = proj.polygone(q.map { k[$0] }) else { return }
@@ -251,13 +254,51 @@ public struct SceneProjetee: Sendable {
             if oeil.z < z0 { face([0, 1, 5, 4], 5) }
             let aretes = Self.aretesBloc.compactMap { proj.segment(k[$0.0], k[$0.1]) }
             blocs.append(Bloc(piece: i, faces: faces, aretes: aretes, teinte: teinte, opaciteVerre: vis * (0.13 + 0.05 * t),
-                              opaciteAretes: vis * 0.75, profondeur: proj.profondeur(centres[i])))
+                              opaciteAretes: vis * 0.75, profondeur: proj.profondeur(centre)))
             let coins = k.compactMap { proj.ecran($0) }
-            if coins.count == 8 { ancresPieces[i] = Self.boite(coins) }
-            for (r, id) in pc.noeuds.enumerated() where r < cartes[i].places.count {
-                let l = cartes[i].places[r]
-                mondes[id] = SIMD3(bx + l.x * f, c.y + 0.1 + 0.5 * h * t, bz + l.y * f)
+            if i >= 0, coins.count == 8 { ancresPieces[i] = Self.boite(coins) }
+        }
+        // Un noeud en transition : le centre de sa piece, puis sa place dans la carte, a l'echelle `f`.
+        func monde(_ n: PosesScene.Noeud, f: Double) -> SIMD3<Double>? {
+            guard let c = PosesScene.centre(n.ancres, geometrie: g, plateaux: plateaux, t: t) else { return nil }
+            return SIMD3(c.x + n.decalage.x * f, c.y + 0.1 + 0.5 * h * t, c.z + n.decalage.y * f)
+        }
+        for (i, pc) in scene.pieces.enumerated() where i < cartes.count && i < positions.count {
+            let c = g.centrePlateau(pc.etage, t)
+            let fe = CameraScene.rampe(i < etat.fk.count ? etat.fk[i] : 0)
+            let voile = 1 - es * (1 - fe), f = 1 + 0.3 * fe
+            voiles[i] = voile
+            echelles[i] = f
+            var vis = min(1 - 0.85 * (1 - voile), pc.etage < ve.count ? ve[pc.etage] : 1)
+            var m = SIMD3(c.x + positions[i].x, c.y, c.z + positions[i].y)
+            var taille = SIMD2(cartes[i].largeur, cartes[i].profondeur)
+            if let pose = poses.pieces[pc.id], let centre = PosesScene.centre(pose.ancres, geometrie: g, plateaux: plateaux, t: t) {
+                m = centre
+                taille = pose.taille
+                vis *= pose.opacite
             }
+            bloc(i, centre: m, taille: taille, f: f, teinte: pc.teinte, vis: vis)
+            for (r, id) in pc.noeuds.enumerated() where r < cartes[i].places.count {
+                if let n = poses.noeuds[id] {
+                    apparitions[id] = n.opacite
+                    if let w = monde(n, f: f) {
+                        mondes[id] = w
+                        continue
+                    }
+                }
+                let l = cartes[i].places[r]
+                mondes[id] = SIMD3(m.x + l.x * f, m.y + 0.1 + 0.5 * h * t, m.z + l.y * f)
+            }
+        }
+        let presentes = Set(scene.pieces.map(\.id))
+        for (k, pose) in poses.pieces.sorted(by: { $0.key < $1.key }) where !presentes.contains(k) {
+            guard let centre = PosesScene.centre(pose.ancres, geometrie: g, plateaux: plateaux, t: t) else { continue }
+            bloc(-1, centre: centre, taille: pose.taille, f: 1, teinte: pose.teinte, vis: pose.opacite)
+        }
+        for (id, n) in poses.noeuds where scene.noeud(id) == nil {
+            guard let w = monde(n, f: 1) else { continue }
+            mondes[id] = w
+            fantomes.insert(id)
         }
         blocs.sort { $0.profondeur > $1.profondeur }
         centresNoeuds = mondes
@@ -273,9 +314,14 @@ public struct SceneProjetee: Sendable {
             guard let p = mondes[n.id], let e = proj.ecran(p) else { continue }
             let r = min(n.rayon * 1.1, max(3, n.rayon * proj.pxParUnite(p) / CartesPieces.px))
             disques.append(Disque(noeud: n.id, centre: e, rayon: r,
-                                  opacite: min(1 - 0.8 * (1 - voiles[n.piece]), voileEtage(n.piece)),
+                                  opacite: min(1 - 0.8 * (1 - voiles[n.piece]), voileEtage(n.piece)) * (apparitions[n.id] ?? 1),
                                   profondeur: proj.profondeur(p)))
             ancresNoeuds[n.id] = CGRect(x: Double(e.x) - r, y: Double(e.y) - r, width: 2 * r, height: 2 * r)
+        }
+        for id in fantomes.sorted() {
+            guard let n = poses.noeuds[id], let p = mondes[id], let e = proj.ecran(p) else { continue }
+            let r = min(n.rayon * 1.1, max(3, n.rayon * proj.pxParUnite(p) / CartesPieces.px))
+            disques.append(Disque(noeud: id, centre: e, rayon: r, opacite: n.opacite, profondeur: proj.profondeur(p)))
         }
         disques.sort { $0.profondeur > $1.profondeur }
 
@@ -287,12 +333,25 @@ public struct SceneProjetee: Sendable {
             let poids = min(1 - 0.85 * (1 - max(voiles[na.piece], voiles[nb.piece])),
                             max(voileEtage(na.piece), voileEtage(nb.piece)))
             let eclaire = [l.de, l.vers].contains { $0 == etat.survol || $0 == etat.selection }
+            let fondu = poses.liens[PosesScene.cle(l)]?.opacite ?? 1
             if l.genre == .radio {
-                liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite, opacite: 0.95 * poids,
+                liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite, opacite: 0.95 * poids * fondu,
                                           eclaire: eclaire))
             } else {
                 liensEnfants.append(Lien(a: pa, b: pb, genre: l.genre, qualite: l.qualite,
-                                         opacite: eclaire ? 0.85 : 0.28 * poids, eclaire: eclaire))
+                                         opacite: (eclaire ? 0.85 : 0.28 * poids) * fondu, eclaire: eclaire))
+            }
+        }
+        // Les liens qui s'effacent, absents de la scene, entre les places affichees de leurs bouts.
+        let presents = Set(scene.liens.map(PosesScene.cle))
+        for (k, l) in poses.liens.sorted(by: { $0.key < $1.key }) where !presents.contains(k) {
+            guard let a = mondes[l.de], let b = mondes[l.vers], let (pa, pb) = proj.segment(a, b) else { continue }
+            if l.genre == .radio {
+                liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite, opacite: 0.95 * l.opacite,
+                                          eclaire: false))
+            } else {
+                liensEnfants.append(Lien(a: pa, b: pb, genre: l.genre, qualite: l.qualite, opacite: 0.28 * l.opacite,
+                                         eclaire: false))
             }
         }
 
@@ -343,13 +402,13 @@ public struct SceneProjetee: Sendable {
 
     /// Piece sous un point de l'ecran : la plus proche dont une face le contient.
     public func piece(sous p: CGPoint) -> Int? {
-        blocs.reversed().first { b in b.faces.contains { Self.contient($0.points, p) } }?.piece
+        blocs.reversed().first { b in b.piece >= 0 && b.faces.contains { Self.contient($0.points, p) } }?.piece
     }
 
     /// Noeud sous un point de l'ecran : la pastille la plus proche, a `marge` points pres de son bord.
     public func noeud(sous p: CGPoint, marge: Double = 8) -> String? {
         var meilleur: (String, Double)?
-        for d in disques where d.opacite > 0.5 {
+        for d in disques where d.opacite > 0.5 && !fantomes.contains(d.noeud) {
             let e = hypot(Double(d.centre.x - p.x), Double(d.centre.y - p.y))
             if e <= d.rayon + marge, e < meilleur?.1 ?? .infinity { meilleur = (d.noeud, e) }
         }
