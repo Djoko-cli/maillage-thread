@@ -18,11 +18,12 @@ Le polissage se fait en quatre sous-projets : A, B et C sont fusionnés ; **D (c
 
 ## 1. Le glissement d'une disposition à l'autre
 
-**Quand :** chaque fois que le moteur installe une nouvelle disposition. Il y en a quatre sources :
+**Quand :** chaque fois que le moteur installe une nouvelle disposition. Il y en a trois sources :
 - un relevé ;
 - un appareil placé dans une pièce ;
-- une pièce glissée par Djoko ;
 - un choix de niveau.
+
+Une pièce glissée par Djoko n'en est pas une : voir plus bas.
 
 Les plateaux qui changent de niveau gardent leur glissement de C, avec les mêmes 0,9 s.
 
@@ -53,7 +54,7 @@ Le triage A, n° 6, constatait ceci : un changement d'état change le nom affich
 - la mesure d'une carte (`CartesPieces`) compte, pour chaque nom, la place de ses badges possibles : ☾, ⚠︎ et 👑, qu'ils soient affichés ou non ;
 - la place de la pastille de pile faible (« ⚠︎ 12 % ») n'est réservée qu'aux appareils dont la pile est connue (décision du 05/10). Une pile qui devient connue peut donc élargir la carte une fois ;
 - le chef (👑) ne remonte plus en tête de sa carte : il garde sa place, avec sa couronne. Sinon, un changement de chef réordonnerait la carte. C'est un écart voulu à la spec de la vue par pièces, section 2.2 (décision du 05/10) ;
-- la clé de disposition ne contient plus les badges, seulement les noms nus, et le fait que la pile soit connue ;
+- la clé de disposition ne contient plus les badges, seulement les noms nus, le fait que la pile soit connue, et le fait que le nœud route (il ne prend pas ☾) ;
 - un badge qui apparaît ou disparaît ne relance donc plus le calcul : rien ne bouge, seul le nom change.
 
 Les cartes s'élargissent un peu, et toutes les images de démo changent une fois. Le placement des noms ne change pas.
@@ -82,7 +83,7 @@ C'est le triage A, n° 7. Le moniteur local prenait toute la molette et tout Éc
 Un routeur de bordure non identifié garde ses candidats, les annonces non reprises qui peuvent être la sienne (plan 3a). Son nom est alors « A ou B · RLOC16 », et il va dans « Sans pièce ». Chez Djoko, les deux HomePod d'une paire stéréo y tombent ensemble dès que la sonde perd leur ExtMac.
 
 **La règle :**
-- on cherche la pièce de chaque candidat, comme celle d'un routeur identifié qui porterait son annonce : d'abord le choix de « Placer dans une pièce… », gardé sous l'instance de l'annonce, puis la règle du nom (spec de la vue par pièces, section 2.3) ;
+- on cherche la pièce de chaque candidat, comme celle d'un routeur identifié qui porterait son annonce : par la même chaîne que pour un routeur identifié : la pièce donnée par Maison s'il y en a une, puis le choix de « Placer dans une pièce… », gardé sous l'instance de l'annonce, puis la règle du nom (spec de la vue par pièces, section 2.3) ;
 - si tous les candidats ont une pièce, et que c'est la même, le routeur va dans cette pièce ;
 - sinon, il reste dans « Sans pièce », comme aujourd'hui ;
 - le nom ne change pas : « A ou B · RLOC16 » reste honnête ;
@@ -111,7 +112,7 @@ Constat de Djoko du 04/10 : juste après la première tournée, la courbe « Sig
 
 **La valeur au survol :**
 - quand le pointeur passe sur la courbe du signal, le relevé le plus proche dans le temps est mis en avant : un trait vertical à son heure, un point sur sa valeur ;
-- une étiquette donne sa valeur et son heure, par exemple « −67 dBm · 14 h 32 », au format de la langue de l'app ; pour 7 j et 30 j, elle donne aussi le jour ;
+- une étiquette donne sa valeur et son heure, par exemple « −67 dBm · 16:13 » en français, au format d'heure de la langue de l'app ; pour 7 j et 30 j, elle donne aussi le jour ;
 - un relevé ne compte que s'il est à moins de 2 % de la largeur de la période du pointeur ; dans un trou de la courbe, rien n'est montré ;
 - le pointeur sorti de la courbe, l'étiquette disparaît ;
 - l'étiquette reste dans le cadre du graphe, à gauche du trait quand il est près du bord droit.
