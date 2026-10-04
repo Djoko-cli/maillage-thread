@@ -14,6 +14,7 @@ Le polissage se fait en quatre sous-projets : A, B et C sont fusionnés ; **D (c
 | Rythme des glissements | **0,9 s**, la durée et la courbe des changements de niveau de C ; apparitions et disparitions en fondu de 0,3 s |
 | Un badge change (⚠︎, ☾, 👑, pastille de pile) | **l'étage ne bouge pas** : les cartes réservent la place des badges |
 | Ajouts du 04/10, pendant le plan | un routeur dont tous les candidats sont dans la même pièce va dans cette pièce (section 4.1) ; la rotation lente continue quand une pièce ou un étage est isolé (section 4.2) ; le signal vu par la sonde a toujours une échelle, et sa valeur se lit au survol (section 4.3) |
+| Points du plan, 05/10 | la pastille de pile n'est réservée qu'aux appareils dont la pile est connue ; une pièce glissée ne relance pas le calcul ; le chef garde sa place dans sa carte ; le moteur est découpé en fichiers dans D (section 5) |
 
 ## 1. Le glissement d'une disposition à l'autre
 
@@ -38,7 +39,7 @@ Chacun va de sa pose affichée à sa pose nouvelle, en **0,9 s**, en cubique ent
 
 **Une nouvelle disposition pendant un glissement** repart de la pose affichée à cet instant, sans saut. Il en va de même pour un isolement ou un vol de caméra en cours : la caméra suit ce qu'elle regarde, comme pour la grille de C.
 
-**Une pièce glissée par Djoko** n'est pas animée à son relâchement : elle est déjà à sa place. Seules les autres pièces que le recalcul déplace glissent.
+**Une pièce glissée par Djoko** n'est pas animée à son relâchement : elle est déjà à sa place. Le relâchement ne relance pas le calcul, comme avant : les autres pièces ne bougent pas, et ne glissent qu'à la disposition suivante (décision du 05/10). Un recalcul au relâchement pourrait réarranger toute la maison.
 
 **« Réduire les animations »** : tout est immédiat, sans fondu.
 
@@ -49,8 +50,10 @@ Chacun va de sa pose affichée à sa pose nouvelle, en **0,9 s**, en cubique ent
 Le triage A, n° 6, constatait ceci : un changement d'état change le nom affiché, donc la largeur de la carte et la clé de disposition. Il pouvait réarranger un étage.
 
 **Ce qui change :**
-- la mesure d'une carte (`CartesPieces`) compte, pour chaque nom, la place de ses badges possibles : ☾, ⚠︎, 👑 et la pastille de pile faible (« ⚠︎ 12 % »), qu'ils soient affichés ou non ;
-- la clé de disposition ne contient plus les badges, seulement les noms nus ;
+- la mesure d'une carte (`CartesPieces`) compte, pour chaque nom, la place de ses badges possibles : ☾, ⚠︎ et 👑, qu'ils soient affichés ou non ;
+- la place de la pastille de pile faible (« ⚠︎ 12 % ») n'est réservée qu'aux appareils dont la pile est connue (décision du 05/10). Une pile qui devient connue peut donc élargir la carte une fois ;
+- le chef (👑) ne remonte plus en tête de sa carte : il garde sa place, avec sa couronne. Sinon, un changement de chef réordonnerait la carte. C'est un écart voulu à la spec de la vue par pièces, section 2.2 (décision du 05/10) ;
+- la clé de disposition ne contient plus les badges, seulement les noms nus, et le fait que la pile soit connue ;
 - un badge qui apparaît ou disparaît ne relance donc plus le calcul : rien ne bouge, seul le nom change.
 
 Les cartes s'élargissent un peu, et toutes les images de démo changent une fois. Le placement des noms ne change pas.
@@ -123,6 +126,11 @@ La courbe de la qualité des liens garde son échelle fixe de 0 à 3, sans survo
 - **la transition de la section 1,** écrite directement dans le cœur.
 
 Le moteur garde le rendu, les gestes, l'horloge et les vols, et appelle ces types.
+
+**Le moteur est aussi découpé en fichiers** (décision du 05/10, le moteur passant sinon de 1 724 à 1 877 lignes). C'est la dernière tâche de code de D, une fois tout le reste en place :
+- `MoteurPieces` se répartit en extensions, par responsabilité : par exemple le rendu, les gestes, l'horloge et les vols, l'isolement et la grille, le menu ;
+- aucun fichier ne dépasse environ 600 lignes ;
+- le code est déplacé, sans être réécrit ; les tests ne changent pas, et les images de démo restent identiques, octet pour octet.
 
 **Le comportement ne change pas.** Les tests du moteur, de la fenêtre et de l'isolement restent verts sans être affaiblis. Les règles écrites deux fois (relecture de la tâche 5 de C) n'ont plus qu'un endroit.
 
