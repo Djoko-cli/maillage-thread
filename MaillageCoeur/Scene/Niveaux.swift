@@ -83,11 +83,10 @@ extension Rangement {
     /// ordre y sont dans le leur ; un plateau du garde absent du nouveau, absent de la scene, y garde son rang relatif,
     /// juste apres celui qui le precedait dans le garde (en tete s'il n'en avait pas).
     public static func fondre(_ nouveau: [String], dans garde: [String]) -> [String] {
-        let presents = Set(nouveau)
         var r = nouveau
         var precedent: String?
         for c in garde {
-            if !presents.contains(c), !r.contains(c) {
+            if !r.contains(c) {
                 let i = precedent.flatMap { r.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
                 r.insert(c, at: i)
             }

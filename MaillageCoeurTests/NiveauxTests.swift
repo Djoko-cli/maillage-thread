@@ -96,15 +96,17 @@ struct NiveauxTests {
         #expect(r.ordre == ["c", "a", "b", "e", "d"])
     }
 
-    /// Le nouvel ordre fondu dans l'ordre garde (polissage D, section 4) : un plateau absent de la scene y garde son rang
-    /// relatif, juste apres celui qui le precedait ; en tete s'il l'etait ; plusieurs absents de suite restent ensemble,
-    /// dans leur ordre. Un plateau nouveau garde la place que lui donne le nouvel ordre ; sans ordre garde, le nouvel ordre.
+    /// Le nouvel ordre fondu dans l'ordre garde (polissage D, section 4) : un plateau absent de la scene y garde son
+    /// rang relatif, juste apres celui qui le precedait ; en tete s'il l'etait ; plusieurs absents de suite restent
+    /// ensemble, dans leur ordre. Un plateau nouveau garde la place que lui donne le nouvel ordre ; sans ordre garde,
+    /// le nouvel ordre.
     @Test func ordreFondu() {
         #expect(Rangement.fondre(["a", "c", "b"], dans: ["a", "x", "b", "c"]) == ["a", "x", "c", "b"])
         #expect(Rangement.fondre(["b", "a"], dans: ["x", "a", "b"]) == ["x", "b", "a"])
         #expect(Rangement.fondre(["b", "a"], dans: ["a", "x", "y", "b"]) == ["b", "a", "x", "y"])
         #expect(Rangement.fondre(["a", "n", "b"], dans: ["a", "b", "z"]) == ["a", "n", "b", "z"])
-        #expect(Rangement.fondre(["a", "b"], dans: []) == ["a", "b"] && Rangement.fondre(["b", "a"], dans: ["a", "b"]) == ["b", "a"])
+        #expect(Rangement.fondre(["a", "b"], dans: []) == ["a", "b"], "sans ordre garde : le nouvel ordre")
+        #expect(Rangement.fondre(["b", "a"], dans: ["a", "b"]) == ["b", "a"], "sans absent : le nouvel ordre")
         var p = PlacesGardees()
         p.ordonner(["a", "x", "b"], domicile: "Maison")
         p.ranger(Rangement(ordre: ["b", "a"], aCote: [:]), domicile: "Maison")

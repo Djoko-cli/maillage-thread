@@ -351,9 +351,9 @@ struct IsolementTests {
                 "le plateau, par sa cle")
     }
 
-    /// Un etage isole (polissage C, section 5.1) : les autres plateaux a 15 %, la sphere effacee, la rotation lente
-    /// arretee ; les pieces de l'etage isole se glissent, celles des autres etages seulement se cliquent ; seuls les
-    /// noms des appareils de l'etage isole sont voulus, selon le zoom.
+    /// Un etage isole (polissage C, section 5.1) : les autres plateaux a 15 %, la sphere effacee ; la rotation lente
+    /// continue autour de la cible (polissage D, section 4.2) ; les pieces de l'etage isole se glissent, celles des
+    /// autres etages seulement se cliquent ; seuls les noms des appareils de l'etage isole sont voulus, selon le zoom.
     @Test func etageIsole() throws {
         let url = MoteurPiecesTests.fichier()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -396,6 +396,14 @@ struct IsolementTests {
         #expect(t.orbite.azimut < azimut && t.orbite.cible == cible, "la rotation lente continue, autour de la cible")
     }
 
+    /// Deux images, 20 ms apres : l'azimut tourne-t-il ?
+    private static func tourne(_ m: MoteurPieces) -> Bool {
+        let a = m.orbite.azimut
+        Thread.sleep(forTimeInterval: 0.02)
+        MoteurPiecesTests.dessiner(m)
+        return m.orbite.azimut < a
+    }
+
     /// La rotation lente pendant un isolement (polissage D, section 4.2) : en 3D, autour de la piece isolee, la cible et
     /// la distance gardees ; elle s'arrete pendant un geste (un glisser, le zoom de la molette, un pincement) et reprend
     /// apres ; « Rotation lente » decochee ou « Reduire les animations » : pas de rotation. Le temps reel n'y est qu'une
@@ -414,13 +422,7 @@ struct IsolementTests {
             MoteurPiecesTests.dessiner(m)
             return m
         }
-        // Deux images, 20 ms apres : l'azimut tourne-t-il ?
-        func tourne(_ m: MoteurPieces) -> Bool {
-            let a = m.orbite.azimut
-            Thread.sleep(forTimeInterval: 0.02)
-            MoteurPiecesTests.dessiner(m)
-            return m.orbite.azimut < a
-        }
+        let tourne = Self.tourne
         let m = moteur()
         let (cible, distance) = (m.orbite.cible, m.orbite.distance)
         #expect(m.estIsolee && tourne(m), "elle tourne, la piece isolee")
@@ -447,6 +449,54 @@ struct IsolementTests {
         d.basculerRotation()
         MoteurPiecesTests.dessiner(d)
         #expect(!d.rotation && !tourne(d), "decochee")
+    }
+
+    /// La rotation lente n'a lieu qu'en 3D, l'envol fini (polissage D, section 4.2), la piece isolee ou non : en 2D,
+    /// rien ne tourne ; a mi-bascule (3D commencee, `t` entre 0 et 1), non plus ; en 3D fini, si.
+    @Test func rotationSeulementEnTroisDFini() throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (_, e) = try Self.jardinDehors(url)
+        let salon = try MoteurPiecesTests.indice(e, "Salon")
+        func moteur(troisD: Bool, isolee: Bool) -> MoteurPieces {
+            let m = MoteurPieces(troisD: troisD)
+            m.marges = (84, 50)
+            m.poserTaille(MoteurPiecesTests.taille)
+            m.installerMaintenant(e)
+            if isolee { m.poserIsolement(salon) }
+            MoteurPiecesTests.dessiner(m)
+            return m
+        }
+        for isolee in [false, true] {
+            #expect(Self.tourne(moteur(troisD: true, isolee: isolee)), "3D fini, isolee : \(isolee)")
+            #expect(!Self.tourne(moteur(troisD: false, isolee: isolee)), "2D, isolee : \(isolee)")
+            let m = moteur(troisD: true, isolee: isolee)
+            m.poserBascule(0.5)
+            MoteurPiecesTests.dessiner(m)
+            #expect(m.t > 0 && m.t < 1 && !Self.tourne(m), "a mi-bascule, isolee : \(isolee)")
+        }
+    }
+
+    /// Apres un vrai vol (1,3 s, l'horloge de l'app) vers une piece, la rotation lente reprend, en 3D, a partir de la
+    /// pose du bout du vol : la cible gardee, un azimut qui ne bouge que d'un pas d'image (au plus 0,1 s de tour) ;
+    /// en 2D, rien ne tourne avant ni apres.
+    @Test(.timeLimit(.minutes(1)), arguments: [false, true]) func rotationApresUnVraiVol(troisD: Bool) async throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (m, e) = try Self.jardinDehors(url, troisD: troisD)
+        m.isoler(try MoteurPiecesTests.indice(e, "Salon"))
+        #expect(m.enMouvement, "le vol part")
+        try await MoteurPiecesTests.attendre {
+            MoteurPiecesTests.dessiner(m)
+            return !m.enMouvement
+        }
+        #expect(!m.enMouvement && m.estIsolee, "le vol est fini, la piece isolee")
+        let (azimut, cible) = (m.orbite.azimut, m.orbite.cible)
+        #expect(Self.tourne(m) == troisD, "la rotation reprend en 3D, pas en 2D")
+        #expect(m.orbite.cible == cible)
+        let pas = 2 * Double.pi / CameraScene.dureeTour * 0.1
+        let tourne = azimut - m.orbite.azimut
+        #expect(troisD ? tourne <= pas + 1e-9 : tourne == 0, "sans saut : \(tourne)")
     }
 
     /// Triage A, n° 8 : pendant le retour d'une piece isolee, les noms des appareils suivent l'etat d'arrivee, et la

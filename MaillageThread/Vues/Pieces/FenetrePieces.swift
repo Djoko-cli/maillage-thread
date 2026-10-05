@@ -263,6 +263,9 @@ struct VuePieces: View {
     /// Un glisser est en cours. SwiftUI le remet a faux a la fin du geste, meme annule (sans `onEnded`) :
     /// le moteur clot alors un geste qui serait reste ouvert.
     @GestureState private var glisse = false
+    /// Un pincement est en cours. Meme chose : un pincement annule n'a pas d'`onEnded`, et le moteur garde alors son
+    /// dernier `magnification`, qui arreterait la rotation lente jusqu'au pincement suivant.
+    @GestureState private var pince = false
 
     /// Espace de coordonnees de la vue et de ce qui est pose dessus.
     nonisolated static let espace = "pieces"
@@ -310,6 +313,7 @@ struct VuePieces: View {
             .onChanged { moteur.glisser($0.location, depart: $0.startLocation, option: NSEvent.modifierFlags.contains(.option)) }
             .onEnded { moteur.relacher($0.location) })
         .simultaneousGesture(MagnifyGesture()
+            .updating($pince) { _, p, _ in p = true }
             .onChanged { moteur.pincer($0.magnification, en: $0.startLocation) }
             .onEnded { _ in moteur.finPincement() })
         .contextMenu { MenuPieces(moteur: moteur) }
@@ -323,12 +327,16 @@ struct VuePieces: View {
         .onChange(of: glisse) { _, g in
             if !g { moteur.abandonnerGeste() }
         }
+        .onChange(of: pince) { _, p in
+            if !p { moteur.finPincement() }
+        }
         .onChange(of: entree, initial: true) { _, e in moteur.recevoir(e) }
         .onAppear { moteur.ecouter() }
         .onDisappear {
             moteur.arreterEcoute()
             // La vue quitte la fenetre pendant un geste : ni `onEnded`, ni peut-etre le changement ci-dessus.
             moteur.abandonnerGeste()
+            moteur.finPincement()
         }
     }
 }
