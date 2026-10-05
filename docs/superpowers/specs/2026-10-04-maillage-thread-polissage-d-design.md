@@ -38,7 +38,7 @@ Chacun va de sa pose affichée à sa pose nouvelle, en **0,9 s**, en cubique ent
 - un élément présent seulement dans la nouvelle disposition (pièce, appareil, lien) apparaît en **fondu de 0,3 s** à sa place ;
 - un élément présent seulement dans l'ancienne s'efface en 0,3 s, à sa dernière place.
 
-**Une nouvelle disposition pendant un glissement** repart de la pose affichée à cet instant, sans saut. Il en va de même pour un isolement ou un vol de caméra en cours : la caméra suit ce qu'elle regarde, comme pour la grille de C.
+**Une nouvelle disposition pendant un glissement** repart de la pose affichée à cet instant, sans saut. Il en va de même pour un isolement ou un vol de caméra en cours : la caméra suit ce qu'elle regarde, comme pour la grille de C. Une disposition qui arrive pendant un vol, l'envol ou un geste attend toujours la fin du mouvement (spec de la vue par pièces, section 7), puis glisse de la pose affichée : un délai, jamais un saut.
 
 **Une pièce glissée par Djoko** n'est pas animée à son relâchement : elle est déjà à sa place. Le relâchement ne relance pas le calcul, comme avant : les autres pièces ne bougent pas, et ne glissent qu'à la disposition suivante (décision du 05/10). Un recalcul au relâchement pourrait réarranger toute la maison.
 
