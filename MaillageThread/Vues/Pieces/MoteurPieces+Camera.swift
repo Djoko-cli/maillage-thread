@@ -129,13 +129,25 @@ extension MoteurPieces {
         if glissementPlateaux == nil && aLaVueDEnsemble { recadrer() }   // posee tout de suite : cadree tout de suite
     }
 
-    /// Ce que la vue regarde : la piece isolee, l'etage isole, ou la cible de la vue d'ensemble ; dans la geometrie de
-    /// l'image, ou dans `g`.
+    /// Ce que la vue regarde : la piece isolee, l'etage isole (ou celui de la piece isolee), ou la cible de la vue
+    /// d'ensemble ; dans la geometrie de l'image, ou dans `g`. Une piece ou un etage qu'on quitte, encore en train de
+    /// se relacher, ne sont plus regardes : la vue regarde deja ce vers quoi elle remonte (relecture ciblee de la vague
+    /// finale, Important 1).
     func ancreCamera(dans g: GeometrieMaison? = nil) -> SIMD3<Double> {
         let g = g ?? geometrie
-        if let i = focus, let c = centrePiece(i, dans: g) { return c }
-        if let k = etageEnVue, let e = scene?.etages.firstIndex(where: { $0.id == k }) { return g.centrePlateau(e, t) }
+        if let i = focus, sCible == 1, let c = centrePiece(i, dans: g) { return c }
+        if let k = etageEnVue, seCible == 1, let e = scene?.etages.firstIndex(where: { $0.id == k }) {
+            return g.centrePlateau(e, t)
+        }
         return g.cible2D + (g.centreSphere - g.cible2D) * t
+    }
+
+    /// La cle de ce que la vue regarde, comme `ancreCamera` : `p:` et la cle de la piece isolee, ou `e:` et celle de
+    /// l'etage en vue ; nil, la vue d'ensemble. `piece` : la cle de la piece de `focus`.
+    func cleRegard(piece: String?) -> String? {
+        if sCible == 1, let piece { return "p:" + piece }
+        if seCible == 1, let k = etageEnVue { return "e:" + k }
+        return nil
     }
 
     /// Centre du bloc d'une piece, dans le monde, dans la geometrie de l'image ou dans `g` : sa pose affichee quand

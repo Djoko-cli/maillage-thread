@@ -373,9 +373,11 @@ struct TransitionSceneTests {
     }
 
     /// Ce qui s'efface sous le voile d'un isolement (relecture finale, Mineur 2) : sur le plateau estompe d'un etage
-    /// isole, une piece, ses pastilles et leurs liens qui partent sont estompes comme ce qui reste, a 15 % au plus de
-    /// leur fondu ; sous une piece isolee, comme une piece hors du focus : le bloc et les liens a 15 %, les pastilles
-    /// a 20 %. Sans isolement, le fondu seul.
+    /// isole, une piece, ses pastilles et leurs liens qui partent sont estompes comme ce qui reste, a 15 % de leur
+    /// fondu ; sous une piece isolee, comme une piece hors du focus : le bloc et les liens a 15 %, les pastilles a
+    /// 20 %, exactement, et non moins (relecture ciblee de la vague finale, Mineur 2). Des pastilles qui quittent la
+    /// piece isolee elle-meme, et leurs liens, gardent son voile : elles partent de leur opacite affichee (Mineur 1 de
+    /// la meme relecture). Sans isolement, le fondu seul.
     @Test func ceQuiSEffaceSousLeVoile() throws {
         let (s, c, d, g) = try SceneProjeteeTests.scene()
         #expect(s.etages.map(\.id) == ["zone:Rez-de-chaussée", "zone:Étage"])
@@ -393,7 +395,7 @@ struct TransitionSceneTests {
         f.liens[PosesScene.cle(radio)] = PosesScene.Lien(radio, opacite: 0.4)
         f.liens[PosesScene.cle(enfant)] = PosesScene.Lien(enfant, opacite: 0.4)
         /// Le facteur de chacun, sur son fondu : le bloc, les deux pastilles, le lien radio, le lien enfant.
-        func facteurs(_ e: EtatAnime) throws -> [Double] {
+        func facteurs(_ e: EtatAnime, _ f: PosesScene) throws -> [Double] {
             let sans = SceneProjetee(scene: s, cartes: c, positions: d.positions, geometrie: g, etat: e, orbite: o,
                                      cadre: SceneProjeteeTests.cadre)
             let p = SceneProjetee(scene: s, cartes: c, positions: d.positions, geometrie: g, etat: e, orbite: o,
@@ -406,17 +408,29 @@ struct TransitionSceneTests {
             return [bloc.opaciteAretes / (0.75 * 0.6)] + disques.map { $0.opacite / 0.8 }
                 + [r.opacite / (0.95 * 0.4), l.opacite / (0.28 * 0.4)]
         }
+        func egaux(_ a: [Double], _ b: [Double]) -> Bool {
+            a.count == b.count && zip(a, b).allSatisfy { abs($0 - $1) < 1e-12 }
+        }
         let n = s.pieces.count
-        let libre = try facteurs(EtatAnime(t: 0, fk: Array(repeating: 0, count: n)))
-        #expect(libre.allSatisfy { abs($0 - 1) < 1e-12 }, "sans isolement, le fondu seul : \(libre)")
-        let etage = try facteurs(EtatAnime(t: 0, fk: Array(repeating: 0, count: n), se: 1, ek: [1, 0]))
-        #expect(etage.count == 5 && etage.allSatisfy { $0 <= 0.15 + 1e-12 }, "l'etage isole est l'autre : \(etage)")
+        let libre = try facteurs(EtatAnime(t: 0, fk: Array(repeating: 0, count: n)), f)
+        #expect(egaux(libre, [1, 1, 1, 1, 1]), "sans isolement, le fondu seul : \(libre)")
+        let etage = try facteurs(EtatAnime(t: 0, fk: Array(repeating: 0, count: n), se: 1, ek: [1, 0]), f)
+        #expect(egaux(etage, [0.15, 0.15, 0.15, 0.15, 0.15]), "l'etage isole est l'autre : \(etage)")
         let salon = try SceneProjeteeTests.indice(s, "Salon")
         var fk = Array(repeating: 0.0, count: n)
         fk[salon] = 1
-        let piece = try facteurs(EtatAnime(t: 0, s: 1, fk: fk, focus: salon))
-        let plafonds = [0.15, 0.2, 0.2, 0.15, 0.15]
-        #expect(piece.count == 5 && zip(piece, plafonds).allSatisfy { $0 <= $1 + 1e-12 }, "le salon isole : \(piece)")
+        let isole = EtatAnime(t: 0, s: 1, fk: fk, focus: salon)
+        let piece = try facteurs(isole, f)
+        #expect(egaux(piece, [0.15, 0.2, 0.2, 0.15, 0.15]), "le salon isole : \(piece)")
+        // Les deux pastilles quittent le salon isole lui-meme : son voile, celui de leur opacite affichee ; leurs
+        // liens aussi. Le bloc qui part est celui d'une autre piece.
+        let posees = PosesScene(scene: s, cartes: c, positions: d.positions)
+        #expect(posees.noeuds.allSatisfy { k, p in p.piece == s.noeud(k).map { s.pieces[$0.piece].id } },
+                "une pose de noeud porte la cle de sa piece")
+        var duSalon = f
+        for id in ["E000000000000009", "E00000000000000A"] { duSalon.noeuds[id]?.piece = s.pieces[salon].id }
+        let partantes = try facteurs(isole, duSalon)
+        #expect(egaux(partantes, [0.15, 1, 1, 1, 1]), "elles quittent le salon isole : \(partantes)")
     }
 
     /// Ce qui s'efface, absent de la scene, se dessine a sa derniere place, a son opacite : une piece (son bloc, sans

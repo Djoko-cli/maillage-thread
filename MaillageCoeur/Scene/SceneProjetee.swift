@@ -309,12 +309,20 @@ public struct SceneProjetee: Sendable {
             }
         }
         // Ce qui s'efface est sous le voile de l'isolement, comme ce qui reste (relecture finale, Mineur 2) : celui du
-        // plateau de son ancre de plus fort poids, et celui d'une piece hors du focus.
+        // plateau de son ancre de plus fort poids, et celui d'une piece hors du focus ; un noeud, celui de la piece
+        // qu'il quitte, si elle reste : il part de son opacite affichee, meme de la piece isolee (relecture ciblee de
+        // la vague finale, Mineur 1).
         func voileAncres(_ ancres: [PosesScene.Ancre]) -> Double {
             guard let a = ancres.max(by: { $0.poids < $1.poids }), let e = plateaux[a.plateau], e < ve.count else {
                 return 1
             }
             return ve[e]
+        }
+        // Sans transition, pas de noeud qui s'efface : pas d'indice a construire.
+        let indicesPieces = poses.noeuds.isEmpty ? [:]
+            : Dictionary(scene.pieces.indices.map { (scene.pieces[$0].id, $0) }, uniquingKeysWith: { a, _ in a })
+        func pieceRestante(_ n: PosesScene.Noeud) -> Int? {
+            n.piece.flatMap { indicesPieces[$0] }.flatMap { $0 < voiles.count ? $0 : nil }
         }
         let presentes = Set(scene.pieces.map(\.id))
         for (k, pose) in poses.pieces.sorted(by: { $0.key < $1.key }) where !presentes.contains(k) {
@@ -349,7 +357,8 @@ public struct SceneProjetee: Sendable {
         for id in fantomes.sorted() {
             guard let n = poses.noeuds[id], let p = mondes[id], let e = proj.ecran(p) else { continue }
             disques.append(Disque(noeud: id, centre: e, rayon: rayonPastille(n.rayon, en: p),
-                                  opacite: min(1 - 0.8 * es, voileAncres(n.ancres)) * n.opacite,
+                                  opacite: min(1 - 0.8 * (pieceRestante(n).map { 1 - voiles[$0] } ?? es),
+                                               voileAncres(n.ancres)) * n.opacite,
                                   profondeur: proj.profondeur(p)))
         }
         disques.sort { $0.profondeur > $1.profondeur }
@@ -375,10 +384,11 @@ public struct SceneProjetee: Sendable {
         }
         // Les liens qui s'effacent, absents de la scene, entre les places affichees de leurs bouts, sous le voile de
         // leurs bouts, comme ceux qui restent : un bout de la scene, celui de sa piece ; un bout qui s'efface, celui
-        // d'une piece hors du focus et du plateau de son ancre.
+        // de la piece qu'il quitte si elle reste, sinon d'une piece hors du focus, et celui du plateau de son ancre.
         func voilesBout(_ id: String) -> (piece: Double, etage: Double) {
             if let n = scene.noeud(id) { return (voiles[n.piece], voileEtage(n.piece)) }
-            return (1 - es, poses.noeuds[id].map { voileAncres($0.ancres) } ?? 1)
+            guard let n = poses.noeuds[id] else { return (1 - es, 1) }
+            return (pieceRestante(n).map { voiles[$0] } ?? 1 - es, voileAncres(n.ancres))
         }
         let presents = poses.liens.isEmpty ? Set<String>() : Set(scene.liens.map(PosesScene.cle))
         for (k, l) in poses.liens.sorted(by: { $0.key < $1.key }) where !presents.contains(k) {

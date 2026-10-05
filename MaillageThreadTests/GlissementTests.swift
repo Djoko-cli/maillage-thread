@@ -664,4 +664,171 @@ struct GlissementTests {
         MoteurPiecesTests.dessiner(m, taille: taille)
         #expect(m.colonnes == meilleure && m.geometrieVisee.colonnes == meilleure)
     }
+
+    /// La grille fusionnee glisse en sa duree (relecture ciblee de la vague finale, Mineur 3) : « Etages en 2D »
+    /// coche pendant que la vue est zoomee (la grille attend, en 2,6 s), le retour a la vue d'ensemble 2D, puis une
+    /// autre taille avant la prochaine image : la demande du redimensionnement (0,4 s) fusionne avec celle du
+    /// reglage, et les plateaux glissent en 2,6 s, la plus longue.
+    @Test func grilleFusionneeGlisseEnSaDuree() throws {
+        let e = try MoteurPiecesTests.quatrePlateaux()
+        let m = MoteurPiecesTests.moteur(e)
+        let r = m.geometrie.rayons
+        let c = try #require(m.colonnes)
+        // Une autre taille, ou le meilleur choix, sans hysteresis, est une autre grille.
+        let tailles = stride(from: 500.0, through: 1600, by: 50).flatMap { h in
+            stride(from: 600.0, through: 2400, by: 40).map { CGSize(width: $0, height: h) }
+        }
+        let (taille, meilleure) = try #require(tailles.lazy.compactMap { t -> (CGSize, Int)? in
+            let zone = CGSize(width: t.width, height: t.height - 84 - 50)
+            guard let b = GeometrieMaison.colonnes(rayons: r, taille: zone), b != c else { return nil }
+            return (t, b)
+        }.first, "une taille ou la grille change")
+        m.reduire = true
+        m.poserZoom(echelle: 1, vers: nil)
+        m.reglerGrille(false)
+        m.reglerGrille(true)
+        #expect(m.grilleEnAttente == PolitiqueGrille.reglage, "zoomee, le reglage attend")
+        #expect(m.sortir() && m.aLaVueDEnsemble2D && m.grilleEnAttente == PolitiqueGrille.reglage)
+        m.reduire = false
+        MoteurPiecesTests.dessiner(m, taille: taille)
+        #expect(m.colonnes == meilleure && m.grilleEnAttente == nil, "posee, sans hysteresis")
+        let gl = try #require(m.glissementPlateaux, "les plateaux glissent")
+        #expect(gl.duree2D == PolitiqueGrille.reglage.duree && gl.duree2D > PolitiqueGrille.redimensionnement.duree,
+                "en la duree fusionnee : \(gl.duree2D)")
+    }
+
+    /// « Reduire les animations » (relecture ciblee de la vague finale, Important 1) : la cuisine isolee, quittee
+    /// pour son etage, se relache encore 1,3 s ; une disposition qui la deplace arrive alors (le salon fondu dedans).
+    /// La vue regarde l'etage, pas la cuisine : elle suit l'etage, et garde son ecart avec lui. De meme si la cuisine
+    /// disparait (ses appareils passes au salon), et sans « Reduire ».
+    @Test(arguments: [false, true], [false, true]) func pieceQuitteePourLEtage(reduire: Bool, disparait: Bool) throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (m, e) = try IsolementTests.jardinDehors(url)
+        m.reduire = reduire
+        let ic = try MoteurPiecesTests.indice(e, "Cuisine")
+        m.poserIsolement(ic)
+        MoteurPiecesTests.dessiner(m)
+        let ie = try IsolementTests.indiceEtage(e, IsolementTests.etage)
+        m.allerEtage(ie)
+        var n = 0
+        while m.enMouvement && n < 200 {
+            Thread.sleep(forTimeInterval: 0.02)
+            MoteurPiecesTests.dessiner(m)
+            n += 1
+        }
+        #expect(!m.enMouvement && m.isolement == .etage(IsolementTests.etage))
+        #expect((m.focus != nil) == reduire, "sous « Reduire », la cuisine se relache encore")
+        let c0 = m.orbite.cible
+        let et0 = m.geometrie.centrePlateau(ie, m.t)
+        let cu0 = try #require(m.centrePiece(ic))
+        let deplacer = disparait ? ["Cuisine": "Salon"] : ["Salon": "Cuisine"]
+        let e2 = try IsolementTests.sceneQuiArrive(e, places: m.places, deplacer: deplacer)
+        m.installerMaintenant(e2)
+        m.reculerTransition(de: 2)
+        MoteurPiecesTests.dessiner(m)
+        MoteurPiecesTests.dessiner(m)
+        let entree = try #require(m.entree)
+        let et1 = m.geometrie.centrePlateau(try IsolementTests.indiceEtage(entree, IsolementTests.etage), m.t)
+        if disparait {
+            #expect(!entree.scene.pieces.contains { $0.id == "piece:Cuisine" } && m.focus == nil,
+                    "la cuisine disparait")
+            #expect(simd_distance(et0, et1) > 0.1, "l'etage a bouge : \(simd_distance(et0, et1))")
+        } else {
+            let cu1 = try #require(m.centrePiece(try MoteurPiecesTests.indice(entree, "Cuisine")))
+            #expect(simd_distance(cu0, cu1) > 1, "la cuisine a bouge")
+        }
+        #expect(m.isolement == .etage(IsolementTests.etage))
+        #expect(simd_distance(m.orbite.cible - et1, c0 - et0) < 1e-6, "la vue suit l'etage, pas la cuisine")
+    }
+
+    /// Echap depuis la cuisine isolee : la vue d'ensemble ; sous « Reduire les animations », la cuisine se relache
+    /// encore 1,3 s, et une disposition qui la deplace arrive alors (relecture ciblee de la vague finale, Important 1).
+    /// La vue regarde la maison, pas la cuisine : elle reste cadree sur la vue d'ensemble, tout de suite, et apres le
+    /// relachement. Sans « Reduire », de meme.
+    @Test(arguments: [false, true]) func echapPuisDisposition(reduire: Bool) throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (m, e) = try IsolementTests.jardinDehors(url)
+        m.reduire = reduire
+        let ic = try MoteurPiecesTests.indice(e, "Cuisine")
+        m.poserIsolement(ic)
+        MoteurPiecesTests.dessiner(m)
+        #expect(m.sortir())
+        var n = 0
+        while m.enMouvement && n < 200 {
+            Thread.sleep(forTimeInterval: 0.02)
+            MoteurPiecesTests.dessiner(m)
+            n += 1
+        }
+        #expect(!m.enMouvement && m.isolement == .maison)
+        #expect((m.focus != nil) == reduire, "sous « Reduire », la cuisine se relache encore")
+        let cu0 = try #require(m.centrePiece(ic))
+        let e2 = try IsolementTests.sceneQuiArrive(e, places: m.places, deplacer: ["Salon": "Cuisine"])
+        m.installerMaintenant(e2)
+        m.reculerTransition(de: 2)
+        MoteurPiecesTests.dessiner(m)
+        MoteurPiecesTests.dessiner(m)
+        let e3 = try #require(m.entree)
+        let cu1 = try #require(m.centrePiece(try MoteurPiecesTests.indice(e3, "Cuisine")))
+        #expect(simd_distance(cu0, cu1) > 1, "la cuisine a bouge")
+        func ecart() -> Double {
+            simd_distance(m.orbite.cible, CameraScene.canonique(m.geometrie, aspect: m.aspect, u: m.t).cible)
+        }
+        #expect(ecart() < 1e-6, "la vue d'ensemble, tout de suite : \(ecart())")
+        n = 0
+        while m.focus != nil && n < 200 {
+            Thread.sleep(forTimeInterval: 0.02)
+            MoteurPiecesTests.dessiner(m)
+            n += 1
+        }
+        #expect(m.focus == nil && ecart() < 1e-6, "et apres le relachement : \(ecart())")
+    }
+
+    /// Une piece isolee qui disparait, la vue zoomee (relecture ciblee de la vague finale, Mineur 3) : la vue regardait
+    /// la piece, elle ne regarde plus la meme chose ; elle ne bouge pas, avec ou sans « Reduire les animations ».
+    @Test(arguments: [false, true]) func pieceIsoleeDisparueVueZoomee(reduire: Bool) throws {
+        let (s, _, e) = try NomsSceneTests.demo()
+        let maison = try #require(s.noms.maison)
+        var deplacer: [String: String] = [:]
+        for a in maison.accessoires where a.piece == "Cuisine" { deplacer[a.nom] = "Salon" }
+        let e2 = try Self.demo(deplacer)
+        #expect(!e2.scene.pieces.contains { $0.id == "piece:Cuisine" }, "la cuisine disparait")
+        let i = try MoteurPiecesTests.indice(e, "Cuisine")
+        let m = MoteurPiecesTests.moteur(e)
+        m.reduire = reduire
+        m.poserZoom(echelle: 2, vers: nil)
+        m.poserIsolement(i)
+        MoteurPiecesTests.dessiner(m)
+        let c0 = m.orbite.cible
+        m.installerMaintenant(e2)
+        m.reculerTransition(de: 2)
+        MoteurPiecesTests.dessiner(m)
+        MoteurPiecesTests.dessiner(m)
+        #expect(m.focus == nil && m.vueTouchee)
+        #expect(simd_distance(m.orbite.cible, c0) < 1e-9, "la vue ne bouge pas : \(simd_distance(m.orbite.cible, c0))")
+    }
+
+    /// Un appareil qui quitte la piece isolee elle-meme (relecture ciblee de la vague finale, Mineur 1) : sa pastille
+    /// pleinement opaque s'efface depuis son opacite affichee, sans tomber d'abord sous le voile d'une piece hors du
+    /// focus.
+    @Test func pastilleQuiPartDeLaPieceIsolee() throws {
+        let (m, e1) = try Self.moteur()
+        let id = Self.inconnu
+        let i = try #require(e1.scene.pieces.firstIndex { $0.noeuds.contains(id) })
+        m.poserIsolement(i)
+        MoteurPiecesTests.dessiner(m)
+        let avant = try #require(m.projetee?.disques.first { $0.noeud == id }).opacite
+        #expect(m.estIsolee && avant == 1, "dans la piece isolee, pleinement opaque")
+        m.installerMaintenant(try Self.demoSansInconnu())
+        let tr = try #require(m.transition)
+        #expect(tr.depart.noeuds[id]?.piece == e1.scene.pieces[i].id && tr.arrivee.noeuds[id] == nil,
+                "il s'efface, de sa piece")
+        for (q, attendu) in [(0.0, 1.0), (0.05, 0.85), (0.1, 0.7)] {
+            m.poserTransition(q)
+            MoteurPiecesTests.dessiner(m)
+            let o = try #require(m.projetee?.disques.first { $0.noeud == id }).opacite
+            #expect(abs(o - attendu) < 1e-9, "a \(q) du glissement : \(o)")
+        }
+    }
 }

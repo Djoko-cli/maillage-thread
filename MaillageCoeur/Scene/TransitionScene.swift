@@ -42,12 +42,17 @@ public struct PosesScene: Hashable, Sendable {
         /// Rayon naturel de sa pastille (px).
         public var rayon: Double
         public var opacite: Double
+        /// La cle de sa piece : un noeud qui s'efface garde le voile de la piece qu'il quitte, si elle reste
+        /// (relecture ciblee de la vague finale, Mineur 1) ; nil, inconnue.
+        public var piece: String?
 
-        public init(ancres: [Ancre], decalage: SIMD2<Double>, rayon: Double, opacite: Double = 1) {
+        public init(ancres: [Ancre], decalage: SIMD2<Double>, rayon: Double, opacite: Double = 1,
+                    piece: String? = nil) {
             self.ancres = ancres
             self.decalage = decalage
             self.rayon = rayon
             self.opacite = opacite
+            self.piece = piece
         }
     }
 
@@ -74,7 +79,7 @@ public struct PosesScene: Hashable, Sendable {
     public init() {}
 
     /// Les poses de `scene` posee : chaque piece a sa place (`positions`), de la taille de sa carte (`cartes`) ; chaque
-    /// noeud a sa place dans la carte de sa piece ; chaque lien. Tout est opaque.
+    /// noeud a sa place dans la carte de sa piece, avec la cle de celle-ci ; chaque lien. Tout est opaque.
     public init(scene: ScenePieces, cartes: [CartesPieces.Carte], positions: [SIMD2<Double>]) {
         for (i, p) in scene.pieces.enumerated()
         where i < cartes.count && i < positions.count && p.etage < scene.etages.count {
@@ -82,7 +87,8 @@ public struct PosesScene: Hashable, Sendable {
             pieces[p.id] = Piece(ancres: ancres, taille: SIMD2(cartes[i].largeur, cartes[i].profondeur),
                                  teinte: p.teinte)
             for (r, id) in p.noeuds.enumerated() where r < cartes[i].places.count {
-                noeuds[id] = Noeud(ancres: ancres, decalage: cartes[i].places[r], rayon: scene.noeud(id)?.rayon ?? 7)
+                noeuds[id] = Noeud(ancres: ancres, decalage: cartes[i].places[r], rayon: scene.noeud(id)?.rayon ?? 7,
+                                   piece: p.id)
             }
         }
         for l in scene.liens { liens[Self.cle(l)] = Lien(l) }

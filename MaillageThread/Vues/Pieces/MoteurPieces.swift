@@ -89,7 +89,7 @@ enum Curseur: Equatable {
 /// main). Ces extensions ecrivent l'etat, qui n'est donc plus `private(set)` : Swift n'en a pas entre fichiers. L'etat
 /// qui etait `private(set)` avant ce decoupage, hors de ces six fichiers, on le lit seulement ; le compilateur ne le
 /// garde plus, cette regle le remplace. La vue pose le reste, comme avant : `selection`, `reduire`, `marges`,
-/// `basGrille`, `fenetre` et `vue`.
+/// `basGrille`, `fenetre` et `vue` ; les captures de demo posent aussi `fige` (`CapturesPieces`).
 @MainActor
 @Observable
 final class MoteurPieces {

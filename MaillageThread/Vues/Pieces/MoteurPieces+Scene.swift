@@ -110,8 +110,9 @@ extension MoteurPieces {
         let niveauxChanges = pret && entree?.scene.niveaux != scene.niveaux
         let ensemble = aLaVueDEnsemble2D
         // Ce que la vue regarde, et ou, a l'image d'avant : sans glissement (« Reduire les animations »), elle le
-        // suit d'un coup (plus bas).
-        let regard = ancienFocus.map { "p:" + $0 } ?? etageEnVue.map { "e:" + $0 }
+        // suit d'un coup (plus bas). Une piece ou un etage qu'on quitte n'est plus regarde, meme s'il se relache
+        // encore (relecture ciblee de la vague finale, Important 1).
+        let regard = cleRegard(piece: ancienFocus)
         let ancre0 = pret ? ancreCamera() : nil
         // La pose affichee de la scene d'avant, et sa pose d'arrivee (polissage D, section 1).
         let avant = entree.map { PosesScene(scene: $0.scene, cartes: cartes, positions: positions) }
@@ -199,7 +200,7 @@ extension MoteurPieces {
         } else if !vueTouchee && sansIsolement {
             recadrer()
         } else if let ancre0, transition == nil, glissementPlateaux == nil, !aLaVueDEnsemble,
-                  regard == (focus.map { "p:" + scene.pieces[$0].id } ?? etageEnVue.map { "e:" + $0 }) {
+                  regard == cleRegard(piece: focus.map { scene.pieces[$0].id }) {
             // Rien ne glisse (« Reduire les animations ») : les pieces et les plateaux sont poses tout de suite
             // (polissage D, section 1 ; polissage C, section 1.3). La vue isolee ou zoomee suit ce qu'elle regarde,
             // d'un coup, depuis sa place a l'image d'avant, comme le glissement le lui fait suivre image apres image
