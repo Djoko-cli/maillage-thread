@@ -6051,7 +6051,7 @@ Expected: `Ran 121 tests`, `OK`, sous les deux Python ; 12 tests de plus qu'apr�
 - [ ] **Step 5 : la capture du dépôt ressort telle quelle.**
 
 Run: `python3 outils/anonymiser-sonde.py docs/releves/2026-09-29/capture-sonde.jsonl "$HOME/Library/Caches/maillage-plan3b/capture.jsonl" && cmp docs/releves/2026-09-29/capture-sonde.jsonl "$HOME/Library/Caches/maillage-plan3b/capture.jsonl" && shasum -a 256 "$HOME/Library/Caches/maillage-plan3b/capture.jsonl" && rm "$HOME/Library/Caches/maillage-plan3b/capture.jsonl"`
-Expected: `64 lignes ; 0 ExtMac, 0 identifiants, 0 prefixes /48 remplaces`, `cmp` muet, puis `d77853f1759925819d4ad4f4c1ee3aa07e26e689d75833e5af85a51df5424832` (l'empreinte de la capture validée au plan 3a).
+Expected: `64 lignes ; 0 ExtMac, 0 identifiants, 0 prefixes /48 remplaces`, `cmp` muet, puis `b6ee78110e024534af1dd099c1997d0f72ce564f8eebb5dbf705fa3f49558bbb` (l'empreinte de la capture validée au plan 3a).
 
 - [ ] **Step 6 : commit.**
 

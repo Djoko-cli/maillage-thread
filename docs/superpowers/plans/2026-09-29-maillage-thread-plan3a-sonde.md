@@ -676,7 +676,7 @@ Run: `python3 outils/anonymiser-sonde.py docs/releves/2026-09-29/capture-sonde-e
 Expected: `64 lignes ; 14 ExtMac, 18 identifiants, 3 prefixes /48 remplaces`
 
 Run: `shasum -a 256 docs/releves/2026-09-29/capture-sonde.jsonl`
-Expected: `d77853f1759925819d4ad4f4c1ee3aa07e26e689d75833e5af85a51df5424832`. C'est l'empreinte de la capture anonymisée validée ; les tests des tâches suivantes en dépendent.
+Expected: `b6ee78110e024534af1dd099c1997d0f72ce564f8eebb5dbf705fa3f49558bbb`. C'est l'empreinte de la capture anonymisée validée ; les tests des tâches suivantes en dépendent.
 
 - [ ] **Step 4 : les scripts se compilent.**
 

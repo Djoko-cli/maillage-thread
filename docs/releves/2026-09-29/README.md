@@ -19,11 +19,18 @@ remplacées de façon cohérente d'une ligne à l'autre, jusque dans les TLV :
 - le `xp`, en `A0A1A2A3A4A5A6A7`, et la MAC de la sonde, en `A0…`.
 
 Le code d'appairage et le QR code sont retirés (`null`), non remplacés.
-Les RLOC16, partitions, qualités de lien, délais et versions de pile sont
-gardés, et les `id` des `diag` aussi : ils reprennent ceux des commandes
-envoyées (`diag <cible> <TLV> <id>`), choisis à la main ou par
+Les RLOC16, qualités de lien, délais et versions de pile sont gardés, et les
+`id` des `diag` aussi : ils reprennent ceux des commandes envoyées
+(`diag <cible> <TLV> <id>`), choisis à la main ou par
 `sonde/tournee_essai.py`, qui numérote à partir de 101. Ce ne sont pas des
 identifiants de la sonde. La capture brute n'est pas dans le dépôt.
+
+**Réécriture du 05/10/2026.** L'anonymiseur gardait deux identifiants réels :
+la partition et le 4e groupe du préfixe de maillage local, derrière
+`fd00:1111:2222`. L'historique du dépôt a été réécrit (spec de
+l'anonymisation, `docs/superpowers/specs/2026-10-05-anonymisation-design.md`) :
+ils sont désormais inventés, jusque dans les TLV, et la capture ne garde plus
+aucun identifiant réel. Le canal radio est gardé, comme dans le reste du dépôt.
 
 Ce que la capture montre (spec de la sonde, section 8) :
 - **Les 5 routeurs de bordure d'Apple ne répondent jamais** : `0400`, `AC00`,
