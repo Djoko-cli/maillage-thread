@@ -68,6 +68,23 @@ struct CourbesFiche: View {
         Set(Dictionary(grouping: points, by: \.troncon).filter { $0.value.count == 1 }.keys)
     }
 
+    /// Le nom du nouveau parent, en haut du trace, a droite de chaque pointille d'un changement de parent. Pose dans
+    /// une couche sur le graphe et non en `annotation` : sous le verre de la fiche, les annotations du graphe ne se
+    /// dessinent pas (verification du 05/10).
+    static func nomsDesParents(_ changements: [ChangementParent], _ noms: [String: String], proxy: ChartProxy,
+                               geometrie g: GeometryProxy) -> some View {
+        ForEach(changements, id: \.date) { ch in
+            if let cadre = proxy.plotFrame, let x = proxy.position(forX: ch.date) {
+                Text(verbatim: "→ " + (noms[ch.parent] ?? ch.parent)).font(.caption2)
+                    .padding(.horizontal, 2)
+                    .fixedSize()
+                    .frame(width: 0, height: 0, alignment: .leading)
+                    .position(x: g[cadre].origin.x + x, y: g[cadre].origin.y + 8)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
     private func qualite(_ c: CourbesNoeud, _ noms: [String: String]) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(Self.titreQualite(c)).font(.caption).foregroundStyle(.secondary)
@@ -90,14 +107,14 @@ struct CourbesFiche: View {
                     RuleMark(x: .value("Heure", ch.date))
                         .foregroundStyle(.secondary)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        .annotation(position: .top, alignment: .leading) {
-                            Text(verbatim: "→ " + (noms[ch.parent] ?? ch.parent)).font(.caption2)
-                        }
                 }
             }
             .chartXScale(domain: c.debut ... c.fin)
             .chartYScale(domain: 0 ... 3)
             .chartYAxis { AxisMarks(values: [0, 1, 2, 3]) }
+            .chartOverlay { proxy in
+                GeometryReader { g in Self.nomsDesParents(c.parents, noms, proxy: proxy, geometrie: g) }
+            }
             .chartLegend(c.liens.allSatisfy { $0.id == CourbesNoeud.cleParent } ? .hidden : .visible)
             .frame(width: 320, height: 120)
         }
@@ -170,9 +187,6 @@ struct GrapheSignal: View {
                     RuleMark(x: .value("Heure", ch.date))
                         .foregroundStyle(.secondary)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        .annotation(position: .top, alignment: .leading) {
-                            Text(verbatim: "→ " + (noms[ch.parent] ?? ch.parent)).font(.caption2)
-                        }
                 }
                 // Le releve survole : un trait a son heure, un point sur sa valeur ; son etiquette est dans `chartOverlay`.
                 if let r = a.releve {
@@ -196,6 +210,7 @@ struct GrapheSignal: View {
                             }
                             if heure != survole { survole = heure }
                         }
+                    CourbesFiche.nomsDesParents(c.parentsSonde, noms, proxy: proxy, geometrie: g)
                     // L'etiquette du releve survole, en haut du trace, a gauche du trait dans la moitie droite, a droite
                     // sinon. Posee ici et non en `annotation` : sous le verre de la fiche, les annotations du graphe ne
                     // se dessinent pas (verification du 05/10).
