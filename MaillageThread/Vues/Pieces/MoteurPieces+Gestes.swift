@@ -36,7 +36,7 @@ extension MoteurPieces {
         }
         surCliquable = switch c {
         case .appareil, .piece: true
-        case .nomEtage(let e): clicEtage(e, disque: false) != .rien
+        case .nomEtage(let e): etageCliquable(e, disque: false)
         case .disque(let e): disqueCliquable(e)
         case .fond: false
         }
@@ -99,11 +99,17 @@ extension MoteurPieces {
     /// Un clic sur ce disque fait quelque chose (polissage C, section 5.4) : sauf celui de l'etage isole, entre ses
     /// pieces ; dans une maison d'un seul plateau, seulement depuis une piece isolee, pour remonter.
     func disqueCliquable(_ e: Int) -> Bool {
-        clicEtage(e, disque: true) != .rien
+        etageCliquable(e, disque: true)
     }
 
-    /// Ce que fait un clic sur le nom ou le disque du plateau `e` (`Isolement.clicEtage`) : la regle du clic et de la
-    /// main du pointeur.
+    /// La main du pointeur sur le nom ou le disque du plateau `e` : la regle du clic (`Isolement.cliquable`).
+    private func etageCliquable(_ e: Int, disque: Bool) -> Bool {
+        guard let scene, e < scene.etages.count else { return false }
+        return isolement.cliquable(scene.etages[e].id, disque: disque, plusieursPlateaux: scene.etages.count > 1,
+                                   pieceIsolee: estIsolee)
+    }
+
+    /// Ce que fait un clic sur le nom ou le disque du plateau `e` (`Isolement.clicEtage`).
     private func clicEtage(_ e: Int, disque: Bool) -> Isolement.ClicEtage {
         guard let scene, e < scene.etages.count else { return .rien }
         return isolement.clicEtage(scene.etages[e].id, disque: disque, plusieursPlateaux: scene.etages.count > 1,
@@ -148,11 +154,9 @@ extension MoteurPieces {
             } else if !estIsolee, !enMouvement, let scene, let i = projetee?.piece(sous: d), i < scene.pieces.count,
                       indiceEtageIsole.map({ $0 == scene.pieces[i].etage }) ?? true {
                 // Les pieces de l'etage isole se glissent ; celles des autres etages se cliquent seulement. Une piece
-                // en route vers sa place y est posee, avec ses noeuds : elle suit le pointeur depuis sa place, a sa
-                // hauteur, lue une fois posee. Sans centre (un indice hors des positions), elle reste de cote : le
-                // geste est celui du fond.
-                transition?.oublier(pieces: [scene.pieces[i].id], noeuds: Set(scene.pieces[i].noeuds))
-                if let tr = transition { posesAffichees = tr.poses(a: Self.maintenant()) }
+                // en route vers sa place n'y est posee qu'au premier vrai mouvement (`prendrePiece`) : un simple clic
+                // ne la fait pas sauter. Sans centre (un indice hors des positions), elle reste de cote : le geste est
+                // celui du fond.
                 if let h = centrePiece(i)?.y {
                     geste = .piece(scene.pieces[i].id, hauteur: h)
                 } else {
@@ -164,7 +168,10 @@ extension MoteurPieces {
             majCurseur()
         }
         if !bouge && hypot(p.x - d.x, p.y - d.y) < 5 { return }
-        bouge = true
+        if !bouge {
+            bouge = true
+            if case .piece(let id, _)? = geste { geste = prendrePiece(id) }
+        }
         defer { precedent = p }
         guard !enMouvement, let geste else { return }
         let proj = ProjectionScene(orbite, cadre: cadre)
@@ -195,6 +202,18 @@ extension MoteurPieces {
             }
         }
         reveiller()
+    }
+
+    /// Une piece prise, au premier vrai mouvement du glisser (relecture finale, Mineur 3) : en route vers sa place,
+    /// elle y est posee, avec ses noeuds ; elle suit alors le pointeur depuis sa place, a sa hauteur, lue une fois
+    /// posee. Sans centre, le geste devient celui du fond.
+    private func prendrePiece(_ id: String) -> Geste {
+        guard let scene, let i = scene.pieces.firstIndex(where: { $0.id == id }) else { return .fond }
+        if transition != nil {
+            transition?.oublier(pieces: [id], noeuds: Set(scene.pieces[i].noeuds))
+            if let tr = transition { posesAffichees = tr.poses(a: Self.maintenant()) }
+        }
+        return centrePiece(i).map { .piece(id, hauteur: $0.y) } ?? .fond
     }
 
     /// Fin d'un glisser, ou clic. Deux clics sur le fond ou sur un disque, a moins de l'intervalle du double-clic
@@ -304,7 +323,13 @@ extension MoteurPieces {
         zoomer(l, en: p)
     }
 
-    func finPincement() { dernierPincement = 1 }
+    /// Fin du pincement (relache, annule, ou la vue fermee) : la rotation lente, arretee pendant le geste, reprend
+    /// (polissage D, section 4.2) ; l'horloge, endormie pendant un pincement tenu immobile, se reveille.
+    func finPincement() {
+        guard dernierPincement != 1 else { return }
+        dernierPincement = 1
+        reveiller()
+    }
 
     /// Zoom amorti ; en 2D, vers le point sous le curseur.
     private func zoomer(_ l: Double, en p: CGPoint?) {

@@ -84,13 +84,24 @@ struct CourbesFicheTests {
         #expect(GrapheSignal.affichage(droite, survole: droite.debut, periode: .jour).releve == nil, "dans un trou")
     }
 
-    /// Le pointeur : son heure dans la zone de trace, aucune hors de la zone, et aucune a la sortie (`.ended`).
+    /// Le pointeur : l'heure du releve le plus proche de sa position dans la zone de trace, la meme tant que ce releve
+    /// ne change pas (relecture finale, Mineur 4 : l'etat du graphe ne change pas a chaque pixel) ; aucune dans un
+    /// trou, hors de la zone, et a la sortie (`.ended`). Sur 24 h, un releve compte a moins de 20 min.
     @Test func heureSurvolee() {
         let d = Date(timeIntervalSince1970: 1_790_000_000)
-        let dans = GrapheSignal.heureSurvolee(.active(CGPoint(x: 10, y: 5))) { d.addingTimeInterval($0.x) }
-        #expect(dans == d.addingTimeInterval(10))
-        #expect(GrapheSignal.heureSurvolee(.active(.zero)) { _ in nil } == nil, "hors de la zone de trace")
-        #expect(GrapheSignal.heureSurvolee(.ended) { _ in d } == nil)
+        let signal = [PointCourbe(date: d, valeur: -60, troncon: 0),
+                      PointCourbe(date: d.addingTimeInterval(300), valeur: -62, troncon: 0),
+                      PointCourbe(date: d.addingTimeInterval(7200), valeur: -64, troncon: 1)]
+        func heure(_ phase: HoverPhase) -> Date? {
+            GrapheSignal.heureSurvolee(phase, signal: signal, periode: .jour) { d.addingTimeInterval($0.x) }
+        }
+        #expect(heure(.active(CGPoint(x: 10, y: 5))) == d && heure(.active(CGPoint(x: 100, y: 40))) == d,
+                "deux positions proches du meme releve : son heure")
+        #expect(heure(.active(CGPoint(x: 200, y: 5))) == d.addingTimeInterval(300), "le suivant, plus proche")
+        #expect(heure(.active(CGPoint(x: 3750, y: 5))) == nil, "dans un trou")
+        #expect(GrapheSignal.heureSurvolee(.active(.zero), signal: signal, periode: .jour) { _ in nil } == nil,
+                "hors de la zone de trace")
+        #expect(GrapheSignal.heureSurvolee(.ended, signal: signal, periode: .jour) { _ in d } == nil)
     }
 
     /// La fiche montre les courbes des qu'il y a un historique (jamais en demo), et la vue lui

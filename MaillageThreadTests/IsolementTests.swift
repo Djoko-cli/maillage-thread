@@ -434,6 +434,14 @@ struct IsolementTests {
         #expect(tourne(m), "apres")
         m.molette(-3, precis: false)
         #expect(!tourne(m), "pendant le zoom de la molette")
+        // Le zoom amorti va a son terme, une image toutes les 20 ms : la rotation reprend (relecture finale).
+        var images = 0
+        while m.zoomEnAttente != 0 && images < 500 {
+            Thread.sleep(forTimeInterval: 0.02)
+            MoteurPiecesTests.dessiner(m)
+            images += 1
+        }
+        #expect(m.zoomEnAttente == 0 && tourne(m), "apres la molette")
         // Un pincement a peine commence : son zoom, minuscule, se fait a la premiere image ; le geste, lui, dure.
         let pince = moteur()
         pince.pincer(1.0001, en: p)
@@ -449,6 +457,34 @@ struct IsolementTests {
         d.basculerRotation()
         MoteurPiecesTests.dessiner(d)
         #expect(!d.rotation && !tourne(d), "decochee")
+    }
+
+    /// Un pincement tenu immobile (relecture finale, Important 1) : 0,6 s apres la derniere activite, le zoom fini et
+    /// la rotation arretee par le geste, l'horloge s'endort ; la fin du pincement la reveille, et la rotation lente
+    /// reprend (polissage D, section 4.2 : « reprend apres »), sans attendre un autre evenement.
+    @Test(.timeLimit(.minutes(1))) func finDuPincementReveille() async throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (_, e) = try Self.jardinDehors(url)
+        let m = MoteurPieces(troisD: true)
+        m.marges = (84, 50)
+        m.poserTaille(MoteurPiecesTests.taille)
+        m.installerMaintenant(e)
+        m.poserIsolement(try MoteurPiecesTests.indice(e, "Salon"))
+        MoteurPiecesTests.dessiner(m)
+        m.pincer(1.0001, en: CGPoint(x: 600, y: 400))
+        for _ in 0..<5 { MoteurPiecesTests.dessiner(m) }
+        m.derniereActivite = 0
+        m.zoomEnAttente = 0
+        for i in m.etiquettes.indices { m.etiquettes[i].envie = 0 }
+        MoteurPiecesTests.dessiner(m)
+        try await MoteurPiecesTests.attendre { !m.anime }
+        #expect(!m.anime, "le pincement tenu immobile : l'horloge s'endort")
+        m.finPincement()
+        #expect(m.anime, "la fin du pincement la reveille")
+        // La premiere image du reveil a un pas de temps nul (`reveiller`) ; la suivante tourne.
+        MoteurPiecesTests.dessiner(m)
+        #expect(Self.tourne(m), "et la rotation lente reprend")
     }
 
     /// La rotation lente n'a lieu qu'en 3D, l'envol fini (polissage D, section 4.2), la piece isolee ou non : en 2D,

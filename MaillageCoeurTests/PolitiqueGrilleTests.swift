@@ -67,9 +67,9 @@ struct PolitiqueGrilleTests {
         var p = PolitiqueGrille()
         _ = p.premiereZone(rayons: Self.r, zone: Self.carree)
         let attend = p.demander(PolitiqueGrille.redimensionnement, ensemble2D: false, rayons: Self.r, zone: Self.large)
-        #expect(!attend && p.attente == PolitiqueGrille.redimensionnement && p.colonnes == 2)
+        #expect(attend == nil && p.attente == PolitiqueGrille.redimensionnement && p.colonnes == 2)
         let attendEncore = p.demander(PolitiqueGrille.reglage, ensemble2D: false, rayons: Self.r, zone: Self.large)
-        #expect(!attendEncore)
+        #expect(attendEncore == nil)
         #expect(p.attente == PolitiqueGrille.Demande(duree: 2.6, hysteresis: false))
         var q = PolitiqueGrille()
         q.attendre(PolitiqueGrille.reglage)
@@ -80,10 +80,25 @@ struct PolitiqueGrilleTests {
         h.attendre(PolitiqueGrille.Demande(duree: 0.2, hysteresis: true))
         #expect(h.attente == PolitiqueGrille.Demande(duree: 0.4, hysteresis: true), "l'hysteresis, si toutes la demandent")
         let posee = p.demander(PolitiqueGrille.niveaux, ensemble2D: true, rayons: Self.r, zone: Self.large)
-        #expect(posee && p.attente == nil && p.colonnes == 4)
+        #expect(posee == PolitiqueGrille.Demande(duree: 2.6, hysteresis: false) && p.attente == nil && p.colonnes == 4,
+                "la demande posee : celle qui attendait, fusionnee")
         p.attendre(PolitiqueGrille.niveaux)
         p.oublierAttente()
         #expect(p.attente == nil && p.colonnes == 4)
+        // Une demande a la vue d'ensemble 2D, une autre en attente (relecture finale, Mineur 9) : elles fusionnent ; le
+        // reglage attendait sans hysteresis, le redimensionnement qui la porte ne la remet pas : le choix exact.
+        var f = PolitiqueGrille()
+        _ = f.premiereZone(rayons: Self.r, zone: Self.carree)
+        f.attendre(PolitiqueGrille.reglage)
+        let fusion = f.demander(PolitiqueGrille.redimensionnement, ensemble2D: true, rayons: Self.r, zone: Self.pres)
+        #expect(fusion == PolitiqueGrille.reglage && f.attente == nil && f.colonnes == 4,
+                "sans hysteresis : 4, et non 2 gardee")
+        var seule = PolitiqueGrille()
+        _ = seule.premiereZone(rayons: Self.r, zone: Self.carree)
+        let seulePosee = seule.demander(PolitiqueGrille.redimensionnement, ensemble2D: true, rayons: Self.r,
+                                        zone: Self.pres)
+        #expect(seulePosee == PolitiqueGrille.redimensionnement && seule.attente == nil && seule.colonnes == 2,
+                "seule, elle garde l'hysteresis")
     }
 
     /// L'hysteresis de 5 % (section 3.3) : 2 x 2 en place reste a 1820 x 1000 avec une demande qui la porte, et pas

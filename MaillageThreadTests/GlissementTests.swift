@@ -418,9 +418,10 @@ struct GlissementTests {
         #expect(simd_distance(avant.orbite.cible, arrivee) < 1e-6, "la vue l'a suivie jusqu'au bout")
     }
 
-    /// Une piece qu'on prend en route est posee a sa place, ses noeuds avec elle, et suit le pointeur ; une piece
-    /// glissee par Djoko n'est pas animee a son relachement, quand la disposition suivante arrive : elle y est fixee,
-    /// deja a sa place ; les autres glissent.
+    /// Une piece qu'on prend en route est posee a sa place, ses noeuds avec elle, et suit le pointeur ; un appui sans
+    /// mouvement ne la prend pas (relecture finale, Mineur 3 : un simple clic ne la fait pas sauter) : elle est posee
+    /// au premier vrai mouvement. Une piece glissee par Djoko n'est pas animee a son relachement, quand la disposition
+    /// suivante arrive : elle y est fixee, deja a sa place ; les autres glissent.
     @Test(.timeLimit(.minutes(1))) func pieceGlissee() async throws {
         let (_, _, e) = try NomsSceneTests.demo()
         let m = MoteurPiecesTests.moteur(e)
@@ -429,11 +430,18 @@ struct GlissementTests {
         #expect(m.transition?.arrivee.pieces["piece:Cuisine"] != nil)
         MoteurPiecesTests.dessiner(m)
         let p = try MoteurPiecesTests.pointDePiece(m, cuisine)
+        let enRoute = m.posesAffichees.pieces["piece:Cuisine"]
         m.glisser(p, depart: p)
+        #expect(m.transition?.arrivee.pieces["piece:Cuisine"] != nil && enRoute != nil
+                && m.posesAffichees.pieces["piece:Cuisine"] == enRoute, "un appui sans mouvement : elle reste en route")
+        m.glisser(CGPoint(x: p.x + 4, y: p.y), depart: p)
+        #expect(m.transition?.arrivee.pieces["piece:Cuisine"] != nil, "a moins de 5 points : pas encore un glisser")
+        m.glisser(CGPoint(x: p.x + 5, y: p.y), depart: p)
         #expect(m.transition?.arrivee.pieces["piece:Cuisine"] == nil && m.posesAffichees.pieces["piece:Cuisine"] == nil)
         #expect(m.transition?.arrivee.noeuds[Self.prise] == nil, "ses noeuds avec elle")
         #expect(m.transition?.arrivee.pieces["piece:Salon"] != nil, "les autres glissent encore")
         m.glisser(CGPoint(x: p.x + 10, y: p.y), depart: p)
+        #expect(m.transition?.arrivee.pieces["piece:Cuisine"] == nil)
         let version = m.versionScene
         m.relacher(CGPoint(x: p.x + 10, y: p.y))
         #expect(m.versionScene == version, "glisser une piece ne relance pas le calcul : aucune scene ne bouge")
@@ -479,13 +487,15 @@ struct GlissementTests {
         let enRoute = try #require(m.centrePiece(bureau)).y
         let p = try MoteurPiecesTests.pointDePiece(m, bureau)
         m.glisser(p, depart: p)
-        let pose = try #require(m.centrePiece(bureau)).y
-        #expect(abs(pose - enRoute) > 1, "en route, la piece est entre deux etages ; posee, a l'etage d'arrivee")
+        let appui = try #require(m.centrePiece(bureau)).y
+        #expect(appui == enRoute, "un appui sans mouvement : elle reste en route")
         let q = CGPoint(x: p.x + 20, y: p.y + 8)
         let projection = ProjectionScene(m.orbite, cadre: m.cadre)
-        let a = try #require(projection.sol(p, hauteur: pose)), b = try #require(projection.sol(q, hauteur: pose))
         let place = m.positions[bureau]
         m.glisser(q, depart: p)
+        let pose = try #require(m.centrePiece(bureau)).y
+        #expect(abs(pose - enRoute) > 1, "en route, la piece est entre deux etages ; posee, a l'etage d'arrivee")
+        let a = try #require(projection.sol(p, hauteur: pose)), b = try #require(projection.sol(q, hauteur: pose))
         #expect(simd_distance(m.positions[bureau], place + SIMD2(b.x - a.x, b.z - a.z)) < 1e-9,
                 "elle suit le pointeur depuis sa place, a sa hauteur d'arrivee")
     }
@@ -559,5 +569,99 @@ struct GlissementTests {
         p.installerMaintenant(e1)
         #expect(p.colonnes == c1 && p.grilleEnAttente == nil && p.transition == nil && p.glissementPlateaux == nil,
                 "les memes rayons : rien")
+    }
+
+    /// « Reduire les animations » (relecture finale, Mineur 1) : une piece isolee qu'une nouvelle disposition deplace
+    /// (la cuisine, l'ampoule de l'entree placee dedans), la vue la suit, d'un coup, comme elle la suit en route sans
+    /// « Reduire » (polissage D, section 1 : « la camera suit ce qu'elle regarde »).
+    @Test(arguments: [false, true]) func reduireSuitLaPieceIsolee(reduire: Bool) throws {
+        let (_, _, e) = try NomsSceneTests.demo()
+        let e2 = try Self.demo("Ampoule entrée", dans: "Cuisine")
+        let cuisine = try MoteurPiecesTests.indice(e, "Cuisine")
+        let m = MoteurPiecesTests.moteur(e)
+        m.reduire = reduire
+        m.poserIsolement(cuisine)
+        MoteurPiecesTests.dessiner(m)
+        let avant = try #require(m.centrePiece(cuisine))
+        #expect(simd_distance(m.orbite.cible, avant) < 1e-6, "la vue regarde la cuisine")
+        m.installerMaintenant(e2)
+        #expect((m.transition == nil) == reduire)
+        m.reculerTransition(de: 2)
+        MoteurPiecesTests.dessiner(m)
+        MoteurPiecesTests.dessiner(m)
+        let c2 = try MoteurPiecesTests.indice(try #require(m.entree), "Cuisine")
+        let apres = try #require(m.centrePiece(c2))
+        #expect(simd_distance(avant, apres) > 1, "la cuisine a bouge")
+        #expect(simd_distance(m.orbite.cible, apres) < 1e-6, "la vue la suit")
+    }
+
+    /// Un releve de meme cle ou un lien radio entre routeurs apparait, pendant un glissement (relecture finale,
+    /// Mineur 10) : le lien change une pose, le glissement est relance, et le lien vient en fondu.
+    @Test func lienQuiApparaitRelance() throws {
+        func demo(liens: ([LienRadio]) -> [LienRadio], deplacer: [String: String]) throws -> EntreeScene {
+            let (s, r, _) = try NomsSceneTests.demo()
+            let m = try #require(s.maillage)
+            s.recevoir(Maillage(date: m.date, partition: m.partition, routeurs: m.routeurs, liens: liens(m.liens),
+                                enfants: m.enfants, signaux: m.signaux), a: s.maintenant)
+            var maison = try #require(s.noms.maison)
+            for k in maison.accessoires.indices {
+                if let p = deplacer[maison.accessoires[k].nom] { maison.accessoires[k].piece = p }
+            }
+            s.noms.maison = maison
+            return EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        }
+        let (m, _) = try Self.moteur()
+        let deplacer = ["Prise salon": "Cuisine"]
+        let sans = try demo(liens: { Array($0.dropLast()) }, deplacer: deplacer)
+        let avec = try demo(liens: { $0 }, deplacer: deplacer)
+        #expect(sans.cleDisposition == avec.cleDisposition, "la meme cle : le releve se pose sans calcul")
+        #expect(sans.scene.liens.count + 1 == avec.scene.liens.count, "un lien de plus")
+        m.installerMaintenant(sans)
+        m.poserTransition(0.5)
+        let premiere = try #require(m.transition)
+        m.recevoir(avec)
+        #expect(m.entree?.scene.liens == avec.scene.liens, "le releve est pose")
+        let tr = try #require(m.transition)
+        #expect(tr != premiere, "le lien qui apparait relance le glissement")
+        #expect(tr.arrivee.liens.count == 1 && tr.poses(a: tr.debut).liens.values.allSatisfy { $0.opacite == 0 }
+                && tr.poses(a: tr.debut + TransitionScene.dureeFondu).liens.values.allSatisfy { $0.opacite == 1 },
+                "et il vient en fondu")
+    }
+
+    /// « Etages en 2D » coche pendant que la vue est zoomee (la grille attend, sans hysteresis), « Reduire les
+    /// animations », Echap (la vue d'ensemble 2D, tout de suite), puis un releve aux rayons changes avant la prochaine
+    /// image (relecture finale, Mineur 9) : la demande du releve ne remplace pas celle du reglage,
+    /// elles fusionnent ; la grille se pose sans hysteresis, sur le meilleur choix, des le releve.
+    @Test func reglagePuisEchapPuisReleve() throws {
+        let e1 = try MoteurPiecesTests.quatrePlateaux()
+        let e3 = try IsolementTests.sceneQuiArrive(e1, places: PlacesGardees()) { zones in
+            zones[1].pieces.removeAll { $0 == "Entrée" }
+            zones[0].pieces += ["Entrée"]
+        }
+        let r1 = MoteurPiecesTests.moteur(e1).geometrie.rayons, r3 = MoteurPiecesTests.moteur(e3).geometrie.rayons
+        let tailles = stride(from: 650.0, through: 1600, by: 50).flatMap { h in
+            stride(from: 820.0, through: 2400, by: 20).map { CGSize(width: $0, height: h) }
+        }
+        // Une vue ou l'hysteresis garde la grille c pour les rayons de e3 ; sans elle, le choix serait un autre.
+        let (taille, c, meilleure) = try #require(tailles.lazy.compactMap { t -> (CGSize, Int, Int)? in
+            let zone = CGSize(width: t.width, height: t.height - 84 - 50)
+            guard let c = GeometrieMaison.colonnes(rayons: r1, taille: zone),
+                  let b = GeometrieMaison.colonnes(rayons: r3, taille: zone), b != c,
+                  GeometrieMaison.colonnes(rayons: r3, taille: zone, enPlace: c) == c else { return nil }
+            return (t, c, b)
+        }.first, "une vue ou l'hysteresis garde la grille")
+        let m = MoteurPiecesTests.moteur(e1, taille: taille)
+        #expect(m.colonnes == c)
+        m.reduire = true
+        m.poserZoom(echelle: 1, vers: nil)
+        m.reglerGrille(false)
+        m.reglerGrille(true)
+        #expect(m.grilleEnAttente == PolitiqueGrille.reglage, "zoomee, le reglage attend")
+        let pris = m.sortir()
+        #expect(pris && m.aLaVueDEnsemble2D && m.grilleEnAttente == PolitiqueGrille.reglage)
+        m.installerMaintenant(e3)
+        #expect(m.colonnes == meilleure && m.grilleEnAttente == nil, "sans hysteresis : le meilleur choix")
+        MoteurPiecesTests.dessiner(m, taille: taille)
+        #expect(m.colonnes == meilleure && m.geometrieVisee.colonnes == meilleure)
     }
 }

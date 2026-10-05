@@ -86,8 +86,10 @@ enum Curseur: Equatable {
 /// par responsabilite (polissage D, section 5) : `MoteurPieces+Scene` (scene, disposition, places gardees, menu du
 /// clic droit), `+Camera` (plateaux et grille, camera, vols, isolement, Echap), `+Image` (chaque image, l'avance de
 /// l'etat, l'horloge), `+Gestes` (souris, molette, pincement, moniteur des evenements) et `+Poses` (etats poses a la
-/// main). Ces extensions ecrivent l'etat, qui n'est donc plus `private(set)` : Swift n'en a pas entre fichiers.
-/// Hors de ces six fichiers, on le lit seulement ; le compilateur ne le garde plus, cette regle le remplace.
+/// main). Ces extensions ecrivent l'etat, qui n'est donc plus `private(set)` : Swift n'en a pas entre fichiers. L'etat
+/// qui etait `private(set)` avant ce decoupage, hors de ces six fichiers, on le lit seulement ; le compilateur ne le
+/// garde plus, cette regle le remplace. La vue pose le reste, comme avant : `selection`, `reduire`, `marges`,
+/// `basGrille`, `fenetre` et `vue`.
 @MainActor
 @Observable
 final class MoteurPieces {

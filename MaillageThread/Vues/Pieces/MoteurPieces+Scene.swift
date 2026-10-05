@@ -109,7 +109,10 @@ extension MoteurPieces {
         let anciens = entree?.scene.etages.map(\.id) ?? []
         let niveauxChanges = pret && entree?.scene.niveaux != scene.niveaux
         let ensemble = aLaVueDEnsemble2D
-        let image = geometrie
+        // Ce que la vue regarde, et ou, a l'image d'avant : sans glissement (« Reduire les animations »), elle le
+        // suit d'un coup (plus bas).
+        let regard = ancienFocus.map { "p:" + $0 } ?? etageEnVue.map { "e:" + $0 }
+        let ancre0 = pret ? ancreCamera() : nil
         // La pose affichee de la scene d'avant, et sa pose d'arrivee (polissage D, section 1).
         let avant = entree.map { PosesScene(scene: $0.scene, cartes: cartes, positions: positions) }
         let affichee = avant?.recouvertes(par: posesAffichees)
@@ -150,7 +153,7 @@ extension MoteurPieces {
         } else if niveauxChanges {
             politique.attendre(PolitiqueGrille.niveaux)
         } else if rayonsChanges && grille {
-            _ = politique.demander(PolitiqueGrille.redimensionnement, ensemble2D: ensemble, rayons: rayons(scene),
+            politique.demander(PolitiqueGrille.redimensionnement, ensemble2D: ensemble, rayons: rayons(scene),
                                    zone: zoneVisible)
         }
         let glisse = pret ? TransitionScene.duree : 0
@@ -195,12 +198,14 @@ extension MoteurPieces {
             orbite = CameraScene.canonique(geometrie, aspect: aspect, u: t)
         } else if !vueTouchee && sansIsolement {
             recadrer()
-        } else if niveauxChanges && glissementPlateaux == nil {
-            // Des niveaux changes, avec « Reduire les animations » : les plateaux sont poses tout de suite
-            // (section 1.3). La vue isolee ou zoomee suit ce qu'elle regarde, d'un coup, depuis sa place au depart du
-            // glissement qu'il n'y a pas : comme le glissement le lui fait suivre image apres image (`suivre`), sans
-            // « Reduire ».
-            suivre(depuis: ancreCamera(dans: depart(image, anciens: anciens, vers: geometrie)))
+        } else if let ancre0, transition == nil, glissementPlateaux == nil, !aLaVueDEnsemble,
+                  regard == (focus.map { "p:" + scene.pieces[$0].id } ?? etageEnVue.map { "e:" + $0 }) {
+            // Rien ne glisse (« Reduire les animations ») : les pieces et les plateaux sont poses tout de suite
+            // (polissage D, section 1 ; polissage C, section 1.3). La vue isolee ou zoomee suit ce qu'elle regarde,
+            // d'un coup, depuis sa place a l'image d'avant, comme le glissement le lui fait suivre image apres image
+            // (`suivre`), sans « Reduire » (relecture finale, Mineur 1). Si elle regarde autre chose (la piece isolee
+            // disparue), elle ne bouge pas.
+            suivre(depuis: ancre0)
         }
         reveiller()
     }

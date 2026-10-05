@@ -112,15 +112,15 @@ struct CourbesFiche: View {
 }
 
 /// Le graphe du signal vu par la sonde, avec sa valeur au survol (polissage D, section 4.3). Une vue a part : le survol
-/// change `survole` a chaque mouvement du pointeur, et seul ce graphe se recalcule, non les courbes de `CourbesFiche`
-/// (qui relisent l'historique de la periode).
+/// change `survole` quand le releve sous le pointeur change, et seul ce graphe se recalcule, non les courbes de
+/// `CourbesFiche` (qui relisent l'historique de la periode).
 struct GrapheSignal: View {
     @Environment(\.locale) private var langue
     let c: CourbesNoeud
     let noms: [String: String]
     let periode: PeriodeCourbes
-    /// L'heure sous le pointeur ; nil, ailleurs. L'etat disparait avec le graphe, et se remet a zero quand la periode
-    /// change.
+    /// L'heure du releve sous le pointeur ; nil, ailleurs. L'etat disparait avec le graphe, et se remet a zero quand la
+    /// periode change.
     @State private var survole: Date?
 
     /// Ce que la vue affiche, decide sans fenetre : l'echelle, le releve sous l'heure survolee (aucun dans un trou), et
@@ -140,11 +140,14 @@ struct GrapheSignal: View {
                          alignement: aGauche ? .trailing : .leading)
     }
 
-    /// L'heure survolee apres un evenement du pointeur : celle de sa position (`convertir`, nil hors de la zone de
-    /// trace), ou nil quand il sort.
-    static func heureSurvolee(_ phase: HoverPhase, convertir: (CGPoint) -> Date?) -> Date? {
+    /// L'heure survolee apres un evenement du pointeur : celle du releve le plus proche de sa position (`convertir`,
+    /// nil hors de la zone de trace), nil dans un trou de la courbe et quand il sort. Elle ne change que lorsque ce
+    /// releve change : le graphe ne se refait pas a chaque pixel (relecture finale, Mineur 4).
+    static func heureSurvolee(_ phase: HoverPhase, signal: [PointCourbe], periode: PeriodeCourbes,
+                              convertir: (CGPoint) -> Date?) -> Date? {
         switch phase {
-        case .active(let position): convertir(position)
+        case .active(let position):
+            convertir(position).flatMap { EchelleSignal.plusProche(signal, de: $0, periode: periode)?.date }
         case .ended: nil
         }
     }
@@ -194,11 +197,12 @@ struct GrapheSignal: View {
                 GeometryReader { g in
                     Rectangle().fill(.clear).contentShape(Rectangle())
                         .onContinuousHover { phase in
-                            survole = Self.heureSurvolee(phase) { position in
+                            let heure = Self.heureSurvolee(phase, signal: c.signal, periode: periode) { position in
                                 proxy.plotFrame.flatMap { cadre in
                                     proxy.value(atX: position.x - g[cadre].origin.x, as: Date.self)
                                 }
                             }
+                            if heure != survole { survole = heure }
                         }
                 }
             }

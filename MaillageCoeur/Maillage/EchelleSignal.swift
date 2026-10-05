@@ -7,8 +7,9 @@ public enum EchelleSignal {
     public static let portee = 0.02
 
     /// La distance sous laquelle un releve compte au survol : la plus petite de 2 % de la duree de la periode et de
-    /// l'ecart qui coupe sa courbe en troncons (20 min sur 24 h, 90 min sur 7 j, 6 h sur 30 j). Dans un trou de la
-    /// courbe, aucun releve n'est assez proche.
+    /// l'ecart qui coupe sa courbe en troncons (20 min sur 24 h, 90 min sur 7 j, 6 h sur 30 j) ; aux trois periodes,
+    /// c'est l'ecart. Au milieu d'un trou d'au moins deux ecarts, aucun releve n'est assez proche ; pres des bords d'un
+    /// trou, ou dans un trou plus court, le plus proche compte encore.
     public static func seuil(periode: PeriodeCourbes) -> TimeInterval {
         seuil(duree: periode.duree, ecart: periode.ecartTroncon)
     }

@@ -536,4 +536,22 @@ struct NomsSceneTests {
             #expect(m.width <= mesure.maison(maison).width + 1 && m.height <= mesure.maison(maison).height + 1)
         }
     }
+
+    /// Le noeud route, dans le moteur (relecture finale, Mineur 11) : les routeurs du dessin sont
+    /// les noeuds qui routent, de rang 1 ou 2 ; le nom de chacun est mesure en routeur (12 points), plus large que le
+    /// meme texte en appareil.
+    @Test func routeursDuMoteur() throws {
+        let (_, _, e) = try Self.demo()
+        let m = MoteurPiecesTests.moteur(e)
+        let routent = e.scene.noeuds.filter(\.route)
+        #expect(routent.contains { $0.rang == 2 } && routent.contains { $0.rang == 1 }, "des deux rangs")
+        #expect(m.routeurs == Set(routent.map(\.id)) && !m.routeurs.isEmpty)
+        let mesure = MesureNoms()
+        for n in routent {
+            let libelle = try #require(m.textes.noeuds[n.id])
+            let taille = try #require(m.etiquettes.first { $0.genre == .noeud(n.id) }?.taille)
+            let routeur = mesure.noeud(libelle, routeur: true), appareil = mesure.noeud(libelle, routeur: false)
+            #expect(taille == routeur && routeur.width > appareil.width, "\(n.id) : \(taille) \(appareil)")
+        }
+    }
 }

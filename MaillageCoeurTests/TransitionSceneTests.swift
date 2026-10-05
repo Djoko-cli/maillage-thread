@@ -179,6 +179,37 @@ struct TransitionSceneTests {
         #expect(TransitionScene(de: efface, vers: a, a: 0.5) == nil, "plus rien ne change")
     }
 
+    /// Les bornes de ce qui n'existe plus (relecture finale, Mineur 6) : efface (opacite 0) mais present a l'arrivee,
+    /// un element revient, en fondu, depuis sa derniere place ; presque efface (1e-9) et absent de l'arrivee, il
+    /// s'efface encore : c'est un changement.
+    @Test func bornesDeLEfface() throws {
+        var d = PosesScene(), a = PosesScene()
+        d.pieces["p"] = Self.piece(x: 1)
+        d.pieces["p"]?.opacite = 0
+        a.pieces["p"] = Self.piece(x: 5)
+        d.noeuds["n"] = Self.noeud("a", x: 1)
+        d.noeuds["n"]?.opacite = 0
+        a.noeuds["n"] = Self.noeud("a", x: 5)
+        let t = try #require(TransitionScene(de: d, vers: a, a: 0), "il revient : un changement")
+        let mi = t.poses(a: 0.45)
+        #expect(Self.x(mi.pieces["p"]) == 3 && mi.pieces["p"]?.opacite == 1, "la piece, depuis sa derniere place")
+        #expect(mi.noeuds["n"]?.ancres.map(\.place.x) == [3] && mi.noeuds["n"]?.opacite == 1, "le noeud aussi")
+        #expect(t.poses(a: 0).pieces["p"]?.opacite == 0 && t.poses(a: 0).noeuds["n"]?.opacite == 0, "en fondu")
+        var q = PosesScene()
+        q.pieces["q"] = Self.piece(x: 5)
+        for genre in ["piece", "noeud", "lien"] {
+            var presque = q
+            switch genre {
+            case "piece": presque.pieces["part"] = PosesScene.Piece(ancres: [A(plateau: "a", place: .zero)],
+                                                                   taille: SIMD2(2, 2), teinte: 3, opacite: 1e-9)
+            case "noeud": presque.noeuds["n"] = PosesScene.Noeud(ancres: [A(plateau: "a", place: .zero)],
+                                                                 decalage: .zero, rayon: 7, opacite: 1e-9)
+            default: presque.liens["l"] = PosesScene.Lien(Self.lien("n", "x"), opacite: 1e-9)
+            }
+            #expect(TransitionScene(de: presque, vers: q, a: 0) != nil, "\(genre) a 1e-9 : il s'efface encore")
+        }
+    }
+
     /// Un noeud qui change de plateau va en ligne droite, d'un etage a l'autre, en 2D comme en 3D : ses ancres,
     /// melangees, donnent a chaque instant le point du segment entre ses deux places dans le monde.
     @Test(arguments: [0.0, 1.0]) func dUnPlateauALAutre(t: Double) throws {
@@ -339,6 +370,53 @@ struct TransitionSceneTests {
         let transition = try #require(TransitionScene(de: depart, vers: posees, a: 0))
         let milieu = try #require(projeter(transition.poses(a: 0.45)).centresNoeuds["E000000000000003"])
         #expect(simd_distance(milieu, attendu + SIMD3(0.5 * f, 0, 0.5 * f)) < 1e-9, "a mi-chemin, a l'echelle f")
+    }
+
+    /// Ce qui s'efface sous le voile d'un isolement (relecture finale, Mineur 2) : sur le plateau estompe d'un etage
+    /// isole, une piece, ses pastilles et leurs liens qui partent sont estompes comme ce qui reste, a 15 % au plus de
+    /// leur fondu ; sous une piece isolee, comme une piece hors du focus : le bloc et les liens a 15 %, les pastilles
+    /// a 20 %. Sans isolement, le fondu seul.
+    @Test func ceQuiSEffaceSousLeVoile() throws {
+        let (s, c, d, g) = try SceneProjeteeTests.scene()
+        #expect(s.etages.map(\.id) == ["zone:Rez-de-chaussée", "zone:Étage"])
+        let o = CameraScene.canonique(g, aspect: 1.5, u: 0)
+        // Sur l'etage : une piece, deux pastilles, un lien radio entre elles, un lien enfant vers E...03 (le bureau).
+        var f = PosesScene()
+        f.pieces["piece:Garage"] = PosesScene.Piece(ancres: [A(plateau: "zone:Étage", place: .zero)],
+                                                    taille: SIMD2(3, 3), teinte: 2, opacite: 0.6)
+        for (id, x) in [("E000000000000009", 1.0), ("E00000000000000A", -1.0)] {
+            f.noeuds[id] = PosesScene.Noeud(ancres: [A(plateau: "zone:Étage", place: SIMD2(x, 0))], decalage: .zero,
+                                            rayon: 7, opacite: 0.8)
+        }
+        let radio = GrapheReseau.Lien(de: "E000000000000009", vers: "E00000000000000A", genre: .radio, qualite: 1)
+        let enfant = GrapheReseau.Lien(de: "E00000000000000A", vers: "E000000000000003", genre: .parent, qualite: nil)
+        f.liens[PosesScene.cle(radio)] = PosesScene.Lien(radio, opacite: 0.4)
+        f.liens[PosesScene.cle(enfant)] = PosesScene.Lien(enfant, opacite: 0.4)
+        /// Le facteur de chacun, sur son fondu : le bloc, les deux pastilles, le lien radio, le lien enfant.
+        func facteurs(_ e: EtatAnime) throws -> [Double] {
+            let sans = SceneProjetee(scene: s, cartes: c, positions: d.positions, geometrie: g, etat: e, orbite: o,
+                                     cadre: SceneProjeteeTests.cadre)
+            let p = SceneProjetee(scene: s, cartes: c, positions: d.positions, geometrie: g, etat: e, orbite: o,
+                                  cadre: SceneProjeteeTests.cadre, poses: f)
+            let bloc = try #require(p.blocs.first { $0.piece == -1 })
+            let disques = p.disques.filter { p.fantomes.contains($0.noeud) }
+            #expect(disques.count == 2)
+            let r = try #require(p.liensRouteurs.dropFirst(sans.liensRouteurs.count).first)
+            let l = try #require(p.liensEnfants.dropFirst(sans.liensEnfants.count).first)
+            return [bloc.opaciteAretes / (0.75 * 0.6)] + disques.map { $0.opacite / 0.8 }
+                + [r.opacite / (0.95 * 0.4), l.opacite / (0.28 * 0.4)]
+        }
+        let n = s.pieces.count
+        let libre = try facteurs(EtatAnime(t: 0, fk: Array(repeating: 0, count: n)))
+        #expect(libre.allSatisfy { abs($0 - 1) < 1e-12 }, "sans isolement, le fondu seul : \(libre)")
+        let etage = try facteurs(EtatAnime(t: 0, fk: Array(repeating: 0, count: n), se: 1, ek: [1, 0]))
+        #expect(etage.count == 5 && etage.allSatisfy { $0 <= 0.15 + 1e-12 }, "l'etage isole est l'autre : \(etage)")
+        let salon = try SceneProjeteeTests.indice(s, "Salon")
+        var fk = Array(repeating: 0.0, count: n)
+        fk[salon] = 1
+        let piece = try facteurs(EtatAnime(t: 0, s: 1, fk: fk, focus: salon))
+        let plafonds = [0.15, 0.2, 0.2, 0.15, 0.15]
+        #expect(piece.count == 5 && zip(piece, plafonds).allSatisfy { $0 <= $1 + 1e-12 }, "le salon isole : \(piece)")
     }
 
     /// Ce qui s'efface, absent de la scene, se dessine a sa derniere place, a son opacite : une piece (son bloc, sans

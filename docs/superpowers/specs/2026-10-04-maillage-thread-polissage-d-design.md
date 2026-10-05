@@ -113,7 +113,7 @@ Constat de Djoko du 04/10 : juste après la première tournée, la courbe « Sig
 **La valeur au survol :**
 - quand le pointeur passe sur la courbe du signal, le relevé le plus proche dans le temps est mis en avant : un trait vertical à son heure, un point sur sa valeur ;
 - une étiquette donne sa valeur et son heure, par exemple « −67 dBm · 16:13 » en français, au format d'heure de la langue de l'app ; pour 7 j et 30 j, elle donne aussi le jour ;
-- un relevé ne compte que s'il est à moins du plus petit de deux seuils, 2 % de la largeur de la période et l'écart qui coupe la courbe en tronçons (20 min sur 24 h, 90 min sur 7 j, 6 h sur 30 j), si bien que dans un trou de la courbe rien n'est montré ;
+- un relevé ne compte que s'il est à moins du plus petit de deux seuils, 2 % de la largeur de la période et l'écart qui coupe la courbe en tronçons (20 min sur 24 h, 90 min sur 7 j, 6 h sur 30 j) ; aux trois périodes, c'est l'écart, le plus petit. Au milieu d'un trou d'au moins deux écarts, rien n'est montré ; près des bords d'un trou, ou dans un trou plus court, le relevé le plus proche l'est encore ;
 - le pointeur sorti de la courbe, l'étiquette disparaît ;
 - l'étiquette reste dans le cadre du graphe, à gauche du trait quand il est près du bord droit.
 

@@ -308,10 +308,19 @@ public struct SceneProjetee: Sendable {
                 mondes[id] = place(m, cartes[i].places[r], f: f)
             }
         }
+        // Ce qui s'efface est sous le voile de l'isolement, comme ce qui reste (relecture finale, Mineur 2) : celui du
+        // plateau de son ancre de plus fort poids, et celui d'une piece hors du focus.
+        func voileAncres(_ ancres: [PosesScene.Ancre]) -> Double {
+            guard let a = ancres.max(by: { $0.poids < $1.poids }), let e = plateaux[a.plateau], e < ve.count else {
+                return 1
+            }
+            return ve[e]
+        }
         let presentes = Set(scene.pieces.map(\.id))
         for (k, pose) in poses.pieces.sorted(by: { $0.key < $1.key }) where !presentes.contains(k) {
             guard let centre = PosesScene.centre(pose.ancres, geometrie: g, plateaux: plateaux, t: t) else { continue }
-            bloc(-1, centre: centre, taille: pose.taille, f: 1, teinte: pose.teinte, vis: pose.opacite)
+            bloc(-1, centre: centre, taille: pose.taille, f: 1, teinte: pose.teinte,
+                 vis: min(1 - 0.85 * es, voileAncres(pose.ancres)) * pose.opacite)
         }
         for (id, n) in poses.noeuds where scene.noeud(id) == nil {
             guard let w = monde(n, f: 1) else { continue }
@@ -339,7 +348,8 @@ public struct SceneProjetee: Sendable {
         }
         for id in fantomes.sorted() {
             guard let n = poses.noeuds[id], let p = mondes[id], let e = proj.ecran(p) else { continue }
-            disques.append(Disque(noeud: id, centre: e, rayon: rayonPastille(n.rayon, en: p), opacite: n.opacite,
+            disques.append(Disque(noeud: id, centre: e, rayon: rayonPastille(n.rayon, en: p),
+                                  opacite: min(1 - 0.8 * es, voileAncres(n.ancres)) * n.opacite,
                                   profondeur: proj.profondeur(p)))
         }
         disques.sort { $0.profondeur > $1.profondeur }
@@ -352,7 +362,8 @@ public struct SceneProjetee: Sendable {
             let poids = min(1 - 0.85 * (1 - max(voiles[na.piece], voiles[nb.piece])),
                             max(voileEtage(na.piece), voileEtage(nb.piece)))
             let eclaire = [l.de, l.vers].contains { $0 == etat.survol || $0 == etat.selection }
-            let fondu = poses.liens[PosesScene.cle(l)]?.opacite ?? 1
+            // Sans transition, pas de cle de lien a construire (relecture finale, Mineur 5).
+            let fondu = poses.liens.isEmpty ? 1 : poses.liens[PosesScene.cle(l)]?.opacite ?? 1
             if l.genre == .radio {
                 liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite,
                                           opacite: Self.opaciteLienRadio * poids * fondu, eclaire: eclaire))
@@ -362,16 +373,24 @@ public struct SceneProjetee: Sendable {
                                          eclaire: eclaire))
             }
         }
-        // Les liens qui s'effacent, absents de la scene, entre les places affichees de leurs bouts.
-        let presents = Set(scene.liens.map(PosesScene.cle))
+        // Les liens qui s'effacent, absents de la scene, entre les places affichees de leurs bouts, sous le voile de
+        // leurs bouts, comme ceux qui restent : un bout de la scene, celui de sa piece ; un bout qui s'efface, celui
+        // d'une piece hors du focus et du plateau de son ancre.
+        func voilesBout(_ id: String) -> (piece: Double, etage: Double) {
+            if let n = scene.noeud(id) { return (voiles[n.piece], voileEtage(n.piece)) }
+            return (1 - es, poses.noeuds[id].map { voileAncres($0.ancres) } ?? 1)
+        }
+        let presents = poses.liens.isEmpty ? Set<String>() : Set(scene.liens.map(PosesScene.cle))
         for (k, l) in poses.liens.sorted(by: { $0.key < $1.key }) where !presents.contains(k) {
             guard let a = mondes[l.de], let b = mondes[l.vers], let (pa, pb) = proj.segment(a, b) else { continue }
+            let va = voilesBout(l.de), vb = voilesBout(l.vers)
+            let poids = min(1 - 0.85 * (1 - max(va.piece, vb.piece)), max(va.etage, vb.etage))
             if l.genre == .radio {
                 liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite,
-                                          opacite: Self.opaciteLienRadio * l.opacite, eclaire: false))
+                                          opacite: Self.opaciteLienRadio * poids * l.opacite, eclaire: false))
             } else {
                 liensEnfants.append(Lien(a: pa, b: pb, genre: l.genre, qualite: l.qualite,
-                                         opacite: Self.opaciteLienEnfant * l.opacite, eclaire: false))
+                                         opacite: Self.opaciteLienEnfant * poids * l.opacite, eclaire: false))
             }
         }
 

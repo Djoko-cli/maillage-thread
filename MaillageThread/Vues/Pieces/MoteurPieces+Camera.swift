@@ -104,12 +104,12 @@ extension MoteurPieces {
         demanderGrille(PolitiqueGrille.redimensionnement)
     }
 
-    /// Une grille voulue : posee a la vue d'ensemble 2D, ses plateaux glissant en `d.duree` ; sinon elle attend
-    /// (`PolitiqueGrille`).
+    /// Une grille voulue : posee a la vue d'ensemble 2D, avec celle qui attendait encore, ses plateaux glissant en la
+    /// duree de la demande posee ; sinon elle attend (`PolitiqueGrille`).
     private func demanderGrille(_ d: PolitiqueGrille.Demande) {
         guard let scene else { return }
-        if politique.demander(d, ensemble2D: aLaVueDEnsemble2D, rayons: rayons(scene), zone: zoneVisible) {
-            poserGeometrie(d.duree)
+        if let posee = politique.demander(d, ensemble2D: aLaVueDEnsemble2D, rayons: rayons(scene), zone: zoneVisible) {
+            poserGeometrie(posee.duree)
         }
     }
 

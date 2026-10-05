@@ -162,6 +162,9 @@ struct MoletteEtEchapTests {
         for (unite, precis) in [(CGScrollEventUnit.pixel, true), (.line, false)] {
             let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: unite, wheelCount: 1, wheel1: -4, wheel2: 0,
                                           wheel3: 0))
+            // Une position a soi, et non celle du pointeur reel (relecture finale, Mineur 7) : lue, elle n'est pas
+            // l'origine.
+            cg.location = CGPoint(x: 123, y: 45)
             let e = try #require(NSEvent(cgEvent: cg))
             guard case .molette(let dy, let p, let position) = MoteurPieces.EvenementVue(e).genre else {
                 Issue.record("la molette : \(lu(e))")
@@ -169,7 +172,7 @@ struct MoletteEtEchapTests {
             }
             #expect(dy == Double(e.scrollingDeltaY) && dy < 0, "\(unite) : le pas")
             #expect(p == precis && p == e.hasPreciseScrollingDeltas, "\(unite) : precis ou non")
-            #expect(position == e.locationInWindow)
+            #expect(position == e.locationInWindow && position != .zero, "\(unite) : la position de l'evenement")
             let (m, _) = try MoteurPiecesTests.moteur()
             #expect(!m.prendre(e) && !m.vueTouchee, "sans fenetre : jamais pris")
         }

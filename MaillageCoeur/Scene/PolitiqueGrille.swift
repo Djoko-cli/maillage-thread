@@ -48,15 +48,16 @@ public struct PolitiqueGrille: Hashable, Sendable {
         return true
     }
 
-    /// Une demande : a la vue d'ensemble 2D (`ensemble2D`), elle se pose tout de suite, et la fonction rend vrai (le
-    /// moteur pose alors la geometrie, ses plateaux glissant en `d.duree`) ; sinon elle attend.
-    public mutating func demander(_ d: Demande, ensemble2D: Bool, rayons: [Double], zone: CGSize) -> Bool {
-        guard ensemble2D else {
-            attendre(d)
-            return false
-        }
-        poser(d, rayons: rayons, zone: zone)
-        return true
+    /// Une demande : a la vue d'ensemble 2D (`ensemble2D`), elle se pose tout de suite, fusionnee avec celle qui
+    /// attendait encore (`attendre` : la plus longue duree, l'hysteresis si toutes la demandent ; relecture finale,
+    /// Mineur 9), et la fonction rend la demande posee (le moteur pose alors la geometrie, ses plateaux glissant en sa
+    /// duree) ; sinon elle attend, et la fonction rend nil.
+    @discardableResult
+    public mutating func demander(_ d: Demande, ensemble2D: Bool, rayons: [Double], zone: CGSize) -> Demande? {
+        attendre(d)
+        guard ensemble2D, let a = attente else { return nil }
+        poser(a, rayons: rayons, zone: zone)
+        return a
     }
 
     /// Une demande attend la vue d'ensemble 2D : avec une autre en attente, la plus longue duree, et l'hysteresis
