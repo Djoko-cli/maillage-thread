@@ -195,6 +195,7 @@ Djoko a vérifié D en vrai, sur sa maison : « tout est parfait ». Trois corre
 - **Les clés « rloc » de l'historique :**
   - un routeur que la sonde n'identifiait pas encore était rangé sous « rloc:XXXX », et apparaissait deux fois dans la légende ;
   - sa clé devient désormais l'ExtMac du même identifiant, dans la même partition, au relevé suivant le plus proche, sinon au précédent ;
-  - la clé reste « rloc » si cette ExtMac est déjà tenue par un autre routeur du relevé, ou si le routeur n'est jamais identifié ;
+  - un relevé suivant ou précédent ne compte que s'il est à 7 jours au plus (décision de Djoko du 05/10) : un identifiant réattribué à un routeur jamais identifié ne reprend pas l'historique d'un appareil parti depuis longtemps ;
+  - la clé reste « rloc » si le routeur n'est jamais identifié dans ces 7 jours, ou si l'ExtMac trouvée revient à un autre routeur du même relevé. Deux routeurs d'un relevé n'ont jamais la même clé, et un suivant refusé ne cède pas la place au précédent ;
   - la fiche d'un routeur montre aussi ses relevés d'avant son identification.
 - **La portée du survol** reste l'écart qui coupe la courbe : 20 min en 24 h, 90 min en 7 j, 6 h en 30 j.
