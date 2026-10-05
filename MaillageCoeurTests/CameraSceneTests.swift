@@ -395,6 +395,18 @@ struct CameraSceneTests {
         #expect(GeometrieMaison.colonnes(rayons: r, taille: CGSize(width: 1100, height: 760)) == 2)
     }
 
+    /// La rotation lente (spec de la vue par pieces, section 7 ; polissage D, section 4.2) : en 3D, l'envol fini,
+    /// cochee, sans « Reduire les animations », hors d'un geste ; chaque condition l'arrete. L'isolement, non : il
+    /// n'entre pas dans la regle.
+    @Test func rotationLente() {
+        #expect(CameraScene.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: false, geste: false))
+        #expect(!CameraScene.rotationLente(troisD: false, bascule: 1, cochee: true, reduire: false, geste: false))
+        #expect(!CameraScene.rotationLente(troisD: true, bascule: 0.999, cochee: true, reduire: false, geste: false))
+        #expect(!CameraScene.rotationLente(troisD: true, bascule: 1, cochee: false, reduire: false, geste: false))
+        #expect(!CameraScene.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: true, geste: false))
+        #expect(!CameraScene.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: false, geste: true))
+    }
+
     /// Cadrage d'un etage isole (polissage C, section 5.1) : en 2D, vue de dessus, la cible au centre de sa boite,
     /// bande du nom comprise, la boite dans le cadre ; en 3D, meme azimut et meme inclinaison, la cible au centre
     /// du plateau, a sa hauteur ; la hauteur de vue max((2 r + bande) 1,1 ; 2 r 1,05 / aspect).

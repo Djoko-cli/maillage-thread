@@ -2,8 +2,8 @@ import Foundation
 import MaillageCoeur
 import SwiftUI
 
-/// La scene et sa disposition, les places gardees et le menu du clic droit (polissage D, section 5 : le moteur
-/// en fichiers). Les membres que d'autres fichiers du moteur lisent ou ecrivent ne sont plus prives.
+/// La scene et sa disposition, le glissement d'une disposition a l'autre, les noms, les places gardees et le menu du
+/// clic droit (polissage D, section 5 : le moteur en fichiers).
 extension MoteurPieces {
     // MARK: Scene et disposition
 
@@ -57,7 +57,8 @@ extension MoteurPieces {
     func installerMaintenant(_ e: EntreeScene) {
         calcul?.cancel()
         let cartes = cartesPour(e)
-        let d = DispositionPieces(scene: e.scene, cartes: cartes, fixees: places.fixees(e.scene, domicile: e.domicile))
+        let d = DispositionPieces(scene: e.scene, cartes: cartes,
+                                  fixees: places.fixees(e.scene, domicile: e.domicile))
         enCalcul = e
         retenir(d, scene: e.scene, cartes: cartes, cle: e.cleDisposition)
     }
@@ -67,7 +68,7 @@ extension MoteurPieces {
     private func cartesPour(_ e: EntreeScene) -> [CartesPieces.Carte] {
         var largeurs: [String: Double] = [:]
         for n in e.scene.noeuds {
-            largeurs[n.id] = mesure.reserve(n.libelle, routeur: n.rang <= 2, pile: n.pile).width
+            largeurs[n.id] = mesure.reserve(n.libelle, routeur: n.route, pile: n.pile).width
         }
         return CartesPieces.cartes(e.scene, largeurs: largeurs)
     }
@@ -80,10 +81,14 @@ extension MoteurPieces {
     private func retenir(_ d: DispositionPieces, scene: ScenePieces, cartes: [CartesPieces.Carte],
                          cle: EntreeScene.CleDisposition) {
         guard let e = enCalcul, e.cleDisposition == cle else { return }
-        placesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { (scene.pieces[$0].id, d.positions[$0]) })
+        placesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map {
+            (scene.pieces[$0].id, d.positions[$0])
+        })
         rayonsCalcules = Dictionary(scene.etages.indices.map { (scene.etages[$0].id, d.rayons[$0]) },
                                     uniquingKeysWith: { a, _ in a })
-        cartesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { (scene.pieces[$0].id, cartes[$0]) })
+        cartesCalculees = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map {
+            (scene.pieces[$0].id, cartes[$0])
+        })
         cleCalculee = cle
         enCalcul = nil
         if occupe {
@@ -93,8 +98,9 @@ extension MoteurPieces {
         installer(e)
     }
 
-    /// Pose une scene sur la disposition gardee : positions et rayons retrouves par cles, noms,
-    /// piece isolee.
+    /// Pose une scene sur la disposition gardee : positions et rayons retrouves par cles, noms, piece isolee. Une
+    /// nouvelle disposition glisse depuis la pose affichee (polissage D, section 1) ; des niveaux changes, ou des
+    /// rayons changes sans eux (section 4), redemandent la grille.
     private func installer(_ e: EntreeScene) {
         let scene = e.scene
         let ancienFocus = focus.flatMap { $0 < clesPieces.count ? clesPieces[$0] : nil }
@@ -102,13 +108,12 @@ extension MoteurPieces {
         // section 1.3) ; a la vue d'ensemble 2D, la grille se recalcule, sinon elle l'attend.
         let anciens = entree?.scene.etages.map(\.id) ?? []
         let niveauxChanges = pret && entree?.scene.niveaux != scene.niveaux
-        let ensemble = aLaVueDEnsemble && t == 0
+        let ensemble = aLaVueDEnsemble2D
         let image = geometrie
         // La pose affichee de la scene d'avant, et sa pose d'arrivee (polissage D, section 1).
         let avant = entree.map { PosesScene(scene: $0.scene, cartes: cartes, positions: positions) }
         let affichee = avant?.recouvertes(par: posesAffichees)
-        let rayonsAvant = entree.map { Dictionary(zip($0.scene.etages.map(\.id), geometrieVisee.rayons).map { ($0, $1) },
-                                                  uniquingKeysWith: { a, _ in a }) }
+        let rayonsAvant = entree.map { Self.rayonsParCle($0.scene, geometrieVisee.rayons) }
         let ancienne = entree
         entree = e
         // Un autre ordre des plateaux : le disque et le nom d'etage survoles, des indices, en designeraient
@@ -120,9 +125,13 @@ extension MoteurPieces {
         cartes = scene.pieces.map { cartesCalculees[$0.id] ?? CartesPieces.carte([]) }
         positions = scene.pieces.map { placesCalculees[$0.id] ?? .zero }
         // Une nouvelle disposition glisse (polissage D, section 1) : de la pose affichee a la nouvelle, en 0,9 s ; une
-        // disposition qui ne change rien laisse le glissement en cours. Avec « Reduire les animations », tout de suite.
+        // disposition qui ne change aucune pose laisse le glissement en cours aller a son terme, sans le relancer :
+        // un releve qui ne change que la qualite d'un lien, par exemple. Ce qui change se juge comme dans
+        // `TransitionScene` (les pieces, les noeuds, les liens presents). Avec « Reduire les animations », tout de
+        // suite.
         let arrivee = PosesScene(scene: scene, cartes: cartes, positions: positions)
-        if pret, let affichee, let avant, arrivee != avant || transition == nil {
+        if pret, let affichee, let avant,
+           transition == nil || TransitionScene(de: avant, vers: arrivee, a: 0) != nil {
             transition = TransitionScene(de: affichee, vers: arrivee, a: Self.maintenant(), reduire: reduire)
             if let tr = transition {
                 posesAffichees = tr.poses(a: tr.debut)
@@ -132,20 +141,17 @@ extension MoteurPieces {
                 apparencesParties = [:]
             }
         }
-        // Les rayons changent sans les niveaux : la grille se rechoisit, a la vue d'ensemble 2D, avec l'hysteresis ;
-        // sinon elle attend (polissage D, section 4).
-        let rayonsChanges = pret && !niveauxChanges
-            && Dictionary(zip(scene.etages.map(\.id), rayons(scene)).map { ($0, $1) }, uniquingKeysWith: { a, _ in a }) != rayonsAvant
+        // Les rayons changent sans les niveaux : la grille se redemande comme au redimensionnement, par la regle de la
+        // politique : a la vue d'ensemble 2D, elle se rechoisit, avec l'hysteresis ; sinon elle attend (polissage D,
+        // section 4).
+        let rayonsChanges = pret && !niveauxChanges && Self.rayonsParCle(scene, rayons(scene)) != rayonsAvant
         if grille && (!pret || (niveauxChanges && ensemble)) {
             politique.choisir(rayons: rayons(scene), zone: zoneVisible, enPlace: false)
         } else if niveauxChanges {
             politique.attendre(PolitiqueGrille.niveaux)
         } else if rayonsChanges && grille {
-            if ensemble {
-                politique.choisir(rayons: rayons(scene), zone: zoneVisible, enPlace: true)
-            } else {
-                politique.attendre(PolitiqueGrille.redimensionnement)
-            }
+            _ = politique.demander(PolitiqueGrille.redimensionnement, ensemble2D: ensemble, rayons: rayons(scene),
+                                   zone: zoneVisible)
         }
         let glisse = pret ? TransitionScene.duree : 0
         viser(geometriePour(scene), depuis: anciens, duree2D: niveauxChanges ? CameraScene.dureeCases : glisse,
@@ -180,7 +186,7 @@ extension MoteurPieces {
             seCible = 0
         }
         textes = Self.textes(e, focus: focus)
-        routeurs = Set(scene.noeuds.filter { $0.rang <= 2 }.map(\.id))
+        routeurs = Set(scene.noeuds.filter(\.route).map(\.id))
         teintes = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { ($0, scene.pieces[$0].teinte) })
         construireEtiquettes()
         majFil()
@@ -197,6 +203,11 @@ extension MoteurPieces {
             suivre(depuis: ancreCamera(dans: depart(image, anciens: anciens, vers: geometrie)))
         }
         reveiller()
+    }
+
+    /// Les rayons des plateaux de `scene`, par cle : une cle en double garde son premier rayon.
+    private static func rayonsParCle(_ scene: ScenePieces, _ rayons: [Double]) -> [String: Double] {
+        Dictionary(zip(scene.etages.map(\.id), rayons).map { ($0, $1) }, uniquingKeysWith: { a, _ in a })
     }
 
     /// Textes des noms : libelles, pieces (nom, compte), etages, maison, reperes « ailleurs ».
@@ -249,7 +260,8 @@ extension MoteurPieces {
             l.append(e)
         }
         for n in scene.noeuds {
-            ajouter(.noeud(n.id), mesure.noeud(textes.noeuds[n.id] ?? LibellesNoeuds.Libelle(texte: n.id), routeur: n.rang <= 2))
+            let libelle = textes.noeuds[n.id] ?? LibellesNoeuds.Libelle(texte: n.id)
+            ajouter(.noeud(n.id), mesure.noeud(libelle, routeur: n.route))
         }
         for i in scene.etages.indices { ajouter(.etage(i), mesure.etage(textes.etages[i] ?? "")) }
         for i in scene.pieces.indices {
@@ -257,7 +269,9 @@ extension MoteurPieces {
             ajouter(.piece(i), mesure.piece(nom: t.nom, compte: t.compte))
         }
         ajouter(.maison, mesure.maison(textes.maison))
-        for (id, texte) in textes.ailleurs.sorted(by: { $0.key < $1.key }) { ajouter(.ailleurs(id), mesure.ailleurs(texte)) }
+        for (id, texte) in textes.ailleurs.sorted(by: { $0.key < $1.key }) {
+            ajouter(.ailleurs(id), mesure.ailleurs(texte))
+        }
         etiquettes = l
     }
 
@@ -310,9 +324,9 @@ extension MoteurPieces {
     }
 
     /// Un choix du menu, calcule sur la scene la plus recente et sur les choix gardes : le nouvel ordre des plateaux et
-    /// les nouveaux choix de niveau, gardes ; la scene suivante les prend (`EntreeScene`), et les plateaux glissent vers
-    /// leur nouvelle place. Sur la scene affichee, un choix fait pendant que la scene du precedent attend (un vol, le
-    /// calcul de sa disposition) defaisait le precedent.
+    /// les nouveaux choix de niveau, gardes ; la scene suivante les prend (`EntreeScene`), et les plateaux glissent
+    /// vers leur nouvelle place. Sur la scene affichee, un choix fait pendant que la scene du precedent attend (un vol,
+    /// le calcul de sa disposition) defaisait le precedent.
     private func ranger(_ operation: (Niveaux, [String: PlacesGardees.ACote]) -> Rangement?) {
         guard let e = sceneRecente, let r = operation(e.scene.niveaux, places.maison(e.domicile).aCote) else { return }
         places.ranger(r, domicile: e.domicile)

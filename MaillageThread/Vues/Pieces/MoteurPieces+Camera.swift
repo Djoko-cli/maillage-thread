@@ -2,7 +2,8 @@ import Foundation
 import MaillageCoeur
 import simd
 
-/// Les plateaux et la grille, la camera, les vols et l'isolement (polissage D, section 5 : le moteur en fichiers).
+/// Les plateaux et la grille, la camera et ce qu'elle regarde, les vols, l'isolement, le retour a la maison et ce
+/// que fait Echap (`sortir`) (polissage D, section 5 : le moteur en fichiers).
 extension MoteurPieces {
     // MARK: Plateaux
 
@@ -22,8 +23,8 @@ extension MoteurPieces {
     }
 
     /// La zone visible ou se choisit la grille (polissage C, section 3.3, decision de Djoko du 03/10) : la vue moins la
-    /// marge du haut et celle du bas, la legende ouverte ou repliee, sans la fiche (`basGrille`). La vue d'ensemble y est
-    /// toujours la plus grande possible.
+    /// marge du haut et celle du bas, la legende ouverte ou repliee, sans la fiche (`basGrille`). La vue d'ensemble y
+    /// est toujours la plus grande possible.
     var zoneVisible: CGSize {
         CGSize(width: taille.width, height: taille.height - marges.haut - (basGrille ?? marges.bas))
     }
@@ -89,8 +90,8 @@ extension MoteurPieces {
 
     /// La zone visible a change (polissage C, sections 3.3 et 3.5) : la taille de la vue, ou ses marges sans la fiche
     /// (la legende ouverte ou repliee, un bandeau). La premiere vraie zone pose la grille et cadre la vue d'ensemble,
-    /// sans autre condition ; ensuite, la grille se recalcule a la vue d'ensemble 2D, avec l'hysteresis, et les plateaux
-    /// glissent en 0,4 s ; zoomee, isolee ou en 3D, elle attend.
+    /// sans autre condition ; ensuite, la grille se recalcule a la vue d'ensemble 2D, avec l'hysteresis, et les
+    /// plateaux glissent en 0,4 s ; zoomee, isolee ou en 3D, elle attend.
     func zoneChangee() {
         guard pret, let scene else { return }
         if politique.sansVraieTaille {
@@ -107,7 +108,7 @@ extension MoteurPieces {
     /// (`PolitiqueGrille`).
     private func demanderGrille(_ d: PolitiqueGrille.Demande) {
         guard let scene else { return }
-        if politique.demander(d, ensemble2D: t == 0 && aLaVueDEnsemble, rayons: rayons(scene), zone: zoneVisible) {
+        if politique.demander(d, ensemble2D: aLaVueDEnsemble2D, rayons: rayons(scene), zone: zoneVisible) {
             poserGeometrie(d.duree)
         }
     }
@@ -137,8 +138,28 @@ extension MoteurPieces {
         return g.cible2D + (g.centreSphere - g.cible2D) * t
     }
 
-    /// Les plateaux glissent : un vol rejoint l'arrivee de ce qu'il vise ; a la vue d'ensemble, elle se recadre ; sinon,
-    /// la vue suit ce qu'elle regarde (`ancre0` : sa place a l'image d'avant).
+    /// Centre du bloc d'une piece, dans le monde, dans la geometrie de l'image ou dans `g` : sa pose affichee quand
+    /// elle est en route vers une nouvelle disposition (polissage D, section 1), sinon sa place sur son plateau. Nil
+    /// pour un indice hors de la scene.
+    func centrePiece(_ i: Int, dans g: GeometrieMaison? = nil) -> SIMD3<Double>? {
+        guard let scene, i < scene.pieces.count, i < positions.count else { return nil }
+        let g = g ?? geometrie
+        // En route (polissage D, section 1) : sa pose affichee.
+        if let pose = posesAffichees.pieces[scene.pieces[i].id],
+           let m = PosesScene.centre(pose.ancres, geometrie: g, plateaux: plateaux(scene), t: t) {
+            return SIMD3(m.x, m.y + 0.02 + GeometrieMaison.hauteurBloc(t) / 2, m.z)
+        }
+        let c = g.centrePlateau(scene.pieces[i].etage, t)
+        return SIMD3(c.x + positions[i].x, c.y + 0.02 + GeometrieMaison.hauteurBloc(t) / 2, c.z + positions[i].y)
+    }
+
+    /// L'indice de chaque plateau de la scene, par cle.
+    private func plateaux(_ scene: ScenePieces) -> [String: Int] {
+        Dictionary(scene.etages.indices.map { (scene.etages[$0].id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Les plateaux glissent : un vol rejoint l'arrivee de ce qu'il vise ; a la vue d'ensemble, elle se recadre ;
+    /// sinon, la vue suit ce qu'elle regarde (`ancre0` : sa place a l'image d'avant).
     func suivre(depuis ancre0: SIMD3<Double>) {
         if vol != nil {
             if let v = viseeVol, let fin = volVers(v) {
@@ -239,8 +260,9 @@ extension MoteurPieces {
     }
 
     /// Isole un etage (polissage C, section 5.1) : un vol de 1,3 s cadre son plateau, bande de son nom comprise ; les
-    /// autres plateaux s'estompent a 15 %, la sphere et « ⌂ Maison » s'effacent ; la rotation lente continue (polissage D). Une
-    /// piece isolee est relachee. Rien dans une maison d'un seul plateau, ni pendant l'envol.
+    /// autres plateaux s'estompent a 15 %, la sphere et « ⌂ Maison » s'effacent ; la rotation lente continue
+    /// (polissage D, section 4.2). Une piece isolee est relachee. Rien dans une maison d'un seul plateau, ni pendant
+    /// l'envol.
     func allerEtage(_ e: Int) {
         guard let scene, scene.etages.count > 1, e < scene.etages.count, envol == nil, fondu == nil else { return }
         quitterPiece()
@@ -254,6 +276,12 @@ extension MoteurPieces {
     /// Vol vers un etage isole.
     func volVersEtage(_ e: Int) -> Vol {
         CameraScene.volVersEtage(orbite, geometrie, etage: e, aspect: aspect, u: t, troisD: t == 1)
+    }
+
+    /// L'etage vise par l'isolement, dans la scene ; nil : la maison ou une piece.
+    var indiceEtageIsole: Int? {
+        guard case .etage(let cle) = isolement else { return nil }
+        return scene?.etages.firstIndex { $0.id == cle }
     }
 
     /// L'isolement d'etage vise `cle` : son plateau reste net.
@@ -318,7 +346,7 @@ extension MoteurPieces {
     /// relaches, le zoom et le deplacement annules, par un vol de 1,3 s qui part de la pose courante. « Reduire les
     /// animations » : tout de suite, ou par un fondu de 0,3 s (`enFondu`, le double-clic).
     func versMaison(enFondu: Bool = false) {
-        guard isolement != .maison || focus != nil || etageEnVue != nil || vueTouchee else { return }
+        guard ecarteDeLaVueDEnsemble else { return }
         quitterPiece()
         quitterEtage()
         isolement = .maison
@@ -349,16 +377,15 @@ extension MoteurPieces {
     }
 
     /// Echap (polissage D, section 3), dans cet ordre : une fiche ouverte se ferme ; sinon la vue remonte d'un cran ;
-    /// sinon, a la vue d'ensemble sans zoom ni fiche, Echap n'est pas pris (faux) : l'evenement suit son chemin.
+    /// sinon, a la vue d'ensemble sans zoom ni fiche, Echap n'est pas pris (faux) : l'evenement suit son chemin. Le
+    /// moniteur des evenements (`prendre`, dans `MoteurPieces+Gestes`) l'appelle.
     @discardableResult
     func sortir() -> Bool {
         if selection != nil {
             selection = nil
             return true
         }
-        guard envol == nil, fondu == nil, isolement != .maison || focus != nil || etageEnVue != nil || vueTouchee else {
-            return false
-        }
+        guard envol == nil, fondu == nil, ecarteDeLaVueDEnsemble else { return false }
         remonter(clavier: true)
         return true
     }

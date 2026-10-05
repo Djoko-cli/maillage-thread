@@ -16,35 +16,36 @@ struct GlissementTests {
     /// La Prise salon de la demo (un appareil du salon, au rez-de-chaussee).
     static let prise = "7AF0B6D5006CF95F"
 
-    /// La demo, l'accessoire `nom` place dans la piece `piece` (« Placer dans une piece… », ou Maison).
-    static func demo(_ nom: String, dans piece: String) throws -> EntreeScene {
+    /// La demo, ses enfants du maillage changes par `enfants` (un releve de la sonde, recu avant les noms), et ses
+    /// accessoires par `accessoires`.
+    private static func demo(enfants: ([EnfantMaillage]) -> [EnfantMaillage] = { $0 },
+                             accessoires changer: (inout AccessoireMaison) -> Void) throws -> EntreeScene {
         let (s, r, _) = try NomsSceneTests.demo()
-        var maison = try #require(s.noms.maison)
-        for k in maison.accessoires.indices where maison.accessoires[k].nom == nom {
-            maison.accessoires[k].piece = piece
+        let m = try #require(s.maillage)
+        let changes = enfants(m.enfants)
+        if changes != m.enfants {
+            s.recevoir(Maillage(date: m.date, partition: m.partition, routeurs: m.routeurs, liens: m.liens,
+                                enfants: changes, signaux: m.signaux), a: s.maintenant)
         }
+        var maison = try #require(s.noms.maison)
+        for k in maison.accessoires.indices { changer(&maison.accessoires[k]) }
         s.noms.maison = maison
         return EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+    }
+
+    /// La demo, l'accessoire `nom` place dans la piece `piece` (« Placer dans une piece… », ou Maison).
+    static func demo(_ nom: String, dans piece: String) throws -> EntreeScene {
+        try demo([nom: piece])
     }
 
     /// La demo, chaque accessoire de `deplacer` place dans sa piece.
     static func demo(_ deplacer: [String: String]) throws -> EntreeScene {
-        let (s, r, _) = try NomsSceneTests.demo()
-        var maison = try #require(s.noms.maison)
-        for k in maison.accessoires.indices {
-            if let p = deplacer[maison.accessoires[k].nom] { maison.accessoires[k].piece = p }
-        }
-        s.noms.maison = maison
-        return EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        try demo { a in if let p = deplacer[a.nom] { a.piece = p } }
     }
 
     /// La demo, l'accessoire `nom` renomme `nouveau`.
     static func demo(_ nom: String, nom nouveau: String) throws -> EntreeScene {
-        let (s, r, _) = try NomsSceneTests.demo()
-        var maison = try #require(s.noms.maison)
-        for k in maison.accessoires.indices where maison.accessoires[k].nom == nom { maison.accessoires[k].nom = nouveau }
-        s.noms.maison = maison
-        return EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        try demo { a in if a.nom == nom { a.nom = nouveau } }
     }
 
     /// Le noeud que la sonde seule connait, dans la demo : un enfant du maillage sans appareil, de « Sans pièce ».
@@ -53,16 +54,19 @@ struct GlissementTests {
     /// La demo sans cet enfant du maillage de la sonde : ce noeud quitte la scene ; `deplacer` : chaque accessoire
     /// de la liste place dans sa piece, comme `demo(_:)`.
     static func demoSansInconnu(_ deplacer: [String: String] = [:]) throws -> EntreeScene {
-        let (s, r, _) = try NomsSceneTests.demo()
-        let m = try #require(s.maillage)
-        s.recevoir(Maillage(date: m.date, partition: m.partition, routeurs: m.routeurs, liens: m.liens,
-                            enfants: m.enfants.filter { $0.rloc16 != 0x041F }, signaux: m.signaux), a: s.maintenant)
-        var maison = try #require(s.noms.maison)
-        for k in maison.accessoires.indices {
-            if let p = deplacer[maison.accessoires[k].nom] { maison.accessoires[k].piece = p }
-        }
-        s.noms.maison = maison
-        return EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        try demo(enfants: { $0.filter { $0.rloc16 != 0x041F } }) { a in if let p = deplacer[a.nom] { a.piece = p } }
+    }
+
+    /// La demo, la qualite du lien de cet enfant vers son parent changee (1 dans la demo, 3 ici) : un releve qui ne
+    /// change rien d'autre ; `deplacer` : comme `demo(_:)`.
+    static func demoQualite(_ deplacer: [String: String] = [:]) throws -> EntreeScene {
+        try demo(enfants: { enfants in
+            enfants.map { e in
+                var e = e
+                if e.rloc16 == 0x041F { e.qualite = e.qualite == 3 ? 2 : 3 }
+                return e
+            }
+        }) { a in if let p = deplacer[a.nom] { a.piece = p } }
     }
 
     /// Le moteur de la demo, fige (sans horloge : les etats se posent a la main), une image dessinee.
@@ -86,13 +90,6 @@ struct GlissementTests {
     /// La place d'un noeud dans le monde, a l'image.
     static func monde(_ m: MoteurPieces, _ id: String) throws -> SIMD3<Double> {
         try #require(m.projetee?.centresNoeuds[id])
-    }
-
-    /// Le dessin des pastilles qui s'effacent (`apparencesParties`), lu dans le moteur : il est prive, et ne se voit
-    /// qu'au dessin.
-    static func apparencesParties(_ m: MoteurPieces) throws -> [String: DessinNoeud.Apparence] {
-        let c = Mirror(reflecting: m).children.first { $0.label == "apparencesParties" }
-        return try #require(c?.value as? [String: DessinNoeud.Apparence], "apparencesParties : renomme ?")
     }
 
     /// Une image du moteur, dessinee hors fenetre, et ce qu'elle montre de la pastille `id` : son opacite dans la scene
@@ -241,6 +238,29 @@ struct GlissementTests {
         #expect(simd_distance(try Self.monde(m, Self.prise), mi) < 1e-9, "pas de saut, encore")
     }
 
+    /// Un releve de meme cle qui ne change que la qualite d'un lien (relecture de la tache 3, Important 3) : il est
+    /// pose, mais le glissement en cours va a son terme sans etre relance, donc sans repartir a vitesse nulle ni
+    /// finir plus tard : la meme transition (meme debut, memes poses de depart et d'arrivee), les memes poses
+    /// affichees. Une disposition qui change une pose le relance toujours (`interruption`).
+    @Test func qualiteDUnLienSansRelance() throws {
+        let (m, _) = try Self.moteur()
+        let deplacer = ["Prise salon": "Cuisine"]
+        let e2 = try Self.demo(deplacer), e3 = try Self.demoQualite(deplacer)
+        #expect(e3.cleDisposition == e2.cleDisposition, "la meme cle : le releve se pose sans calcul")
+        #expect(e3.scene.pieces == e2.scene.pieces && e3.scene.noeuds == e2.scene.noeuds)
+        #expect(e3.scene.liens != e2.scene.liens
+                && e3.scene.liens.map(PosesScene.cle) == e2.scene.liens.map(PosesScene.cle),
+                "seule la qualite d'un lien change")
+        m.installerMaintenant(e2)
+        m.poserTransition(0.5)
+        let premiere = try #require(m.transition)
+        let poses = m.posesAffichees
+        m.recevoir(e3)
+        #expect(m.entree?.scene.liens == e3.scene.liens, "le releve est pose")
+        #expect(m.transition == premiere, "le glissement continue, sans etre relance")
+        #expect(m.posesAffichees == poses)
+    }
+
     /// Par l'horloge : la cuisine isolee, qu'une nouvelle disposition deplace de plus de 10 unites (l'ampoule de
     /// l'entree placee dans la cuisine), glisse, et la vue la suit, en route (sa place a l'image, de sa pose affichee)
     /// comme au bout ; l'horloge tourne pendant le glissement, meme sans plateau qui glisse. Temps reel, sans borne
@@ -264,9 +284,10 @@ struct GlissementTests {
         #expect(m.glissementPlateaux == nil && m.transition != nil && simd_distance(m.orbite.cible, avant) < 1e-6)
         #expect(simd_distance(avant, apres) > 10)
         #expect(m.doitContinuer(MoteurPieces.maintenant() + 0.7), "l'horloge tourne pendant le glissement")
-        // 0,3 s ecoulees a cet instant, et l'image juste apres : sa pose est entre les deux instants mesures.
+        // Le debut recule pour que 0,3 s soient ecoulees a cet instant (`reculerTransition` retranche son argument du
+        // debut), puis l'image juste apres : sa pose est entre les deux instants mesures.
         let debut0 = try #require(m.transition).debut
-        m.reculerTransition(de: MoteurPieces.maintenant() - debut0 + 0.3)
+        m.reculerTransition(de: debut0 - MoteurPieces.maintenant() + 0.3)
         let debut = try #require(m.transition).debut
         let avantImage = MoteurPieces.maintenant()
         MoteurPiecesTests.dessiner(m)
@@ -300,7 +321,7 @@ struct GlissementTests {
             let m = MoteurPiecesTests.moteur(e)
             m.installerMaintenant(e2)
             let debut0 = try #require(m.transition).debut
-            m.reculerTransition(de: MoteurPieces.maintenant() - debut0 + ecoule)
+            m.reculerTransition(de: debut0 - MoteurPieces.maintenant() + ecoule)
             let debut = try #require(m.transition).debut
             MoteurPiecesTests.dessiner(m)
             if fini {
@@ -324,7 +345,7 @@ struct GlissementTests {
         m.installerMaintenant(e2)
         let tr = try #require(m.transition)
         #expect(tr.depart.noeuds[id] != nil && tr.arrivee.noeuds[id] == nil, "il s'efface, a sa place")
-        #expect(try Self.apparencesParties(m)[id] == avant, "son dessin d'avant est garde")
+        #expect(m.apparencesParties[id] == avant, "son dessin d'avant est garde")
         // Le fondu dure 0,3 s des 0,9 s du glissement : a 1/20, 1/10, 3/20 et 2/10 de celui-ci, la pastille est a 85,
         // 70, 55 et 40 %.
         func image(_ q: Double) throws -> (opacite: Double, pixel: [Double]) {
@@ -346,13 +367,13 @@ struct GlissementTests {
         let reprise = try Self.pastille(m, id)
         #expect(abs(reprise.opacite - 0.7) < 1e-6, "elle repart de son opacite du moment")
         #expect(Self.ecart(reprise.pixel, a.pixel) < 40, "toujours dessinee, du meme dessin")
-        #expect(try Self.apparencesParties(m)[id] == avant, "son dessin d'avant est toujours garde")
+        #expect(m.apparencesParties[id] == avant, "son dessin d'avant est toujours garde")
         // Au bout : plus de pastille, plus de dessin garde.
         m.fige = false
         m.reculerTransition(de: 1)
         MoteurPiecesTests.dessiner(m)
         #expect(m.transition == nil && m.projetee?.disques.contains { $0.noeud == id } == false)
-        #expect(try Self.apparencesParties(m).isEmpty, "fini : plus rien d'efface a garder")
+        #expect(m.apparencesParties.isEmpty, "fini : plus rien d'efface a garder")
     }
 
     /// Un vol de camera et une disposition qui glisse (polissage D, section 1). Un vol qui part pendant le glissement

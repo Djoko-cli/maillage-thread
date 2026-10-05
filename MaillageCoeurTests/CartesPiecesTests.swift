@@ -59,10 +59,10 @@ struct CartesPiecesTests {
 
     /// Le nom affiche et le nom que la carte reserve (polissage D, section 2) : la couronne, ☾ et ⚠︎, dans cet ordre,
     /// chacun apres une espace ; la carte reserve la couronne a un noeud qui route, ☾ a un autre, ⚠︎ a tous (la pastille,
-    /// a un noeud dont la pile est connue : `ScenePiecesTests.cleSansLesBadges`). Le nom que montre
-    /// un chef (routeur) ou un endormi (autre noeud), avec ou sans ⚠︎, est un debut du nom reserve. Les autres noms
-    /// affiches (sans la couronne ou ☾, ⚠︎ seul) n'en sont pas un debut : leur largeur est verifiee, avec la vraie
-    /// police, par `NomsSceneTests.reserveDesBadges`.
+    /// a un noeud dont la pile est connue : `ScenePiecesTests.cleSansLesBadges`). Le nom que montre un chef (routeur)
+    /// ou un endormi (autre noeud), avec ou sans ⚠︎, est un debut du nom reserve, et le nom nu aussi. Les autres noms
+    /// affiches (⚠︎ seul ou ☾ sur un routeur, par exemple) n'en sont pas un debut : la largeur de toutes les variantes
+    /// est verifiee, avec la vraie police, par `NomsSceneTests.reserveDesBadges`.
     @Test func badgesReserves() {
         #expect(CartesPieces.texte("Lampe", chef: false, endormi: false, alerte: false) == "Lampe")
         #expect(CartesPieces.texte("Lampe", chef: true, endormi: true, alerte: true) == "Lampe 👑 ☾ ⚠︎")

@@ -2,7 +2,8 @@ import Foundation
 import MaillageCoeur
 import simd
 
-/// Les etats poses a la main, pour les captures et les tests (polissage D, section 5 : le moteur en fichiers).
+/// Les etats poses a la main, sans horloge, pour les captures et les tests : la bascule, un isolement, le survol,
+/// un glissement, l'orbite, le zoom et la taille (polissage D, section 5 : le moteur en fichiers).
 extension MoteurPieces {
     // MARK: Etats poses a la main (captures, tests)
 
@@ -57,8 +58,8 @@ extension MoteurPieces {
         if let gl = glissementPlateaux { geometrie = geometrie(a: gl.debut + q * max(gl.duree2D, gl.duree3D)) }
     }
 
-    /// Le glissement d'une disposition et celui des plateaux, commences `dt` secondes plus tot (tests) : l'image suivante
-    /// les avance d'autant, par l'horloge.
+    /// Le glissement d'une disposition et celui des plateaux, commences `dt` secondes plus tot (tests) : l'image
+    /// suivante les avance d'autant, par l'horloge.
     func reculerTransition(de dt: Double) {
         transition?.debut -= dt
         glissementPlateaux?.debut -= dt
@@ -67,24 +68,6 @@ extension MoteurPieces {
     func poserAzimut(_ decalage: Double) { orbite.azimut += decalage }
 
     func poserInclinaison(_ i: Double) { orbite.inclinaison = i }
-
-    /// Centre du bloc d'une piece, dans le monde ; dans la geometrie de l'image, ou dans `g`.
-    func centrePiece(_ i: Int, dans g: GeometrieMaison? = nil) -> SIMD3<Double>? {
-        guard let scene, i < scene.pieces.count, i < positions.count else { return nil }
-        let g = g ?? geometrie
-        // En route (polissage D, section 1) : sa pose affichee.
-        if let pose = posesAffichees.pieces[scene.pieces[i].id],
-           let m = PosesScene.centre(pose.ancres, geometrie: g, plateaux: plateaux(scene), t: t) {
-            return SIMD3(m.x, m.y + 0.02 + GeometrieMaison.hauteurBloc(t) / 2, m.z)
-        }
-        let c = g.centrePlateau(scene.pieces[i].etage, t)
-        return SIMD3(c.x + positions[i].x, c.y + 0.02 + GeometrieMaison.hauteurBloc(t) / 2, c.z + positions[i].y)
-    }
-
-    /// L'indice de chaque plateau de la scene, par cle.
-    private func plateaux(_ scene: ScenePieces) -> [String: Int] {
-        Dictionary(scene.etages.indices.map { (scene.etages[$0].id, $0) }, uniquingKeysWith: { a, _ in a })
-    }
 
     /// Zoom a l'echelle `k` (points par unite a la cible, divises par 24), vers le point `vers`.
     func poserZoom(echelle k: Double, vers a: SIMD3<Double>?) {

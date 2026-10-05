@@ -96,8 +96,9 @@ public struct ScenePieces: Hashable, Sendable {
         public var pile: Bool
         /// Rang dans sa carte : 1 routeur de bordure, 2 autre routeur, 3 autre noeud.
         public var rang: Int
-        /// Le noeud route : un routeur de bordure ou un autre routeur (rang 1 ou 2). La cle de la disposition et le
-        /// placement des noms le lisent d'ici ; le moteur de l'app mesure encore `rang <= 2`, qui en est la definition.
+        /// Le noeud route : un routeur de bordure ou un autre routeur (rang 1 ou 2). La cle de la disposition, le
+        /// placement des noms et le moteur de l'app (la place reservee aux badges, les noms en 12 points) le lisent
+        /// d'ici.
         public var route: Bool { rang <= 2 }
         /// Rayon naturel de sa pastille (px).
         public var rayon: Double

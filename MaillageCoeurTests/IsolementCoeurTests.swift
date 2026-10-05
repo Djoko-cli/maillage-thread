@@ -3,7 +3,8 @@ import Testing
 @testable import MaillageCoeur
 
 /// Les regles de l'isolement, sorties du moteur (polissage D, section 5) : la provenance, la remontee, le clic sur le
-/// nom ou le disque d'un etage, le recalage sur une nouvelle scene, la rotation lente.
+/// nom ou le disque d'un etage, le recalage sur une nouvelle scene. La rotation lente, qui ne depend pas de
+/// l'isolement, est dans `CameraSceneTests`.
 @Suite("Scene : isolement")
 struct IsolementCoeurTests {
     /// La provenance (polissage C, section 5.4) : depuis la maison, aucune ; depuis un etage isole, cet etage, meme pour
@@ -67,16 +68,5 @@ struct IsolementCoeurTests {
         #expect(Isolement.etage("b").recaler(pieces: pieces, etages: etages) == .maison)
         #expect(Isolement.etage("a").recaler(pieces: pieces, etages: etages) == .etage("a"))
         #expect(Isolement.maison.recaler(pieces: [], etages: []) == .maison)
-    }
-
-    /// La rotation lente (spec de la vue par pieces, section 7 ; polissage D, section 4.2) : en 3D, l'envol fini,
-    /// cochee, sans « Reduire les animations », hors d'un geste ; chaque condition l'arrete. L'isolement, non.
-    @Test func rotationLente() {
-        #expect(Isolement.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: false, geste: false))
-        #expect(!Isolement.rotationLente(troisD: false, bascule: 1, cochee: true, reduire: false, geste: false))
-        #expect(!Isolement.rotationLente(troisD: true, bascule: 0.999, cochee: true, reduire: false, geste: false))
-        #expect(!Isolement.rotationLente(troisD: true, bascule: 1, cochee: false, reduire: false, geste: false))
-        #expect(!Isolement.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: true, geste: false))
-        #expect(!Isolement.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: false, geste: true))
     }
 }

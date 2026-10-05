@@ -67,8 +67,8 @@ struct MenuEtage: Equatable {
     var dehors: Bool
 }
 
-/// Le curseur au-dessus de la vue : une main sur ce qui se clique (polissage C, maquette) ; en 3D, une main ouverte tant
-/// que ⌥ est tenue, une main fermee pendant ⌥ + glisser (section 6).
+/// Le curseur au-dessus de la vue : une main sur ce qui se clique (polissage C, maquette) ; en 3D, une main ouverte
+/// tant que ⌥ est tenue, une main fermee pendant ⌥ + glisser (section 6).
 enum Curseur: Equatable {
     case fleche
     case main
@@ -81,6 +81,13 @@ enum Curseur: Equatable {
 /// amortis) ; les gestes ; les places gardees ; et chaque image du `Canvas`. SwiftUI n'observe que ce
 /// que les vues autour lisent (mode, rotation, horloge, piece isolee, selection, ligne de niveau,
 /// menu, places) : le reste change a chaque image sans relancer leur corps.
+///
+/// Ce fichier porte les types de la vue, l'etat et les proprietes calculees ; le reste est reparti en extensions,
+/// par responsabilite (polissage D, section 5) : `MoteurPieces+Scene` (scene, disposition, places gardees, menu du
+/// clic droit), `+Camera` (plateaux et grille, camera, vols, isolement, Echap), `+Image` (chaque image, l'avance de
+/// l'etat, l'horloge), `+Gestes` (souris, molette, pincement, moniteur des evenements) et `+Poses` (etats poses a la
+/// main). Ces extensions ecrivent l'etat, qui n'est donc plus `private(set)` : Swift n'en a pas entre fichiers.
+/// Hors de ces six fichiers, on le lit seulement ; le compilateur ne le garde plus, cette regle le remplace.
 @MainActor
 @Observable
 final class MoteurPieces {
@@ -147,7 +154,8 @@ final class MoteurPieces {
     /// Le dessin des pastilles qui s'effacent, absentes de la scene : celui de la scene d'avant.
     @ObservationIgnored var apparencesParties: [String: DessinNoeud.Apparence] = [:]
     /// La politique de la grille 2D (polissage C, section 3 ; dans le coeur depuis le polissage D, section 5) : le
-    /// reglage « Etages en 2D », pose par la fenetre, les colonnes choisies, une demande qui attend la vue d'ensemble 2D.
+    /// reglage « Etages en 2D », pose par la fenetre, les colonnes choisies, une demande qui attend la vue d'ensemble
+    /// 2D (`aLaVueDEnsemble2D`).
     @ObservationIgnored var politique = PolitiqueGrille()
     var grille: Bool { politique.grille }
     var colonnes: Int? { politique.colonnes }
@@ -162,8 +170,8 @@ final class MoteurPieces {
     /// ou descend sous un bandeau ; en 0,45 s quand la legende s'ouvre ou se replie (`legendeBasculee`) ; avec
     /// « Reduire les animations », par un fondu.
     @ObservationIgnored var marges: (haut: CGFloat, bas: CGFloat) = (0, 0)
-    /// Marge du bas de la zone visible ou se choisit la grille (polissage C, section 3.3) : celle de la legende, ouverte
-    /// ou repliee, sans la fiche, qui va et vient (`FenetrePieces.margeBasGrille`) ; nil : celle du cadre.
+    /// Marge du bas de la zone visible ou se choisit la grille (polissage C, section 3.3) : celle de la legende,
+    /// ouverte ou repliee, sans la fiche, qui va et vient (`FenetrePieces.margeBasGrille`) ; nil : celle du cadre.
     @ObservationIgnored var basGrille: CGFloat?
     /// La zone visible de la derniere image : une autre recalcule la grille.
     @ObservationIgnored var zoneGrille = CGSize.zero
@@ -264,7 +272,8 @@ final class MoteurPieces {
     @ObservationIgnored var surCliquable = false
 
     /// ⌥ + glisser en cours : la camera n'obeit qu'au pointeur. La maquette coupe alors ses controles : l'inertie de
-    /// rotation et le zoom amorti attendent, la molette et le pincement sont ignores ; au relachement, tout reprend.
+    /// rotation et le zoom amorti attendent, la molette et le pincement sont ignores ; au relachement, tout
+    /// reprend.
     var deplaceDansLEcran: Bool {
         if case .ecran? = geste { true } else { false }
     }
@@ -314,7 +323,8 @@ final class MoteurPieces {
 
     /// `troisD` : le mode garde ; `fichierPlaces` : `positions-pieces.json` (nil : ni lu ni ecrit) ; `places` : sans
     /// fichier, les places de depart, en memoire (la demo et son choix de niveau).
-    init(troisD: Bool = false, fichierPlaces: URL? = nil, selection: String? = nil, places depart: PlacesGardees? = nil) {
+    init(troisD: Bool = false, fichierPlaces: URL? = nil, selection: String? = nil,
+         places depart: PlacesGardees? = nil) {
         self.troisD = troisD
         t = troisD ? 1 : 0
         self.fichierPlaces = fichierPlaces
@@ -330,9 +340,15 @@ final class MoteurPieces {
     var estIsolee: Bool { focus != nil && sCible == 1 }
     var enMouvement: Bool { envol != nil || fondu != nil || vol != nil }
     /// La vue est a la vue d'ensemble : ni zoomee, ni deplacee, ni isolee, ni en mouvement.
-    var aLaVueDEnsemble: Bool { pret && !vueTouchee && sansIsolement && !enMouvement }
+    var aLaVueDEnsemble: Bool { pret && !ecarteDeLaVueDEnsemble && !enMouvement }
+    /// A la vue d'ensemble, en 2D (la bascule a 0) : la ou la grille se choisit ; ailleurs, une demande de grille
+    /// attend (`PolitiqueGrille`, polissage C, section 3.5).
+    var aLaVueDEnsemble2D: Bool { t == 0 && aLaVueDEnsemble }
     /// Ni piece ni etage isoles, ni en train d'etre quittes.
     var sansIsolement: Bool { isolement == .maison && focus == nil && etageEnVue == nil }
+    /// La vue s'ecarte de la vue d'ensemble : une piece ou un etage isoles (ou en train d'etre quittes), ou la vue
+    /// zoomee ou deplacee. Le retour a la maison (`versMaison`) et Echap (`sortir`) n'ont rien a faire sinon.
+    var ecarteDeLaVueDEnsemble: Bool { !sansIsolement || vueTouchee }
     /// Un mouvement, ou un glisser en cours (spec, sections 5 et 7) : une scene recue attend sa fin.
     var occupe: Bool { enMouvement || geste != nil }
 }

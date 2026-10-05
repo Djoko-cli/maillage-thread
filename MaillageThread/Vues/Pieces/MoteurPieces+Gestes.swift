@@ -3,7 +3,9 @@ import MaillageCoeur
 import SwiftUI
 import simd
 
-/// La souris, le clavier, la molette et Echap (polissage D, section 5 : le moteur en fichiers).
+/// La souris (survol, clics, glisser), la molette, le pincement, et le moniteur des evenements de la fenetre : la
+/// molette, ⌥, et Echap, qu'il passe a `sortir` (dans `MoteurPieces+Camera`) (polissage D, section 5 : le moteur en
+/// fichiers).
 extension MoteurPieces {
     // MARK: Souris et clavier
 
@@ -129,8 +131,8 @@ extension MoteurPieces {
 
     /// Un glisser, a chaque deplacement du pointeur ; `option` : ⌥ tenue, lue a l'appui seulement (polissage C,
     /// section 6) : en 3D, la vue glisse alors dans le plan de l'ecran, depuis le fond, un disque ou une piece, qui ne
-    /// bouge pas ; un vol en cours s'arrete, et pendant le geste la camera n'obeit qu'au pointeur (`deplaceDansLEcran`).
-    /// Relacher ⌥ en route ne change rien. En 2D, ⌥ ne change rien.
+    /// bouge pas ; un vol en cours s'arrete, et pendant le geste la camera n'obeit qu'au pointeur
+    /// (`deplaceDansLEcran`). Relacher ⌥ en route ne change rien. En 2D, ⌥ ne change rien.
     func glisser(_ p: CGPoint, depart d: CGPoint, option: Bool = false) {
         // Un geste reste d'un glisser annule (sans relachement), et celui-ci part d'ailleurs : il est clos.
         if geste != nil, d != departGeste { terminerGeste() }
@@ -145,11 +147,17 @@ extension MoteurPieces {
                 geste = .ecran(orbite)
             } else if !estIsolee, !enMouvement, let scene, let i = projetee?.piece(sous: d), i < scene.pieces.count,
                       indiceEtageIsole.map({ $0 == scene.pieces[i].etage }) ?? true {
-                // Les pieces de l'etage isole se glissent ; celles des autres etages se cliquent seulement. Une piece en
-                // route vers sa place y est posee, avec ses noeuds : elle suit le pointeur depuis sa place.
+                // Les pieces de l'etage isole se glissent ; celles des autres etages se cliquent seulement. Une piece
+                // en route vers sa place y est posee, avec ses noeuds : elle suit le pointeur depuis sa place, a sa
+                // hauteur, lue une fois posee. Sans centre (un indice hors des positions), elle reste de cote : le
+                // geste est celui du fond.
                 transition?.oublier(pieces: [scene.pieces[i].id], noeuds: Set(scene.pieces[i].noeuds))
                 if let tr = transition { posesAffichees = tr.poses(a: Self.maintenant()) }
-                geste = .piece(scene.pieces[i].id, hauteur: centrePiece(i)?.y ?? 0)
+                if let h = centrePiece(i)?.y {
+                    geste = .piece(scene.pieces[i].id, hauteur: h)
+                } else {
+                    geste = .fond
+                }
             } else {
                 geste = .fond
             }
@@ -162,14 +170,16 @@ extension MoteurPieces {
         let proj = ProjectionScene(orbite, cadre: cadre)
         switch geste {
         case .ecran(let o):
-            orbite = CameraScene.deplacerDansLEcran(o, glisse: CGSize(width: p.x - d.x, height: p.y - d.y), cadre: cadre)
+            orbite = CameraScene.deplacerDansLEcran(o, glisse: CGSize(width: p.x - d.x, height: p.y - d.y),
+                                                    cadre: cadre)
             vueTouchee = true
         case .piece(let id, let h):
             guard let scene, let i = scene.pieces.firstIndex(where: { $0.id == id }), i < positions.count,
                   i < cartes.count, scene.pieces[i].etage < geometrie.rayons.count,
                   let a = proj.sol(precedent, hauteur: h), let b = proj.sol(p, hauteur: h) else { return }
             var pos = positions[i] + SIMD2(b.x - a.x, b.z - a.z)
-            let r = max(0, geometrie.rayons[scene.pieces[i].etage] - 0.5 * hypot(cartes[i].largeur, cartes[i].profondeur))
+            let demiDiagonale = 0.5 * hypot(cartes[i].largeur, cartes[i].profondeur)
+            let r = max(0, geometrie.rayons[scene.pieces[i].etage] - demiDiagonale)
             if simd_length(pos) > r { pos = simd_length(pos) > 0 ? simd_normalize(pos) * r : .zero }
             positions[i] = pos
         case .fond:
@@ -270,8 +280,8 @@ extension MoteurPieces {
     }
 
     /// La molette zoome, sauf pendant un vol et pendant ⌥ + glisser : elle est alors ignoree, non differee. Au-dessus
-    /// d'un element pose sur la vue (`p`, dans la vue : la fiche, la legende, la ligne des capsules, la colonne du haut),
-    /// elle n'est pas prise (faux) : l'evenement leur revient (polissage D, section 3).
+    /// d'un element pose sur la vue (`p`, dans la vue : la fiche, la legende, la ligne des capsules, la colonne du
+    /// haut), elle n'est pas prise (faux) : l'evenement leur revient (polissage D, section 3).
     @discardableResult
     func molette(_ dy: Double, precis: Bool, en p: CGPoint? = nil) -> Bool {
         if let p, surInterface(p) { return false }
@@ -309,16 +319,18 @@ extension MoteurPieces {
     /// d'evenement de molette brut).
     func ecouter() {
         guard moniteur == nil else { return }
-        moniteur = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown, .flagsChanged]) { [weak self] e in
+        let genres: NSEvent.EventTypeMask = [.scrollWheel, .keyDown, .flagsChanged]
+        moniteur = NSEvent.addLocalMonitorForEvents(matching: genres) { [weak self] e in
             guard let self else { return e }
             let pris = MainActor.assumeIsolated { self.prendre(e) }
             return pris ? nil : e
         }
     }
 
-    /// Un evenement du moniteur, dans la fenetre de la vue seulement : la molette, au-dessus de la scene (pas d'un element
-    /// pose sur elle), et Echap, s'il a quelque chose a faire, sont pris (vrai : le moniteur rend nil) ; ⌥ pressee ou
-    /// relachee met a jour la main ouverte (polissage C, section 6) et continue son chemin, comme tout le reste.
+    /// Un evenement du moniteur, dans la fenetre de la vue seulement : la molette, au-dessus de la scene (pas d'un
+    /// element pose sur elle), et Echap, s'il a quelque chose a faire, sont pris (vrai : le moniteur rend nil) ; ⌥
+    /// pressee ou relachee met a jour la main ouverte (polissage C, section 6) et continue son chemin, comme tout le
+    /// reste.
     func prendre(_ e: NSEvent) -> Bool {
         guard e.window != nil, e.window === fenetre else { return false }
         return prendre(EvenementVue(e))
@@ -344,7 +356,8 @@ extension MoteurPieces {
         init(_ e: NSEvent) {
             switch e.type {
             case .scrollWheel:
-                genre = .molette(dy: Double(e.scrollingDeltaY), precis: e.hasPreciseScrollingDeltas, position: e.locationInWindow)
+                genre = .molette(dy: Double(e.scrollingDeltaY), precis: e.hasPreciseScrollingDeltas,
+                                 position: e.locationInWindow)
             case .keyDown where e.keyCode == 53:
                 genre = .echap
             case .flagsChanged:

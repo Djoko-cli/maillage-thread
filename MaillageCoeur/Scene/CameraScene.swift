@@ -351,7 +351,7 @@ public struct GeometrieMaison: Hashable, Sendable {
     public static func hauteurBloc(_ u: Double) -> Double { 0.04 + hauteurBloc3D * u }
 }
 
-/// Camera de la vue (spec, section 7) : vues d'ensemble, envol, vols, zoom vers le curseur, bornes.
+/// Camera de la vue (spec, section 7) : vues d'ensemble, envol, vols, zoom vers le curseur, bornes, rotation lente.
 public enum CameraScene {
     public static let champ2D = 2.0
     public static let champ3D = 40.0
@@ -369,6 +369,13 @@ public enum CameraScene {
     public static let dureeFondu = 0.3
     /// Rotation lente : un tour en deux minutes.
     public static let dureeTour = 120.0
+
+    /// La rotation lente tourne (spec de la vue par pieces, section 7) : en 3D, l'envol fini (`bascule` a 1), cochee,
+    /// sans « Reduire les animations », hors d'un geste (`geste` : un glisser, la molette, un pincement). Elle continue
+    /// quand une piece ou un etage est isole (polissage D, section 4.2), autour de la cible de la camera.
+    public static func rotationLente(troisD: Bool, bascule: Double, cochee: Bool, reduire: Bool, geste: Bool) -> Bool {
+        troisD && bascule == 1 && cochee && !reduire && !geste
+    }
 
     /// Rampe de la maquette : cubique entree-sortie.
     public static func rampe(_ x: Double) -> Double {

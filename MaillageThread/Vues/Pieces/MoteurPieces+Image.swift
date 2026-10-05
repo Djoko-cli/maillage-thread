@@ -3,7 +3,8 @@ import MaillageCoeur
 import SwiftUI
 import simd
 
-/// Chaque image du `Canvas`, l'avance de l'etat et l'horloge (polissage D, section 5 : le moteur en fichiers).
+/// Chaque image du `Canvas`, les marges du cadre, l'avance de l'etat (envol, fondu, isolement, glissements, vols,
+/// rotation lente, amortis) et l'horloge (polissage D, section 5 : le moteur en fichiers).
 extension MoteurPieces {
     // MARK: Image
 
@@ -29,8 +30,8 @@ extension MoteurPieces {
                              ek: scene.etages.map { ek[$0.id] ?? 0 }, survolEtage: survolEtage)
         let p = SceneProjetee(scene: scene, cartes: cartes, positions: positions, geometrie: geometrie, etat: etat,
                               orbite: orbite, cadre: cadre, poses: posesAffichees)
-        PlacementNoms.regler(&etiquettes, scene: scene, niveau: p.niveau, survol: survol, selection: selection, focus: focus,
-                             isolee: estIsolee, fk: parts, s: s, t: t, se: se, voiles: p.voilesEtages,
+        PlacementNoms.regler(&etiquettes, scene: scene, niveau: p.niveau, survol: survol, selection: selection,
+                             focus: focus, isolee: estIsolee, fk: parts, s: s, t: t, se: se, voiles: p.voilesEtages,
                              etageIsole: indiceEtageIsole, survolNomEtage: survolNomEtage)
         let ancres: [CGRect?] = etiquettes.map { l in
             switch l.genre {
@@ -42,7 +43,8 @@ extension MoteurPieces {
             }
         }
         var obstacles = p.disques.filter { $0.opacite > 0.5 }.map { d in
-            CGRect(x: Double(d.centre.x) - d.rayon, y: Double(d.centre.y) - d.rayon, width: 2 * d.rayon, height: 2 * d.rayon)
+            CGRect(x: Double(d.centre.x) - d.rayon, y: Double(d.centre.y) - d.rayon, width: 2 * d.rayon,
+                   height: 2 * d.rayon)
         }
         obstacles += cadresInterface.values.map { $0.insetBy(dx: -4, dy: -4) }
         traits = PlacementNoms.placer(&etiquettes, ancres: ancres, obstacles: obstacles, cadre: taille, dt: dt)
@@ -122,12 +124,6 @@ extension MoteurPieces {
     /// marges) prend sa duree, 0,45 s (`Apparition.dureeLegende`), au lieu des 0,3 s de la fiche et des bandeaux.
     func legendeBasculee() {
         dureeAnnoncee = Apparition.dureeLegende
-    }
-
-    /// L'etage vise par l'isolement, dans la scene ; nil : la maison ou une piece.
-    var indiceEtageIsole: Int? {
-        guard case .etage(let cle) = isolement else { return nil }
-        return scene?.etages.firstIndex { $0.id == cle }
     }
 
     private func ligne(_ niveau: NiveauZoom, ancres: [CGRect?]) -> LigneNiveau {
@@ -222,15 +218,15 @@ extension MoteurPieces {
             controles()
         }
         // Une grille qui attendait la vue d'ensemble 2D s'y pose.
-        if let g = politique.attente, t == 0, aLaVueDEnsemble { poserGrille(g) }
+        if let g = politique.attente, aLaVueDEnsemble2D { poserGrille(g) }
         if !occupe, let e = attente { appliquer(e) }
     }
 
-    /// La rotation lente tourne (`Isolement.rotationLente`), une piece ou un etage isoles compris (polissage D,
+    /// La rotation lente tourne (`CameraScene.rotationLente`), une piece ou un etage isoles compris (polissage D,
     /// section 4.2), sauf pendant un geste : un glisser (⌥ compris), le zoom de la molette en route, un pincement.
     private var rotationLente: Bool {
-        Isolement.rotationLente(troisD: troisD, bascule: t, cochee: rotation, reduire: reduire,
-                                geste: geste != nil || zoomEnAttente != 0 || dernierPincement != 1)
+        CameraScene.rotationLente(troisD: troisD, bascule: t, cochee: rotation, reduire: reduire,
+                                  geste: geste != nil || zoomEnAttente != 0 || dernierPincement != 1)
     }
 
     /// L'envol ou son fondu fini : le survol, le menu du clic droit et le curseur reprennent sous le pointeur immobile
@@ -280,7 +276,8 @@ extension MoteurPieces {
             || (attente != nil && geste == nil) {
             return true
         }
-        if se != seCible || fk.values.contains(where: { $0 != 0 && $0 != 1 }) || ek.values.contains(where: { $0 != 0 && $0 != 1 }) {
+        if se != seCible || fk.values.contains(where: { $0 != 0 && $0 != 1 })
+            || ek.values.contains(where: { $0 != 0 && $0 != 1 }) {
             return true
         }
         if rotationLente { return true }
