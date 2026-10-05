@@ -174,18 +174,10 @@ struct GrapheSignal: View {
                             Text(verbatim: "→ " + (noms[ch.parent] ?? ch.parent)).font(.caption2)
                         }
                 }
-                // Le releve survole : un trait a son heure, un point sur sa valeur, son etiquette, dans le cadre.
+                // Le releve survole : un trait a son heure, un point sur sa valeur ; son etiquette est dans `chartOverlay`.
                 if let r = a.releve {
                     RuleMark(x: .value("Heure", r.date))
                         .foregroundStyle(.primary.opacity(0.5))
-                        .annotation(position: .top, alignment: a.alignement, spacing: 0,
-                                    overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                            Text(verbatim: EchelleSignal.etiquette(r, periode: periode, locale: langue,
-                                                                   fuseau: .current))
-                                .font(.caption2.monospacedDigit())
-                                .padding(.horizontal, 4)
-                                .background(.background.opacity(0.85), in: RoundedRectangle(cornerRadius: 3))
-                        }
                     PointMark(x: .value("Heure", r.date), y: .value("Signal", r.valeur))
                         .symbolSize(30)
                 }
@@ -204,6 +196,19 @@ struct GrapheSignal: View {
                             }
                             if heure != survole { survole = heure }
                         }
+                    // L'etiquette du releve survole, en haut du trace, a gauche du trait dans la moitie droite, a droite
+                    // sinon. Posee ici et non en `annotation` : sous le verre de la fiche, les annotations du graphe ne
+                    // se dessinent pas (verification du 05/10).
+                    if let r = a.releve, let cadre = proxy.plotFrame, let x = proxy.position(forX: r.date) {
+                        Text(verbatim: EchelleSignal.etiquette(r, periode: periode, locale: langue, fuseau: .current))
+                            .font(.caption2.monospacedDigit())
+                            .padding(.horizontal, 4)
+                            .background(.background.opacity(0.85), in: RoundedRectangle(cornerRadius: 3))
+                            .fixedSize()
+                            .frame(width: 0, height: 0, alignment: a.alignement)
+                            .position(x: g[cadre].origin.x + x, y: g[cadre].origin.y + 8)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
             .frame(width: 320, height: 120)
