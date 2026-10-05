@@ -6,13 +6,17 @@ import SwiftUI
 /// la qualite des liens du noeud (d'un routeur avec ses voisins, d'un enfant vers son parent,
 /// ses changements de parent marques) et, pour un routeur, le signal que la sonde en recoit,
 /// avec les changements de parent de la sonde marques (ce signal depend d'abord de l'endroit ou
-/// elle est posee).
+/// elle est posee). Le signal a toujours une echelle, et sa valeur se lit au survol (polissage D,
+/// section 4.3).
 struct CourbesFiche: View {
     @Environment(Surveillance.self) private var surveillance
+    @Environment(\.locale) private var langue
     let id: String
     /// Fin des courbes : l'heure de la fiche (`FicheNoeud.instant`), qui avance chaque minute.
     let instant: Date
     @State private var periode: PeriodeCourbes = .jour
+    /// L'heure sous le pointeur, au-dessus du graphe du signal ; nil, ailleurs.
+    @State private var survole: Date?
 
     var body: some View {
         let courbes = surveillance.courbes(noeud: id, periode: periode, fin: instant)
@@ -102,8 +106,18 @@ struct CourbesFiche: View {
         }
     }
 
+    /// L'echelle du signal (polissage D, section 4.3) : son domaine, des dizaines de dBm autour de ses valeurs, et ses
+    /// graduations ; sans valeur, de -100 a -40 dBm.
+    static func echelle(_ c: CourbesNoeud) -> (domaine: ClosedRange<Double>, graduations: [Double]) {
+        let d = EchelleSignal.domaine(c.signal.map(\.valeur)) ?? -100 ... -40
+        return (d, EchelleSignal.graduations(d))
+    }
+
     private func signal(_ c: CourbesNoeud, _ noms: [String: String]) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let echelle = Self.echelle(c)
+        // Le releve sous le pointeur, a moins de 2 % de la periode ; aucun dans un trou.
+        let releve = survole.flatMap { EchelleSignal.plusProche(c.signal, de: $0, periode: periode) }
+        return VStack(alignment: .leading, spacing: 2) {
             Text("Signal vu par la sonde (dBm)").font(.caption).foregroundStyle(.secondary)
             Chart {
                 let seuls = Self.tronconsSeuls(c.signal)
@@ -123,9 +137,39 @@ struct CourbesFiche: View {
                             Text(verbatim: "→ " + (noms[ch.parent] ?? ch.parent)).font(.caption2)
                         }
                 }
+                // Le releve survole : un trait a son heure, un point sur sa valeur, son etiquette, dans le cadre.
+                if let r = releve {
+                    RuleMark(x: .value("Heure", r.date))
+                        .foregroundStyle(.primary.opacity(0.5))
+                        .annotation(position: .top,
+                                    alignment: EchelleSignal.aGauche(r.date, debut: c.debut, fin: c.fin) ? .trailing : .leading,
+                                    spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                            Text(verbatim: EchelleSignal.etiquette(r, periode: periode, locale: langue, fuseau: .current))
+                                .font(.caption2.monospacedDigit())
+                                .padding(.horizontal, 4)
+                                .background(.background.opacity(0.85), in: RoundedRectangle(cornerRadius: 3))
+                        }
+                    PointMark(x: .value("Heure", r.date), y: .value("Signal", r.valeur))
+                        .symbolSize(30)
+                }
             }
             .chartXScale(domain: c.debut ... c.fin)
-            .chartYScale(domain: .automatic(includesZero: false))
+            .chartYScale(domain: echelle.domaine)
+            .chartYAxis { AxisMarks(values: echelle.graduations) }
+            .chartOverlay { proxy in
+                GeometryReader { g in
+                    Rectangle().fill(.clear).contentShape(Rectangle())
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active(let p):
+                                guard let cadre = proxy.plotFrame else { return }
+                                survole = proxy.value(atX: p.x - g[cadre].origin.x, as: Date.self)
+                            case .ended:
+                                survole = nil
+                            }
+                        }
+                }
+            }
             .frame(width: 320, height: 120)
             if !c.parentsSonde.isEmpty {
                 Text("Pointillé : la sonde change de parent.").font(.caption2).foregroundStyle(.secondary)

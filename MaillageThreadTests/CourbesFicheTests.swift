@@ -50,6 +50,18 @@ struct CourbesFicheTests {
         #expect(r.signal.map(\.valeur) == [-61, -61])
     }
 
+    /// L'echelle du signal de la fiche (polissage D, section 4.3) : celle du coeur, sur les valeurs de la courbe ; deux
+    /// releves egaux a -61 dBm donnent -70 ... -50, gradue -70, -60, -50 ; sans valeur, -100 ... -40.
+    @Test func echelleDuSignal() throws {
+        let s = try Self.surveillance()
+        let r = try #require(s.courbes(noeud: "rloc:0400", periode: .jour, fin: Date()))
+        let e = CourbesFiche.echelle(r)
+        #expect(e.domaine == -70 ... -50 && e.graduations == [-70, -60, -50])
+        let vide = try #require(s.courbes(noeud: JournalMaillageTests.appareil, periode: .jour, fin: Date()))
+        #expect(vide.signal.isEmpty && CourbesFiche.echelle(vide).domaine == -100 ... -40)
+        #expect(CourbesFiche.echelle(vide).graduations == [-100, -90, -80, -70, -60, -50, -40])
+    }
+
     /// La fiche montre les courbes des qu'il y a un historique (jamais en demo), et la vue lui
     /// garde plus de place en bas : la marge du bas suit la pile mesuree, plus haute avec les courbes (elle
     /// remplace les 190 et 360 pt fixes) ; pour un noeud sans historique, une ligne de texte.
