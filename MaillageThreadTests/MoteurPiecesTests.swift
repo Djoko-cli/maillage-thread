@@ -585,8 +585,7 @@ struct MoteurPiecesTests {
     /// scene reste affichee pendant ce temps ; la nouvelle vient ensuite, avec ses cartes.
     @Test(.timeLimit(.minutes(1))) func nouvelleDisposition() async throws {
         let (m, e) = try Self.moteur()
-        var autre = e
-        autre.libelles["56B1E064401F74EF"] = LibellesNoeuds.Libelle(texte: "Pont du bureau, sous la lampe de l'écran")
+        let autre = try GlissementTests.demo("Halo", nom: "Pont du bureau, sous la lampe de l'écran")
         #expect(autre.cleDisposition != e.cleDisposition)
         m.recevoir(autre)
         #expect(m.entree == e, "l'ancienne disposition reste affichee")

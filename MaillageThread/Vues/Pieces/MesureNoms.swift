@@ -19,6 +19,7 @@ final class MesureNoms {
 
     private var hote: NSHostingController<AnyView>?
     private var tailles: [Cle: CGSize] = [:]
+    private var pastilleLaPlusLarge: String?
 
     /// Boite du nom d'un noeud : le texte en semi-gras (sa place ne change pas au survol), 5 points de
     /// chaque cote, puis la pastille d'une batterie faible, 5 points apres.
@@ -33,6 +34,25 @@ final class MesureNoms {
             taille.height = max(taille.height, c.height)
         }
         return taille
+    }
+
+    /// Boite que la carte reserve au nom d'un noeud (polissage D, section 2) : son nom et tous les badges qu'il peut
+    /// porter, affiches ou non (`CartesPieces.texteReserve`), puis, pour un noeud dont la pile est connue (`pile`), la
+    /// plus large des pastilles d'une pile faible. Un badge qui parait ou s'en va n'y change rien.
+    func reserve(_ nom: String, routeur: Bool, pile: Bool) -> CGSize {
+        noeud(LibellesNoeuds.Libelle(texte: CartesPieces.texteReserve(nom, routeur: routeur),
+                                     pastille: pile ? pastilleReservee : nil),
+              routeur: routeur)
+    }
+
+    /// La plus large des pastilles d'une pile faible : de 0 a 100 %, ou « faible ».
+    var pastilleReservee: String {
+        if let p = pastilleLaPlusLarge { return p }
+        let textes = (0...100).compactMap { LibellesNoeuds.pastilleBatterie(BatterieMaison(niveau: $0, alerte: true)) }
+            + [LibellesNoeuds.pastilleBatterie(BatterieMaison(alerte: true))].compactMap { $0 }
+        let p = textes.max { pastille($0).width < pastille($1).width } ?? ""
+        pastilleLaPlusLarge = p
+        return p
     }
 
     /// Boite du glyphe d'un nom (la couronne, la lune), dessine seul dans la legende : celle de son nom, sans ses 5 points

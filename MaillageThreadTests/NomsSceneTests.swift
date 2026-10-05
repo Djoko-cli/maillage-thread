@@ -56,7 +56,7 @@ struct NomsSceneTests {
     @Test func libelles() throws {
         let (s, r, e) = try Self.demo()
         #expect(e.libelles["Apple TV 4K"]?.texte == "Apple TV 4K 👑")
-        #expect(e.libelles["86E7BD1A75F28E6D"] == LibellesNoeuds.Libelle(texte: "Nuki Ultra ☾"))
+        #expect(e.libelles["86E7BD1A75F28E6D"] == LibellesNoeuds.Libelle(texte: "Nuki Ultra ☾", nom: "Nuki Ultra"))
         #expect(e.libelles["7AF0B6D5006CF95F"]?.texte == "Prise salon ☾ ⚠︎", "disparue")
         #expect(e.libelles["3A5DFAFCAB581AAF"]?.pastille == String(localized: "\(12)\u{202F}%"))
         #expect(e.libelles["rloc:041F"]?.texte == String(localized: "Non identifié · \("041F")"))
@@ -279,6 +279,99 @@ struct NomsSceneTests {
                 "hors de la maison")
         s.renommer("56B1E064401F74EF", en: "Pont Halo")
         #expect(cle([rdc, etage, combles], [:]) != depart)
+    }
+
+    /// Un badge qui change ne change ni la scene ni la cle de la disposition (polissage D, section 2) : une pile qui
+    /// faiblit donne sa pastille au libelle, sans plus. Le moteur pose la scene tout de suite, sans calcul : rien ne
+    /// bouge, ni piece ni carte, rien ne glisse ; seul le nom change.
+    @Test func unBadgeNeBougeRien() throws {
+        let (s, r, e) = try Self.demo()
+        let m = MoteurPiecesTests.moteur(e)
+        var maison = try #require(s.noms.maison)
+        let k = try #require(maison.accessoires.firstIndex { $0.nom == "Nuki Ultra" })
+        maison.accessoires[k].batterie = BatterieMaison(niveau: 5)
+        s.noms.maison = maison
+        let e2 = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        let nuki = "86E7BD1A75F28E6D"
+        #expect(e2.libelles[nuki]?.pastille == String(localized: "\(5)\u{202F}%") && e.libelles[nuki]?.pastille == nil)
+        #expect(e2.scene == e.scene && e2.cleDisposition == e.cleDisposition && e2 != e)
+        // La scene ne voit que les noms : ni ☾, ni la couronne du chef.
+        #expect(e.libelles[nuki]?.texte == "Nuki Ultra ☾" && e.scene.noeud(nuki)?.libelle == "Nuki Ultra")
+        #expect(e.libelles["Apple TV 4K"]?.texte == "Apple TV 4K 👑" && e.scene.noeud("Apple TV 4K")?.libelle == "Apple TV 4K")
+        let (positions, cartes) = (m.positions, m.cartes)
+        let mesure = MesureNoms()
+        let reserves = Dictionary(uniqueKeysWithValues: e.scene.noeuds.map {
+            ($0.id, Double(mesure.reserve($0.libelle, routeur: $0.rang <= 2, pile: $0.pile).width))
+        })
+        #expect(cartes == CartesPieces.cartes(e.scene, largeurs: reserves), "les cartes reservent la place des badges")
+        m.recevoir(e2)
+        #expect(m.entree == e2, "posee tout de suite, sans calcul")
+        #expect(m.positions == positions && m.cartes == cartes && m.transition == nil && m.glissementPlateaux == nil)
+        #expect(m.textes.noeuds[nuki]?.pastille == String(localized: "\(5)\u{202F}%"))
+        // Une pile qui devient connue (decision du 05/10) : la cle change, et la carte de la cuisine s'elargit, une fois.
+        let k2 = try #require(maison.accessoires.firstIndex { $0.nom == "Interrupteur cuisine" })
+        maison.accessoires[k2].batterie = BatterieMaison(niveau: 80)
+        s.noms.maison = maison
+        let e3 = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        let cuisine = try MoteurPiecesTests.indice(e, "Cuisine")
+        #expect(e3.cleDisposition != e.cleDisposition && e3.scene.noeud("D6ECDD6EF9C0CB0C")?.pile == true)
+        #expect(e.scene.noeud("D6ECDD6EF9C0CB0C")?.pile == false && e.scene.noeud(nuki)?.pile == true)
+        #expect(MoteurPiecesTests.moteur(e3).cartes[cuisine].largeur > cartes[cuisine].largeur)
+    }
+
+    /// La place que la carte reserve au nom de chaque noeud de la demo (polissage D, section 2), avec la vraie police :
+    /// chacun de ses noms affiches y tient, quels que soient ses badges, la pastille la plus large comprise pour un noeud
+    /// dont la pile est connue ; sans pile connue, la reserve n'a pas de pastille (decision du 05/10).
+    @Test func reserveDesBadges() throws {
+        let (_, _, e) = try Self.demo()
+        let mesure = MesureNoms()
+        let pastilles = (0...100).compactMap { LibellesNoeuds.pastilleBatterie(BatterieMaison(niveau: $0, alerte: true)) }
+            + [String(localized: "faible")]
+        let large = mesure.pastilleReservee
+        #expect(pastilles.contains(large) && pastilles.allSatisfy { mesure.pastille($0).width <= mesure.pastille(large).width })
+        for n in e.scene.noeuds {
+            let routeur = n.rang <= 2
+            let reserve = mesure.reserve(n.libelle, routeur: routeur, pile: n.pile)
+            for badge in [false, true] {
+                for alerte in [false, true] {
+                    let texte = CartesPieces.texte(n.libelle, chef: routeur && badge, endormi: !routeur && badge, alerte: alerte)
+                    let affiche = mesure.noeud(LibellesNoeuds.Libelle(texte: texte, pastille: n.pile ? large : nil),
+                                               routeur: routeur)
+                    #expect(affiche.width <= reserve.width && affiche.height <= reserve.height, "\(texte)")
+                }
+            }
+            let sansPastille = mesure.noeud(LibellesNoeuds.Libelle(texte: CartesPieces.texteReserve(n.libelle, routeur: routeur)),
+                                            routeur: routeur)
+            #expect(n.pile ? reserve.width > sansPastille.width : reserve == sansPastille, "\(n.libelle)")
+            #expect(mesure.reserve(n.libelle, routeur: routeur, pile: true).width > sansPastille.width)
+        }
+        #expect(e.scene.noeuds.filter(\.pile).count == 9, "les neuf piles connues de la demo")
+    }
+
+    /// Deux routeurs de bordure non identifies (polissage D, section 4.1), les HomePod de la demo sans leur ExtMac :
+    /// leurs candidats, les deux HomePod, sont au salon ; ils y vont, sous leur nom « A ou B · RLOC16 », et la fiche ne
+    /// leur propose toujours pas « Placer dans une piece… ». Un candidat dans une autre piece : « Sans piece ».
+    @Test func routeursAuxCandidats() throws {
+        let (s, r, _) = try Self.demo()
+        let i = try #require(s.instantane)
+        let m = try #require(MaillageDemo.maillage(i, date: s.maintenant, sansIdentite: ["HomePod Avant", "HomePod Palier"]))
+        s.recevoir(m, a: s.maintenant)
+        let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        let inconnus = e.scene.noeuds.filter { $0.inconnu && $0.bordure }
+        #expect(inconnus.count == 2)
+        for n in inconnus {
+            #expect(e.scene.pieces[n.piece].nom == .maison("Salon"), "\(n.id)")
+            #expect(e.libelles[n.id]?.texte.contains("HomePod Avant") == true)
+            #expect(PiecesChoisies.placement(n.id, dans: s, entree: e) == nil)
+        }
+        var maison = try #require(s.noms.maison)
+        let k = try #require(maison.accessoires.firstIndex { $0.nom == "HomePod Avant" })
+        maison.accessoires[k].piece = "Cuisine"
+        s.noms.maison = maison
+        let autre = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
+        for n in autre.scene.noeuds where n.inconnu && n.bordure {
+            #expect(autre.scene.pieces[n.piece].nom == .sansPiece, "\(n.id)")
+        }
     }
 
     /// La scene porte ce dont elle est faite, construit une fois avec elle : le graphe, le maillage de la

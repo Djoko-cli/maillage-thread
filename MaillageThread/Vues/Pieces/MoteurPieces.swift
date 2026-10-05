@@ -392,12 +392,12 @@ final class MoteurPieces {
         retenir(d, scene: e.scene, cartes: cartes, cle: e.cleDisposition)
     }
 
-    /// Cartes des pieces d'une scene, d'apres les noms mesures des noeuds.
+    /// Cartes des pieces d'une scene, d'apres les noms mesures des noeuds, avec la place de tous leurs badges possibles
+    /// (polissage D, section 2) : un badge qui change ne change pas la carte.
     private func cartesPour(_ e: EntreeScene) -> [CartesPieces.Carte] {
         var largeurs: [String: Double] = [:]
         for n in e.scene.noeuds {
-            guard let l = e.libelles[n.id] else { continue }
-            largeurs[n.id] = mesure.noeud(l, routeur: n.rang <= 2).width
+            largeurs[n.id] = mesure.reserve(n.libelle, routeur: n.rang <= 2, pile: n.pile).width
         }
         return CartesPieces.cartes(e.scene, largeurs: largeurs)
     }

@@ -6,13 +6,22 @@ import MaillageCoeur
 /// texte d'un repere « ailleurs ».
 enum LibellesNoeuds {
     /// La couronne du chef et la lune d'un endormi, a la suite du nom ; la legende les reprend.
-    static let couronne = "👑"
-    static let lune = "☾"
+    static let couronne = CartesPieces.couronne
+    static let lune = CartesPieces.lune
 
-    /// Libelle d'un noeud : son texte, et la pastille de sa batterie faible.
+    /// Libelle d'un noeud : son texte, et la pastille de sa batterie faible ; son nom, sans ses badges (polissage D,
+    /// section 2) : la scene et sa carte ne voient que lui.
     struct Libelle: Hashable {
         var texte: String
         var pastille: String?
+        var nom: String
+
+        /// `nom` : le texte, a defaut.
+        init(texte: String, pastille: String? = nil, nom: String? = nil) {
+            self.texte = texte
+            self.pastille = pastille
+            self.nom = nom ?? texte
+        }
     }
 
     /// Nom d'un noeud que seule la sonde connait : « Routeur de bordure · B400 »,
@@ -63,11 +72,10 @@ enum LibellesNoeuds {
         for n in graphe.noeuds {
             let a = appareils[n.id]
             let nom = a?.nom ?? nomsRouteurs[n.id] ?? maillage?.noeud(n.id).map(inconnu) ?? n.id
-            var texte = CartesPieces.couper(nom)
-            if chefs.contains(n.id) { texte += " " + couronne }
-            if endormi(a, routeur: n.routeur) { texte += " " + lune }
-            if a?.etat == .sansAdresse || a?.etat == .disparu { texte += " ⚠︎" }
-            libelles[n.id] = Libelle(texte: texte, pastille: pastilleBatterie(a?.batterie))
+            let coupe = CartesPieces.couper(nom)
+            let texte = CartesPieces.texte(coupe, chef: chefs.contains(n.id), endormi: endormi(a, routeur: n.routeur),
+                                           alerte: a?.etat == .sansAdresse || a?.etat == .disparu)
+            libelles[n.id] = Libelle(texte: texte, pastille: pastilleBatterie(a?.batterie), nom: coupe)
         }
         return libelles
     }
@@ -75,11 +83,13 @@ enum LibellesNoeuds {
     /// Piece de Maison de chaque noeud : celle de son accessoire (appareil), ou, pour un routeur de
     /// bordure, celle de l'accessoire de Maison qui porte le nom de son annonce. Un routeur de bordure
     /// que Maison ne place pas (HomePod, Apple TV) prend la piece choisie pour lui, sinon celle de son
-    /// nom (`nomsRouteurs`, par instance ; `PiecesRouteurs`). Un autre noeud du graphe que Maison ne
+    /// nom (`nomsRouteurs`, par instance ; `PiecesRouteurs`). Un routeur de bordure que seule la sonde connait, non
+    /// identifie, prend la piece de ses candidats s'ils sont tous dans la meme (polissage D, section 4.1, `maillage`).
+    /// Un autre noeud du graphe que Maison ne
     /// place pas prend la piece choisie pour son ExtMac (precision 27).
     static func pieces(reseau: Reseau, appareils: [AppareilAffiche], maison: NomsMaison?,
                        nomsRouteurs: [String: String] = [:], choix: PiecesRouteurs = PiecesRouteurs(),
-                       graphe: GrapheReseau) -> [String: String] {
+                       graphe: GrapheReseau, maillage: MaillageAffiche? = nil) -> [String: String] {
         var pieces: [String: String] = [:]
         for a in appareils {
             if let p = a.piece, !p.isEmpty { pieces[a.id] = p }
@@ -95,12 +105,18 @@ enum LibellesNoeuds {
                 pieces[r.instance] = p
             }
         }
+        for n in graphe.noeuds where n.bordure && pieces[n.id] == nil {
+            guard let candidats = maillage?.noeud(n.id)?.candidats, !candidats.isEmpty,
+                  let p = choix.piece(candidats: candidats, noms: nomsRouteurs, maison: maison, parmi: toutes,
+                                      domicile: domicile) else { continue }
+            pieces[n.id] = p
+        }
         return pieces
     }
 
     /// Piece de Maison d'un routeur de bordure (son instance) : celle de l'accessoire qui porte son nom.
     static func pieceDeMaison(routeur: String, maison: NomsMaison?) -> String? {
-        maison?.accessoires.first { $0.nom == routeur && $0.piece?.isEmpty == false }?.piece
+        PiecesRouteurs.pieceDeMaison(routeur: routeur, maison: maison)
     }
 
     static func nom(_ e: ScenePieces.NomEtage) -> String {

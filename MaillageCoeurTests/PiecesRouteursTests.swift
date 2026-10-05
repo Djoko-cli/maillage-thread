@@ -57,6 +57,35 @@ struct PiecesRouteursTests {
         #expect(p == PiecesRouteurs())
     }
 
+    /// Un routeur de bordure non identifie, aux candidats (polissage D, section 4.1) : il va dans leur piece s'ils sont
+    /// tous dans la meme ; sinon, ou si l'un n'en a pas, nulle part (« Sans piece »). La piece d'un candidat : celle de
+    /// son accessoire de Maison, sinon le choix garde sous son instance, avant la regle de son nom (son surnom, sinon
+    /// l'instance).
+    @Test func candidats() {
+        var p = PiecesRouteurs()
+        let maison = NomsMaison(date: Date(timeIntervalSince1970: 1_790_000_000), accessoires: [
+            AccessoireMaison(nom: "HomePod A", piece: "Bureau"), AccessoireMaison(nom: "HomePod B", piece: "Bureau"),
+        ])
+        func piece(_ c: [String], noms: [String: String] = [:], maison m: NomsMaison? = nil) -> String? {
+            p.piece(candidats: c, noms: noms, maison: m, parmi: Self.pieces, domicile: "Maison")
+        }
+        #expect(piece(["HomePod Salon gauche", "HomePod Salon droit"]) == "Salon", "la meme piece, par le nom")
+        #expect(piece(["HomePod Salon", "HomePod mini chambre"]) == nil, "des pieces differentes")
+        #expect(piece(["HomePod Salon", "HomePod"]) == nil, "un candidat sans piece")
+        #expect(piece(["HomePod"]) == nil && piece([]) == nil)
+        #expect(piece(["HomePod"], noms: ["HomePod": "HomePod du salon"]) == "Salon", "le surnom")
+        #expect(piece(["HomePod A", "HomePod B"], maison: maison) == "Bureau", "l'accessoire de Maison")
+        #expect(piece(["HomePod A", "HomePod Salon"], maison: maison) == nil)
+        p.choisir("Chambre", routeur: "HomePod Salon gauche", domicile: "Maison")
+        #expect(piece(["HomePod Salon gauche", "HomePod Salon droit"]) == nil, "le choix avant le nom : deux pieces")
+        p.choisir("Chambre", routeur: "HomePod Salon droit", domicile: "Maison")
+        #expect(piece(["HomePod Salon gauche", "HomePod Salon droit"]) == "Chambre", "le choix avant le nom")
+        p.choisir("Chambre", routeur: "HomePod A", domicile: "Maison")
+        #expect(piece(["HomePod A", "HomePod B"], maison: maison) == "Bureau", "Maison avant le choix")
+        #expect(PiecesRouteurs.pieceDeMaison(routeur: "HomePod A", maison: maison) == "Bureau")
+        #expect(PiecesRouteurs.pieceDeMaison(routeur: "HomePod C", maison: maison) == nil)
+    }
+
     /// Pieces de Maison : celles des accessoires et celles des zones, sans doublon ni nom vide.
     @Test func piecesDeLaMaison() {
         let maison = NomsMaison(date: Date(timeIntervalSince1970: 1_790_000_000), accessoires: [

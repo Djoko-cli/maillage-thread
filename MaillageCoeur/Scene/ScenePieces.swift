@@ -17,8 +17,9 @@ import Foundation
 /// - Teinte d'une piece : dans chaque etage, les pieces rangees par nom prennent chacune la teinte
 ///   d'indice FNV-1a 32 bits de leur nom, modulo 8, ou la suivante libre dans l'etage. La carte d'un
 ///   routeur est rangee et teintee d'apres l'id du routeur, qui ne change pas avec son libelle.
-/// - Noeuds d'une carte : le chef, les routeurs de bordure, les autres routeurs, les autres
-///   noeuds ; par libelle dans chaque groupe. Rayon naturel : 15 px pour le centre d'une
+/// - Noeuds d'une carte : les routeurs de bordure, les autres routeurs, les autres noeuds ; par nom
+///   dans chaque groupe, sans ses badges. Le chef reste dans son groupe (polissage D, section 2) : un
+///   changement de chef ne reordonne pas la carte. Rayon naturel : 15 px pour le centre d'une
 ///   partition, 13 pour un autre routeur de bordure, 8 pour un autre routeur, 7 sinon.
 public struct ScenePieces: Hashable, Sendable {
     public enum NomEtage: Hashable, Sendable {
@@ -82,7 +83,7 @@ public struct ScenePieces: Hashable, Sendable {
 
     public struct Noeud: Hashable, Sendable, Identifiable {
         public var id: String
-        /// Nom affiche, avec la couronne, la lune et l'alerte ; deja coupe (`CartesPieces.couper`).
+        /// Nom, sans la couronne, la lune ni l'alerte (polissage D, section 2) ; deja coupe (`CartesPieces.couper`).
         public var libelle: String
         public var genre: GrapheReseau.Genre
         public var partition: String
@@ -90,7 +91,10 @@ public struct ScenePieces: Hashable, Sendable {
         public var bordure: Bool
         public var inconnu: Bool
         public var chef: Bool
-        /// Rang dans sa carte : 0 chef, 1 routeur de bordure, 2 autre routeur, 3 autre noeud.
+        /// Sa pile est connue (Maison) : la carte reserve la place de la pastille d'une pile faible (polissage D,
+        /// section 2).
+        public var pile: Bool
+        /// Rang dans sa carte : 1 routeur de bordure, 2 autre routeur, 3 autre noeud.
         public var rang: Int
         /// Rayon naturel de sa pastille (px).
         public var rayon: Double
@@ -114,13 +118,14 @@ public struct ScenePieces: Hashable, Sendable {
     public private(set) var sansPiecesMaison: Bool
     private var indices: [String: Int] = [:]
 
-    /// `libelles` : nom affiche de chaque noeud (son id a defaut) ; `piecesNoeuds` : piece de Maison
+    /// `libelles` : nom de chaque noeud, sans ses badges (son id a defaut) ; `piecesNoeuds` : piece de Maison
     /// de chaque noeud qui en a une ; `zones` : celles de Maison (nil : fichier d'avant les zones) ;
     /// `chefs` : noeuds couronnes ; `piecesMaison` : Maison a au moins une piece ; `ordreEtages` :
-    /// cles des etages dans l'ordre garde, du bas vers le haut ; `aCote` : les choix de niveau gardes.
+    /// cles des etages dans l'ordre garde, du bas vers le haut ; `aCote` : les choix de niveau gardes ; `piles` : les
+    /// noeuds dont la pile est connue.
     public init(graphe: GrapheReseau, libelles: [String: String], piecesNoeuds: [String: String],
                 zones: [ZoneMaison]?, chefs: Set<String>, piecesMaison: Bool, ordreEtages: [String] = [],
-                aCote: [String: PlacesGardees.ACote] = [:]) {
+                aCote: [String: PlacesGardees.ACote] = [:], piles: Set<String> = []) {
         sansPiecesMaison = !piecesMaison
         func libelle(_ id: String) -> String { libelles[id] ?? id }
         // Piece de chaque noeud.
@@ -221,11 +226,12 @@ public struct ScenePieces: Hashable, Sendable {
         for n in graphe.noeuds {
             guard let p = nomPiece[n.id].flatMap({ indicePiece[$0] }) else { continue }
             let chef = chefs.contains(n.id)
-            let rang = chef ? 0 : n.bordure ? 1 : n.routeur ? 2 : 3
+            let rang = n.bordure ? 1 : n.routeur ? 2 : 3
             let rayon: Double = n.genre == .centre ? 15 : n.bordure ? 13 : n.routeur ? 8 : 7
             indices[n.id] = noeuds.count
             noeuds.append(Noeud(id: n.id, libelle: libelle(n.id), genre: n.genre, partition: n.partition,
-                                routeur: n.routeur, bordure: n.bordure, inconnu: n.inconnu, chef: chef, rang: rang,
+                                routeur: n.routeur, bordure: n.bordure, inconnu: n.inconnu, chef: chef,
+                                pile: piles.contains(n.id), rang: rang,
                                 rayon: rayon, piece: p))
         }
         for i in pieces.indices {
@@ -237,6 +243,39 @@ public struct ScenePieces: Hashable, Sendable {
     }
 
     public func noeud(_ id: String) -> Noeud? { indices[id].map { noeuds[$0] } }
+
+    /// Ce qui oblige a recalculer la disposition (spec de la vue par pieces, section 4.3 ; polissage C, section 4 ;
+    /// polissage D, section 2).
+    public struct CleDisposition: Hashable, Sendable {
+        /// Etage -> piece -> ses noeuds, dans l'ordre de sa carte : l'id, le nom sans ses badges, s'il route, et si sa pile
+        /// est connue.
+        public var pieces: [String: [String: [String]]] = [:]
+        /// La place de chaque plateau dans la vue de reference du cout : l'etage principal de son niveau, et son rang
+        /// dans le niveau.
+        public var niveaux: [String: String] = [:]
+    }
+
+    /// Les etages, leurs pieces, les noeuds de chacune, leurs noms, s'ils routent et si leur pile est connue, et les
+    /// niveaux tels que les voit le cout : qui partage le niveau de qui, dans quel ordre. Ni les badges d'un nom (la
+    /// couronne, ☾, ⚠︎, la pastille d'une pile faible : la carte leur reserve leur place), ni l'ordre des niveaux, ni une
+    /// zone dans ou hors de la maison, ni l'etat d'un noeud.
+    public var cleDisposition: CleDisposition {
+        var c = CleDisposition()
+        for e in etages {
+            for i in e.pieces {
+                let p = pieces[i]
+                c.pieces[e.id, default: [:]][p.id] = p.noeuds.map { id in
+                    let n = noeud(id)
+                    return [id, n?.libelle ?? "", n?.routeur == true ? "R" : "", n?.pile == true ? "P" : ""]
+                        .joined(separator: "|")
+                }
+            }
+        }
+        for l in niveaux.liste {
+            for (k, cle) in l.enumerated() { c.niveaux[cle] = l[0] + "#" + String(k) }
+        }
+        return c
+    }
 
     /// Indice d'un noeud dans `noeuds`.
     public func indice(_ id: String) -> Int? { indices[id] }

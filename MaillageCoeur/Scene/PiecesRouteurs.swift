@@ -53,6 +53,25 @@ public struct PiecesRouteurs: Hashable, Sendable, Codable {
         try FichiersGardes.ecrire(self, dans: url, version: Self.versionActuelle)
     }
 
+    /// Piece de Maison d'un routeur de bordure (son instance) : celle de l'accessoire qui porte son nom.
+    public static func pieceDeMaison(routeur: String, maison: NomsMaison?) -> String? {
+        maison?.accessoires.first { $0.nom == routeur && $0.piece?.isEmpty == false }?.piece
+    }
+
+    /// Piece d'un routeur de bordure non identifie (polissage D, section 4.1), d'apres ses candidats, les annonces
+    /// qui peuvent etre la sienne : celle de chacun, comme pour un routeur identifie qui porterait son annonce (sa piece
+    /// de Maison, sinon le choix garde sous son instance, sinon la regle du nom de `noms`, l'instance a defaut). Si tous
+    /// en ont une, et que c'est la meme, le routeur y va ; sinon nil : « Sans piece ».
+    public func piece(candidats: [String], noms: [String: String], maison: NomsMaison?, parmi pieces: [String],
+                      domicile: String) -> String? {
+        let p = candidats.map { c in
+            Self.pieceDeMaison(routeur: c, maison: maison)
+                ?? piece(routeur: c, nom: noms[c] ?? c, parmi: pieces, domicile: domicile)
+        }
+        guard let premiere = p.first ?? nil, p.allSatisfy({ $0 == premiere }) else { return nil }
+        return premiere
+    }
+
     /// Piece choisie pour un routeur (son instance) ; nil : la regle du nom.
     public func choix(routeur: String, domicile: String) -> String? {
         maisons[domicile]?[routeur]

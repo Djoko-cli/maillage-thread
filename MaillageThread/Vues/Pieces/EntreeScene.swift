@@ -40,11 +40,13 @@ struct EntreeScene: Equatable {
         let domicile = maison?.domicile ?? ""
         let pieces = LibellesNoeuds.pieces(reseau: r, appareils: affiches, maison: maison,
                                            nomsRouteurs: surveillance.nomsRouteurs(pour: r), choix: choix,
-                                           graphe: graphe)
-        let scene = ScenePieces(graphe: graphe, libelles: libelles.mapValues(\.texte), piecesNoeuds: pieces,
+                                           graphe: graphe, maillage: maillage)
+        // La scene voit les noms sans leurs badges : un badge qui change ne la change pas (polissage D, section 2).
+        let scene = ScenePieces(graphe: graphe, libelles: libelles.mapValues(\.nom), piecesNoeuds: pieces,
                                 zones: maison?.zones, chefs: chefs,
                                 piecesMaison: maison?.accessoires.contains { $0.piece?.isEmpty == false } == true,
-                                ordreEtages: places.maison(domicile).ordreEtages, aCote: places.maison(domicile).aCote)
+                                ordreEtages: places.maison(domicile).ordreEtages, aCote: places.maison(domicile).aCote,
+                                piles: Set(parId.filter { $0.value.batterie != nil }.keys))
         let principale = r.partitions.first(where: \.estPrincipale)?.id
         self.scene = scene
         self.libelles = libelles
@@ -65,31 +67,8 @@ struct EntreeScene: Equatable {
         a.scene == b.scene && a.libelles == b.libelles && a.apparences == b.apparences && a.domicile == b.domicile
     }
 
-    /// Ce qui oblige a recalculer la disposition (spec, section 4.3 ; polissage C, section 4).
-    struct CleDisposition: Equatable {
-        /// Etage -> piece -> ses noeuds et leurs noms.
-        var pieces: [String: [String: [String]]] = [:]
-        /// La place de chaque plateau dans la vue de reference du cout : l'etage principal de son niveau, et
-        /// son rang dans le niveau.
-        var niveaux: [String: String] = [:]
-    }
+    /// Ce qui oblige a recalculer la disposition : celle de la scene, sans les badges des noms (polissage D, section 2).
+    typealias CleDisposition = ScenePieces.CleDisposition
 
-    /// Les etages, leurs pieces, les noeuds de chacune et leurs noms, et les niveaux tels que les voit le cout :
-    /// qui partage le niveau de qui, dans quel ordre. L'ordre des niveaux, une zone dans ou hors de la maison,
-    /// ou l'etat d'un noeud, non.
-    var cleDisposition: CleDisposition {
-        var c = CleDisposition()
-        for e in scene.etages {
-            for i in e.pieces {
-                let p = scene.pieces[i]
-                c.pieces[e.id, default: [:]][p.id] = p.noeuds.map { id in
-                    [id, libelles[id]?.texte ?? "", libelles[id]?.pastille ?? ""].joined(separator: "|")
-                }
-            }
-        }
-        for l in scene.niveaux.liste {
-            for (k, cle) in l.enumerated() { c.niveaux[cle] = l[0] + "#" + String(k) }
-        }
-        return c
-    }
+    var cleDisposition: CleDisposition { scene.cleDisposition }
 }

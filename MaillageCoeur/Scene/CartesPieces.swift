@@ -29,6 +29,27 @@ public enum CartesPieces {
         }
     }
 
+    /// Les badges d'un nom : la couronne du chef, la lune d'un endormi, l'alerte d'un appareil sans adresse ou disparu.
+    public static let couronne = "👑"
+    public static let lune = "☾"
+    public static let alerte = "⚠︎"
+
+    /// Le nom affiche d'un noeud : son nom, deja coupe, puis la couronne du chef, ☾ endormi, ⚠︎ sans adresse ou disparu.
+    public static func texte(_ nom: String, chef: Bool, endormi: Bool, alerte a: Bool) -> String {
+        var t = nom
+        if chef { t += " " + couronne }
+        if endormi { t += " " + lune }
+        if a { t += " " + alerte }
+        return t
+    }
+
+    /// Le texte que la carte reserve au nom d'un noeud (polissage D, section 2) : son nom et tous les badges qu'il peut
+    /// porter, affiches ou non. La couronne va a un noeud qui route (le chef d'une partition est un routeur), ☾ a un
+    /// noeud qui ne route pas (un routeur n'est jamais endormi), ⚠︎ a tous.
+    public static func texteReserve(_ nom: String, routeur: Bool) -> String {
+        texte(nom, chef: routeur, endormi: !routeur, alerte: true)
+    }
+
     /// Un nom de plus de 40 caracteres : ses 39 premiers, puis « … ».
     public static func couper(_ nom: String) -> String {
         nom.count > longueurMax ? String(nom.prefix(longueurMax - 1)) + "…" : nom

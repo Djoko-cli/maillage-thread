@@ -171,16 +171,57 @@ struct ScenePiecesTests {
         #expect(try Self.piece(sans, .sansPiece).noeuds.count == 4)
     }
 
-    /// Lignes d'une carte : le chef, les routeurs de bordure, les autres routeurs, puis les autres
-    /// noeuds, par libelle ; rayons 15 (centre), 13, 8 et 7.
+    /// La cle de la disposition et les cartes ne dependent pas des badges (polissage D, section 2) : la scene voit les
+    /// noms sans eux, et un autre chef ne reordonne pas les lignes. Un autre nom, une autre piece, une pile qui devient
+    /// connue changent la cle ; la largeur reservee d'un nom (ici 7 px par caractere de `texteReserve`, plus 50 pour la
+    /// pastille d'une pile connue) fait des cartes egales, avec ou sans badge, et une carte plus large avec une pile
+    /// connue (polissage D, section 2, decision du 05/10).
+    @Test func cleSansLesBadges() throws {
+        let g = try Self.graphe(sonde: true)
+        let tous = Dictionary(uniqueKeysWithValues: g.noeuds.map { ($0.id, "Salon") })
+        func scene(chefs: Set<String>, libelles: [String: String] = Self.libelles, pieces: [String: String]? = nil,
+                   piles: Set<String> = []) -> ScenePieces {
+            ScenePieces(graphe: g, libelles: libelles, piecesNoeuds: pieces ?? tous, zones: nil, chefs: chefs, piecesMaison: true,
+                        piles: piles)
+        }
+        let a = scene(chefs: ["Apple TV"]), b = scene(chefs: ["HomePod"]), c = scene(chefs: [])
+        #expect(a.cleDisposition == b.cleDisposition && a.cleDisposition == c.cleDisposition)
+        #expect(a.pieces.map(\.noeuds) == b.pieces.map(\.noeuds))
+        func largeurs(_ s: ScenePieces) -> [String: Double] {
+            Dictionary(uniqueKeysWithValues: s.noeuds.map {
+                ($0.id, 7.0 * Double(CartesPieces.texteReserve($0.libelle, routeur: $0.routeur).count) + ($0.pile ? 50 : 0))
+            })
+        }
+        #expect(CartesPieces.cartes(a, largeurs: largeurs(a)) == CartesPieces.cartes(b, largeurs: largeurs(b)))
+        let pile = scene(chefs: ["Apple TV"], piles: ["E000000000000002"])
+        #expect(pile.noeud("E000000000000002")?.pile == true && a.noeud("E000000000000002")?.pile == false)
+        #expect(pile.cleDisposition != a.cleDisposition, "une pile connue")
+        let salonPile = try #require(pile.pieces.firstIndex { $0.nom == .maison("Salon") })
+        #expect(CartesPieces.cartes(pile, largeurs: largeurs(pile))[salonPile].largeur
+                > CartesPieces.cartes(a, largeurs: largeurs(a))[salonPile].largeur, "une carte plus large avec une pile connue")
+        var renomme = Self.libelles
+        renomme["E000000000000002"] = "Lampe du salon"
+        #expect(scene(chefs: ["Apple TV"], libelles: renomme).cleDisposition != a.cleDisposition, "un autre nom")
+        var ailleurs = tous
+        ailleurs["E000000000000002"] = "Cuisine"
+        #expect(scene(chefs: ["Apple TV"], pieces: ailleurs).cleDisposition != a.cleDisposition, "une autre piece")
+        let salon = try #require(a.cleDisposition.pieces["maison"]?["piece:Salon"])
+        #expect(salon.contains("HomePod|HomePod|R|") && salon.contains("E000000000000002|Lampe salon||"), "l'id, le nom, s'il route")
+        #expect(try #require(pile.cleDisposition.pieces["maison"]?["piece:Salon"]).contains("E000000000000002|Lampe salon||P"),
+                "et si sa pile est connue")
+        #expect(a.cleDisposition.niveaux == ["maison": "maison#0"])
+    }
+
+    /// Lignes d'une carte : les routeurs de bordure, les autres routeurs, puis les autres noeuds, par nom ; le chef reste
+    /// dans son groupe (polissage D, section 2) ; rayons 15 (centre), 13, 8 et 7.
     @Test func lignesEtRayons() throws {
         let g = try Self.graphe(sonde: true)
         let tous = Dictionary(uniqueKeysWithValues: g.noeuds.map { ($0.id, "Salon") })
         let s = ScenePieces(graphe: g, libelles: Self.libelles, piecesNoeuds: tous, zones: nil, chefs: ["HomePod"],
                             piecesMaison: true)
         #expect(try Self.piece(s, .maison("Salon")).noeuds
-                == ["HomePod", "Apple TV", "E000000000000004", "E000000000000005", "E000000000000003", "E000000000000002"])
-        #expect(s.noeud("HomePod")?.rang == 0 && s.noeud("HomePod")?.rayon == 13)
+                == ["Apple TV", "HomePod", "E000000000000004", "E000000000000005", "E000000000000003", "E000000000000002"])
+        #expect(s.noeud("HomePod")?.rang == 1 && s.noeud("HomePod")?.rayon == 13 && s.noeud("HomePod")?.chef == true)
         #expect(s.noeud("Apple TV")?.rang == 1 && s.noeud("Apple TV")?.rayon == 15)
         #expect(s.noeud("E000000000000004")?.rang == 2 && s.noeud("E000000000000004")?.rayon == 8)
         #expect(s.noeud("E000000000000002")?.rang == 3 && s.noeud("E000000000000002")?.rayon == 7)

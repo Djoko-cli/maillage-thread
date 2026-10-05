@@ -57,6 +57,27 @@ struct CartesPiecesTests {
         #expect(CartesPieces.couper(String(repeating: "👑", count: 41)).count == 40)
     }
 
+    /// Le nom affiche et le nom que la carte reserve (polissage D, section 2) : la couronne, ☾ et ⚠︎, dans cet ordre,
+    /// chacun apres une espace ; la carte reserve la couronne a un noeud qui route, ☾ a un autre, ⚠︎ a tous (la pastille,
+    /// a un noeud dont la pile est connue : `ScenePiecesTests.cleSansLesBadges`). Chaque nom affiche, quels que soient ses badges, tient dans le nom reserve : il en est un debut, ses badges
+    /// pris dans l'ordre de la reserve.
+    @Test func badgesReserves() {
+        #expect(CartesPieces.texte("Lampe", chef: false, endormi: false, alerte: false) == "Lampe")
+        #expect(CartesPieces.texte("Lampe", chef: true, endormi: true, alerte: true) == "Lampe 👑 ☾ ⚠︎")
+        #expect(CartesPieces.texte("Lampe", chef: false, endormi: true, alerte: false) == "Lampe ☾")
+        #expect(CartesPieces.texte("Lampe", chef: false, endormi: false, alerte: true) == "Lampe ⚠︎")
+        #expect(CartesPieces.texte("Prise", chef: true, endormi: false, alerte: false) == "Prise 👑")
+        #expect(CartesPieces.texteReserve("Prise", routeur: true) == "Prise 👑 ⚠︎")
+        #expect(CartesPieces.texteReserve("Lampe", routeur: false) == "Lampe ☾ ⚠︎")
+        for routeur in [false, true] {
+            let reserve = CartesPieces.texteReserve("Nom", routeur: routeur)
+            for alerte in [false, true] {
+                let affiche = CartesPieces.texte("Nom", chef: routeur, endormi: !routeur, alerte: alerte)
+                #expect(reserve.hasPrefix(affiche), "\(affiche) dans \(reserve)")
+            }
+        }
+    }
+
     /// Une carte par piece de la scene, dans l'ordre de ses lignes ; les largeurs viennent de l'app.
     @Test func cartesDeLaScene() throws {
         let g = try ScenePiecesTests.graphe(sonde: false)
