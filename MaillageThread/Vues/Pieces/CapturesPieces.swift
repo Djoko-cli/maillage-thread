@@ -10,7 +10,8 @@ import UniformTypeIdentifiers
 /// la grille 2 x 2 dans une fenetre carree, la meme fenetre en rangee, le jardin dans la maison, un etage isole en 2D
 /// et en 3D, une piece isolee depuis son etage. La maison de demo a son jardin au niveau du rez-de-chaussee, hors de
 /// la maison (`NomsDemo.places()`) ; dans la fenetre des images, la legende ouverte ou repliee, sa grille est la
-/// rangee (la zone visible, section 3.3). Sans fenetre ni capture d'ecran ;
+/// rangee (la zone visible, section 3.3). Puis un appareil a mi-chemin de son glissement vers une autre piece
+/// (polissage D, section 6). Sans fenetre ni capture d'ecran ;
 /// l'app quitte ensuite. `ImageRenderer` ne rend ni la fenetre ni le verre : le haut de la fenetre et la
 /// fiche y sont dessines comme dans les maquettes (`capturePieces`), avec les trois boutons de la
 /// fenetre a leur place (`FeuxDeCapture`).
@@ -22,7 +23,8 @@ enum CapturesPieces {
     nonisolated static let carree = CGSize(width: 1000, height: 1000)
 
     /// Une image : son nom, l'etat a poser sur le moteur, et la legende repliee ; la taille de la fenetre, les etages
-    /// en grille ou en rangee, et les places gardees, dont le choix de niveau du jardin.
+    /// en grille ou en rangee, et les places gardees, dont le choix de niveau du jardin ; `deplacer` : apres la scene
+    /// de la demo, celle des pieces choisies (« Placer dans une piece… »), posee a mi-chemin de son glissement.
     struct Cas {
         var nom: String
         var poser: (MoteurPieces, ScenePieces) -> Void
@@ -30,6 +32,15 @@ enum CapturesPieces {
         var taille = CapturesPieces.taille
         var grille = true
         var places = NomsDemo.places()
+        var deplacer: PiecesRouteurs?
+    }
+
+    /// L'appareil inconnu de la demo, que seule la sonde connait (« Non identifie · 041F », sans piece), place dans la
+    /// cuisine.
+    static var appareilDansLaCuisine: PiecesRouteurs {
+        var p = PiecesRouteurs()
+        p.choisir("Cuisine", appareil: "E0000000000000FF", domicile: NomsDemo.maison.domicile ?? "")
+        return p
     }
 
     /// Indice d'une piece de Maison de la scene (la premiere, sans elle).
@@ -77,6 +88,11 @@ enum CapturesPieces {
             m.poserBascule(1)
             m.poserIsolement(piece(sc, "Terrasse"), depuisEtage: true)
         },
+        Cas(nom: "21-2d-appareil-en-route", poser: { m, sc in
+            m.poserTransition(0.5)
+            let sansPiece = sc.pieces.firstIndex { $0.nom == .sansPiece } ?? 0
+            m.poserZoom(echelle: 1, vers: m.centrePiece(sansPiece))
+        }, deplacer: appareilDansLaCuisine),
     ]
 
     /// Ecrit les images dans `dossier` ; rend leurs noms.
@@ -109,6 +125,9 @@ enum CapturesPieces {
             m.poserTaille(taille)
             m.installerMaintenant(e)
             m.poserTaille(taille)
+            if let choix = c.deplacer {
+                m.installerMaintenant(EntreeScene(surveillance: s, reseau: r, places: m.places, choix: choix))
+            }
             c.poser(m, e.scene)
             // La fiche : la legende reste au-dessus d'elle (repliee si la place manque, comme dans la fenetre), et la
             // vue se cadre au-dessus de la pile mesuree.

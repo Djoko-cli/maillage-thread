@@ -70,11 +70,12 @@ open "…/Maillage Thread.app" --args -demo -selection 86E7BD1A75F28E6D   # card
 open "…/Maillage Thread.app" --args -demo -captures ~/Library/Containers/fr.djoko.maillage/Data/tmp/captures
 ```
 
-With `-captures <folder>`, the app writes twenty PNG images of the room view
-(2D, flight, 3D, zooms, isolated rooms, hover, the leader's card, the folded
-legend; then the floors: the 2 × 2 grid in a square window, the same window
-in a row, 3D with the garden inside the house, a floor isolated in 2D and in
-3D, a room isolated from its floor), then quits, with no window. Its renderer
+With `-captures <folder>`, the app writes twenty-one PNG images of the room
+view (2D, flight, 3D, zooms, isolated rooms, hover, the leader's card, the
+folded legend; then the floors: the 2 × 2 grid in a square window, the same
+window in a row, 3D with the garden inside the house, a floor isolated in 2D
+and in 3D, a room isolated from its floor; last, a device halfway through its
+slide to the kitchen), then quits, with no window. Its renderer
 draws neither the window nor glass: the top of the window, the legend and the
 card are drawn as in their mockups, with the window's three buttons in place.
 The app is sandboxed: the folder must be inside its container.
@@ -195,17 +196,29 @@ and for the floors `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-
   is as large as possible: 2 × 2 in a square or tall window, often the row in
   a wide window with the legend open. 3D stacks the levels inside the house
   sphere, the zones next to a floor at its height, inside the sphere or around
-  it, with a slow rotation you can turn off. Switching is a 2.6 s flight; the
+  it, with a slow rotation you can turn off, which goes on around an isolated
+  room or floor and stops during a gesture. Switching is a 2.6 s flight; the
   platforms slide to their place when the window is resized, when the legend
   opens or folds, when the setting changes, and after a level change.
-- **Gestures.** Scroll wheel or pinch: zoom, towards the pointer in 2D. Drag
+- **Slides.** A new layout (a tour, a device placed in a room, a level
+  choice) slides in 0.9 s: rooms, devices and platforms go from their shown
+  place to the new one, a device in a straight line from room to room, from
+  floor to floor if need be; what appears or disappears fades in 0.3 s, and
+  links follow. The view follows what it looks at. A changing badge (☾, ⚠︎,
+  👑, low battery) no longer moves the floor: each card keeps room for the
+  possible badges of its names. An unidentified border router whose candidates
+  are all in the same room goes to that room.
+- **Gestures.** Scroll wheel or pinch: zoom, towards the pointer in 2D; over
+  the card, the legend or the top of the window, the wheel goes to them. Drag
   the background: pan in 2D, orbit around the house in 3D. Drag a room: move
   it within its floor; its place is kept (`positions-pieces.json` in the app
   folder, never in the demo). Click a room or its name: isolate it (the others
   fade, a tag points to a parent elsewhere); click a floor's name or disc:
-  isolate it the same way. Click outside or Esc: go up one step, from a room
-  to its floor if you opened it from there, otherwise to the house; the
-  "Home › Floor › Room" path leads there too. In 3D, ⌥ + drag pans the view in
+  isolate it the same way. Esc first closes the open card; otherwise, like a
+  click outside, it goes up one step, from a room to its floor if you opened
+  it from there, otherwise to the house, and brings a zoomed view back to the
+  overview; there, it is not taken and goes its way. The "Home › Floor ›
+  Room" path also leads to each step. In 3D, ⌥ + drag pans the view in
   the screen plane. Double-click the background or a disc: back to the
   overview, zoom and pan undone. Click a device or its name: its card, which
   slides up from the bottom as the view rises; the card of the Thread
@@ -220,7 +233,8 @@ and for the floors `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-
   that fits. The line at the top left, under "Home", gives the level, or how
   many names are hidden for lack of room.
 - "Reduce motion" (macOS accessibility): the flight and the double-click
-  return become a fade, other camera flights are immediate, the slow rotation
+  return become a fade, other camera flights are immediate, as are the slides
+  from one layout to the next, the slow rotation
   is off, the card, the legend and the top banners come and go with a plain
   fade, and the view reframes itself through a fade.
 - The room layout is computed off the main thread: a few hundredths of a
@@ -409,7 +423,9 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   parent (`etat`). A node's card draws its curves over 24 h, 7 d or 30 d: the
   quality of its links, parent changes marked, and for a router the "Signal
   seen by the probe", with the probe's own parent changes marked (the signal
-  depends first on where the probe sits). None of this in demo mode.
+  depends first on where the probe sits); its scale, in tens of dBm, always
+  has its ticks, even for a single reading, and hovering gives the value and
+  time of the nearest reading. None of this in demo mode.
 - Probe captures hold the home network's addresses:
   `outils/anonymiser-sonde.py` rewrites them consistently before they become
   test data (`docs/releves/2026-09-29/`): ExtMacs and the SRP host name,

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 @testable import MaillageCoeur
+import simd
 import SwiftUI
 import Testing
 @testable import MaillageThread
@@ -1344,13 +1345,43 @@ struct FenetrePiecesTests {
             "08-2d-mi-distance", "09-2d-loin", "10-3d-isolee-salon", "11-2d-isolee-chambre", "12-2d-survol",
             "13-2d-fiche-du-chef", "14-2d-legende-repliee", "15-2d-carree-2x2", "16-2d-carree-en-rangee",
             "17-3d-jardin-dedans", "18-2d-etage-isole", "19-3d-etage-isole", "20-3d-terrasse-depuis-le-jardin",
+            "21-2d-appareil-en-route",
         ])
+        #expect(CapturesPieces.cas.filter { $0.deplacer != nil }.map(\.nom) == ["21-2d-appareil-en-route"])
         #expect(CapturesPieces.cas.filter(\.legendeRepliee).map(\.nom) == ["14-2d-legende-repliee"])
         let (_, _, e) = try NomsSceneTests.demo()
         let m = MoteurPieces()
         try #require(CapturesPieces.cas.first { $0.nom == "13-2d-fiche-du-chef" }).poser(m, e.scene)
         let choisi = try #require(m.selection)
         #expect(FicheNoeud.couronne(choisi, entree: e))
+    }
+
+    /// L'image du glissement (polissage D, section 6) : la scene de la demo, puis celle ou l'appareil inconnu « 041F »,
+    /// sans piece, est place dans la cuisine ; posee a mi-chemin, sa pastille est en route, loin de ses deux places.
+    @Test func imageDuGlissement() throws {
+        let (s, r, e) = try NomsSceneTests.demo()
+        let cas = try #require(CapturesPieces.cas.first { $0.nom == "21-2d-appareil-en-route" })
+        let choix = try #require(cas.deplacer)
+        let e2 = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees(), choix: choix)
+        let id = "rloc:041F"
+        #expect(e.scene.noeud(id).map { e.scene.pieces[$0.piece].nom } == .sansPiece)
+        #expect(e2.scene.noeud(id).map { e2.scene.pieces[$0.piece].nom } == .maison("Cuisine"))
+        let m = MoteurPieces()
+        m.fige = true
+        m.marges = (84, 50)
+        m.poserTaille(MoteurPiecesTests.taille)
+        m.installerMaintenant(e)
+        MoteurPiecesTests.dessiner(m)
+        let avant = try #require(m.projetee?.centresNoeuds[id])
+        m.installerMaintenant(e2)
+        m.poserTransition(1)
+        MoteurPiecesTests.dessiner(m)
+        let apres = try #require(m.projetee?.centresNoeuds[id])
+        cas.poser(m, e2.scene)
+        MoteurPiecesTests.dessiner(m)
+        let mi = try #require(m.projetee?.centresNoeuds[id])
+        let d = simd_distance(avant, apres)
+        #expect(d > 3 && simd_distance(mi, avant) > 0.25 * d && simd_distance(mi, apres) > 0.25 * d)
     }
 
     /// La marge du bas de la zone visible ou se choisit la grille (polissage C, section 3.3, decision de Djoko du
