@@ -387,11 +387,66 @@ struct IsolementTests {
         #expect(t.projetee?.niveau == .tous && !voulus.isEmpty, "\(voulus.count) noms voulus")
         #expect(voulus.allSatisfy { id in e.scene.noeud(id).map { e.scene.pieces[$0.piece].etage == etage } == true },
                 "seuls les noms des appareils de l'etage isole : \(voulus)")
+        // La rotation lente continue, autour de la cible (polissage D, section 4.2).
         t.fige = false
-        let azimut = t.orbite.azimut
+        let (azimut, cible) = (t.orbite.azimut, t.orbite.cible)
         MoteurPiecesTests.dessiner(t)
+        Thread.sleep(forTimeInterval: 0.02)
         MoteurPiecesTests.dessiner(t)
-        #expect(t.orbite.azimut == azimut, "la rotation lente s'arrete")
+        #expect(t.orbite.azimut < azimut && t.orbite.cible == cible, "la rotation lente continue, autour de la cible")
+    }
+
+    /// La rotation lente pendant un isolement (polissage D, section 4.2) : en 3D, autour de la piece isolee, la cible et
+    /// la distance gardees ; elle s'arrete pendant un geste (un glisser, le zoom de la molette, un pincement) et reprend
+    /// apres ; « Rotation lente » decochee ou « Reduire les animations » : pas de rotation. Le temps reel n'y est qu'une
+    /// borne basse : 20 ms entre deux images.
+    @Test func rotationPendantLIsolement() throws {
+        let url = MoteurPiecesTests.fichier()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let (_, e) = try Self.jardinDehors(url)
+        let salon = try MoteurPiecesTests.indice(e, "Salon")
+        func moteur() -> MoteurPieces {
+            let m = MoteurPieces(troisD: true)
+            m.marges = (84, 50)
+            m.poserTaille(MoteurPiecesTests.taille)
+            m.installerMaintenant(e)
+            m.poserIsolement(salon)
+            MoteurPiecesTests.dessiner(m)
+            return m
+        }
+        // Deux images, 20 ms apres : l'azimut tourne-t-il ?
+        func tourne(_ m: MoteurPieces) -> Bool {
+            let a = m.orbite.azimut
+            Thread.sleep(forTimeInterval: 0.02)
+            MoteurPiecesTests.dessiner(m)
+            return m.orbite.azimut < a
+        }
+        let m = moteur()
+        let (cible, distance) = (m.orbite.cible, m.orbite.distance)
+        #expect(m.estIsolee && tourne(m), "elle tourne, la piece isolee")
+        #expect(m.orbite.cible == cible && abs(m.orbite.distance - distance) < 1e-9, "autour de la cible")
+        let p = try MoteurPiecesTests.pointDePiece(m, salon)
+        m.glisser(p, depart: p)
+        #expect(!tourne(m), "pendant un glisser")
+        m.relacher(p)
+        #expect(tourne(m), "apres")
+        m.molette(-3, precis: false)
+        #expect(!tourne(m), "pendant le zoom de la molette")
+        // Un pincement a peine commence : son zoom, minuscule, se fait a la premiere image ; le geste, lui, dure.
+        let pince = moteur()
+        pince.pincer(1.0001, en: p)
+        MoteurPiecesTests.dessiner(pince)
+        #expect(!tourne(pince), "pendant un pincement")
+        pince.finPincement()
+        #expect(tourne(pince), "apres le pincement")
+        let r = moteur()
+        r.reduire = true
+        MoteurPiecesTests.dessiner(r)
+        #expect(!tourne(r), "« Reduire les animations »")
+        let d = moteur()
+        d.basculerRotation()
+        MoteurPiecesTests.dessiner(d)
+        #expect(!d.rotation && !tourne(d), "decochee")
     }
 
     /// Triage A, n° 8 : pendant le retour d'une piece isolee, les noms des appareils suivent l'etat d'arrivee, et la

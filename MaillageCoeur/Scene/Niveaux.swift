@@ -78,6 +78,25 @@ public struct Rangement: Hashable, Sendable {
     }
 }
 
+extension Rangement {
+    /// Le nouvel ordre `nouveau`, fondu dans l'ordre garde `garde` (polissage D, section 4) : les plateaux du nouvel
+    /// ordre y sont dans le leur ; un plateau du garde absent du nouveau, absent de la scene, y garde son rang relatif,
+    /// juste apres celui qui le precedait dans le garde (en tete s'il n'en avait pas).
+    public static func fondre(_ nouveau: [String], dans garde: [String]) -> [String] {
+        let presents = Set(nouveau)
+        var r = nouveau
+        var precedent: String?
+        for c in garde {
+            if !presents.contains(c), !r.contains(c) {
+                let i = precedent.flatMap { r.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
+                r.insert(c, at: i)
+            }
+            precedent = c
+        }
+        return r
+    }
+}
+
 /// Les operations du menu du clic droit (polissage C, section 1.3) : chacune rend le nouvel ordre des
 /// plateaux de la scene et les nouveaux choix, ou nil quand elle n'a pas lieu (un article grise, ou deja
 /// coche). Les choix des plateaux de la scene y sont ceux qui valent (`aCote`, resolus) : une chaine est

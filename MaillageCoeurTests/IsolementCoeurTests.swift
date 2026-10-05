@@ -69,14 +69,14 @@ struct IsolementCoeurTests {
         #expect(Isolement.maison.recaler(pieces: [], etages: []) == .maison)
     }
 
-    /// La rotation lente (spec de la vue par pieces, section 7) : en 3D, l'envol fini, cochee, sans « Reduire les
-    /// animations », sans isolement ; chaque condition l'arrete.
+    /// La rotation lente (spec de la vue par pieces, section 7 ; polissage D, section 4.2) : en 3D, l'envol fini,
+    /// cochee, sans « Reduire les animations », hors d'un geste ; chaque condition l'arrete. L'isolement, non.
     @Test func rotationLente() {
-        #expect(Isolement.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: false, sansIsolement: true))
-        #expect(!Isolement.rotationLente(troisD: false, bascule: 1, cochee: true, reduire: false, sansIsolement: true))
-        #expect(!Isolement.rotationLente(troisD: true, bascule: 0.999, cochee: true, reduire: false, sansIsolement: true))
-        #expect(!Isolement.rotationLente(troisD: true, bascule: 1, cochee: false, reduire: false, sansIsolement: true))
-        #expect(!Isolement.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: true, sansIsolement: true))
-        #expect(!Isolement.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: false, sansIsolement: false))
+        #expect(Isolement.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: false, geste: false))
+        #expect(!Isolement.rotationLente(troisD: false, bascule: 1, cochee: true, reduire: false, geste: false))
+        #expect(!Isolement.rotationLente(troisD: true, bascule: 0.999, cochee: true, reduire: false, geste: false))
+        #expect(!Isolement.rotationLente(troisD: true, bascule: 1, cochee: false, reduire: false, geste: false))
+        #expect(!Isolement.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: true, geste: false))
+        #expect(!Isolement.rotationLente(troisD: true, bascule: 1, cochee: true, reduire: false, geste: true))
     }
 }

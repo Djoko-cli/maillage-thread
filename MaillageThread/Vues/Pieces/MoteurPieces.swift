@@ -240,8 +240,9 @@ final class MoteurPieces {
     /// Ce qui est pose sur la vue (barre, fil, ligne de niveau, legende, fiche), par element : les noms
     /// l'evitent.
     @ObservationIgnored var cadresInterface: [String: CGRect] = [:]
-    /// Fenetre de la vue : la molette et Echap ne valent que pour elle.
+    /// Fenetre de la vue : la molette et Echap ne valent que pour elle. La vue, dans AppKit : le point de la molette.
     @ObservationIgnored weak var fenetre: NSWindow?
+    @ObservationIgnored weak var vue: NSView?
     @ObservationIgnored private var moniteur: Any?
     /// Captures : l'etat est pose a la main, l'horloge n'avance pas.
     @ObservationIgnored var fige = false
@@ -933,7 +934,7 @@ final class MoteurPieces {
     }
 
     /// Isole un etage (polissage C, section 5.1) : un vol de 1,3 s cadre son plateau, bande de son nom comprise ; les
-    /// autres plateaux s'estompent a 15 %, la sphere et « ⌂ Maison » s'effacent, la rotation lente s'arrete. Une
+    /// autres plateaux s'estompent a 15 %, la sphere et « ⌂ Maison » s'effacent ; la rotation lente continue (polissage D). Une
     /// piece isolee est relachee. Rien dans une maison d'un seul plateau, ni pendant l'envol.
     func allerEtage(_ e: Int) {
         guard let scene, scene.etages.count > 1, e < scene.etages.count, envol == nil, fondu == nil else { return }
@@ -1042,9 +1043,19 @@ final class MoteurPieces {
         }
     }
 
-    /// Echap.
-    func sortir() {
+    /// Echap (polissage D, section 3), dans cet ordre : une fiche ouverte se ferme ; sinon la vue remonte d'un cran ;
+    /// sinon, a la vue d'ensemble sans zoom ni fiche, Echap n'est pas pris (faux) : l'evenement suit son chemin.
+    @discardableResult
+    func sortir() -> Bool {
+        if selection != nil {
+            selection = nil
+            return true
+        }
+        guard envol == nil, fondu == nil, isolement != .maison || focus != nil || etageEnVue != nil || vueTouchee else {
+            return false
+        }
         remonter(clavier: true)
+        return true
     }
 
     /// Fin du retour d'un isolement : plus de piece isolee, ni de reperes « ailleurs ».
@@ -1224,6 +1235,8 @@ final class MoteurPieces {
     private func avancer(_ now: Double) {
         dt = instant.map { min(0.1, max(0, now - $0)) } ?? 0
         instant = now
+        let basculait = envol != nil || fondu != nil
+        defer { if basculait && envol == nil && fondu == nil { basculeFinie() } }
         if let e = envol {
             let q = min(1, max(0, (now - debutEnvol) / CameraScene.dureeEnvol))
             (t, orbite) = e.pose(q, geometrie: geometrie, aspect: aspect)
@@ -1303,15 +1316,26 @@ final class MoteurPieces {
         if !occupe, let e = attente { appliquer(e) }
     }
 
-    /// La rotation lente tourne (`Isolement.rotationLente`).
+    /// La rotation lente tourne (`Isolement.rotationLente`), une piece ou un etage isoles compris (polissage D,
+    /// section 4.2), sauf pendant un geste : un glisser (⌥ compris), le zoom de la molette en route, un pincement.
     private var rotationLente: Bool {
-        Isolement.rotationLente(troisD: troisD, bascule: t, cochee: rotation, reduire: reduire, sansIsolement: sansIsolement)
+        Isolement.rotationLente(troisD: troisD, bascule: t, cochee: rotation, reduire: reduire,
+                                geste: geste != nil || zoomEnAttente != 0 || dernierPincement != 1)
+    }
+
+    /// L'envol ou son fondu fini : le survol, le menu du clic droit et le curseur reprennent sous le pointeur immobile
+    /// (polissage D, section 4), hors du rendu.
+    private func basculeFinie() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.survoler(self.curseur, option: self.optionTenue)
+        }
     }
 
     /// Rotation lente, rotation amortie, zoom amorti ; rien pendant ⌥ + glisser : ce qui attend reprend au relachement.
     private func controles() {
         guard !deplaceDansLEcran else { return }
-        if rotationLente && geste == nil {
+        if rotationLente {
             orbite.azimut -= 2 * .pi / CameraScene.dureeTour * dt
         }
         if rotationEnAttente != .zero {
@@ -1637,10 +1661,20 @@ final class MoteurPieces {
         }
     }
 
-    /// La molette zoome, sauf pendant un vol et pendant ⌥ + glisser : elle est alors ignoree, non differee.
-    func molette(_ dy: Double, precis: Bool) {
-        guard !enMouvement, !deplaceDansLEcran else { return }
+    /// La molette zoome, sauf pendant un vol et pendant ⌥ + glisser : elle est alors ignoree, non differee. Au-dessus
+    /// d'un element pose sur la vue (`p`, dans la vue : la fiche, la legende, la ligne des capsules, la colonne du haut),
+    /// elle n'est pas prise (faux) : l'evenement leur revient (polissage D, section 3).
+    @discardableResult
+    func molette(_ dy: Double, precis: Bool, en p: CGPoint? = nil) -> Bool {
+        if let p, surInterface(p) { return false }
+        guard !enMouvement, !deplaceDansLEcran else { return true }
         zoomer(precis ? -dy * 0.004 : -dy * 0.08, en: curseur)
+        return true
+    }
+
+    /// Le point `p` de la vue est sur un element pose sur elle.
+    func surInterface(_ p: CGPoint) -> Bool {
+        cadresInterface.values.contains { $0.contains(p) }
     }
 
     /// Le pincement zoome de son increment depuis le dernier `m`, sauf pendant un vol et pendant ⌥ + glisser : il est
@@ -1669,24 +1703,62 @@ final class MoteurPieces {
         guard moniteur == nil else { return }
         moniteur = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown, .flagsChanged]) { [weak self] e in
             guard let self else { return e }
-            let pourMoi = MainActor.assumeIsolated { e.window != nil && e.window === self.fenetre }
-            guard pourMoi else { return e }
+            let pris = MainActor.assumeIsolated { self.prendre(e) }
+            return pris ? nil : e
+        }
+    }
+
+    /// Un evenement du moniteur, dans la fenetre de la vue seulement : la molette, au-dessus de la scene (pas d'un element
+    /// pose sur elle), et Echap, s'il a quelque chose a faire, sont pris (vrai : le moniteur rend nil) ; ⌥ pressee ou
+    /// relachee met a jour la main ouverte (polissage C, section 6) et continue son chemin, comme tout le reste.
+    func prendre(_ e: NSEvent) -> Bool {
+        guard e.window != nil, e.window === fenetre else { return false }
+        return prendre(EvenementVue(e))
+    }
+
+    /// Ce que le moniteur lit d'un evenement de la fenetre de la vue.
+    struct EvenementVue {
+        enum Genre {
+            /// La molette : son pas, precis (trackpad) ou non, et le point du pointeur dans la fenetre.
+            case molette(dy: Double, precis: Bool, position: CGPoint)
+            case echap
+            /// ⌥ tenue ou non.
+            case option(Bool)
+            case autre
+        }
+
+        var genre: Genre
+
+        init(_ genre: Genre) {
+            self.genre = genre
+        }
+
+        init(_ e: NSEvent) {
             switch e.type {
             case .scrollWheel:
-                let dy = Double(e.scrollingDeltaY), precis = e.hasPreciseScrollingDeltas
-                MainActor.assumeIsolated { self.molette(dy, precis: precis) }
-                return nil
+                genre = .molette(dy: Double(e.scrollingDeltaY), precis: e.hasPreciseScrollingDeltas, position: e.locationInWindow)
             case .keyDown where e.keyCode == 53:
-                MainActor.assumeIsolated { self.sortir() }
-                return nil
+                genre = .echap
             case .flagsChanged:
-                // ⌥ et la main ouverte (polissage C, section 6) : l'evenement continue son chemin.
-                let option = e.modifierFlags.contains(.option)
-                MainActor.assumeIsolated { self.changerOption(option) }
-                return e
+                genre = .option(e.modifierFlags.contains(.option))
             default:
-                return e
+                genre = .autre
             }
+        }
+    }
+
+    /// La meme chose, une fois l'evenement lu.
+    func prendre(_ e: EvenementVue) -> Bool {
+        switch e.genre {
+        case .molette(let dy, let precis, let position):
+            return molette(dy, precis: precis, en: vue.map { VuePieces.point(position, dans: $0) })
+        case .echap:
+            return sortir()
+        case .option(let option):
+            changerOption(option)
+            return false
+        case .autre:
+            return false
         }
     }
 

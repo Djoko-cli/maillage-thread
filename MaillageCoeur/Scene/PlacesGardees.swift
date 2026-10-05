@@ -112,9 +112,11 @@ public struct PlacesGardees: Hashable, Sendable, Codable {
         return Rangement(ordre: m.ordreEtages, aCote: m.aCote)
     }
 
-    /// Garde l'ordre des plateaux et les choix de niveau, apres un choix du menu du clic droit.
+    /// Garde l'ordre des plateaux et les choix de niveau, apres un choix du menu du clic droit. Le nouvel ordre, celui
+    /// des plateaux de la scene, est fondu dans l'ordre garde : un plateau absent de la scene y garde son rang relatif
+    /// (polissage D, section 4 ; `Rangement.fondre`).
     public mutating func ranger(_ r: Rangement, domicile: String) {
-        maisons[domicile, default: Maison()].ordreEtages = r.ordre
+        maisons[domicile, default: Maison()].ordreEtages = Rangement.fondre(r.ordre, dans: maison(domicile).ordreEtages)
         maisons[domicile, default: Maison()].aCote = r.aCote
     }
 

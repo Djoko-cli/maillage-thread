@@ -267,6 +267,13 @@ struct VuePieces: View {
     /// Espace de coordonnees de la vue et de ce qui est pose dessus.
     nonisolated static let espace = "pieces"
 
+    /// Le point de la vue (points, depuis son coin haut gauche, comme l'espace de la vue) d'un point de sa fenetre
+    /// (`locationInWindow`) ; `vue` : la sonde de la vue, dans AppKit, de sa taille.
+    static func point(_ p: CGPoint, dans vue: NSView) -> CGPoint {
+        let q = vue.convert(p, from: nil)
+        return CGPoint(x: q.x, y: vue.isFlipped ? q.y : vue.bounds.height - q.y)
+    }
+
     /// Le style du pointeur pour un curseur du moteur : le lien (la main), la main ouverte, la main fermee.
     static func style(_ c: Curseur) -> PointerStyle? {
         switch c {
@@ -309,7 +316,10 @@ struct VuePieces: View {
         // Le premier clic agit aussi dans une fenetre inactive (verification du 02/10) : il active la fenetre et
         // isole la piece, ouvre la fiche ou commence un glisser ; sinon AppKit le garde pour activer la fenetre.
         .allowsWindowActivationEvents(true)
-        .background(SondeFenetre { moteur.fenetre = $0 })
+        .background(SondeFenetre { v in
+            moteur.fenetre = v.window
+            moteur.vue = v
+        })
         .onChange(of: glisse) { _, g in
             if !g { moteur.abandonnerGeste() }
         }
@@ -543,17 +553,17 @@ struct RangeeNiveau: View {
     }
 }
 
-/// Rapporte la fenetre qui porte la vue (la molette et Echap ne valent que pour elle).
+/// Rapporte la vue, dans AppKit, et la fenetre qui la porte (la molette et Echap ne valent que pour elle).
 struct SondeFenetre: NSViewRepresentable {
-    let rapporter: (NSWindow?) -> Void
+    let rapporter: (NSView) -> Void
 
     func makeNSView(context: Context) -> NSView { Sonde(rapporter) }
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     final class Sonde: NSView {
-        let rapporter: (NSWindow?) -> Void
+        let rapporter: (NSView) -> Void
 
-        init(_ rapporter: @escaping (NSWindow?) -> Void) {
+        init(_ rapporter: @escaping (NSView) -> Void) {
             self.rapporter = rapporter
             super.init(frame: .zero)
         }
@@ -562,7 +572,7 @@ struct SondeFenetre: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            rapporter(window)
+            rapporter(self)
         }
     }
 }

@@ -67,10 +67,10 @@ public enum Isolement: Hashable, Sendable {
     }
 
     /// La rotation lente tourne (spec de la vue par pieces, section 7) : en 3D, l'envol fini (`bascule` a 1), cochee,
-    /// sans « Reduire les animations », et ni piece ni etage isoles, ni en train d'etre quittes (`sansIsolement`).
-    public static func rotationLente(troisD: Bool, bascule: Double, cochee: Bool, reduire: Bool,
-                                     sansIsolement: Bool) -> Bool {
-        troisD && bascule == 1 && cochee && !reduire && sansIsolement
+    /// sans « Reduire les animations », hors d'un geste (`geste` : un glisser, la molette, un pincement). Elle continue
+    /// quand une piece ou un etage est isole (polissage D, section 4.2), autour de la cible de la camera.
+    public static func rotationLente(troisD: Bool, bascule: Double, cochee: Bool, reduire: Bool, geste: Bool) -> Bool {
+        troisD && bascule == 1 && cochee && !reduire && !geste
     }
 
     /// Sur une nouvelle scene, de pieces `pieces` et de plateaux `etages` (leurs cles) : une piece isolee ou un etage
