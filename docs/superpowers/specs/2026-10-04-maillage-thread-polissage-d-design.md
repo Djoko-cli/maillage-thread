@@ -184,3 +184,17 @@ Rien n'est reporté : D clôt le polissage. Restent à part :
 - l'anonymisation de l'option C avant tout push ;
 - les essais sur les réglages de sensibilité des capteurs ;
 - les points en attente du 4a et du passeur.
+
+## 8. Vérification du 05/10
+
+Djoko a vérifié D en vrai, sur sa maison : « tout est parfait ». Trois corrections sont venues de cette vérification :
+- **Les étiquettes des graphes de la fiche :**
+  - sous le verre de la fiche, les annotations des graphes ne se dessinaient pas. La valeur au survol et les noms « → parent » des pointillés manquaient ;
+  - ces étiquettes sont désormais posées dans une couche sur le graphe ;
+  - pendant le survol du signal, les noms « → parent » s'effacent, et seule la valeur reste lisible.
+- **Les clés « rloc » de l'historique :**
+  - un routeur que la sonde n'identifiait pas encore était rangé sous « rloc:XXXX », et apparaissait deux fois dans la légende ;
+  - sa clé devient désormais l'ExtMac du même identifiant, dans la même partition, au relevé suivant le plus proche, sinon au précédent ;
+  - la clé reste « rloc » si cette ExtMac est déjà tenue par un autre routeur du relevé, ou si le routeur n'est jamais identifié ;
+  - la fiche d'un routeur montre aussi ses relevés d'avant son identification.
+- **La portée du survol** reste l'écart qui coupe la courbe : 20 min en 24 h, 90 min en 7 j, 6 h en 30 j.
