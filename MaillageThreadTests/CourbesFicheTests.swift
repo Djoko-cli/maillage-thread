@@ -68,6 +68,41 @@ struct CourbesFicheTests {
         }
     }
 
+    /// La resolution des cles est gardee (relecture, Mineur 3) : une fiche (courbes, noms, cle, evenements) ne la
+    /// construit qu'une fois par changement de l'historique ; un nouveau releve (`recevoir`) et la relecture du disque
+    /// (`chargerHistorique`) la refont, cette derniere avec les releves relus. Les evenements d'un noeud n'en ont pas
+    /// besoin.
+    @Test func resolutionGardee() async throws {
+        let x = "E0000000000000C1"
+        let dossier = JournalMaillageTests.dossier()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let t = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down) - 900)
+        // Un lancement precedent : le routeur 1 identifie, sur le disque.
+        let avant = JournalMaillageTests.surveillance(dossier: dossier)
+        avant.recevoir(try JournalMaillageTests.maillage(avant, t, parent: 1, extMac1: x), a: t)
+        let s = JournalMaillageTests.surveillance(dossier: dossier)
+        s.recevoir(try JournalMaillageTests.maillage(s, t.addingTimeInterval(300), parent: 5), a: t.addingTimeInterval(300))
+        func fiche() {
+            _ = s.courbes(noeud: "rloc:0400", periode: .jour, fin: Date())
+            _ = s.nomsHistorique(["rloc:0400", x])
+            _ = s.cleHistorique(noeud: "rloc:0400")
+            _ = s.evenements(de: "rloc:0400")
+        }
+        fiche()
+        fiche()
+        #expect(s.constructionsCles == 1)
+        #expect(s.cleHistorique(noeud: "rloc:0400") == "rloc:0400", "le releve identifie n'est pas encore relu")
+        await s.chargerHistorique()
+        #expect(s.cleHistorique(noeud: "rloc:0400") == x, "refaite avec les releves relus")
+        #expect(s.constructionsCles == 2)
+        s.recevoir(try JournalMaillageTests.maillage(s, t.addingTimeInterval(600), parent: 5), a: t.addingTimeInterval(600))
+        _ = s.evenements(de: "rloc:0400")
+        #expect(s.constructionsCles == 2, "les evenements ne resolvent rien")
+        fiche()
+        fiche()
+        #expect(s.constructionsCles == 3)
+    }
+
     /// L'echelle du signal de la fiche (polissage D, section 4.3) : celle du coeur, sur les valeurs de la courbe ; deux
     /// releves egaux a -61 dBm donnent -70 ... -50, gradue -70, -60, -50 ; sans valeur, -100 ... -40.
     @Test func echelleDuSignal() throws {

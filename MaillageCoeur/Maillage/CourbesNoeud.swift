@@ -100,6 +100,12 @@ public struct CourbesNoeud: Hashable, Sendable {
     /// Courbes du noeud de cle `cle` dans `releves` (du plus ancien au plus recent), sur la
     /// periode qui finit a `fin`.
     public init(cle: String, releves: [ReleveMaillage], periode: PeriodeCourbes, fin: Date) {
+        self.init(cle: cle, releves: releves, cles: ClesHistorique(releves: releves), periode: periode, fin: fin)
+    }
+
+    /// De meme, avec la resolution des cles deja faite (`cles`, construite sur ces memes `releves`) : la
+    /// surveillance la garde d'un calcul de la fiche a l'autre, tant que l'historique ne change pas.
+    public init(cle: String, releves: [ReleveMaillage], cles: ClesHistorique, periode: PeriodeCourbes, fin: Date) {
         let debut = fin.addingTimeInterval(-periode.duree)
         var liens: [String: [(Date, Double)]] = [:]
         var signal: [(Date, Double)] = []
@@ -107,7 +113,6 @@ public struct CourbesNoeud: Hashable, Sendable {
         var parentsSonde: [ChangementParent] = []
         var dernierParent: String?
         var dernierParentSonde: String?
-        let cles = ClesHistorique(releves: releves)
         for (i, r) in releves.enumerated() where r.date >= debut && r.date <= fin {
             if let id = r.routeurs.first(where: { cles.cle(releve: i, routeur: $0.id) == cle })?.id {
                 for l in r.liens where l.a == id || l.b == id {

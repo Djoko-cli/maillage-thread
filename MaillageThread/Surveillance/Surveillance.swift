@@ -56,6 +56,11 @@ final class Surveillance {
     /// Historique de la sonde (spec de la sonde, section 6) : les releves des 30 derniers jours,
     /// du plus ancien au plus recent ; toujours vide en demo.
     private(set) var historique: [ReleveMaillage] = []
+    /// Resolution des cles de l'historique (`ClesHistorique`), construite a la premiere demande et gardee jusqu'au
+    /// prochain changement de l'historique : `recevoir` et `chargerHistorique` l'effacent (relecture, Mineur 3).
+    @ObservationIgnored private var clesGardees: ClesHistorique?
+    /// Nombre de resolutions construites : une par changement de l'historique au plus (lu par les tests).
+    @ObservationIgnored private(set) var constructionsCles = 0
 
     /// Age du maillage de la sonde, depuis sa reception : frais jusqu'a 6 min (la
     /// tournee suivante part 5 min apres la fin de la precedente), et tant qu'une
@@ -199,6 +204,7 @@ final class Surveillance {
         let r = ReleveMaillage(m)
         let limite = date.addingTimeInterval(-Self.dureeHistorique)
         historique = historique.filter { $0.date >= limite } + [r]
+        clesGardees = nil
         purgerSiNouveauMois(date)
         guard let f = fichiersHistorique else { return }
         do {
@@ -238,6 +244,7 @@ final class Surveillance {
             // lecture, ecrit puis relu, garde jusqu'a 1 ms de moins que sa copie en memoire. Il n'est pas repris.
             let premier = (historique.first?.date ?? .distantFuture).addingTimeInterval(-0.001)
             historique = lus.filter { $0.date < premier } + historique
+            clesGardees = nil
         } catch {
             Self.journalMac.error("historique illisible : \(error.localizedDescription, privacy: .public)")
         }
@@ -382,17 +389,26 @@ final class Surveillance {
         Dictionary(r.routeurs.map { ($0.instance, nom($0)) }, uniquingKeysWith: { a, _ in a })
     }
 
-    /// Resolution des cles de l'historique (`ClesHistorique`), suivi du releve du maillage `m`, et l'indice de ce
-    /// releve ; nil si tous les routeurs de `m` ont une ExtMac (rien a resoudre).
+    /// La resolution des cles de l'historique, gardee (`clesGardees`).
+    private var clesHistorique: ClesHistorique {
+        if let c = clesGardees { return c }
+        let c = ClesHistorique(releves: historique)
+        clesGardees = c
+        constructionsCles += 1
+        return c
+    }
+
+    /// La resolution des cles de l'historique et l'indice du releve du maillage `m`, le dernier de l'historique (en mode
+    /// direct, `recevoir` l'y ajoute) ; nil si tous les routeurs de `m` ont une ExtMac (rien a resoudre) ou si son releve
+    /// n'est pas le dernier (demo : pas d'historique).
     private func resolution(_ m: Maillage) -> (cles: ClesHistorique, releve: Int)? {
-        guard m.routeurs.contains(where: { $0.extMac == nil }) else { return nil }
-        let releves = historique + [ReleveMaillage(m)]
-        return (ClesHistorique(releves: releves), releves.count - 1)
+        guard m.routeurs.contains(where: { $0.extMac == nil }), let dernier = historique.last,
+              dernier.date == m.date, dernier.partition == m.partition else { return nil }
+        return (clesHistorique, historique.count - 1)
     }
 
     /// Cle d'un routeur du dernier maillage dans l'historique, celle de ses courbes (verification du 05/10) : son
-    /// ExtMac ; sans elle, celle que `ClesHistorique` donne au releve du maillage, place apres l'historique (l'ExtMac
-    /// du meme identifiant au releve le plus recent de sa partition qui en a une) ; sinon "rloc:XXXX".
+    /// ExtMac ; sans elle, celle que `ClesHistorique` donne au releve du maillage dans l'historique ; sinon "rloc:XXXX".
     private func cleHistorique(routeur r: RouteurMaillage, _ resolution: (cles: ClesHistorique, releve: Int)?) -> String {
         if let x = r.extMac { return x }
         guard let resolution else { return String(format: "rloc:%04X", r.rloc16) }
@@ -404,11 +420,15 @@ final class Surveillance {
     /// pour un enfant, son ExtMac dans le dernier maillage ; sinon le `xa` de l'annonce
     /// d'un routeur de bordure, ou l'hote d'un appareil (l'ExtMac d'un appareil Matter, d'apres
     /// `GrapheReseau.extMac(hote:)`, comme la piece d'un noeud) ; nil si le noeud n'en a pas.
-    func cleHistorique(noeud id: String) -> String? {
+    func cleHistorique(noeud id: String) -> String? { cleHistorique(noeud: id, resoudre: true) }
+
+    /// `resoudre` faux : un routeur sans ExtMac garde "rloc:XXXX", sans resolution (`evenements(de:)`, qui ne compare
+    /// que l'ExtMac d'un enfant).
+    private func cleHistorique(noeud id: String, resoudre: Bool) -> String? {
         if let m = maillage, let n = rapprochement(m)?.noeud(id) {
             switch n.genre {
             case .routeur:
-                if let r = m.routeur(Int(n.rloc16 >> 10)) { return cleHistorique(routeur: r, resolution(m)) }
+                if let r = m.routeur(Int(n.rloc16 >> 10)) { return cleHistorique(routeur: r, resoudre ? resolution(m) : nil) }
             case .enfant:
                 if let x = m.enfants.first(where: { $0.rloc16 == n.rloc16 })?.extMac { return x }
             }
@@ -449,7 +469,9 @@ final class Surveillance {
 
     /// Courbes d'un noeud du graphe sur une periode qui finit a `fin` ; nil sans cle.
     func courbes(noeud id: String, periode: PeriodeCourbes, fin: Date) -> CourbesNoeud? {
-        cleHistorique(noeud: id).map { CourbesNoeud(cle: $0, releves: historique, periode: periode, fin: fin) }
+        cleHistorique(noeud: id).map {
+            CourbesNoeud(cle: $0, releves: historique, cles: clesHistorique, periode: periode, fin: fin)
+        }
     }
 
     /// Nom affiche d'un noeud du graphe : routeur de bordure, appareil, ou noeud que seule la sonde
@@ -552,9 +574,10 @@ final class Surveillance {
     /// 5 derniers evenements d'un noeud, du plus recent au plus ancien. Un evenement qui porte
     /// l'ExtMac d'un enfant (`details["extMac"]`) est le sien si c'est celle du noeud : l'id du
     /// sujet d'un enfant sans appareil (« rloc:XXXX ») change avec son parent. Sinon (evenement
-    /// plus ancien, noeud sans ExtMac), l'id du sujet.
+    /// plus ancien, noeud sans ExtMac), l'id du sujet. Seuls les evenements d'un enfant portent une ExtMac : la cle
+    /// d'un routeur n'a pas a etre resolue dans l'historique.
     func evenements(de id: String) -> [Evenement] {
-        let ext = cleHistorique(noeud: id)
+        let ext = cleHistorique(noeud: id, resoudre: false)
         func concerne(_ e: Evenement) -> Bool {
             if let x = e.details["extMac"], let ext { return x == ext }
             return e.sujet?.id == id
