@@ -200,30 +200,33 @@ and for the floors `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-
   room or floor and stops during a gesture. Switching is a 2.6 s flight; the
   platforms slide to their place when the window is resized, when the legend
   opens or folds, when the setting changes, and after a level change.
-- **Slides.** A new layout (a tour, a device placed in a room, a level
-  choice) slides in 0.9 s: rooms, devices and platforms go from their shown
-  place to the new one, a device in a straight line from room to room, from
-  floor to floor if need be; what appears or disappears fades in 0.3 s, and
-  links follow. The view follows what it looks at. A changing badge (☾, ⚠︎,
-  👑, low battery) no longer moves the floor: each card keeps room for the
-  possible badges of its names. An unidentified border router whose candidates
-  are all in the same room goes to that room.
+- **Slides.** A new layout (a survey, a device placed in a room, a level
+  choice) slides in 0.9 s: rooms and devices go from their shown place to the
+  new one, a device in a straight line from room to room, from floor to floor
+  if need be; the platforms slide with them in 3D, but in 2D, after a level
+  change, in 0.4 s; what appears or disappears fades in 0.3 s, and links
+  follow. The view follows what it looks at. A changing badge (☾, ⚠︎, 👑, low
+  battery) no longer moves the floor: each card keeps room for the possible
+  badges of its names, the battery dot only for a device whose battery is
+  known. An unidentified border router whose candidates are all in the same
+  room goes to that room.
 - **Gestures.** Scroll wheel or pinch: zoom, towards the pointer in 2D; over
   the card, the legend or the top of the window, the wheel goes to them. Drag
   the background: pan in 2D, orbit around the house in 3D. Drag a room: move
-  it within its floor; its place is kept (`positions-pieces.json` in the app
+  it within its floor, with nothing else moving (the other rooms only move at
+  the next layout); its place is kept (`positions-pieces.json` in the app
   folder, never in the demo). Click a room or its name: isolate it (the others
   fade, a tag points to a parent elsewhere); click a floor's name or disc:
   isolate it the same way. Esc first closes the open card; otherwise, like a
   click outside, it goes up one step, from a room to its floor if you opened
   it from there, otherwise to the house, and brings a zoomed view back to the
   overview; there, it is not taken and goes its way. The "Home › Floor ›
-  Room" path also leads to each step. In 3D, ⌥ + drag pans the view in
-  the screen plane. Double-click the background or a disc: back to the
-  overview, zoom and pan undone. Click a device or its name: its card, which
-  slides up from the bottom as the view rises; the card of the Thread
-  network's leader shows "👑 Thread network leader, elected automatically".
-  The first click works even when the window is inactive.
+  Room" path also leads to each step. In 3D, ⌥ + drag pans the view in the
+  screen plane. Double-click the background or a disc: back to the overview,
+  zoom and pan undone. Click a device or its name: its card, which slides up
+  from the bottom as the view rises; the card of the Thread network's leader
+  shows "👑 Thread network leader, elected automatically". The first click
+  works even when the window is inactive.
 - **Right clicks**: on a floor's name or disc, the menu of its level, under
   its name: "Move up one floor" and "Move down one floor" (the whole level),
   "On the same level as ▸", "Outside the house" and "On its own level"; on the
@@ -234,9 +237,9 @@ and for the floors `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-
   many names are hidden for lack of room.
 - "Reduce motion" (macOS accessibility): the flight and the double-click
   return become a fade, other camera flights are immediate, as are the slides
-  from one layout to the next, the slow rotation
-  is off, the card, the legend and the top banners come and go with a plain
-  fade, and the view reframes itself through a fade.
+  from one layout to the next, the slow rotation is off, the card, the legend
+  and the top banners come and go with a plain fade, and the view reframes
+  itself through a fade.
 - The room layout is computed off the main thread: a few hundredths of a
   second for the demo, under a second for 20 rooms and 100 devices
   (`outils/mesurer.sh`).

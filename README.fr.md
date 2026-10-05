@@ -209,27 +209,29 @@ pour les étages `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-c-
   la légende s'ouvre ou se replie, quand le réglage change, et après un
   changement de niveau.
 - **Glissements.** Une nouvelle disposition (un relevé, un appareil placé dans
-  une pièce, un choix de niveau) glisse en 0,9 s : les pièces, les appareils et
-  les plateaux vont de leur place affichée à la nouvelle, un appareil en ligne
-  droite d'une pièce à l'autre, d'un étage à l'autre s'il le faut ; ce qui
+  une pièce, un choix de niveau) glisse en 0,9 s : les pièces et les appareils
+  vont de leur place affichée à la nouvelle, un appareil en ligne droite d'une
+  pièce à l'autre, d'un étage à l'autre s'il le faut ; les plateaux glissent
+  avec eux en 3D, mais en 2D, après un changement de niveau, en 0,4 s ; ce qui
   apparaît ou disparaît le fait en fondu de 0,3 s, et les liens suivent. La vue
   suit ce qu'elle regarde. Un badge qui change (☾, ⚠︎, 👑, pile faible) ne
   fait plus bouger l'étage : chaque carte réserve la place des badges possibles
-  de ses noms. Un routeur de bordure non identifié, dont tous les candidats
-  sont dans la même pièce, va dans cette pièce.
+  de ses noms, la pastille de pile seulement pour un appareil dont la pile est
+  connue. Un routeur de bordure non identifié, dont tous les candidats sont
+  dans la même pièce, va dans cette pièce.
 - **Gestes.** Molette ou pincement : zoom, vers le curseur en 2D ; au-dessus
   de la fiche, de la légende ou du haut de la fenêtre, la molette leur revient.
-  Glisser le
-  fond : déplacer la vue en 2D, tourner autour de la maison en 3D. Glisser une
-  pièce : la déplacer dans son étage ; sa place est gardée
-  (`positions-pieces.json` dans le dossier de l'app, jamais en démo). Clic sur
-  une pièce ou sur son nom : l'isoler (les autres s'estompent, un repère
-  montre un parent situé ailleurs) ; clic sur le nom ou le disque d'un étage :
-  l'isoler de même. Échap ferme d'abord la fiche ouverte ; sinon, comme le clic
-  à côté, il remonte d'un cran, d'une pièce à son étage si on l'a ouverte
-  depuis lui, sinon à la maison, et ramène une vue zoomée à la vue d'ensemble ;
-  là, il n'est pas pris et suit son chemin. Le fil « Maison › Étage › Pièce »
-  mène aussi à chaque cran. En 3D, ⌥ + glisser déplace la vue
+  Glisser le fond : déplacer la vue en 2D, tourner autour de la maison en 3D.
+  Glisser une pièce : la déplacer dans son étage, sans que rien d'autre ne
+  bouge (les autres pièces ne se replacent qu'à la disposition suivante) ; sa
+  place est gardée (`positions-pieces.json` dans le dossier de l'app, jamais en
+  démo). Clic sur une pièce ou sur son nom : l'isoler (les autres s'estompent,
+  un repère montre un parent situé ailleurs) ; clic sur le nom ou le disque
+  d'un étage : l'isoler de même. Échap ferme d'abord la fiche ouverte ; sinon,
+  comme le clic à côté, il remonte d'un cran, d'une pièce à son étage si on
+  l'a ouverte depuis lui, sinon à la maison, et ramène une vue zoomée à la vue
+  d'ensemble ; là, il n'est pas pris et suit son chemin. Le fil « Maison ›
+  Étage › Pièce » mène aussi à chaque cran. En 3D, ⌥ + glisser déplace la vue
   dans le plan de l'écran. Double-clic sur le fond ou sur un disque : retour à
   la vue d'ensemble, zoom et déplacement annulés. Clic sur un appareil ou sur
   son nom : sa fiche, qui glisse depuis le bas pendant que la vue se relève ;
@@ -247,9 +249,8 @@ pour les étages `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-c-
 - « Réduire les animations » (accessibilité de macOS) : l'envol et le retour
   par double-clic deviennent un fondu, les autres vols de caméra sont
   immédiats, comme les glissements d'une disposition à l'autre, la rotation
-  lente est coupée, la fiche, la légende et les
-  bandeaux du haut vont et viennent par un simple fondu, et la vue se recadre
-  par un fondu.
+  lente est coupée, la fiche, la légende et les bandeaux du haut vont et
+  viennent par un simple fondu, et la vue se recadre par un fondu.
 - La disposition des pièces est calculée hors du fil principal : quelques
   centièmes de seconde pour la démo, moins d'une seconde pour 20 pièces et 100
   appareils (`outils/mesurer.sh`).

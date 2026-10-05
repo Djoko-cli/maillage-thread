@@ -95,6 +95,31 @@ enum CapturesPieces {
         }, deplacer: appareilDansLaCuisine),
     ]
 
+    /// Le moteur d'un cas, prepare comme dans la boucle des images : la taille, la scene de la demo (`e`), puis, pour
+    /// `deplacer`, celle des pieces choisies, avec sa transition, enfin l'etat du cas, pose sur la scene que porte le
+    /// moteur. Un cas `deplacer` sans transition (la scene choisie ne change rien) est une erreur : l'image sortirait
+    /// sans appareil en route.
+    static func preparer(_ c: Cas, surveillance s: Surveillance, reseau r: Reseau,
+                         marges: (haut: CGFloat, bas: CGFloat)) -> (m: MoteurPieces, e: EntreeScene) {
+        let m = MoteurPieces(places: c.places)
+        m.fige = true
+        m.reglerGrille(c.grille)
+        let e = EntreeScene(surveillance: s, reseau: r, places: m.places)
+        m.marges = marges
+        m.basGrille = marges.bas
+        m.poserTaille(c.taille)
+        m.installerMaintenant(e)
+        m.poserTaille(c.taille)
+        if let choix = c.deplacer {
+            m.installerMaintenant(EntreeScene(surveillance: s, reseau: r, places: m.places, choix: choix))
+        }
+        precondition(c.deplacer == nil || m.transition != nil,
+                     "\(c.nom) : la scene des pieces choisies ne change aucune disposition")
+        guard let scene = m.scene else { preconditionFailure("\(c.nom) : le moteur n'a pas de scene") }
+        c.poser(m, scene)
+        return (m, e)
+    }
+
     /// Ecrit les images dans `dossier` ; rend leurs noms.
     @discardableResult
     static func ecrire(dans dossier: String, surveillance s: Surveillance, sonde: SondeMaillage,
@@ -112,23 +137,14 @@ enum CapturesPieces {
         var noms: [String] = []
         for c in cas {
             let taille = c.taille
-            let m = MoteurPieces(places: c.places)
-            m.fige = true
-            m.reglerGrille(c.grille)
-            let e = EntreeScene(surveillance: s, reseau: r, places: m.places)
             // La vue d'ensemble se cadre au-dessus de la legende ouverte : la hauteur mesuree de la rangee du bas,
             // comme dans la fenetre ; repliee, la marge d'avant. La grille se choisit sur cette zone visible, sans la
-            // fiche (polissage C, section 3.3).
-            let ouverte = hauteur(LigneDuBas(moteur: MoteurPieces(), entree: e, legendeForcee: false))
-            m.marges = (marges.0, c.legendeRepliee ? marges.1 : FenetrePieces.margeBas(pile: ouverte))
-            m.basGrille = m.marges.bas
-            m.poserTaille(taille)
-            m.installerMaintenant(e)
-            m.poserTaille(taille)
-            if let choix = c.deplacer {
-                m.installerMaintenant(EntreeScene(surveillance: s, reseau: r, places: m.places, choix: choix))
-            }
-            c.poser(m, e.scene)
+            // fiche (polissage C, section 3.3). La mesure se fait sur la scene de la demo, celle du cas sans son
+            // deplacement.
+            let mesure = EntreeScene(surveillance: s, reseau: r, places: c.places)
+            let ouverte = hauteur(LigneDuBas(moteur: MoteurPieces(), entree: mesure, legendeForcee: false))
+            let (m, e) = preparer(c, surveillance: s, reseau: r,
+                                  marges: (marges.0, c.legendeRepliee ? marges.1 : FenetrePieces.margeBas(pile: ouverte)))
             // La fiche : la legende reste au-dessus d'elle (repliee si la place manque, comme dans la fenetre), et la
             // vue se cadre au-dessus de la pile mesuree.
             var repliee = c.legendeRepliee

@@ -1337,7 +1337,8 @@ struct FenetrePiecesTests {
     }
 
     /// Les images de la demo : les douze de la vue par pieces, puis la fiche du chef, avec sa pastille, et
-    /// la legende repliee ; puis les six des etages (polissage C, section 7). La fiche est celle d'un noeud couronne de
+    /// la legende repliee ; puis les six des etages (polissage C, section 7) ; puis la vingt et unieme, un appareil a
+    /// mi-chemin de son glissement vers la cuisine (polissage D, section 6). La fiche est celle d'un noeud couronne de
     /// la demo.
     @Test func imagesDeDemo() throws {
         #expect(CapturesPieces.cas.map(\.nom) == [
@@ -1357,7 +1358,10 @@ struct FenetrePiecesTests {
     }
 
     /// L'image du glissement (polissage D, section 6) : la scene de la demo, puis celle ou l'appareil inconnu « 041F »,
-    /// sans piece, est place dans la cuisine ; posee a mi-chemin, sa pastille est en route, loin de ses deux places.
+    /// sans piece, est place dans la cuisine. Le moteur est prepare par `CapturesPieces.preparer`, comme dans la boucle
+    /// des images ; le cas est pose a trois points de son glissement, sous la meme camera (celle de son zoom) : au
+    /// depart, a mi-chemin (le cas lui-meme), a l'arrivee. A mi-chemin, la pastille est en route, loin de ses deux
+    /// places ; la vue est zoomee a l'echelle 1 vers « Sans pièce », dont le centre ne bouge pas sur l'ecran.
     @Test func imageDuGlissement() throws {
         let (s, r, e) = try NomsSceneTests.demo()
         let cas = try #require(CapturesPieces.cas.first { $0.nom == "21-2d-appareil-en-route" })
@@ -1366,22 +1370,41 @@ struct FenetrePiecesTests {
         let id = "rloc:041F"
         #expect(e.scene.noeud(id).map { e.scene.pieces[$0.piece].nom } == .sansPiece)
         #expect(e2.scene.noeud(id).map { e2.scene.pieces[$0.piece].nom } == .maison("Cuisine"))
-        let m = MoteurPieces()
-        m.fige = true
-        m.marges = (84, 50)
-        m.poserTaille(MoteurPiecesTests.taille)
-        m.installerMaintenant(e)
-        MoteurPiecesTests.dessiner(m)
-        let avant = try #require(m.projetee?.centresNoeuds[id])
-        m.installerMaintenant(e2)
-        m.poserTransition(1)
-        MoteurPiecesTests.dessiner(m)
-        let apres = try #require(m.projetee?.centresNoeuds[id])
-        cas.poser(m, e2.scene)
-        MoteurPiecesTests.dessiner(m)
-        let mi = try #require(m.projetee?.centresNoeuds[id])
+        let marges: (haut: CGFloat, bas: CGFloat) = (84, 50)
+        // Le cas, pose en plus a `q` de son glissement (le cas seul : a mi-chemin) ; son moteur et le centre de la pastille.
+        func rendre(_ q: Double?) throws -> (m: MoteurPieces, centre: SIMD3<Double>) {
+            var c = cas
+            if let q {
+                let poser = cas.poser
+                c.poser = { m, sc in
+                    poser(m, sc)
+                    m.poserTransition(q)
+                }
+            }
+            let (m, _) = CapturesPieces.preparer(c, surveillance: s, reseau: r, marges: marges)
+            MoteurPiecesTests.dessiner(m, taille: c.taille)
+            return (m, try #require(m.projetee?.centresNoeuds[id]))
+        }
+        let (mAvant, avant) = try rendre(0)
+        let (mApres, apres) = try rendre(1)
+        let (mMi, mi) = try rendre(nil)
+        #expect(mAvant.orbite == mMi.orbite && mApres.orbite == mMi.orbite, "les trois points se mesurent sous la meme camera")
         let d = simd_distance(avant, apres)
-        #expect(d > 3 && simd_distance(mi, avant) > 0.25 * d && simd_distance(mi, apres) > 0.25 * d)
+        #expect(d > 1 && simd_distance(mi, avant) > 0.25 * d && simd_distance(mi, apres) > 0.25 * d)
+        // Le zoom : l'echelle 1, vers « Sans pièce », dont le centre garde sa place a l'ecran.
+        let sc = try #require(mMi.scene)
+        let sansPiece = try #require(sc.pieces.firstIndex { $0.nom == .sansPiece })
+        let echelle = ProjectionScene(mMi.orbite, cadre: mMi.cadre).pxParUnite(mMi.orbite.cible) / CartesPieces.px
+        #expect(abs(echelle - 1) < 1e-6)
+        var sansZoom = cas
+        sansZoom.poser = { m, _ in m.poserTransition(0.5) }
+        let (mSans, _) = CapturesPieces.preparer(sansZoom, surveillance: s, reseau: r, marges: marges)
+        #expect(abs(ProjectionScene(mSans.orbite, cadre: mSans.cadre).pxParUnite(mSans.orbite.cible) / CartesPieces.px - 1) > 0.1,
+                "le zoom change l'echelle")
+        let centre = try #require(mMi.centrePiece(sansPiece))
+        let avantZoom = try #require(ProjectionScene(mSans.orbite, cadre: mSans.cadre).ecran(centre))
+        let apresZoom = try #require(ProjectionScene(mMi.orbite, cadre: mMi.cadre).ecran(centre))
+        #expect(hypot(avantZoom.x - apresZoom.x, avantZoom.y - apresZoom.y) < 1)
     }
 
     /// La marge du bas de la zone visible ou se choisit la grille (polissage C, section 3.3, decision de Djoko du
