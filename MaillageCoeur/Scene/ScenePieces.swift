@@ -96,6 +96,9 @@ public struct ScenePieces: Hashable, Sendable {
         public var pile: Bool
         /// Rang dans sa carte : 1 routeur de bordure, 2 autre routeur, 3 autre noeud.
         public var rang: Int
+        /// Le noeud route : un routeur de bordure ou un autre routeur (rang 1 ou 2). La cle de la disposition et le
+        /// placement des noms le lisent d'ici ; le moteur de l'app mesure encore `rang <= 2`, qui en est la definition.
+        public var route: Bool { rang <= 2 }
         /// Rayon naturel de sa pastille (px).
         public var rayon: Double
         public var piece: Int
@@ -266,7 +269,7 @@ public struct ScenePieces: Hashable, Sendable {
                 let p = pieces[i]
                 c.pieces[e.id, default: [:]][p.id] = p.noeuds.map { id in
                     let n = noeud(id)
-                    return [id, n?.libelle ?? "", n?.routeur == true ? "R" : "", n?.pile == true ? "P" : ""]
+                    return [id, n?.libelle ?? "", n?.route == true ? "R" : "", n?.pile == true ? "P" : ""]
                         .joined(separator: "|")
                 }
             }

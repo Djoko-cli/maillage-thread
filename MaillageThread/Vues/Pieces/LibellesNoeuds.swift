@@ -16,11 +16,16 @@ enum LibellesNoeuds {
         var pastille: String?
         var nom: String
 
-        /// `nom` : le texte, a defaut.
-        init(texte: String, pastille: String? = nil, nom: String? = nil) {
+        /// Le nom est toujours donne : la scene ne voit que lui, et un oubli lui montrerait les badges.
+        init(texte: String, pastille: String? = nil, nom: String) {
             self.texte = texte
             self.pastille = pastille
-            self.nom = nom ?? texte
+            self.nom = nom
+        }
+
+        /// Un texte pur, sans badge : mesures, reperes, noeud sans libelle ; son nom est le texte.
+        init(texte: String) {
+            self.init(texte: texte, nom: texte)
         }
     }
 
@@ -80,13 +85,13 @@ enum LibellesNoeuds {
         return libelles
     }
 
-    /// Piece de Maison de chaque noeud : celle de son accessoire (appareil), ou, pour un routeur de
-    /// bordure, celle de l'accessoire de Maison qui porte le nom de son annonce. Un routeur de bordure
-    /// que Maison ne place pas (HomePod, Apple TV) prend la piece choisie pour lui, sinon celle de son
-    /// nom (`nomsRouteurs`, par instance ; `PiecesRouteurs`). Un routeur de bordure que seule la sonde connait, non
-    /// identifie, prend la piece de ses candidats s'ils sont tous dans la meme (polissage D, section 4.1, `maillage`).
-    /// Un autre noeud du graphe que Maison ne
-    /// place pas prend la piece choisie pour son ExtMac (precision 27).
+    /// Piece de Maison de chaque noeud : celle de son accessoire (appareil), ou, pour un routeur de bordure, la chaine de
+    /// `PiecesRouteurs.piece(routeur:nom:maison:parmi:domicile:)` : celle de l'accessoire de Maison qui porte le nom de
+    /// son annonce ; pour un routeur que Maison ne place pas (HomePod, Apple TV), la piece choisie pour lui, sinon celle de
+    /// son nom (`nomsRouteurs`, par instance). Un routeur de bordure que seule la sonde connait, non identifie, prend la
+    /// piece de ses candidats s'ils sont tous dans la meme, par cette meme chaine (polissage D, section 4.1,
+    /// `maillage`). Un autre noeud du graphe que Maison ne place pas prend la piece choisie pour son ExtMac
+    /// (precision 27).
     static func pieces(reseau: Reseau, appareils: [AppareilAffiche], maison: NomsMaison?,
                        nomsRouteurs: [String: String] = [:], choix: PiecesRouteurs = PiecesRouteurs(),
                        graphe: GrapheReseau, maillage: MaillageAffiche? = nil) -> [String: String] {
@@ -98,25 +103,20 @@ enum LibellesNoeuds {
         let domicile = maison?.domicile ?? ""
         pieces = choix.piecesNoeuds(graphe, deMaison: pieces, parmi: toutes, domicile: domicile)
         for r in reseau.routeurs {
-            if let p = pieceDeMaison(routeur: r.instance, maison: maison) {
-                pieces[r.instance] = p
-            } else if let p = choix.piece(routeur: r.instance, nom: nomsRouteurs[r.instance] ?? r.instance, parmi: toutes,
-                                          domicile: domicile) {
+            if let p = choix.piece(routeur: r.instance, nom: nomsRouteurs[r.instance] ?? r.instance, maison: maison,
+                                   parmi: toutes, domicile: domicile) {
                 pieces[r.instance] = p
             }
         }
-        for n in graphe.noeuds where n.bordure && pieces[n.id] == nil {
-            guard let candidats = maillage?.noeud(n.id)?.candidats, !candidats.isEmpty,
+        // Seul un routeur de bordure non identifie a des candidats (`Rapprochement`), et rien ne l'a place avant : ni
+        // Maison, ni un choix (sans instance ni ExtMac).
+        for n in graphe.noeuds {
+            guard let candidats = maillage?.noeud(n.id)?.candidats,
                   let p = choix.piece(candidats: candidats, noms: nomsRouteurs, maison: maison, parmi: toutes,
                                       domicile: domicile) else { continue }
             pieces[n.id] = p
         }
         return pieces
-    }
-
-    /// Piece de Maison d'un routeur de bordure (son instance) : celle de l'accessoire qui porte son nom.
-    static func pieceDeMaison(routeur: String, maison: NomsMaison?) -> String? {
-        PiecesRouteurs.pieceDeMaison(routeur: routeur, maison: maison)
     }
 
     static func nom(_ e: ScenePieces.NomEtage) -> String {

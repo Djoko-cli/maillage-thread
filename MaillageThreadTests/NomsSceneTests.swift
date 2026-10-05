@@ -51,6 +51,16 @@ struct NomsSceneTests {
         return (s, r)
     }
 
+    /// La demo dont les deux HomePod sont deux routeurs de bordure non identifies (polissage D, section 4.1) : leur
+    /// annonce n'a plus d'ExtMac dans le maillage de la sonde ; leurs candidats sont les deux annonces.
+    static func demoSansIdentite() throws -> (Surveillance, Reseau) {
+        let (s, r, _) = try demo()
+        let i = try #require(s.instantane)
+        let m = try #require(MaillageDemo.maillage(i, date: s.maintenant, sansIdentite: ["HomePod Avant", "HomePod Palier"]))
+        s.recevoir(m, a: s.maintenant)
+        return (s, r)
+    }
+
     /// Libelle d'un noeud : le nom coupe a 40 caracteres, la couronne du chef (celui de la partition
     /// et celui de la sonde), ☾ endormi, ⚠︎ sans adresse ou disparu ; la pastille d'une batterie faible.
     @Test func libelles() throws {
@@ -299,11 +309,18 @@ struct NomsSceneTests {
         #expect(e.libelles[nuki]?.texte == "Nuki Ultra ☾" && e.scene.noeud(nuki)?.libelle == "Nuki Ultra")
         #expect(e.libelles["Apple TV 4K"]?.texte == "Apple TV 4K 👑" && e.scene.noeud("Apple TV 4K")?.libelle == "Apple TV 4K")
         let (positions, cartes) = (m.positions, m.cartes)
+        // Les cartes tiennent le pire cas de chaque nom, tel qu'il s'afficherait : tous les badges qu'il peut porter, et la
+        // plus large des pastilles si sa pile est connue. Le noeud route selon le graphe, non selon son rang.
         let mesure = MesureNoms()
-        let reserves = Dictionary(uniqueKeysWithValues: e.scene.noeuds.map {
-            ($0.id, Double(mesure.reserve($0.libelle, routeur: $0.rang <= 2, pile: $0.pile).width))
+        let pires = Dictionary(uniqueKeysWithValues: e.scene.noeuds.map { n -> (String, Double) in
+            let route = n.bordure || n.routeur
+            let texte = CartesPieces.texte(n.libelle, chef: route, endormi: !route, alerte: true)
+            let pastille = n.pile ? Self.pastilleLaPlusLarge(mesure) : nil
+            let pire = LibellesNoeuds.Libelle(texte: texte, pastille: pastille, nom: n.libelle)
+            return (n.id, Double(mesure.noeud(pire, routeur: route).width))
         })
-        #expect(cartes == CartesPieces.cartes(e.scene, largeurs: reserves), "les cartes reservent la place des badges")
+        #expect(cartes == CartesPieces.cartes(e.scene, largeurs: pires), "les cartes reservent la place des badges")
+        #expect(MoteurPiecesTests.moteur(e2).cartes == cartes, "la pastille du Nuki ne change pas les cartes")
         m.recevoir(e2)
         #expect(m.entree == e2, "posee tout de suite, sans calcul")
         #expect(m.positions == positions && m.cartes == cartes && m.transition == nil && m.glissementPlateaux == nil)
@@ -319,24 +336,32 @@ struct NomsSceneTests {
         #expect(MoteurPiecesTests.moteur(e3).cartes[cuisine].largeur > cartes[cuisine].largeur)
     }
 
+    /// Les pastilles d'une pile faible, en valeurs fixes : un niveau de 1 a 3 chiffres (0 a 100 %), ou « faible ».
+    static let pastilles = [0, 5, 9, 10, 50, 88, 99, 100].map { String(localized: "\($0)\u{202F}%") }
+        + [String(localized: "faible")]
+
+    /// La plus large d'entre elles, mesuree : celle que la carte reserve.
+    static func pastilleLaPlusLarge(_ mesure: MesureNoms) -> String {
+        pastilles.max { mesure.pastille($0).width < mesure.pastille($1).width } ?? ""
+    }
+
     /// La place que la carte reserve au nom de chaque noeud de la demo (polissage D, section 2), avec la vraie police :
     /// chacun de ses noms affiches y tient, quels que soient ses badges, la pastille la plus large comprise pour un noeud
     /// dont la pile est connue ; sans pile connue, la reserve n'a pas de pastille (decision du 05/10).
     @Test func reserveDesBadges() throws {
         let (_, _, e) = try Self.demo()
         let mesure = MesureNoms()
-        let pastilles = (0...100).compactMap { LibellesNoeuds.pastilleBatterie(BatterieMaison(niveau: $0, alerte: true)) }
-            + [String(localized: "faible")]
         let large = mesure.pastilleReservee
-        #expect(pastilles.contains(large) && pastilles.allSatisfy { mesure.pastille($0).width <= mesure.pastille(large).width })
+        let largeur = mesure.pastille(large).width
+        #expect(Self.pastilles.contains(large) && Self.pastilles.allSatisfy { mesure.pastille($0).width <= largeur })
         for n in e.scene.noeuds {
-            let routeur = n.rang <= 2
+            let routeur = n.route
             let reserve = mesure.reserve(n.libelle, routeur: routeur, pile: n.pile)
             for badge in [false, true] {
                 for alerte in [false, true] {
                     let texte = CartesPieces.texte(n.libelle, chef: routeur && badge, endormi: !routeur && badge, alerte: alerte)
-                    let affiche = mesure.noeud(LibellesNoeuds.Libelle(texte: texte, pastille: n.pile ? large : nil),
-                                               routeur: routeur)
+                    let pire = LibellesNoeuds.Libelle(texte: texte, pastille: n.pile ? large : nil, nom: n.libelle)
+                    let affiche = mesure.noeud(pire, routeur: routeur)
                     #expect(affiche.width <= reserve.width && affiche.height <= reserve.height, "\(texte)")
                 }
             }
@@ -352,16 +377,16 @@ struct NomsSceneTests {
     /// leurs candidats, les deux HomePod, sont au salon ; ils y vont, sous leur nom « A ou B · RLOC16 », et la fiche ne
     /// leur propose toujours pas « Placer dans une piece… ». Un candidat dans une autre piece : « Sans piece ».
     @Test func routeursAuxCandidats() throws {
-        let (s, r, _) = try Self.demo()
-        let i = try #require(s.instantane)
-        let m = try #require(MaillageDemo.maillage(i, date: s.maintenant, sansIdentite: ["HomePod Avant", "HomePod Palier"]))
-        s.recevoir(m, a: s.maintenant)
+        let (s, r) = try Self.demoSansIdentite()
         let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees())
         let inconnus = e.scene.noeuds.filter { $0.inconnu && $0.bordure }
         #expect(inconnus.count == 2)
+        let candidats = ["HomePod Avant", "HomePod Palier"].formatted(.list(type: .or))
         for n in inconnus {
             #expect(e.scene.pieces[n.piece].nom == .maison("Salon"), "\(n.id)")
-            #expect(e.libelles[n.id]?.texte.contains("HomePod Avant") == true)
+            let rloc = String(format: "%04X", try #require(e.maillage?.noeud(n.id)).rloc16)
+            #expect(e.libelles[n.id]?.texte == String(localized: "\(candidats) · \(rloc)"), "\(n.id)")
+            // Pas de « Placer dans une piece… » : un routeur de bordure que la sonde seule connait (precision 25).
             #expect(PiecesChoisies.placement(n.id, dans: s, entree: e) == nil)
         }
         var maison = try #require(s.noms.maison)
@@ -372,6 +397,34 @@ struct NomsSceneTests {
         for n in autre.scene.noeuds where n.inconnu && n.bordure {
             #expect(autre.scene.pieces[n.piece].nom == .sansPiece, "\(n.id)")
         }
+    }
+
+    /// La regle des candidats, telle que l'app la cable (`LibellesNoeuds.pieces`, polissage D, section 4.1) : comme pour
+    /// un routeur identifie, le choix garde sous l'instance (et sous la maison, `domicile`) et le surnom comptent ; sans
+    /// eux, ni Maison, ni nom : « Sans piece ».
+    @Test func candidatsCables() throws {
+        let (s, r) = try Self.demoSansIdentite()
+        s.noms.maison = Self.maisonSansRouteurs(s)
+        let domicile = try #require(s.noms.maison?.domicile)
+        func pieces(_ choix: PiecesRouteurs = PiecesRouteurs()) throws -> [ScenePieces.NomPiece] {
+            let e = EntreeScene(surveillance: s, reseau: r, places: PlacesGardees(), choix: choix)
+            let inconnus = e.scene.noeuds.filter { $0.inconnu && $0.bordure }
+            try #require(inconnus.count == 2)
+            return inconnus.map { e.scene.pieces[$0.piece].nom }
+        }
+        #expect(try pieces() == [.sansPiece, .sansPiece], "ni Maison, ni choix, ni piece dans le nom")
+        var choix = PiecesRouteurs()
+        choix.choisir("Salon", routeur: "HomePod Avant", domicile: domicile)
+        #expect(try pieces(choix) == [.sansPiece, .sansPiece], "un seul candidat choisi : l'autre n'a pas de piece")
+        var autreMaison = choix
+        autreMaison.choisir("Salon", routeur: "HomePod Palier", domicile: "Autre maison")
+        autreMaison.choisir("Salon", routeur: "HomePod Palier", domicile: "")
+        #expect(try pieces(autreMaison) == [.sansPiece, .sansPiece], "le choix d'une autre maison ne compte pas")
+        choix.choisir("Salon", routeur: "HomePod Palier", domicile: domicile)
+        #expect(try pieces(choix) == [.maison("Salon"), .maison("Salon")], "le choix garde sous l'instance")
+        s.renommer("HomePod Avant", en: "HomePod du salon")
+        s.renommer("HomePod Palier", en: "HomePod du salon, a gauche")
+        #expect(try pieces() == [.maison("Salon"), .maison("Salon")], "le surnom")
     }
 
     /// La scene porte ce dont elle est faite, construit une fois avec elle : le graphe, le maillage de la
@@ -395,16 +448,11 @@ struct NomsSceneTests {
         #expect(apres == e, "la meme scene")
     }
 
-    /// Sur la maison de demo, avec les noms mesures par l'app : aucun lien ne passe sur une piece
-    /// autre que celles de ses bouts, aucune carte n'en recouvre une autre.
+    /// Sur la maison de demo, avec les cartes du moteur, qui reservent la place des badges (polissage D, section 2) :
+    /// aucun lien ne passe sur une piece autre que celles de ses bouts, aucune carte n'en recouvre une autre.
     @Test func demoSansTraversee() throws {
         let (_, _, e) = try Self.demo()
-        let mesure = MesureNoms()
-        var largeurs: [String: Double] = [:]
-        for n in e.scene.noeuds {
-            largeurs[n.id] = mesure.noeud(try #require(e.libelles[n.id]), routeur: n.rang <= 2).width
-        }
-        let cartes = CartesPieces.cartes(e.scene, largeurs: largeurs)
+        let cartes = MoteurPiecesTests.moteur(e).cartes
         let d = DispositionPieces(scene: e.scene, cartes: cartes)
         let calcul = DispositionPieces.Calcul(scene: e.scene, cartes: cartes, fixees: [:])
         #expect(calcul.traversees(d.positions) == 0)
@@ -459,7 +507,7 @@ struct NomsSceneTests {
                         let t = Self.taillesDessinees([DessinNoeud.iconePastille, DessinNoeud.textePastille(v)],
                                                       echelle: echelle)
                         let capsule = DessinNoeud.taillePastille(icone: t[0], valeur: t[1])
-                        let avec = mesure.noeud(LibellesNoeuds.Libelle(texte: n, pastille: v), routeur: routeur)
+                        let avec = mesure.noeud(LibellesNoeuds.Libelle(texte: n, pastille: v, nom: n), routeur: routeur)
                         #expect(5 + ceil(dessinee.width) + 5 + capsule.width + 5 <= avec.width + 1
                                 && capsule.height <= avec.height + 1 && dessinee.height <= avec.height + 1,
                                 "\(n) et \(v) a \(echelle) : \(dessinee) et \(capsule) dans \(avec)")

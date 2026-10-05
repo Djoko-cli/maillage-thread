@@ -128,6 +128,9 @@ struct PlacementNomsTests {
         #expect(e.last?.voulu == true, "les pieces toujours")
         #expect(e.first { $0.genre == .noeud("Apple TV") }?.prio == 5, "chef")
         #expect(e.first { $0.genre == .noeud("E000000000000005") }?.prio == 2, "survole")
+        for (id, prio) in [("HomePod", 6), ("E000000000000004", 6), ("E000000000000003", 7)] {
+            #expect(e.first { $0.genre == .noeud(id) }?.prio == prio, "\(id) : routeur de bordure, routeur, autre noeud")
+        }
         let salon = try #require(s.pieces.firstIndex { $0.nom == .maison("Salon") })
         var fk = Array(repeating: 0.0, count: s.pieces.count)
         fk[salon] = 1

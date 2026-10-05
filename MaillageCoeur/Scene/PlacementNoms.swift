@@ -229,8 +229,8 @@ public enum PlacementNoms {
                 let vise = survol == id || selection == id
                 let arrivee = etageIsole.map { $0 == scene.pieces[n.piece].etage } ?? true
                 etiquettes[j].voulu = vise
-                    || (isolee ? part > 0.6 : arrivee && (niveau == .tous || (niveau == .routeurs && n.rang <= 2)))
-                etiquettes[j].prio = vise ? 2 : n.chef ? 5 : n.rang <= 2 ? 6 : 7
+                    || (isolee ? part > 0.6 : arrivee && (niveau == .tous || (niveau == .routeurs && n.route)))
+                etiquettes[j].prio = vise ? 2 : n.chef ? 5 : n.route ? 6 : 7
                 etiquettes[j].fort = vise
             case .piece(let i):
                 let pale = (focus != nil && (i < fk.count ? fk[i] : 0) < 0.5 && s > 0.3)

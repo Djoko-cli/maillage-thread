@@ -57,6 +57,31 @@ struct PiecesRouteursTests {
         #expect(p == PiecesRouteurs())
     }
 
+    /// La chaine d'un routeur de bordure, une seule fonction (polissage D, section 4.1) : la piece de son accessoire de
+    /// Maison, puis le choix garde sous son instance (si sa piece est encore une piece de la maison), puis la regle de son
+    /// nom. Elle sert au routeur identifie comme a chaque candidat.
+    @Test func chaineDUnRouteur() {
+        var p = PiecesRouteurs()
+        let maison = NomsMaison(date: Date(timeIntervalSince1970: 1_790_000_000), accessoires: [
+            AccessoireMaison(nom: "HomePod A", piece: "Bureau"),
+        ])
+        func piece(_ routeur: String, nom: String? = nil, maison m: NomsMaison? = nil, parmi: [String] = Self.pieces,
+                   domicile: String = "Maison") -> String? {
+            p.piece(routeur: routeur, nom: nom ?? routeur, maison: m, parmi: parmi, domicile: domicile)
+        }
+        #expect(piece("HomePod chambre") == "Chambre", "la regle du nom")
+        #expect(piece("HomePod", nom: "HomePod du salon") == "Salon", "le surnom")
+        #expect(piece("HomePod chambre", nom: "HomePod") == nil, "le nom est celui qu'on donne, pas l'instance")
+        p.choisir("Entrée", routeur: "HomePod chambre", domicile: "Maison")
+        #expect(piece("HomePod chambre") == "Entrée", "le choix avant le nom")
+        #expect(piece("HomePod chambre", parmi: ["Chambre"]) == "Chambre", "un choix perime ne compte pas")
+        #expect(piece("HomePod chambre", domicile: "Chalet") == "Chambre", "le choix d'une autre maison")
+        p.choisir("Salon", routeur: "HomePod A", domicile: "Maison")
+        #expect(piece("HomePod A", maison: maison) == "Bureau", "Maison avant le choix")
+        #expect(piece("HomePod A") == "Salon", "sans Maison, le choix")
+        #expect(piece("HomePod B", maison: maison) == nil, "ni Maison, ni choix, ni piece dans le nom")
+    }
+
     /// Un routeur de bordure non identifie, aux candidats (polissage D, section 4.1) : il va dans leur piece s'ils sont
     /// tous dans la meme ; sinon, ou si l'un n'en a pas, nulle part (« Sans piece »). La piece d'un candidat : celle de
     /// son accessoire de Maison, sinon le choix garde sous son instance, avant la regle de son nom (son surnom, sinon

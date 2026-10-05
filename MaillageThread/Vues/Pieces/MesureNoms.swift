@@ -41,7 +41,7 @@ final class MesureNoms {
     /// plus large des pastilles d'une pile faible. Un badge qui parait ou s'en va n'y change rien.
     func reserve(_ nom: String, routeur: Bool, pile: Bool) -> CGSize {
         noeud(LibellesNoeuds.Libelle(texte: CartesPieces.texteReserve(nom, routeur: routeur),
-                                     pastille: pile ? pastilleReservee : nil),
+                                     pastille: pile ? pastilleReservee : nil, nom: nom),
               routeur: routeur)
     }
 

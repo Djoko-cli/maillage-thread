@@ -189,7 +189,7 @@ struct ScenePiecesTests {
         #expect(a.pieces.map(\.noeuds) == b.pieces.map(\.noeuds))
         func largeurs(_ s: ScenePieces) -> [String: Double] {
             Dictionary(uniqueKeysWithValues: s.noeuds.map {
-                ($0.id, 7.0 * Double(CartesPieces.texteReserve($0.libelle, routeur: $0.routeur).count) + ($0.pile ? 50 : 0))
+                ($0.id, 7.0 * Double(CartesPieces.texteReserve($0.libelle, routeur: $0.route).count) + ($0.pile ? 50 : 0))
             })
         }
         #expect(CartesPieces.cartes(a, largeurs: largeurs(a)) == CartesPieces.cartes(b, largeurs: largeurs(b)))
@@ -210,6 +210,24 @@ struct ScenePiecesTests {
         #expect(try #require(pile.cleDisposition.pieces["maison"]?["piece:Salon"]).contains("E000000000000002|Lampe salon||P"),
                 "et si sa pile est connue")
         #expect(a.cleDisposition.niveaux == ["maison": "maison#0"])
+    }
+
+    /// « Le noeud route » (polissage D, section 2) s'ecrit d'une seule facon, `Noeud.route` : un routeur de bordure ou un
+    /// autre routeur, jamais un autre noeud ; il suit le graphe et le rang de la carte (1 ou 2). La cle de la disposition
+    /// en tire son « R ».
+    @Test func leNoeudRoute() throws {
+        let g = try Self.graphe(sonde: true)
+        let s = ScenePieces(graphe: g, libelles: Self.libelles, piecesNoeuds: Dictionary(uniqueKeysWithValues: g.noeuds.map {
+            ($0.id, "Salon")
+        }), zones: nil, chefs: [], piecesMaison: true)
+        #expect(Set(s.noeuds.map(\.rang)) == [1, 2, 3], "des noeuds de chaque rang")
+        let cles = try #require(s.cleDisposition.pieces["maison"]?["piece:Salon"])
+        for n in s.noeuds {
+            #expect(n.route == (n.bordure || n.routeur), "\(n.id) : le graphe")
+            #expect(n.route == (n.rang == 1 || n.rang == 2), "\(n.id) : le rang")
+            let cle = try #require(cles.first { $0.hasPrefix(n.id + "|") }).split(separator: "|", omittingEmptySubsequences: false)
+            #expect(cle[2] == (n.route ? "R" : ""), "\(n.id) : la cle")
+        }
     }
 
     /// Lignes d'une carte : les routeurs de bordure, les autres routeurs, puis les autres noeuds, par nom ; le chef reste

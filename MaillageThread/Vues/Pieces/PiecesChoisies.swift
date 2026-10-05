@@ -74,7 +74,7 @@ extension PiecesChoisies {
         let pieces = PiecesRouteurs.pieces(de: maison).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
         guard !pieces.isEmpty else { return nil }
         if surveillance.instantane?.routeur(id) != nil {
-            guard LibellesNoeuds.pieceDeMaison(routeur: id, maison: maison) == nil else { return nil }
+            guard PiecesRouteurs.pieceDeMaison(routeur: id, maison: maison) == nil else { return nil }
             return Placement(cle: .routeur(id), pieces: pieces)
         }
         // Un autre noeud : par le graphe de la scene, donc sous la meme cle.
