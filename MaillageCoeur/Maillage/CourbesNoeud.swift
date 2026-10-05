@@ -74,7 +74,9 @@ public struct ChangementParent: Hashable, Sendable {
 /// - enfant : la qualite du lien vers son parent (inconnue sous un routeur muet), avec ses
 ///   changements de parent.
 /// Un noeud se reconnait d'un releve a l'autre par sa cle : son ExtMac, ou "rloc:XXXX" pour un
-/// routeur sans ExtMac (`ReleveMaillage.cle(routeur:)`).
+/// routeur sans ExtMac. Les cles des routeurs (le noeud, l'autre bout d'un lien, le parent d'un enfant
+/// ou de la sonde) viennent de `ClesHistorique`, sur toute la liste des releves : un routeur dont la
+/// sonde n'avait pas encore l'ExtMac garde une seule courbe, et sa fiche montre ses releves d'avant.
 public struct CourbesNoeud: Hashable, Sendable {
     /// Cle de la courbe d'un enfant vers son parent.
     public static let cleParent = "parent"
@@ -105,22 +107,23 @@ public struct CourbesNoeud: Hashable, Sendable {
         var parentsSonde: [ChangementParent] = []
         var dernierParent: String?
         var dernierParentSonde: String?
-        for r in releves where r.date >= debut && r.date <= fin {
-            if let id = r.routeurs.first(where: { r.cle(routeur: $0.id) == cle })?.id {
+        let cles = ClesHistorique(releves: releves)
+        for (i, r) in releves.enumerated() where r.date >= debut && r.date <= fin {
+            if let id = r.routeurs.first(where: { cles.cle(releve: i, routeur: $0.id) == cle })?.id {
                 for l in r.liens where l.a == id || l.b == id {
                     guard let q = l.qualite else { continue }
-                    liens[r.cle(routeur: l.a == id ? l.b : l.a), default: []].append((r.date, Double(q)))
+                    liens[cles.cle(releve: i, routeur: l.a == id ? l.b : l.a), default: []].append((r.date, Double(q)))
                 }
                 if let s = r.signaux.first(where: { $0.routeur == id }) { signal.append((r.date, Double(s.rssi))) }
             }
             if let e = r.enfants.first(where: { $0.extMac == cle }) {
-                let p = r.cle(routeur: e.parent)
+                let p = cles.cle(releve: i, routeur: e.parent)
                 if let d = dernierParent, d != p { parents.append(ChangementParent(date: r.date, parent: p)) }
                 dernierParent = p
                 if let q = e.qualite { liens[Self.cleParent, default: []].append((r.date, Double(q))) }
             }
             if let ps = r.parentSonde {
-                let p = r.cle(routeur: ps)
+                let p = cles.cle(releve: i, routeur: ps)
                 if let d = dernierParentSonde, d != p { parentsSonde.append(ChangementParent(date: r.date, parent: p)) }
                 dernierParentSonde = p
             }

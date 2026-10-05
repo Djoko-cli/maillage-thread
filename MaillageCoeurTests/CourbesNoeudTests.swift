@@ -10,13 +10,14 @@ struct CourbesNoeudTests {
     static let a1 = "E0000000000000A1"
     static let b1 = "E0000000000000B1"
 
-    /// Releve a `minutes` de t0 (valeurs inventees) : les routeurs 0 (a0) et 1 (sans ExtMac si
-    /// `sansExt1`, sinon a1) et leur lien, de qualite `q` de 0 vers 1 et 3 de 1 vers 0 ; l'enfant
-    /// b1 sous `parent` ; la sonde sous `parentSonde`, qui entend le routeur 0 a `rssi`.
+    /// Releve a `minutes` de t0 (valeurs inventees), de la partition `partition` : les routeurs 0 (sans ExtMac si
+    /// `sansExt0`, sinon a0) et 1 (sans ExtMac si `sansExt1`, sinon a1) et leur lien, de qualite `q` de 0 vers 1 et 3
+    /// de 1 vers 0 ; l'enfant b1 sous `parent` ; la sonde sous `parentSonde`, qui entend le routeur 0 a `rssi`.
     static func releve(_ minutes: Double, q: Int = 3, parent: Int = 0, qualiteEnfant: Int? = 3, parentSonde: Int = 0,
-                       rssi: Int = -60, sansExt1: Bool = false) -> ReleveMaillage {
-        ReleveMaillage(date: t0.addingTimeInterval(minutes * 60), partition: "0000000A",
-                       routeurs: [.init(id: 0, extMac: a0), .init(id: 1, extMac: sansExt1 ? nil : a1)],
+                       rssi: Int = -60, sansExt0: Bool = false, sansExt1: Bool = false,
+                       partition: String = "0000000A") -> ReleveMaillage {
+        ReleveMaillage(date: t0.addingTimeInterval(minutes * 60), partition: partition,
+                       routeurs: [.init(id: 0, extMac: sansExt0 ? nil : a0), .init(id: 1, extMac: sansExt1 ? nil : a1)],
                        liens: [LienRadio(a: 0, b: 1, qualiteAB: q, qualiteBA: 3)],
                        enfants: [.init(extMac: b1, parent: parent, qualite: qualiteEnfant)],
                        signaux: [SignalSonde(routeur: 0, rssi: rssi)], parentSonde: parentSonde)
@@ -63,6 +64,57 @@ struct CourbesNoeudTests {
         #expect(c.liens.map(\.id) == ["rloc:0400"])
         let r1 = CourbesNoeud(cle: "rloc:0400", releves: releves, periode: .jour, fin: Self.minutes(15))
         #expect(r1.liens.map(\.id) == [Self.a0])
+    }
+
+    /// Un routeur identifie plus tard (verification du 05/10) : ses releves sans ExtMac prennent celle du suivant le plus
+    /// proche (`ClesHistorique`), sur toute la liste et non la seule periode : ses liens d'avant rejoignent sa courbe, sans
+    /// doublon « rloc », et sa fiche montre ses points d'avant son identification. Le meme identifiant dans une autre
+    /// partition reste a part.
+    @Test func routeurIdentifiePlusTard() {
+        let releves = [Self.releve(0, q: 1, rssi: -70, sansExt0: true, sansExt1: true),
+                       Self.releve(5, q: 2, rssi: -65, sansExt0: true, sansExt1: true),
+                       Self.releve(10, q: 3, rssi: -60),
+                       Self.releve(15, q: 2, sansExt1: true, partition: "0000000B")]
+        let c = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(10))
+        #expect(c.liens.map(\.id) == [Self.a1])
+        #expect(c.liens.first?.points.map(\.valeur) == [1, 2, 3])
+        #expect(c.signal.map(\.valeur) == [-70, -65, -60], "les points d'avant son identification")
+        let avant = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(7))
+        #expect(avant.liens.map(\.id) == [Self.a1] && avant.signal.map(\.valeur) == [-70, -65],
+                "identifie apres la fin de la periode")
+        #expect(CourbesNoeud(cle: Self.a1, releves: releves, periode: .jour, fin: Self.minutes(10)).liens.map(\.id) == [Self.a0])
+        #expect(CourbesNoeud(cle: "rloc:0000", releves: releves, periode: .jour, fin: Self.minutes(10)).estVide)
+        let b = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(15))
+        #expect(b.liens.map(\.id) == [Self.a1, "rloc:0400"], "l'identifiant 1 de l'autre partition")
+    }
+
+    /// Un routeur identifie seulement avant : ses releves suivants, sans ExtMac, prennent celle du precedent le plus
+    /// proche.
+    @Test func routeurIdentifieSeulementAvant() {
+        let releves = [Self.releve(0, q: 3), Self.releve(5, q: 2, sansExt1: true), Self.releve(10, q: 1, sansExt1: true)]
+        let c = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(10))
+        #expect(c.liens.map(\.id) == [Self.a1])
+        #expect(c.liens.first?.points.map(\.valeur) == [3, 2, 1])
+    }
+
+    /// Les parents, de la sonde et d'un enfant, se nomment par la meme cle : un parent identifie en cours de route n'est
+    /// pas un changement de parent ; un vrai changement, si.
+    @Test func parentsIdentifiesEnCoursDeRoute() {
+        let releves = [Self.releve(0, parent: 1, parentSonde: 1, sansExt1: true),
+                       Self.releve(5, parent: 1, parentSonde: 1, sansExt1: true),
+                       Self.releve(10, parent: 1, parentSonde: 1),
+                       Self.releve(15, parent: 0, parentSonde: 0)]
+        let enfant = CourbesNoeud(cle: Self.b1, releves: releves, periode: .jour, fin: Self.minutes(10))
+        #expect(enfant.parents.isEmpty)
+        #expect(CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(10)).parentsSonde.isEmpty)
+        let tout = CourbesNoeud(cle: Self.b1, releves: releves, periode: .jour, fin: Self.minutes(15))
+        #expect(tout.parents == [ChangementParent(date: Self.minutes(15), parent: Self.a0)])
+        #expect(CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(15)).parentsSonde
+                == [ChangementParent(date: Self.minutes(15), parent: Self.a0)])
+        let avant = CourbesNoeud(cle: Self.b1, releves: Array(releves.prefix(2)) + [Self.releve(10, parent: 0, parentSonde: 0)],
+                                 periode: .jour, fin: Self.minutes(10))
+        #expect(avant.parents == [ChangementParent(date: Self.minutes(10), parent: Self.a0)],
+                "le routeur 1, jamais identifie, reste rloc : le passage au routeur 0 est un changement")
     }
 
     /// 7 j : la moyenne de chaque pas de 30 min ; un trou de plus de trois pas ouvre un troncon.

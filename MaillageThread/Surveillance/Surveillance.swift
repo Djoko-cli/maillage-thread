@@ -382,15 +382,33 @@ final class Surveillance {
         Dictionary(r.routeurs.map { ($0.instance, nom($0)) }, uniquingKeysWith: { a, _ in a })
     }
 
-    /// Cle d'un noeud du graphe dans l'historique : l'ExtMac de son routeur ou de son enfant dans
-    /// le dernier maillage ("rloc:XXXX" pour un routeur sans ExtMac), sinon le `xa` de l'annonce
+    /// Resolution des cles de l'historique (`ClesHistorique`), suivi du releve du maillage `m`, et l'indice de ce
+    /// releve ; nil si tous les routeurs de `m` ont une ExtMac (rien a resoudre).
+    private func resolution(_ m: Maillage) -> (cles: ClesHistorique, releve: Int)? {
+        guard m.routeurs.contains(where: { $0.extMac == nil }) else { return nil }
+        let releves = historique + [ReleveMaillage(m)]
+        return (ClesHistorique(releves: releves), releves.count - 1)
+    }
+
+    /// Cle d'un routeur du dernier maillage dans l'historique, celle de ses courbes (verification du 05/10) : son
+    /// ExtMac ; sans elle, celle que `ClesHistorique` donne au releve du maillage, place apres l'historique (l'ExtMac
+    /// du meme identifiant au releve le plus recent de sa partition qui en a une) ; sinon "rloc:XXXX".
+    private func cleHistorique(routeur r: RouteurMaillage, _ resolution: (cles: ClesHistorique, releve: Int)?) -> String {
+        if let x = r.extMac { return x }
+        guard let resolution else { return String(format: "rloc:%04X", r.rloc16) }
+        return resolution.cles.cle(releve: resolution.releve, routeur: r.id)
+    }
+
+    /// Cle d'un noeud du graphe dans l'historique : pour un routeur du dernier maillage, sa cle
+    /// (`cleHistorique(routeur:_:)` : son ExtMac, ou celle que l'historique lui connait, sinon "rloc:XXXX") ;
+    /// pour un enfant, son ExtMac dans le dernier maillage ; sinon le `xa` de l'annonce
     /// d'un routeur de bordure, ou l'hote d'un appareil (l'ExtMac d'un appareil Matter, d'apres
     /// `GrapheReseau.extMac(hote:)`, comme la piece d'un noeud) ; nil si le noeud n'en a pas.
     func cleHistorique(noeud id: String) -> String? {
         if let m = maillage, let n = rapprochement(m)?.noeud(id) {
             switch n.genre {
             case .routeur:
-                if let r = m.routeur(Int(n.rloc16 >> 10)) { return r.extMac ?? String(format: "rloc:%04X", r.rloc16) }
+                if let r = m.routeur(Int(n.rloc16 >> 10)) { return cleHistorique(routeur: r, resolution(m)) }
             case .enfant:
                 if let x = m.enfants.first(where: { $0.rloc16 == n.rloc16 })?.extMac { return x }
             }
@@ -400,15 +418,21 @@ final class Surveillance {
     }
 
     /// Noms de noeuds de l'historique, par cle : leur nom dans le graphe, si le dernier maillage
-    /// ou l'instantane les connait ; la cle sinon. Un enfant vu deux fois prend l'entree que retient
+    /// ou l'instantane les connait ; la cle sinon. Un routeur du dernier maillage se reconnait a la cle
+    /// de ses courbes (`cleHistorique(routeur:_:)`). Un enfant vu deux fois prend l'entree que retient
     /// le rapprochement (`Maillage.enfantsIdentifies`, precision 26 du plan 4b). Le rapprochement
-    /// n'est fait qu'une fois.
+    /// et la resolution des cles ne sont faits qu'une fois.
     func nomsHistorique(_ cles: Set<String>) -> [String: String] {
         let affiche = maillage.flatMap(rapprochement)
         let enfants = maillage?.enfantsIdentifies ?? [:]
+        var routeurs: [(routeur: RouteurMaillage, cle: String)] = []
+        if let m = maillage {
+            let r = resolution(m)
+            routeurs = m.routeurs.map { ($0, cleHistorique(routeur: $0, r)) }
+        }
         func nomDe(_ cle: String) -> String {
-            if let m = maillage, let affiche {
-                if let r = m.routeurs.first(where: { ($0.extMac ?? String(format: "rloc:%04X", $0.rloc16)) == cle }),
+            if let affiche {
+                if let r = routeurs.first(where: { $0.cle == cle })?.routeur,
                    let n = affiche.routeurs[r.id], let x = nomNoeud(n.id, maillage: affiche) {
                     return x
                 }

@@ -140,13 +140,16 @@ struct GrapheSignal: View {
     /// periode change.
     @State private var survole: Date?
 
-    /// Ce que la vue affiche, decide sans fenetre : l'echelle, le releve sous l'heure survolee (aucun dans un trou), et
-    /// le cote de son etiquette (a gauche du trait dans la moitie droite du graphe, a droite sinon).
+    /// Ce que la vue affiche, decide sans fenetre : l'echelle, le releve sous l'heure survolee (aucun dans un trou), le
+    /// cote de son etiquette (a gauche du trait dans la moitie droite du graphe, a droite sinon), et les noms « → parent »
+    /// des changements de parent de la sonde, masques tant qu'un releve est survole : son etiquette prend le haut du
+    /// trace, ou ils se superposaient (verification du 05/10).
     struct Affichage {
         let domaine: ClosedRange<Double>
         let graduations: [Double]
         let releve: PointCourbe?
         let alignement: Alignment
+        let nomsDesParents: Bool
     }
 
     static func affichage(_ c: CourbesNoeud, survole: Date?, periode: PeriodeCourbes) -> Affichage {
@@ -154,7 +157,7 @@ struct GrapheSignal: View {
         let releve = survole.flatMap { EchelleSignal.plusProche(c.signal, de: $0, periode: periode) }
         let aGauche = releve.map { EchelleSignal.aGauche($0.date, debut: c.debut, fin: c.fin) } ?? false
         return Affichage(domaine: echelle.domaine, graduations: echelle.graduations, releve: releve,
-                         alignement: aGauche ? .trailing : .leading)
+                         alignement: aGauche ? .trailing : .leading, nomsDesParents: releve == nil)
     }
 
     /// L'heure survolee apres un evenement du pointeur : celle du releve le plus proche de sa position (`convertir`,
@@ -210,7 +213,7 @@ struct GrapheSignal: View {
                             }
                             if heure != survole { survole = heure }
                         }
-                    CourbesFiche.nomsDesParents(c.parentsSonde, noms, proxy: proxy, geometrie: g)
+                    if a.nomsDesParents { CourbesFiche.nomsDesParents(c.parentsSonde, noms, proxy: proxy, geometrie: g) }
                     // L'etiquette du releve survole, en haut du trace, a gauche du trait dans la moitie droite, a droite
                     // sinon. Posee ici et non en `annotation` : sous le verre de la fiche, les annotations du graphe ne
                     // se dessinent pas (verification du 05/10).

@@ -21,12 +21,13 @@ struct JournalMaillageTests {
         return s
     }
 
-    /// Maillage de la partition principale (valeurs inventees) : les routeurs 1 (chef) et 5, qui ne
+    /// Maillage de la partition principale (valeurs inventees) : les routeurs 1 (chef, d'ExtMac `extMac1`) et 5, qui ne
     /// sont pas dans l'instantane ; l'appareil, enfant de `parent`.
-    static func maillage(_ s: Surveillance, _ date: Date, parent: Int) throws -> Maillage {
+    static func maillage(_ s: Surveillance, _ date: Date, parent: Int, extMac1: String? = nil) throws -> Maillage {
         var c = ConstructionMaillage(date: date, partition: try #require(s.reseau?.principale?.id))
         c.routeurs(Route64(sequence: 1, routes: [1, 5].map { RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1) }),
                    chef: 1)
+        if let x = extMac1 { c.identite(x, routeur: 1) }
         c.lien(1, 5, sortante: 3, entrante: 2)
         c.enfant(EnfantMaillage(rloc16: UInt16(parent) << 10 | 2, extMac: Self.appareil, qualite: 3, source: .tableEnfants))
         c.signal(SignalSonde(routeur: 1, rssi: -61))

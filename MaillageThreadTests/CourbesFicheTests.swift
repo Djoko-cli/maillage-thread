@@ -50,6 +50,24 @@ struct CourbesFicheTests {
         #expect(r.signal.map(\.valeur) == [-61, -61])
     }
 
+    /// Un routeur dont la sonde n'a l'ExtMac qu'a une tournee sur deux, la derniere ou la premiere (verification du
+    /// 05/10) : sa cle est cette ExtMac, ses deux releves font une seule courbe, et la cle se nomme comme le noeud.
+    @Test func routeurIdentifieAUneTournee() throws {
+        let x = "E0000000000000C1"
+        for derniere in [true, false] {
+            let s = JournalMaillageTests.surveillance(dossier: nil)
+            let t = Date().addingTimeInterval(-600)
+            s.recevoir(try JournalMaillageTests.maillage(s, t, parent: 1, extMac1: derniere ? nil : x), a: t)
+            s.recevoir(try JournalMaillageTests.maillage(s, t.addingTimeInterval(300), parent: 5, extMac1: derniere ? x : nil),
+                       a: t.addingTimeInterval(300))
+            #expect(s.cleHistorique(noeud: "rloc:0400") == x, "derniere : \(derniere)")
+            let r = try #require(s.courbes(noeud: "rloc:0400", periode: .jour, fin: Date()))
+            #expect(r.signal.map(\.valeur) == [-61, -61], "derniere : \(derniere)")
+            #expect(r.liens.map(\.id) == ["rloc:1400"] && r.liens.first?.points.count == 2, "derniere : \(derniere)")
+            #expect(s.nomsHistorique([x])[x] == String(localized: "Routeur · \("0400")"), "derniere : \(derniere)")
+        }
+    }
+
     /// L'echelle du signal de la fiche (polissage D, section 4.3) : celle du coeur, sur les valeurs de la courbe ; deux
     /// releves egaux a -61 dBm donnent -70 ... -50, gradue -70, -60, -50 ; sans valeur, -100 ... -40.
     @Test func echelleDuSignal() throws {
@@ -64,7 +82,8 @@ struct CourbesFicheTests {
 
     /// Ce que le graphe du signal affiche, decide sans fenetre (`GrapheSignal.affichage`, lu par la vue) : le domaine
     /// et les graduations ; le releve sous l'heure survolee, aucun sans survol ni dans un trou ; l'etiquette a gauche
-    /// du trait (alignement `.trailing`) dans la moitie droite de la periode, a droite (`.leading`) sinon.
+    /// du trait (alignement `.trailing`) dans la moitie droite de la periode, a droite (`.leading`) sinon ; les noms
+    /// « → parent », sans releve survole seulement.
     @Test func affichageDuSignal() throws {
         let s = try Self.surveillance()
         let maintenant = Date()
@@ -82,6 +101,11 @@ struct CourbesFicheTests {
         #expect(b.domaine == a.domaine && b.graduations == a.graduations)
         #expect(GrapheSignal.affichage(droite, survole: nil, periode: .jour).releve == nil)
         #expect(GrapheSignal.affichage(droite, survole: droite.debut, periode: .jour).releve == nil, "dans un trou")
+        // Les noms « → parent » s'effacent tant qu'un releve est survole : son etiquette prend le haut du trace
+        // (verification du 05/10) ; ils reviennent sans releve survole, pointeur sorti ou dans un trou.
+        #expect(!a.nomsDesParents && !b.nomsDesParents)
+        #expect(GrapheSignal.affichage(droite, survole: nil, periode: .jour).nomsDesParents)
+        #expect(GrapheSignal.affichage(droite, survole: droite.debut, periode: .jour).nomsDesParents, "dans un trou")
     }
 
     /// Le pointeur : l'heure du releve le plus proche de sa position dans la zone de trace, la meme tant que ce releve
