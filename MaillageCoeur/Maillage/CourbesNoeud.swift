@@ -23,6 +23,10 @@ public enum PeriodeCourbes: String, CaseIterable, Hashable, Sendable, Identifiab
         case .mois: 7200
         }
     }
+
+    /// Ecart de plus de ce temps entre deux releves d'une meme courbe : elle se coupe en troncons, c'est un trou
+    /// (20 min sur 24 h, 90 min sur 7 j, 6 h sur 30 j).
+    public var ecartTroncon: TimeInterval { CourbesNoeud.ecartTroncon(pas: pas) }
 }
 
 /// Point d'une courbe. `troncon` : numero du morceau de courbe ; un trou (plus de 20 min entre
@@ -77,6 +81,9 @@ public struct CourbesNoeud: Hashable, Sendable {
     /// Trou le plus long entre deux releves d'une meme courbe (sans pas) : la tournee part 5 min
     /// apres la fin de la precedente ; au-dela de 20 min, il en manque.
     public static let ecartMax: TimeInterval = 20 * 60
+
+    /// L'ecart qui coupe une courbe en troncons : trois pas, ou `ecartMax` sans pas.
+    public static func ecartTroncon(pas: TimeInterval?) -> TimeInterval { pas.map { 3 * $0 } ?? ecartMax }
 
     public let debut: Date
     public let fin: Date
@@ -143,7 +150,7 @@ public struct CourbesNoeud: Hashable, Sendable {
             }
             points = groupes.map { ($0.debut, $0.valeurs.reduce(0, +) / Double($0.valeurs.count)) }
         }
-        let ecart = pas.map { 3 * $0 } ?? ecartMax
+        let ecart = ecartTroncon(pas: pas)
         var troncon = 0
         var resultat: [PointCourbe] = []
         for (i, (d, v)) in points.enumerated() {

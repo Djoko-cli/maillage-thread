@@ -62,6 +62,37 @@ struct CourbesFicheTests {
         #expect(CourbesFiche.echelle(vide).graduations == [-100, -90, -80, -70, -60, -50, -40])
     }
 
+    /// Ce que le graphe du signal affiche, decide sans fenetre (`GrapheSignal.affichage`, lu par la vue) : le domaine
+    /// et les graduations ; le releve sous l'heure survolee, aucun sans survol ni dans un trou ; l'etiquette a gauche
+    /// du trait (alignement `.trailing`) dans la moitie droite de la periode, a droite (`.leading`) sinon.
+    @Test func affichageDuSignal() throws {
+        let s = try Self.surveillance()
+        let maintenant = Date()
+        // Les deux releves (-61 dBm) datent des dix dernieres minutes : a droite d'une periode qui finit maintenant, a
+        // gauche d'une periode qui finit 21 h plus tard.
+        let droite = try #require(s.courbes(noeud: "rloc:0400", periode: .jour, fin: maintenant))
+        let tard = maintenant.addingTimeInterval(21 * 3600)
+        let gauche = try #require(s.courbes(noeud: "rloc:0400", periode: .jour, fin: tard))
+        let p0 = try #require(droite.signal.first), q0 = try #require(gauche.signal.first)
+        let a = GrapheSignal.affichage(droite, survole: p0.date.addingTimeInterval(60), periode: .jour)
+        #expect(a.domaine == -70 ... -50 && a.graduations == [-70, -60, -50])
+        #expect(a.releve == p0 && a.alignement == .trailing)
+        let b = GrapheSignal.affichage(gauche, survole: q0.date, periode: .jour)
+        #expect(b.releve == q0 && b.alignement == .leading)
+        #expect(b.domaine == a.domaine && b.graduations == a.graduations)
+        #expect(GrapheSignal.affichage(droite, survole: nil, periode: .jour).releve == nil)
+        #expect(GrapheSignal.affichage(droite, survole: droite.debut, periode: .jour).releve == nil, "dans un trou")
+    }
+
+    /// Le pointeur : son heure dans la zone de trace, aucune hors de la zone, et aucune a la sortie (`.ended`).
+    @Test func heureSurvolee() {
+        let d = Date(timeIntervalSince1970: 1_790_000_000)
+        let dans = GrapheSignal.heureSurvolee(.active(CGPoint(x: 10, y: 5))) { d.addingTimeInterval($0.x) }
+        #expect(dans == d.addingTimeInterval(10))
+        #expect(GrapheSignal.heureSurvolee(.active(.zero)) { _ in nil } == nil, "hors de la zone de trace")
+        #expect(GrapheSignal.heureSurvolee(.ended) { _ in d } == nil)
+    }
+
     /// La fiche montre les courbes des qu'il y a un historique (jamais en demo), et la vue lui
     /// garde plus de place en bas : la marge du bas suit la pile mesuree, plus haute avec les courbes (elle
     /// remplace les 190 et 360 pt fixes) ; pour un noeud sans historique, une ligne de texte.

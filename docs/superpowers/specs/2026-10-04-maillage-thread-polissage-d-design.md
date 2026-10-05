@@ -113,7 +113,7 @@ Constat de Djoko du 04/10 : juste après la première tournée, la courbe « Sig
 **La valeur au survol :**
 - quand le pointeur passe sur la courbe du signal, le relevé le plus proche dans le temps est mis en avant : un trait vertical à son heure, un point sur sa valeur ;
 - une étiquette donne sa valeur et son heure, par exemple « −67 dBm · 16:13 » en français, au format d'heure de la langue de l'app ; pour 7 j et 30 j, elle donne aussi le jour ;
-- un relevé ne compte que s'il est à moins de 2 % de la largeur de la période du pointeur ; dans un trou de la courbe, rien n'est montré ;
+- un relevé ne compte que s'il est à moins du plus petit de deux seuils, 2 % de la largeur de la période et l'écart qui coupe la courbe en tronçons (20 min sur 24 h, 90 min sur 7 j, 6 h sur 30 j), si bien que dans un trou de la courbe rien n'est montré ;
 - le pointeur sorti de la courbe, l'étiquette disparaît ;
 - l'étiquette reste dans le cadre du graphe, à gauche du trait quand il est près du bord droit.
 
@@ -156,7 +156,7 @@ Le moteur garde le rendu, les gestes, l'horloge et les vols, et appelle ces type
 - **la pièce d'un routeur aux candidats :** même pièce ; pièces différentes ; un candidat sans pièce ; le choix gardé avant la règle du nom ;
 - **le signal de la fiche :**
   - le domaine pour un seul point, des valeurs égales, des valeurs étalées, et des valeurs déjà sur une dizaine ;
-  - le relevé le plus proche du pointeur, le seuil de 2 % des deux côtés, et un trou ;
+  - le relevé le plus proche du pointeur, le seuil des deux côtés, et un trou ;
   - le texte de l'étiquette en 24 h et en 7 j.
 
 **Tests de l'app :**

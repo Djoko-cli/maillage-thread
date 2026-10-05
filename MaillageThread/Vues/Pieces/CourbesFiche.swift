@@ -10,13 +10,10 @@ import SwiftUI
 /// section 4.3).
 struct CourbesFiche: View {
     @Environment(Surveillance.self) private var surveillance
-    @Environment(\.locale) private var langue
     let id: String
     /// Fin des courbes : l'heure de la fiche (`FicheNoeud.instant`), qui avance chaque minute.
     let instant: Date
     @State private var periode: PeriodeCourbes = .jour
-    /// L'heure sous le pointeur, au-dessus du graphe du signal ; nil, ailleurs.
-    @State private var survole: Date?
 
     var body: some View {
         let courbes = surveillance.courbes(noeud: id, periode: periode, fin: instant)
@@ -36,7 +33,7 @@ struct CourbesFiche: View {
             if let c = courbes, !c.estVide {
                 HStack(alignment: .top, spacing: 24) {
                     if !c.liens.isEmpty || !c.parents.isEmpty { qualite(c, noms) }
-                    if !c.signal.isEmpty { signal(c, noms) }
+                    if !c.signal.isEmpty { GrapheSignal(c: c, noms: noms, periode: periode) }
                 }
             } else {
                 Text("Pas encore d'historique de la sonde pour ce nœud sur cette période.")
@@ -112,15 +109,52 @@ struct CourbesFiche: View {
         let d = EchelleSignal.domaine(c.signal.map(\.valeur)) ?? -100 ... -40
         return (d, EchelleSignal.graduations(d))
     }
+}
 
-    private func signal(_ c: CourbesNoeud, _ noms: [String: String]) -> some View {
-        let echelle = Self.echelle(c)
-        // Le releve sous le pointeur, a moins de 2 % de la periode ; aucun dans un trou.
+/// Le graphe du signal vu par la sonde, avec sa valeur au survol (polissage D, section 4.3). Une vue a part : le survol
+/// change `survole` a chaque mouvement du pointeur, et seul ce graphe se recalcule, non les courbes de `CourbesFiche`
+/// (qui relisent l'historique de la periode).
+struct GrapheSignal: View {
+    @Environment(\.locale) private var langue
+    let c: CourbesNoeud
+    let noms: [String: String]
+    let periode: PeriodeCourbes
+    /// L'heure sous le pointeur ; nil, ailleurs. L'etat disparait avec le graphe, et se remet a zero quand la periode
+    /// change.
+    @State private var survole: Date?
+
+    /// Ce que la vue affiche, decide sans fenetre : l'echelle, le releve sous l'heure survolee (aucun dans un trou), et
+    /// le cote de son etiquette (a gauche du trait dans la moitie droite du graphe, a droite sinon).
+    struct Affichage {
+        let domaine: ClosedRange<Double>
+        let graduations: [Double]
+        let releve: PointCourbe?
+        let alignement: Alignment
+    }
+
+    static func affichage(_ c: CourbesNoeud, survole: Date?, periode: PeriodeCourbes) -> Affichage {
+        let echelle = CourbesFiche.echelle(c)
         let releve = survole.flatMap { EchelleSignal.plusProche(c.signal, de: $0, periode: periode) }
-        return VStack(alignment: .leading, spacing: 2) {
+        let aGauche = releve.map { EchelleSignal.aGauche($0.date, debut: c.debut, fin: c.fin) } ?? false
+        return Affichage(domaine: echelle.domaine, graduations: echelle.graduations, releve: releve,
+                         alignement: aGauche ? .trailing : .leading)
+    }
+
+    /// L'heure survolee apres un evenement du pointeur : celle de sa position (`convertir`, nil hors de la zone de
+    /// trace), ou nil quand il sort.
+    static func heureSurvolee(_ phase: HoverPhase, convertir: (CGPoint) -> Date?) -> Date? {
+        switch phase {
+        case .active(let position): convertir(position)
+        case .ended: nil
+        }
+    }
+
+    var body: some View {
+        let a = Self.affichage(c, survole: survole, periode: periode)
+        VStack(alignment: .leading, spacing: 2) {
             Text("Signal vu par la sonde (dBm)").font(.caption).foregroundStyle(.secondary)
             Chart {
-                let seuls = Self.tronconsSeuls(c.signal)
+                let seuls = CourbesFiche.tronconsSeuls(c.signal)
                 ForEach(c.signal, id: \.date) { p in
                     LineMark(x: .value("Heure", p.date), y: .value("Signal", p.valeur),
                              series: .value("Tronçon", p.troncon))
@@ -138,13 +172,13 @@ struct CourbesFiche: View {
                         }
                 }
                 // Le releve survole : un trait a son heure, un point sur sa valeur, son etiquette, dans le cadre.
-                if let r = releve {
+                if let r = a.releve {
                     RuleMark(x: .value("Heure", r.date))
                         .foregroundStyle(.primary.opacity(0.5))
-                        .annotation(position: .top,
-                                    alignment: EchelleSignal.aGauche(r.date, debut: c.debut, fin: c.fin) ? .trailing : .leading,
-                                    spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                            Text(verbatim: EchelleSignal.etiquette(r, periode: periode, locale: langue, fuseau: .current))
+                        .annotation(position: .top, alignment: a.alignement, spacing: 0,
+                                    overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                            Text(verbatim: EchelleSignal.etiquette(r, periode: periode, locale: langue,
+                                                                   fuseau: .current))
                                 .font(.caption2.monospacedDigit())
                                 .padding(.horizontal, 4)
                                 .background(.background.opacity(0.85), in: RoundedRectangle(cornerRadius: 3))
@@ -154,18 +188,16 @@ struct CourbesFiche: View {
                 }
             }
             .chartXScale(domain: c.debut ... c.fin)
-            .chartYScale(domain: echelle.domaine)
-            .chartYAxis { AxisMarks(values: echelle.graduations) }
+            .chartYScale(domain: a.domaine)
+            .chartYAxis { AxisMarks(values: a.graduations) }
             .chartOverlay { proxy in
                 GeometryReader { g in
                     Rectangle().fill(.clear).contentShape(Rectangle())
                         .onContinuousHover { phase in
-                            switch phase {
-                            case .active(let p):
-                                guard let cadre = proxy.plotFrame else { return }
-                                survole = proxy.value(atX: p.x - g[cadre].origin.x, as: Date.self)
-                            case .ended:
-                                survole = nil
+                            survole = Self.heureSurvolee(phase) { position in
+                                proxy.plotFrame.flatMap { cadre in
+                                    proxy.value(atX: position.x - g[cadre].origin.x, as: Date.self)
+                                }
                             }
                         }
                 }
@@ -175,5 +207,6 @@ struct CourbesFiche: View {
                 Text("Pointillé : la sonde change de parent.").font(.caption2).foregroundStyle(.secondary)
             }
         }
+        .onChange(of: periode) { survole = nil }
     }
 }

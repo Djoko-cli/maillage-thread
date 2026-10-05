@@ -3,8 +3,17 @@ import Foundation
 /// Le signal vu par la sonde, dans la fiche (polissage D, section 4.3) : son echelle, toujours visible, meme pour un
 /// seul point ou des valeurs toutes egales ; le releve sous le pointeur et son etiquette.
 public enum EchelleSignal {
-    /// Un releve ne compte au survol qu'a moins de 2 % de la duree de la periode du pointeur.
+    /// Un releve ne compte au survol qu'a moins de 2 % de la duree de la periode du pointeur (et d'un trou : `seuil`).
     public static let portee = 0.02
+
+    /// La distance sous laquelle un releve compte au survol : la plus petite de 2 % de la duree de la periode et de
+    /// l'ecart qui coupe sa courbe en troncons (20 min sur 24 h, 90 min sur 7 j, 6 h sur 30 j). Dans un trou de la
+    /// courbe, aucun releve n'est assez proche.
+    public static func seuil(periode: PeriodeCourbes) -> TimeInterval {
+        seuil(duree: periode.duree, ecart: periode.ecartTroncon)
+    }
+
+    static func seuil(duree: TimeInterval, ecart: TimeInterval) -> TimeInterval { min(portee * duree, ecart) }
 
     /// Le domaine vertical (dBm) : du minimum moins 5 dB, arrondi a la dizaine inferieure, au maximum plus 5 dB, arrondi
     /// a la dizaine superieure ; au moins 10 dB. Nil sans valeur.
@@ -18,20 +27,22 @@ public enum EchelleSignal {
         stride(from: (d.lowerBound / 10).rounded(.up) * 10, through: d.upperBound, by: 10).map { $0 }
     }
 
-    /// Le releve le plus proche de `date` dans le temps, a moins de 2 % de la duree de `periode` ; nil s'il n'y en a pas
-    /// (un trou de la courbe). A egale distance, le plus ancien.
+    /// Le releve le plus proche de `date` dans le temps (`points` du plus ancien au plus recent), a moins de
+    /// `seuil(periode:)` strictement ; nil s'il n'y en a pas (un trou de la courbe). A egale distance, le plus ancien.
     public static func plusProche(_ points: [PointCourbe], de date: Date, periode: PeriodeCourbes) -> PointCourbe? {
-        let portee = Self.portee * periode.duree
-        return points.filter { abs($0.date.timeIntervalSince(date)) < portee }
+        let seuil = Self.seuil(periode: periode)
+        return points.filter { abs($0.date.timeIntervalSince(date)) < seuil }
             .min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
     }
 
     /// L'etiquette d'un releve : sa valeur arrondie au dBm, avec le vrai signe moins, puis son heure, au format de
-    /// `locale`, dans le fuseau `fuseau` : « −67 dBm · 14:32 » ; en 7 j et 30 j, le jour aussi.
+    /// `locale`, dans le fuseau `fuseau`, en calendrier gregorien (celui de la machine n'y change rien) :
+    /// « −67 dBm · 14:32 » ; en 7 j et 30 j, le jour aussi.
     public static func etiquette(_ p: PointCourbe, periode: PeriodeCourbes, locale: Locale, fuseau: TimeZone) -> String {
         let v = Int(p.valeur.rounded())
         let valeur = (v < 0 ? "\u{2212}" : "") + String(abs(v))
-        var style = Date.FormatStyle(locale: locale, timeZone: fuseau).hour().minute()
+        let gregorien = Calendar(identifier: .gregorian)
+        var style = Date.FormatStyle(locale: locale, calendar: gregorien, timeZone: fuseau).hour().minute()
         if periode != .jour { style = style.day().month(.abbreviated) }
         return valeur + " dBm · " + p.date.formatted(style)
     }
