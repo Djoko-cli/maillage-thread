@@ -10,7 +10,8 @@ import Sparkle
 /// textes de sa fenetre viennent de ses propres traductions.
 ///
 /// Ni en demo, ni sous les tests, le moteur n'est demarre : aucune recherche, aucun acces au reseau, et les
-/// reglages ne sont pas ecrits (les preferences sont celles de l'app de Djoko).
+/// reglages ne sont pas ecrits (les preferences sont celles de l'app de Djoko). Ni dans une compilation de
+/// travail (numero de compilation 1, jamais publie) : elle ne se remplace jamais par la version publiee.
 @MainActor
 @Observable
 final class MisesAJour {
@@ -45,15 +46,18 @@ final class MisesAJour {
         Self.deLApp = self
     }
 
-    /// Le moteur demarre au lancement de l'app, sauf en demo et sous les tests.
+    /// Le moteur demarre au lancement de l'app, sauf en demo, sous les tests et dans une compilation de travail.
     static func demarrerAuLancement(demo: Bool) -> Bool {
-        doitDemarrer(demo: demo, environnement: ProcessInfo.processInfo.environment)
+        doitDemarrer(demo: demo, numero: Bundle.main.infoDictionary?["CFBundleVersion"] as? String,
+                     environnement: ProcessInfo.processInfo.environment)
     }
 
-    /// La decision, pure : oui, sauf en demo et si l'environnement porte celui des tests (Xcode pose
-    /// `XCTestConfigurationFilePath`, comme le lit `Surveillance.sousTests`).
-    nonisolated static func doitDemarrer(demo: Bool, environnement: [String: String]) -> Bool {
-        !demo && environnement["XCTestConfigurationFilePath"] == nil
+    /// La decision, pure : oui, sauf en demo, si l'environnement porte celui des tests (Xcode pose
+    /// `XCTestConfigurationFilePath`, comme le lit `Surveillance.sousTests`), et si le numero de compilation
+    /// (`CFBundleVersion`) est celui d'une compilation de travail, 1 (project.yml ; publier.sh donne le nombre de
+    /// commits de main) ou absent.
+    nonisolated static func doitDemarrer(demo: Bool, numero: String?, environnement: [String: String]) -> Bool {
+        !demo && numero != nil && numero != "1" && environnement["XCTestConfigurationFilePath"] == nil
     }
 
     /// « Rechercher les mises a jour… » : la fenetre de Sparkle dit ce qu'elle trouve.

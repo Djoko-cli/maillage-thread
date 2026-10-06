@@ -35,7 +35,8 @@ struct MaillageThreadApp: App {
                                fichierIdentites: SondeMaillage.fichierIdentites(demo: Self.demo,
                                                                                 sousTests: Surveillance.sousTests))
         _sonde = State(initialValue: sm)
-        // Les mises a jour : ni en demo, ni sous les tests (aucune recherche, aucun reseau).
+        // Les mises a jour : ni en demo, ni sous les tests (aucune recherche, aucun reseau), ni dans une
+        // compilation de travail.
         let m = MisesAJour(demarrer: MisesAJour.demarrerAuLancement(demo: Self.demo))
         _misesAJour = State(initialValue: m)
         _reglages = State(initialValue: ControleurReglages(surveillance: s, ouverture: o, nomsMaison: d, sonde: sm,

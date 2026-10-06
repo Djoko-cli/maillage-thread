@@ -37,17 +37,22 @@ struct MisesAJourTests {
         #expect(reseau == true)
     }
 
-    /// La decision de demarrer le moteur : oui dans l'app ordinaire, non en demo, non sous les tests (Xcode pose
-    /// `XCTestConfigurationFilePath`). Sans le cas « oui », une app qui ne cherche jamais passerait.
+    /// La decision de demarrer le moteur : oui dans l'app publiee ordinaire, non en demo, non sous les tests (Xcode
+    /// pose `XCTestConfigurationFilePath`), non dans une compilation de travail (numero 1, ou absent). Sans le cas
+    /// « oui », une app qui ne cherche jamais passerait.
     @Test func decisionDeDemarrer() {
-        #expect(MisesAJour.doitDemarrer(demo: false, environnement: [:]))
-        #expect(MisesAJour.doitDemarrer(demo: false, environnement: ["HOME": "/tmp", "PATH": "/usr/bin"]))
-        #expect(!MisesAJour.doitDemarrer(demo: true, environnement: [:]))
-        #expect(!MisesAJour.doitDemarrer(demo: true, environnement: ["HOME": "/tmp", "PATH": "/usr/bin"]))
-        #expect(!MisesAJour.doitDemarrer(demo: false,
+        #expect(MisesAJour.doitDemarrer(demo: false, numero: "435", environnement: [:]))
+        #expect(MisesAJour.doitDemarrer(demo: false, numero: "435", environnement: ["HOME": "/tmp", "PATH": "/usr/bin"]))
+        #expect(!MisesAJour.doitDemarrer(demo: false, numero: "1", environnement: [:]))
+        #expect(!MisesAJour.doitDemarrer(demo: false, numero: "1", environnement: ["HOME": "/tmp", "PATH": "/usr/bin"]))
+        #expect(!MisesAJour.doitDemarrer(demo: false, numero: nil, environnement: [:]))
+        #expect(!MisesAJour.doitDemarrer(demo: true, numero: "435", environnement: [:]))
+        #expect(!MisesAJour.doitDemarrer(demo: true, numero: "435", environnement: ["HOME": "/tmp", "PATH": "/usr/bin"]))
+        #expect(!MisesAJour.doitDemarrer(demo: false, numero: "435",
                                          environnement: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"]))
-        #expect(!MisesAJour.doitDemarrer(demo: false, environnement: ["HOME": "/tmp", "XCTestConfigurationFilePath": ""]))
-        #expect(!MisesAJour.doitDemarrer(demo: true,
+        #expect(!MisesAJour.doitDemarrer(demo: false, numero: "435",
+                                         environnement: ["HOME": "/tmp", "XCTestConfigurationFilePath": ""]))
+        #expect(!MisesAJour.doitDemarrer(demo: true, numero: "435",
                                          environnement: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"]))
     }
 
