@@ -45,6 +45,7 @@ struct FenetreReglages: View {
     @Environment(OuvertureSession.self) private var ouverture
     @Environment(NomsInternes.self) private var nomsMaison
     @Environment(SondeMaillage.self) private var sonde
+    @Environment(MisesAJour.self) private var misesAJour
     @AppStorage(Notifications.cle(.scission)) private var scission = CategorieAlerte.scission.parDefaut
     @AppStorage(Notifications.cle(.routeurDisparu)) private var routeurDisparu = CategorieAlerte.routeurDisparu.parDefaut
     @AppStorage(Notifications.cle(.pertes)) private var pertes = CategorieAlerte.pertes.parDefaut
@@ -63,6 +64,7 @@ struct FenetreReglages: View {
             case .general:
                 page {
                     ouvertureALaConnexion
+                    sectionMisesAJour
                     choixDeLangue
                     vueParPieces
                 }
@@ -117,6 +119,19 @@ struct FenetreReglages: View {
             if let e = ouverture.erreur {
                 Text(e).foregroundStyle(.red)
             }
+        }
+    }
+
+    /// Onglet General : les mises a jour (Sparkle), recherche et installation automatiques, cochees par defaut.
+    private var sectionMisesAJour: some View {
+        Section("Mises à jour") {
+            Toggle("Rechercher automatiquement",
+                   isOn: Binding(get: { misesAJour.rechercheAuto }, set: { misesAJour.rechercheAuto = $0 }))
+            Toggle("Installer automatiquement",
+                   isOn: Binding(get: { misesAJour.installationAuto }, set: { misesAJour.installationAuto = $0 }))
+                .disabled(!misesAJour.rechercheAuto)
+            Button("Rechercher les mises à jour…") { misesAJour.rechercher() }
+                .disabled(!misesAJour.peutRechercher)
         }
     }
 

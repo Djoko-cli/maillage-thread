@@ -18,17 +18,20 @@ final class ControleurReglages {
     @ObservationIgnored private let ouverture: OuvertureSession
     @ObservationIgnored private let nomsMaison: NomsInternes
     @ObservationIgnored private let sonde: SondeMaillage
+    @ObservationIgnored private let misesAJour: MisesAJour
     /// Creee a la premiere ouverture, puis gardee : elle rouvre sur le meme onglet.
     @ObservationIgnored private var fenetre: NSWindow?
     /// L'etat de Thread Route, cree avec la fenetre : il vit aussi longtemps qu'elle et ecoute le retour de l'app
     /// au premier plan, que la fenetre soit ouverte ou non (`SuiviThreadRoute`).
     @ObservationIgnored private var suiviThreadRoute: SuiviThreadRoute?
 
-    init(surveillance: Surveillance, ouverture: OuvertureSession, nomsMaison: NomsInternes, sonde: SondeMaillage) {
+    init(surveillance: Surveillance, ouverture: OuvertureSession, nomsMaison: NomsInternes, sonde: SondeMaillage,
+         misesAJour: MisesAJour) {
         self.surveillance = surveillance
         self.ouverture = ouverture
         self.nomsMaison = nomsMaison
         self.sonde = sonde
+        self.misesAJour = misesAJour
     }
 
     /// Montre la fenetre au premier plan. Elle devient la fenetre active : le menu de la barre
@@ -55,6 +58,7 @@ final class ControleurReglages {
                 .environment(nomsMaison)
                 .environment(sonde)
                 .environment(suivi)
+                .environment(misesAJour)
             // Sans `sizingOptions` : la page n'annonce pas de taille preferee, sinon le redimensionnement
             // natif, sans animation, prendrait le pas sur `ajuster`.
             let hote = NSHostingController(rootView: page)

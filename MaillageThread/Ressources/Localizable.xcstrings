@@ -1713,6 +1713,22 @@
         }
       }
     },
+    "Installer automatiquement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install updates automatically"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installer automatiquement"
+          }
+        }
+      }
+    },
     "Journal" : {
       "localizations" : {
         "en" : {
@@ -2093,6 +2109,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mi-distance : les pièces et les routeurs"
+          }
+        }
+      }
+    },
+    "Mises à jour" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updates"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mises à jour"
           }
         }
       }
@@ -2893,6 +2925,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rafraîchir depuis Maison"
+          }
+        }
+      }
+    },
+    "Rechercher automatiquement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check for updates automatically"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechercher automatiquement"
+          }
+        }
+      }
+    },
+    "Rechercher les mises à jour…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check for Updates…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechercher les mises à jour…"
           }
         }
       }

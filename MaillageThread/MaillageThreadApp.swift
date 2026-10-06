@@ -11,6 +11,7 @@ struct MaillageThreadApp: App {
     @State private var nomsMaison: NomsInternes
     @State private var sonde: SondeMaillage
     @State private var reglages: ControleurReglages
+    @State private var misesAJour: MisesAJour
     private let notifications = Notifications()
     private static let demo = CommandLine.arguments.contains("-demo")
     /// Le graphe s'ouvre au lancement en mode demo et au tout premier lancement
@@ -34,7 +35,11 @@ struct MaillageThreadApp: App {
                                fichierIdentites: SondeMaillage.fichierIdentites(demo: Self.demo,
                                                                                 sousTests: Surveillance.sousTests))
         _sonde = State(initialValue: sm)
-        _reglages = State(initialValue: ControleurReglages(surveillance: s, ouverture: o, nomsMaison: d, sonde: sm))
+        // Les mises a jour : ni en demo, ni sous les tests (aucune recherche, aucun reseau).
+        let m = MisesAJour(demarrer: MisesAJour.demarrerAuLancement(demo: Self.demo))
+        _misesAJour = State(initialValue: m)
+        _reglages = State(initialValue: ControleurReglages(surveillance: s, ouverture: o, nomsMaison: d, sonde: sm,
+                                                           misesAJour: m))
         let premier = !UserDefaults.standard.bool(forKey: Self.clePremierGraphe)
         ouvrirGraphe = !Surveillance.sousTests && (Self.demo || premier)
         guard !Surveillance.sousTests else { return }
@@ -67,6 +72,7 @@ struct MaillageThreadApp: App {
                 .environment(nomsMaison)
                 .environment(sonde)
                 .environment(reglages)
+                .environment(misesAJour)
         } label: {
             IconeBarre(ouvrirGraphe: ouvrirGraphe)
                 .environment(surveillance)
@@ -74,6 +80,10 @@ struct MaillageThreadApp: App {
         .menuBarExtraStyle(.window)
         // Les Reglages sont une fenetre AppKit (`ControleurReglages`) : Cmd-virgule l'ouvre.
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Rechercher les mises à jour…") { misesAJour.rechercher() }
+                    .disabled(!misesAJour.peutRechercher)
+            }
             CommandGroup(replacing: .appSettings) {
                 Button("Réglages…") { reglages.montrer() }
                     .keyboardShortcut(",")

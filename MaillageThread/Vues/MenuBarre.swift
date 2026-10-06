@@ -40,6 +40,7 @@ struct MenuBarre: View {
     @Environment(SondeMaillage.self) private var sonde
     @Environment(\.openWindow) private var openWindow
     @Environment(ControleurReglages.self) private var reglages
+    @Environment(MisesAJour.self) private var misesAJour
     /// Fenetre du menu, pour le fermer apres « Ouvrir le graphe », « Journal… » et « Reglages… ».
     @State private var fenetreMenu = RefFenetre()
 
@@ -72,6 +73,8 @@ struct MenuBarre: View {
                         Text(p).font(.caption).foregroundStyle(.red).padding(.horizontal, 8)
                     }
                 }
+                Button("Rechercher les mises à jour…") { rechercherMisesAJour() }
+                    .disabled(!misesAJour.peutRechercher)
                 Button("Réglages…") { ouvrirReglages() }
                 Button("Quitter Maillage Thread") { NSApp.terminate(nil) }
             }
@@ -157,6 +160,12 @@ struct MenuBarre: View {
     /// restait ouvert). On ferme donc le menu nous-memes, apres avoir montre les reglages.
     private func ouvrirReglages() {
         reglages.montrer()
+        fenetreMenu.fenetre?.close()
+    }
+
+    /// La fenetre de Sparkle prend la place du menu, comme celle des reglages.
+    private func rechercherMisesAJour() {
+        misesAJour.rechercher()
         fenetreMenu.fenetre?.close()
     }
 }
