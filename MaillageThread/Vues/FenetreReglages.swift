@@ -1,5 +1,6 @@
 import AppKit
 import MaillageCoeur
+import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -52,6 +53,7 @@ struct FenetreReglages: View {
     @State private var messageCapture: String?
     @State private var langue = LangueApp.lire()
     @State private var messageLangue: String?
+    @State private var etatThreadRoute = EtatThreadRoute.lire()
 
     var body: some View {
         Group {
@@ -65,7 +67,11 @@ struct FenetreReglages: View {
             case .notifications: page { notifications }
             case .maison: page { nomsDeMaison }
             case .sonde: page { reglagesSonde }
-            case .diagnostic: page { diagnostic }
+            case .diagnostic:
+                page {
+                    diagnostic
+                    threadRoute
+                }
             }
         }
         .frame(width: 560)
@@ -73,7 +79,11 @@ struct FenetreReglages: View {
         // Collee en haut : pendant que la fenetre change de hauteur, la page ne bouge pas.
         .frame(maxHeight: .infinity, alignment: .top)
         // Etat de l'ouverture a la connexion relu a chaque affichage de l'onglet (Reglages Systeme).
-        .onAppear { if onglet == .general { ouverture.actualiser() } }
+        .onAppear {
+            if onglet == .general { ouverture.actualiser() }
+            // Thread Route installe ou approuve entre-temps : son etat est relu a chaque affichage de l'onglet.
+            if onglet == .diagnostic { etatThreadRoute = EtatThreadRoute.lire() }
+        }
     }
 
     /// Page d'un onglet : un formulaire groupe, a la hauteur de son contenu. Un formulaire groupe
@@ -251,6 +261,20 @@ struct FenetreReglages: View {
             }
             if let messageCapture {
                 Text(messageCapture).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Onglet Diagnostic : Thread Route, le demon qui garde la route du Mac vers le reseau Thread (et vers la sonde
+    /// par « Reseau Thread ») ; son etat, et ce qu'il reste a faire.
+    private var threadRoute: some View {
+        Section("Thread Route") {
+            LabeledContent("État", value: etatThreadRoute.libelle)
+            if let c = etatThreadRoute.consigne {
+                Text(c).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            if etatThreadRoute == .aApprouver {
+                Button("Ouvrir Réglages Système…") { SMAppService.openSystemSettingsLoginItems() }
             }
         }
     }

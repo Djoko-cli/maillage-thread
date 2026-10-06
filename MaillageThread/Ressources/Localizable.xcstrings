@@ -657,6 +657,22 @@
         }
       }
     },
+    "Absent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Absent"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Absent"
+          }
+        }
+      }
+    },
     "Accès au réseau local refusé" : {
       "localizations" : {
         "en" : {
@@ -717,6 +733,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Accès à Maison refusé au passeur : Réglages Système › Confidentialité et sécurité › Maison."
+          }
+        }
+      }
+    },
+    "Actif" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actif"
           }
         }
       }
@@ -1377,6 +1409,22 @@
         }
       }
     },
+    "Désactivé dans Réglages Système" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turned off in System Settings"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactivé dans Réglages Système"
+          }
+        }
+      }
+    },
     "Empreinte incohérente avec la clé reçue : clé non rangée." : {
       "localizations" : {
         "en" : {
@@ -1693,6 +1741,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Journal…"
+          }
+        }
+      }
+    },
+    "L'autoriser dans Réglages Système, Général, Ouverture et extensions." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow it in System Settings, General, Login Items & Extensions."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'autoriser dans Réglages Système, Général, Ouverture et extensions."
           }
         }
       }
@@ -2257,6 +2321,22 @@
         }
       }
     },
+    "Ouvrir Réglages Système…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open System Settings…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir Réglages Système…"
+          }
+        }
+      }
+    },
     "Ouvrir le graphe" : {
       "localizations" : {
         "en" : {
@@ -2525,6 +2605,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Port"
+          }
+        }
+      }
+    },
+    "Pour l'installer : sh outils/thread-route/installer.sh (mot de passe administrateur)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To install it: sh outils/thread-route/installer.sh (administrator password)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pour l'installer : sh outils/thread-route/installer.sh (mot de passe administrateur)."
+          }
+        }
+      }
+    },
+    "Pour le remplacer : sh outils/thread-route/installer.sh (mot de passe administrateur)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To replace it: sh outils/thread-route/installer.sh (administrator password)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pour le remplacer : sh outils/thread-route/installer.sh (mot de passe administrateur)."
           }
         }
       }
@@ -3585,6 +3697,22 @@
         }
       }
     },
+    "Thread Route" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thread Route"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thread Route"
+          }
+        }
+      }
+    },
     "Tournée" : {
       "localizations" : {
         "en" : {
@@ -4285,6 +4413,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "firmware %@"
+          }
+        }
+      }
+    },
+    "halo-routes, son ancien nom, est encore installé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "halo-routes, its former name, is still installed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "halo-routes, son ancien nom, est encore installé"
           }
         }
       }

@@ -2,7 +2,7 @@ import Darwin
 
 /// Routes IPv6 du Mac (sysctl NET_RT_DUMP) : les prefixes /64 routes par un
 /// routeur lien-local, c'est-a-dire les prefixes OMR annonces par les routeurs
-/// de bordure (et ceux que pose l'assistant halo-routes).
+/// de bordure (et ceux que pose Thread Route, l'assistant systeme, anciennement halo-routes).
 public enum TableRoutage {
     /// Lit la table ; nil si le systeme refuse (bac a sable) ou echoue.
     public static func lire() -> [RouteIPv6]? {
