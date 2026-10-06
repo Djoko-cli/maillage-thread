@@ -47,7 +47,13 @@ final class MisesAJour {
 
     /// Le moteur demarre au lancement de l'app, sauf en demo et sous les tests.
     static func demarrerAuLancement(demo: Bool) -> Bool {
-        !demo && !Surveillance.sousTests
+        doitDemarrer(demo: demo, environnement: ProcessInfo.processInfo.environment)
+    }
+
+    /// La decision, pure : oui, sauf en demo et si l'environnement porte celui des tests (Xcode pose
+    /// `XCTestConfigurationFilePath`, comme le lit `Surveillance.sousTests`).
+    nonisolated static func doitDemarrer(demo: Bool, environnement: [String: String]) -> Bool {
+        !demo && environnement["XCTestConfigurationFilePath"] == nil
     }
 
     /// « Rechercher les mises a jour… » : la fenetre de Sparkle dit ce qu'elle trouve.

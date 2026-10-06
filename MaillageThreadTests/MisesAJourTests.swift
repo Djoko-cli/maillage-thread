@@ -32,6 +32,23 @@ struct MisesAJourTests {
         #expect(valeur.filter { !$0.hasPrefix("com.apple.") } == ["fr.djoko.maillage-spks", "fr.djoko.maillage-spki"])
         let bac = SecTaskCopyValueForEntitlement(tache, "com.apple.security.app-sandbox" as CFString, nil) as? Bool
         #expect(bac == true)
+        // Le telechargement des mises a jour passe par le reseau de l'app, pas par un service a part.
+        let reseau = SecTaskCopyValueForEntitlement(tache, "com.apple.security.network.client" as CFString, nil) as? Bool
+        #expect(reseau == true)
+    }
+
+    /// La decision de demarrer le moteur : oui dans l'app ordinaire, non en demo, non sous les tests (Xcode pose
+    /// `XCTestConfigurationFilePath`). Sans le cas « oui », une app qui ne cherche jamais passerait.
+    @Test func decisionDeDemarrer() {
+        #expect(MisesAJour.doitDemarrer(demo: false, environnement: [:]))
+        #expect(MisesAJour.doitDemarrer(demo: false, environnement: ["HOME": "/tmp", "PATH": "/usr/bin"]))
+        #expect(!MisesAJour.doitDemarrer(demo: true, environnement: [:]))
+        #expect(!MisesAJour.doitDemarrer(demo: true, environnement: ["HOME": "/tmp", "PATH": "/usr/bin"]))
+        #expect(!MisesAJour.doitDemarrer(demo: false,
+                                         environnement: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"]))
+        #expect(!MisesAJour.doitDemarrer(demo: false, environnement: ["HOME": "/tmp", "XCTestConfigurationFilePath": ""]))
+        #expect(!MisesAJour.doitDemarrer(demo: true,
+                                         environnement: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"]))
     }
 
     /// Celle de l'app, creee a son lancement, n'est pas demarree sous les tests : aucune recherche, aucun reseau.
