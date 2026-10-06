@@ -2,6 +2,21 @@
 
 # Maillage Thread
 
+<p align="center"><img src="docs/images/vue-3d.png" alt="La vue par pièces en 3D : la maison, ses niveaux, ses pièces, ses routeurs et ses liens radio" width="100%"></p>
+
+<p align="center">
+  <img src="docs/images/vue-2d-3d.gif" alt="De la 2D à la 3D" width="49%">
+  <img src="docs/images/zoom.gif" alt="Zoom sur un niveau et une pièce, puis retour" width="49%">
+</p>
+
+<p align="center">
+  <img src="docs/images/vue-2d.png" alt="La vue par pièces en 2D" width="32%">
+  <img src="docs/images/etage-isole.png" alt="Un niveau isolé, avec la fiche d'un routeur" width="32%">
+  <img src="docs/images/piece-isolee.png" alt="Une pièce isolée, avec la fiche d'un appareil" width="32%">
+</p>
+
+<p align="center"><sub>Mode démo : noms inventés, et maillage de sonde inventé sur les nœuds d'un vrai relevé.</sub></p>
+
 App macOS native de la barre des menus (SwiftUI, Liquid Glass) qui montre le
 réseau Thread vu depuis le Mac : routeurs de bordure, partitions et leur
 chef, préfixes OMR, appareils Matter et HomeKit et la partition où ils se

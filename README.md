@@ -2,6 +2,21 @@
 
 # Maillage Thread
 
+<p align="center"><img src="docs/images/vue-3d.png" alt="The room view in 3D: the house, its floors, rooms, routers and radio links" width="100%"></p>
+
+<p align="center">
+  <img src="docs/images/vue-2d-3d.gif" alt="From 2D to 3D" width="49%">
+  <img src="docs/images/zoom.gif" alt="Zooming in on a floor and a room, then back" width="49%">
+</p>
+
+<p align="center">
+  <img src="docs/images/vue-2d.png" alt="The room view in 2D" width="32%">
+  <img src="docs/images/etage-isole.png" alt="An isolated floor, with a router's card" width="32%">
+  <img src="docs/images/piece-isolee.png" alt="An isolated room, with a device's card" width="32%">
+</p>
+
+<p align="center"><sub>Demo mode: made-up names, and a made-up probe mesh on the nodes of a real survey.</sub></p>
+
 Native macOS menu bar app (SwiftUI, Liquid Glass) that shows the Thread
 network as seen from the Mac: border routers, partitions and their leader,
 OMR prefixes, Matter and HomeKit devices and the partition they sit in. It
