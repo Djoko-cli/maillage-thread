@@ -53,7 +53,17 @@ struct FenetreReglages: View {
     @State private var messageCapture: String?
     @State private var langue = LangueApp.lire()
     @State private var messageLangue: String?
-    @State private var etatThreadRoute = EtatThreadRoute.lire()
+    /// L'etat de Thread Route, tel que la page le lit ; les tests y mettent le leur, jamais celui du Mac.
+    private let lireEtatThreadRoute: () -> EtatThreadRoute
+    @State private var etatThreadRoute: EtatThreadRoute
+
+    init(onglet: OngletReglages, surHauteur: @escaping @MainActor (CGFloat) -> Void = { _ in },
+         etatThreadRoute: @escaping () -> EtatThreadRoute = { EtatThreadRoute.lire() }) {
+        self.onglet = onglet
+        self.surHauteur = surHauteur
+        lireEtatThreadRoute = etatThreadRoute
+        _etatThreadRoute = State(initialValue: etatThreadRoute())
+    }
 
     var body: some View {
         Group {
@@ -82,7 +92,7 @@ struct FenetreReglages: View {
         .onAppear {
             if onglet == .general { ouverture.actualiser() }
             // Thread Route installe ou approuve entre-temps : son etat est relu a chaque affichage de l'onglet.
-            if onglet == .diagnostic { etatThreadRoute = EtatThreadRoute.lire() }
+            if onglet == .diagnostic { etatThreadRoute = lireEtatThreadRoute() }
         }
     }
 
