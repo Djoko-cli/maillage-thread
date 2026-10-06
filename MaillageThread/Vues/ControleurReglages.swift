@@ -20,6 +20,9 @@ final class ControleurReglages {
     @ObservationIgnored private let sonde: SondeMaillage
     /// Creee a la premiere ouverture, puis gardee : elle rouvre sur le meme onglet.
     @ObservationIgnored private var fenetre: NSWindow?
+    /// L'etat de Thread Route, cree avec la fenetre : il vit aussi longtemps qu'elle et ecoute le retour de l'app
+    /// au premier plan, que la fenetre soit ouverte ou non (`SuiviThreadRoute`).
+    @ObservationIgnored private var suiviThreadRoute: SuiviThreadRoute?
 
     init(surveillance: Surveillance, ouverture: OuvertureSession, nomsMaison: NomsInternes, sonde: SondeMaillage) {
         self.surveillance = surveillance
@@ -35,11 +38,15 @@ final class ControleurReglages {
         fenetre = f
         f.makeKeyAndOrderFront(nil)
         NSApp.activate()
+        // Thread Route installe ou approuve pendant que la fenetre etait fermee, sur l'onglet Diagnostic retenu.
+        suiviThreadRoute?.relireSiAffiche()
     }
 
     private func creerFenetre() -> NSWindow {
         let onglets = OngletsReglages()
         onglets.tabStyle = .toolbar
+        let suivi = SuiviThreadRoute(affiche: { [weak onglets] in onglets?.ongletCourant == .diagnostic })
+        suiviThreadRoute = suivi
         for o in OngletReglages.allCases {
             // Contenu change (sonde branchee, erreur affichee…) : la fenetre suit, si la page est visible.
             let page = FenetreReglages(onglet: o, surHauteur: { [weak onglets] _ in onglets?.contenuChange(de: o) })
@@ -47,6 +54,7 @@ final class ControleurReglages {
                 .environment(ouverture)
                 .environment(nomsMaison)
                 .environment(sonde)
+                .environment(suivi)
             // Sans `sizingOptions` : la page n'annonce pas de taille preferee, sinon le redimensionnement
             // natif, sans animation, prendrait le pas sur `ajuster`.
             let hote = NSHostingController(rootView: page)
@@ -79,6 +87,12 @@ final class OngletsReglages: NSTabViewController {
             UserDefaults.standard.set(id, forKey: OngletReglages.cle)
         }
         ajuster(animer: view.window?.isVisible == true)
+    }
+
+    /// L'onglet choisi, ou nil si le choix n'en est pas un.
+    var ongletCourant: OngletReglages? {
+        guard tabViewItems.indices.contains(selectedTabViewItemIndex) else { return nil }
+        return (tabViewItems[selectedTabViewItemIndex].identifier as? String).flatMap(OngletReglages.init(rawValue:))
     }
 
     /// La page de cet onglet a change de hauteur : la fenetre suit, si c'est la page visible.

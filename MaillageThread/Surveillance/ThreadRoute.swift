@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import ServiceManagement
 
@@ -55,5 +56,52 @@ enum EtatThreadRoute: Equatable, Sendable {
         case .actif: nil
         case .ancien: String(localized: "Pour le remplacer : sh outils/thread-route/installer.sh (mot de passe administrateur).")
         }
+    }
+}
+
+/// Suit l'etat de Thread Route pour la page Diagnostic des Reglages. Il le relit :
+/// - a la demande (`relire`) : l'onglet qui s'affiche, la fenetre qui se rouvre ;
+/// - a chaque retour de l'app au premier plan, tant que cette page est celle de l'onglet retenu : c'est le
+///   retour de Reglages Systeme apres l'approbation, ou d'un Terminal ou l'installateur vient de tourner.
+///
+/// La fenetre Reglages est creee une fois et gardee (`ControleurReglages`) : une vue qui apparait ne peut pas
+/// seule voir ce retour, le suivi vit donc avec la fenetre et ecoute lui-meme. Le test de la page affichee
+/// (`affiche`) est donne par la fenetre ; le centre et la notification le sont pour les tests.
+@MainActor
+@Observable
+final class SuiviThreadRoute {
+    private(set) var etat: EtatThreadRoute
+    @ObservationIgnored private let lecture: () -> EtatThreadRoute
+    @ObservationIgnored private let affiche: () -> Bool
+    @ObservationIgnored private let centre: NotificationCenter
+    @ObservationIgnored nonisolated(unsafe) private var observateur: (any NSObjectProtocol)?
+
+    /// `lecture` rend l'etat du moment (par defaut, celui du systeme : les tests y mettent le leur) ; `affiche`
+    /// dit si la page de l'etat est celle de l'onglet retenu. L'etat est lu une fois, a la creation.
+    init(lecture: @escaping () -> EtatThreadRoute = { EtatThreadRoute.lire() },
+         affiche: @escaping () -> Bool,
+         centre: NotificationCenter = .default,
+         retour: Notification.Name = NSApplication.didBecomeActiveNotification) {
+        self.lecture = lecture
+        self.affiche = affiche
+        self.centre = centre
+        etat = lecture()
+        observateur = centre.addObserver(forName: retour, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.relireSiAffiche() }
+        }
+    }
+
+    deinit {
+        if let observateur { centre.removeObserver(observateur) }
+    }
+
+    /// Relit l'etat aupres du systeme.
+    func relire() {
+        etat = lecture()
+    }
+
+    /// Relit l'etat si la page qui le montre est celle de l'onglet retenu ; sinon, ne lit rien.
+    func relireSiAffiche() {
+        if affiche() { relire() }
     }
 }

@@ -53,17 +53,9 @@ struct FenetreReglages: View {
     @State private var messageCapture: String?
     @State private var langue = LangueApp.lire()
     @State private var messageLangue: String?
-    /// L'etat de Thread Route, tel que la page le lit ; les tests y mettent le leur, jamais celui du Mac.
-    private let lireEtatThreadRoute: () -> EtatThreadRoute
-    @State private var etatThreadRoute: EtatThreadRoute
-
-    init(onglet: OngletReglages, surHauteur: @escaping @MainActor (CGFloat) -> Void = { _ in },
-         etatThreadRoute: @escaping () -> EtatThreadRoute = { EtatThreadRoute.lire() }) {
-        self.onglet = onglet
-        self.surHauteur = surHauteur
-        lireEtatThreadRoute = etatThreadRoute
-        _etatThreadRoute = State(initialValue: etatThreadRoute())
-    }
+    /// L'etat de Thread Route, suivi par la fenetre (`SuiviThreadRoute`) : relu a l'affichage de l'onglet, et a
+    /// chaque retour de l'app au premier plan.
+    @Environment(SuiviThreadRoute.self) private var suiviThreadRoute
 
     var body: some View {
         Group {
@@ -92,7 +84,7 @@ struct FenetreReglages: View {
         .onAppear {
             if onglet == .general { ouverture.actualiser() }
             // Thread Route installe ou approuve entre-temps : son etat est relu a chaque affichage de l'onglet.
-            if onglet == .diagnostic { etatThreadRoute = lireEtatThreadRoute() }
+            if onglet == .diagnostic { suiviThreadRoute.relire() }
         }
     }
 
@@ -279,11 +271,11 @@ struct FenetreReglages: View {
     /// par « Reseau Thread ») ; son etat, et ce qu'il reste a faire.
     private var threadRoute: some View {
         Section("Thread Route") {
-            LabeledContent("État", value: etatThreadRoute.libelle)
-            if let c = etatThreadRoute.consigne {
+            LabeledContent("État", value: suiviThreadRoute.etat.libelle)
+            if let c = suiviThreadRoute.etat.consigne {
                 Text(c).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
-            if etatThreadRoute == .aApprouver {
+            if suiviThreadRoute.etat == .aApprouver {
                 Button("Ouvrir Réglages Système…") { SMAppService.openSystemSettingsLoginItems() }
             }
         }

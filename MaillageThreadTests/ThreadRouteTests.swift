@@ -157,7 +157,7 @@ struct ThreadRouteTests {
         #expect(traduit(Self.francais.consigneAApprouver) == t.consigneAApprouver)
         #expect(traduit(Self.francais.consigneAncien) == t.consigneAncien)
         #expect(traduit("Thread Route") == "Thread Route")
-        #expect(traduit("État") != nil)
+        #expect(traduit("État") == (langue == "fr" ? "État" : "Status"))
         #expect(traduit("Ouvrir Réglages Système…") == (langue == "fr" ? "Ouvrir Réglages Système…" : "Open System Settings…"))
     }
 }
