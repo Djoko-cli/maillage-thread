@@ -13,6 +13,40 @@ stopped responding at 04:14. By hand, from the Mac, the leader (an Apple TV)
 had published a new OMR prefix at 04:04 and an Aqara hub had ended up alone
 in its own partition. The app shows that at a glance and remembers it.
 
+## Installing
+
+Download `Maillage-Thread-X.Y.Z.dmg` from the latest
+[release](https://github.com/Djoko-cli/maillage-thread/releases) (`maillage-vX.Y.Z`),
+open it, and drag **Maillage Thread** onto **Applications**. macOS 26 or later.
+
+- **First launch (Gatekeeper).** The app is signed with a self-signed
+  certificate, `Djoko-cli Code Signing`, not with an Apple Developer ID, and
+  isn't notarized. macOS refuses to open it the first time: in System
+  Settings, Privacy & Security, click "Open Anyway" next to Maillage Thread,
+  then confirm with your password (since macOS 15, a right-click no longer
+  does it). Only once.
+- **Automatic updates** (Sparkle 2). The app checks for a new version at
+  launch and then every 24 hours, downloads it, checks its Ed25519 signature,
+  and installs it when the app quits, or right away with "Install and
+  Relaunch". An update installed this way doesn't go back through Gatekeeper:
+  the signature takes its place. "Check for Updates…" is in the menu; Settings,
+  General, "Updates", has "Check for updates automatically" and "Install
+  updates automatically", both on by default. A copy downloaded before the
+  first version with Sparkle (1.0.0) doesn't update itself.
+- **Thread Route.** To reach the probe over the Thread network, the Mac needs
+  a route to it, which Thread Route keeps (see "Route to the Thread network"
+  below). It installs from a copy of this repository:
+  `sh outils/thread-route/installer.sh` (administrator password). Settings,
+  Diagnostics, shows its status.
+- **Passeur Noms is not distributed.** It is an app "Designed for iPad" that
+  everyone builds and signs with their own Apple team: `outils/passeur.sh`
+  (see "Home names" below).
+
+## Credits
+
+The app embeds [Sparkle](https://sparkle-project.org) 2.10.0 (automatic updates), under the MIT
+license; the text of the license is shipped in the `.dmg`, next to the app (`Sparkle-LICENSE.txt`).
+
 ## What the Mac can see
 
 The Mac has no Thread radio: the app only **listens** to the local network.
@@ -43,8 +77,8 @@ prefix".
 
 Requirements: macOS 26 or later, Xcode 26 or later (developed with Xcode 27),
 [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
-No third-party dependency. The Xcode project is generated: only `project.yml`
-is tracked.
+One dependency, Sparkle 2 (2.10.0, the updates), through the Swift Package
+Manager. The Xcode project is generated: only `project.yml` is tracked.
 
 ```sh
 outils/tester.sh                                   # generate, build, all tests
@@ -102,6 +136,45 @@ warn once that the app differs from previously opened versions, and the local
 network permission is asked again. Passeur Noms is signed with the team only
 by `outils/passeur.sh` (see below).
 
+### Publishing a version
+
+`outils/publier.sh X.Y.Z` publishes version X.Y.Z, the `MARKETING_VERSION` of
+`project.yml`, from an up-to-date `main`. Before any test, it checks that the
+tag and the version in the feed don't exist yet (and that the version is
+higher than the head of the feed), that the tree is clean, that the Git author and
+committer are `Djoko-cli` at the GitHub noreply address, that the keychain holds a
+single `Djoko-cli Code Signing` certificate whose subject is only that name,
+and that the anonymization check is on the Mac (it is private): outside a
+rehearsal, without it, nothing is published. Then it runs all the tests,
+builds in Release without debug symbols and with neutral source paths, signs
+the app with that certificate (`IDENTITE_SIGNATURE`, in `publier.sh` only:
+work builds and tests stay ad hoc), and makes the `.dmg` (the app, a shortcut
+to Applications and Sparkle's license). It refuses any binary (Sparkle's
+included) that carries the home folder, `/Users/` or the account name, and any
+real data found by the anonymization check. It signs the `.dmg` with the
+Ed25519 key of the keychain (`sign_update` from the Sparkle 2.10.0 archive,
+whose `bin` folder is given by `SPARKLE_BIN`), then adds the version, with the
+notes of `NOTES-VERSIONS.md`, at the top of the update feed, `appcast.xml`,
+which keeps every published version. Just before the first public step it
+reads the state again (`main` unchanged and up to date, `gh` logged in,
+`git push --dry-run` passing, release absent). It then creates the GitHub
+release with `gh release create --target`, which also creates the
+`maillage-vX.Y.Z` tag on the checked commit, with the `.dmg`; commits the feed
+on `main` and pushes it right away; and copies the `.dmg` to the Desktop. Each
+step done is noted in `gestes.txt`, in `build/publication/X.Y.Z/`: if the
+script stops halfway, the rest is resumed from that file and that folder,
+step by step, not by running the script again. The build number, which Sparkle
+compares, is the number of commits of `main`. The app reads its feed in the
+repository, at
+`https://raw.githubusercontent.com/Djoko-cli/maillage-thread/main/appcast.xml`;
+each `.dmg` stays in its release.
+With `--repetition`, the same without GitHub or Desktop, for a local trial,
+with a test key pair and a test certificate in a separate keychain if given;
+only there may the anonymization check be missing.
+A notarization step (Developer ID) is written but off: `NOTARISER=1`, with
+`PROFIL_NOTARISATION`, the keychain profile of `notarytool store-credentials`.
+Tests: `/usr/bin/python3 -m unittest discover -s outils/tests`.
+
 ## Texts: French and English
 
 French is the development language (catalog keys are the French texts),
@@ -126,12 +199,15 @@ catalog match.
 | `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, access over the Thread network (`Reseau/`: UDP transport and H1 envelope from the Halo bridge, key in the keychain, rid and resends), `SondeUSB` (requests matched by id and target, each with its own deadline), app model (probe remembered by its USB serial number, USB or network link, a tour every 5 minutes) |
 | `MaillageThread/Noms/` | Home names: launching Passeur Noms, receiving its reading over the loopback (TCP listener on 127.0.0.1, one-time token), last valid names kept in the app's container |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
-| `MaillageThread/Surveillance/` | app model: surveys → tracking → log and notifications; sleep of the Mac; login item |
+| `MaillageThread/Surveillance/` | app model: surveys → tracking → log and notifications; sleep of the Mac; login item; updates (Sparkle); Thread Route status |
 | `MaillageThread/Vues/` | menu bar, room view window (`Pieces/`: `Canvas` engine, glass overlays, captures), log window, settings (AppKit window with tabs: General, Notifications, Home, Probe, Diagnostics; ⌘,) |
 | `Passeur/` | Passeur Noms: iOS app run on the Mac (Designed for iPad) that reads Home and sends its names, rooms and zones to the app over the loopback |
 | `sonde/` | probe firmware (ESP32-C6, PlatformIO) and trial tools |
 | `outils/anonymiser-sonde.py` | anonymizes a probe capture before it becomes test data |
 | `outils/mesurer.sh` | timings of the room view (layout, label placement), in Release |
+| `outils/thread-route/` | Thread Route, an identical copy of its source (Halo bridge repository, `tools/macos/thread-route`), at the revision noted in `outils/thread-route.source`; `outils/synchroniser-thread-route.sh` copies it again, `outils/tests/test_thread_route.py` checks it |
+| `outils/publier.sh`, `outils/publication.py` | publishing a version (see "Publishing a version"); tests in `outils/tests/` |
+| `NOTES-VERSIONS.md` | release notes, in French and English |
 | `docs/releves/` | real surveys (the fixture of the tests and the demo) |
 | `docs/superpowers/` | design (spec) and implementation plans |
 
@@ -450,6 +526,14 @@ local network. macOS does not always install the route to that prefix, and
 may lose it when it switches border routers without putting it back: the
 probe is then unreachable, and the app says "No IPv6 route to the Thread
 network". The Mac needs a route to that /64 through one of the border
-routers that advertise it (setting one takes administrator rights). The
-author uses a helper from another of their projects for this; it is not
-part of this repository.
+routers that advertise it (setting one takes administrator rights). Thread
+Route keeps it: a root launchd daemon from the Halo bridge repository, of
+which `outils/thread-route/` is an identical copy. It installs with
+`sh outils/thread-route/installer.sh`, under your own account (the
+administrator password is asked for the installation only); see its README.
+The app can't install it itself: in the sandbox, `SMAppService` refuses a
+daemon that isn't sandboxed (trial of Oct 6, 2026). Settings, Diagnostics,
+shows its status: absent, turned off in System Settings, active, or still
+under its former name, halo-routes, which the installer replaces: it stops it,
+waits (up to 25 s) until launchd has unloaded it, and only then removes its
+files; if the wait runs out, it stops with nothing removed.

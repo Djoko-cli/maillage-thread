@@ -14,6 +14,42 @@ TV) avait publié un nouveau préfixe OMR à 04:04, et un hub Aqara s'était
 retrouvé seul dans sa propre partition. L'app le montre d'un coup d'œil et
 le garde en mémoire.
 
+## Installer
+
+Télécharger `Maillage-Thread-X.Y.Z.dmg` depuis la dernière
+[version publiée](https://github.com/Djoko-cli/maillage-thread/releases) (`maillage-vX.Y.Z`),
+l'ouvrir, et glisser **Maillage Thread** sur **Applications**. macOS 26 ou
+plus.
+
+- **Première ouverture (Gatekeeper).** L'app est signée par un certificat
+  auto-signé, `Djoko-cli Code Signing`, sans Developer ID d'Apple ni
+  notarisation. macOS refuse de l'ouvrir la première fois : dans Réglages
+  Système, Confidentialité et sécurité, cliquer « Ouvrir quand même » en face
+  de Maillage Thread, puis confirmer avec son mot de passe (depuis macOS 15, le
+  clic droit ne suffit plus). Une seule fois.
+- **Mises à jour automatiques** (Sparkle 2). L'app recherche une nouvelle
+  version au démarrage puis toutes les 24 heures, la télécharge, vérifie sa
+  signature Ed25519, et l'installe quand l'app se ferme, ou tout de suite par
+  « Installer et relancer ». Une mise à jour installée ainsi ne repasse pas
+  par Gatekeeper : la signature en tient lieu. « Rechercher les mises à
+  jour… » est dans le menu ; Réglages, Général, « Mises à jour », porte
+  « Rechercher automatiquement » et « Installer automatiquement », cochés par
+  défaut. Une copie téléchargée avant la première version avec Sparkle
+  (1.0.0) ne se met pas à jour seule.
+- **Thread Route.** Pour joindre la sonde par le réseau Thread, il faut au
+  Mac une route vers lui, que garde Thread Route (voir « Route vers le réseau
+  Thread » plus bas). Il s'installe depuis une copie de ce dépôt :
+  `sh outils/thread-route/installer.sh` (mot de passe administrateur).
+  Réglages, Diagnostic, montre son état.
+- **Passeur Noms n'est pas distribué.** C'est une app « conçue pour iPad »
+  que chacun compile et signe avec sa propre équipe Apple :
+  `outils/passeur.sh` (voir « Noms de Maison » plus bas).
+
+## Crédits
+
+L'app embarque [Sparkle](https://sparkle-project.org) 2.10.0 (les mises à jour automatiques), sous
+licence MIT ; le texte de la licence est livré dans le `.dmg`, à côté de l'app (`Sparkle-LICENSE.txt`).
+
 ## Ce que le Mac peut voir
 
 Le Mac n'a pas de radio Thread : l'app **écoute** seulement le réseau local.
@@ -44,8 +80,8 @@ partition « incertaine : préfixe partagé ».
 
 Prérequis : macOS 26 ou plus, Xcode 26 ou plus (développé avec Xcode 27),
 [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
-Aucune dépendance tierce. Le projet Xcode est généré : seul `project.yml` est
-suivi.
+Une dépendance, Sparkle 2 (2.10.0, les mises à jour), par le gestionnaire de
+paquets Swift. Le projet Xcode est généré : seul `project.yml` est suivi.
 
 ```sh
 outils/tester.sh                                   # génère, compile, tous les tests
@@ -104,6 +140,47 @@ dire une fois à macOS « L'app diffère des versions précédemment ouvertes »
 l'autorisation « réseau local » est redemandée. Passeur Noms n'est signé avec
 l'équipe que par `outils/passeur.sh` (voir plus bas).
 
+### Publier une version
+
+`outils/publier.sh X.Y.Z` publie la version X.Y.Z, le `MARKETING_VERSION` de
+`project.yml`, depuis `main` à jour. Avant tout test, il vérifie que
+l'étiquette et la version dans le flux n'existent pas encore (et que la
+version dépasse la tête du flux), que l'arbre est propre, que l'auteur et le
+committer Git sont `Djoko-cli`, à l'adresse noreply de GitHub, que le trousseau porte un
+seul certificat `Djoko-cli Code Signing`, dont le sujet n'est que ce nom, et
+que le contrôle d'anonymisation est sur le Mac (il est privé) : hors
+répétition, sans lui, rien n'est publié. Puis il lance tous les tests,
+compile en Release sans symboles de débogage et avec des chemins de sources
+neutres, signe l'app par ce certificat (`IDENTITE_SIGNATURE`, dans
+`publier.sh` seulement : les compilations de travail et les tests restent ad
+hoc), et fait le `.dmg` (l'app, un raccourci vers Applications et la licence de
+Sparkle). Il refuse tout binaire (celui de Sparkle compris) qui porte le
+dossier personnel, `/Users/` ou le nom du compte, et toute donnée réelle que
+trouve le contrôle d'anonymisation. Il signe le `.dmg` avec la clé Ed25519 du
+trousseau (`sign_update` de l'archive de Sparkle 2.10.0, dont `SPARKLE_BIN`
+donne le dossier `bin`), puis ajoute la version, avec les notes de
+`NOTES-VERSIONS.md`, en tête du flux des mises à jour, `appcast.xml`, qui
+garde toutes les versions publiées. Juste avant le premier geste public, il
+relit l'état (`main` inchangée et à jour, `gh` connecté, `git push --dry-run`
+qui passe, version publiée absente). Il crée alors la version publiée sur
+GitHub par `gh release create --target`, qui crée aussi l'étiquette
+`maillage-vX.Y.Z` sur le commit vérifié, avec le `.dmg` ; commite le flux sur
+`main` et le pousse aussitôt ; et copie le `.dmg` sur le Bureau. Chaque geste
+fait est noté dans `gestes.txt`, dans `build/publication/X.Y.Z/` : si le
+script s'arrête en route, la suite se reprend depuis ce fichier et ce
+dossier, geste par geste, sans relancer le script. Le numéro de compilation,
+que compare Sparkle, est le nombre de commits de `main`. L'app lit son flux
+dans le dépôt, à
+`https://raw.githubusercontent.com/Djoko-cli/maillage-thread/main/appcast.xml` ;
+chaque `.dmg` reste dans sa version publiée.
+Avec `--repetition`, la même chose sans GitHub ni Bureau, pour un essai
+local, avec une paire de clés d'essai et un certificat d'essai dans un
+trousseau à part, s'ils sont donnés ; là seulement, le contrôle
+d'anonymisation peut manquer. Une étape de notarisation (Developer ID)
+est écrite, désactivée : `NOTARISER=1`, avec `PROFIL_NOTARISATION`, le
+profil du trousseau que range `notarytool store-credentials`.
+Tests : `/usr/bin/python3 -m unittest discover -s outils/tests`.
+
 ## Textes : français et anglais
 
 Le français est la langue de développement (les clés des catalogues sont les
@@ -128,12 +205,15 @@ catalogue vont ensemble.
 | `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, accès par le réseau Thread (`Reseau/` : transport UDP et enveloppe H1 du pont Halo, clé dans le trousseau, rid et renvois), `SondeUSB` (requêtes appariées par id et par cible, chacune avec son échéance), modèle de l'app (sonde retenue par son numéro de série USB, liaison USB ou réseau, une tournée toutes les 5 minutes) |
 | `MaillageThread/Noms/` | noms de Maison : lancement de Passeur Noms, réception de son relevé par la boucle locale (écoute TCP sur 127.0.0.1, jeton à usage unique), derniers noms valides gardés dans le conteneur de l'app |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
-| `MaillageThread/Surveillance/` | modèle de l'app : relevés → suivi → journal et notifications ; veille du Mac ; ouverture à la connexion |
+| `MaillageThread/Surveillance/` | modèle de l'app : relevés → suivi → journal et notifications ; veille du Mac ; ouverture à la connexion ; mises à jour (Sparkle) ; état de Thread Route |
 | `MaillageThread/Vues/` | barre des menus, fenêtre de la vue par pièces (`Pieces/` : moteur `Canvas`, surcouches en verre, captures), journal, réglages (fenêtre AppKit à onglets : Général, Notifications, Maison, Sonde, Diagnostic ; ⌘,) |
 | `Passeur/` | Passeur Noms : app iOS lancée sur le Mac (« conçue pour iPad ») qui lit Maison et envoie ses noms, pièces et zones à l'app par la boucle locale |
 | `sonde/` | firmware de la sonde (ESP32-C6, PlatformIO) et outils d'essai |
 | `outils/anonymiser-sonde.py` | anonymise une capture de la sonde avant d'en faire des données de test |
 | `outils/mesurer.sh` | temps de calcul de la vue par pièces (disposition, placement des noms), en Release |
+| `outils/thread-route/` | Thread Route, copie à l'identique de sa source (dépôt du pont Halo, `tools/macos/thread-route`), à la révision notée dans `outils/thread-route.source` ; `outils/synchroniser-thread-route.sh` la refait, `outils/tests/test_thread_route.py` la vérifie |
+| `outils/publier.sh`, `outils/publication.py` | publication d'une version (voir « Publier une version ») ; tests dans `outils/tests/` |
+| `NOTES-VERSIONS.md` | notes de version, en français et en anglais |
 | `docs/releves/` | relevés réels (les données des tests et de la démo) |
 | `docs/superpowers/` | conception (spec) et plans d'implémentation |
 
@@ -473,5 +553,14 @@ macOS n'installe pas toujours la route vers ce préfixe, et peut la perdre en
 changeant de routeur de bordure sans la remettre : la sonde est alors
 injoignable, et l'app dit « Pas de route IPv6 vers le réseau Thread ». Il
 faut au Mac une route vers ce /64 par l'un des routeurs de bordure qui
-l'annoncent (la poser demande les droits d'administrateur). L'auteur utilise
-pour cela un assistant de son autre projet, qui n'est pas dans ce dépôt.
+l'annoncent (la poser demande les droits d'administrateur). Thread Route la
+garde : un démon launchd (root) du dépôt du pont Halo, dont
+`outils/thread-route/` est une copie à l'identique. Il s'installe par
+`sh outils/thread-route/installer.sh`, sous son compte (le mot de passe
+administrateur n'est demandé que pour l'installation) ; voir son README.
+L'app ne peut pas l'installer elle-même : dans le bac à sable, `SMAppService`
+refuse un démon qui n'y est pas (essai du 06/10/2026). Réglages, Diagnostic,
+montre son état : absent, désactivé dans Réglages Système, actif, ou encore
+sous son ancien nom, halo-routes, que l'installateur remplace : il l'arrête,
+attend (25 s au plus) que launchd l'ait déchargé, et ne retire ses fichiers
+qu'ensuite ; si l'attente expire, il s'arrête sans rien retirer.
