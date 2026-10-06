@@ -1,12 +1,23 @@
-# Notes de version · Release notes
+# Release notes · Notes de version
 
-Maillage Thread : une section par version publiée, en français puis en anglais. `outils/publier.sh` en tire les
-notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour.
-
-Maillage Thread: one section per published version, in French then in English. `outils/publier.sh` takes from it
+Maillage Thread: one section per published version, in English then in French. `outils/publier.sh` takes from it
 the notes of the GitHub release and those of the update window.
 
+Maillage Thread : une section par version publiée, en anglais puis en français. `outils/publier.sh` en tire les
+notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour.
+
 ## 1.0.0
+
+**English**
+
+- First published version: the menu bar app that shows the Thread network as seen from the Mac (border routers,
+  partitions, OMR prefixes, devices), keeps a log of changes and notifies the alerts; the room view in 2D and 3D;
+  Home names through Passeur Noms; the real mesh through the probe, over USB or over the Thread network.
+- Automatic updates (Sparkle 2): a check at launch and then every 24 hours, download, and installation when the
+  app quits, or right away with "Install and Relaunch". "Check for Updates…" is in the menu; Settings, General,
+  "Updates", can turn them off.
+- Thread Route, the system helper that keeps the Mac's route to the Thread network (formerly halo-routes): its
+  status is in Settings, Diagnostics; it installs with `sh outils/thread-route/installer.sh`.
 
 **Français**
 
@@ -19,14 +30,3 @@ the notes of the GitHub release and those of the update window.
   jour… » est dans le menu ; Réglages, Général, « Mises à jour », permet de les arrêter.
 - Thread Route, l'assistant système qui garde la route du Mac vers le réseau Thread (anciennement halo-routes) :
   son état est dans Réglages, Diagnostic ; il s'installe par `sh outils/thread-route/installer.sh`.
-
-**English**
-
-- First published version: the menu bar app that shows the Thread network as seen from the Mac (border routers,
-  partitions, OMR prefixes, devices), keeps a log of changes and notifies the alerts; the room view in 2D and 3D;
-  Home names through Passeur Noms; the real mesh through the probe, over USB or over the Thread network.
-- Automatic updates (Sparkle 2): a check at launch and then every 24 hours, download, and installation when the
-  app quits, or right away with "Install and Relaunch". "Check for Updates…" is in the menu; Settings, General,
-  "Updates", can turn them off.
-- Thread Route, the system helper that keeps the Mac's route to the Thread network (formerly halo-routes): its
-  status is in Settings, Diagnostics; it installs with `sh outils/thread-route/installer.sh`.
