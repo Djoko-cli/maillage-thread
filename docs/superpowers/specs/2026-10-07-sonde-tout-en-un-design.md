@@ -112,6 +112,8 @@ Le mode démo, la partition Aqara (montrée comme aujourd'hui ; ses annonces ent
 2. La sonde à sa place habituelle ; après une tournée et une résolution, la vue de l'app comparée aux relevés de l'essai : liens entre routeurs Apple, parents résolus, taux d'accès au canal refusés d'un enfant qui répond (une information, pas une qualité).
 3. Couverture affichée vérifiée, et le déplacement de la sonde qui la fait varier.
 
+**Vérifié le 08/10/2026 avec Djoko** (firmware 1.1.0 flashé sans effacement, app 1.1.0 de travail) : à sa place habituelle, la sonde entend 6 routeurs sur 7 ; les 10 liens possibles entre les 5 routeurs Apple sont dessinés ; 22 appareils sont rattachés à leur parent par la résolution, tous sous un routeur Apple. Le taux d'accès au canal refusés, qui demande deux résolutions à 30 minutes d'écart, et le déplacement de la sonde n'ont pas été vus au banc.
+
 ## 6. Fin de l'essai
 
 - Djoko retire « Sonde essai » de Maison.
