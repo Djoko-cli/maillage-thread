@@ -21,6 +21,7 @@ struct LegendePiecesTests {
     @Test func uneEntreeParSigne() {
         let cas: [(Lecture, Set<Entree>)] = [
             (Lecture(couleurs: ["Apple TV 4K": .routeur(principale: true)]), [.routeur]),
+            (Lecture(routeursSimples: ["E000000000000008"]), [.routeurSimple]),
             (Lecture(couleurs: ["rloc:5000": .routeurInconnu], inconnus: ["rloc:5000"]), [.nonIdentifie]),
             (Lecture(couleurs: ["rloc:041F": .appareil(.inconnu)], inconnus: ["rloc:041F"]), [.nonIdentifie]),
             (Lecture(couleurs: ["Aqara": .routeur(principale: false)]), [.autrePartition]),
@@ -55,7 +56,7 @@ struct LegendePiecesTests {
         let tout = Lecture(couleurs: ["a": .routeur(principale: true), "b": .routeur(principale: false),
                                       "c": .appareil(.joignable), "d": .appareil(.partitionCoupee),
                                       "e": .appareil(.sansAdresse), "f": .appareil(.disparu)],
-                           inconnus: ["g"], chefs: ["a"], endormis: ["c"], piles: ["c"], candidats: ["g"],
+                           routeursSimples: ["c"], inconnus: ["g"], chefs: ["a"], endormis: ["c"], piles: ["c"], candidats: ["g"],
                            liens: [Self.radio(3), Self.radio(2), Self.radio(1), Self.radio(nil),
                                    ScenePieces.Lien(de: "c", vers: "a", genre: .parent),
                                    ScenePieces.Lien(de: "d", vers: "a")],
@@ -78,7 +79,7 @@ struct LegendePiecesTests {
     @Test func legendeDeLaDemo() throws {
         let (s, _, e) = try NomsSceneTests.demo()
         let avec = LegendePieces.entrees(Lecture(e, ailleurs: false))
-        #expect(avec == [.routeur, .nonIdentifie, .autrePartition, .chef, .joignable, .sansAdresse, .disparu, .endormi,
+        #expect(avec == [.routeur, .routeurSimple, .nonIdentifie, .autrePartition, .chef, .joignable, .sansAdresse, .disparu, .endormi,
                          .pile, .bonne, .moyenne, .faible, .versParent, .rattachement])
         #expect(LegendePieces.entrees(Lecture(e, ailleurs: true)).contains(.ailleurs))
         s.oublierMaillage()
@@ -233,7 +234,12 @@ struct LegendePiecesTests {
         var vues = Set<Entree>()
         for scene in [e, thread] {
             for n in scene.scene.noeuds {
-                let a = try #require(scene.apparences[n.id])
+                // Un routeur qui n'est pas de bordure : son cercle a son entree, la pastille de son etat la sienne.
+                var a = try #require(scene.apparences[n.id])
+                if a.cercle {
+                    vues.insert(.routeurSimple)
+                    a.cercle = false
+                }
                 let entree: Entree? = switch a.couleur {
                 case .routeur(principale: true): .routeur
                 case .routeur(principale: false): .autrePartition
@@ -255,7 +261,11 @@ struct LegendePiecesTests {
                         "\(n.id) : la meme apparence que dans la scene")
             }
         }
-        #expect(vues == [.routeur, .nonIdentifie, .autrePartition, .joignable, .sansAdresse, .disparu])
+        #expect(vues == [.routeur, .routeurSimple, .nonIdentifie, .autrePartition, .joignable, .sansAdresse, .disparu])
+        #expect(LegendePieces.signe(.routeurSimple) == .noeud(DessinNoeud.Apparence(forme: .pastille,
+                                                                                    couleur: .appareil(.joignable),
+                                                                                    cercle: true),
+                                                              rayon: LegendePieces.rayonAppareil))
         for (entree, etat) in [(Entree.partitionCoupee, EtatAffiche.partitionCoupee)] {
             #expect(LegendePieces.signe(entree) == .noeud(DessinNoeud.apparenceAppareil(etat), rayon: LegendePieces.rayonAppareil))
         }

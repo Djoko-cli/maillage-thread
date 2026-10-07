@@ -260,6 +260,10 @@ struct NomsSceneTests {
         #expect(e.apparences["7AF0B6D5006CF95F"] == DessinNoeud.Apparence(forme: .anneau, couleur: .appareil(.disparu)))
         #expect(e.apparences["56B1E064401F74EF"] == DessinNoeud.Apparence(forme: .pastille, couleur: .appareil(.joignable)))
         #expect(e.apparences["rloc:041F"]?.couleur == .appareil(.inconnu))
+        // Le cercle bleu : les appareils qui routent, et eux seuls (demande de Djoko du 08/10).
+        let cercles = Set(e.scene.noeuds.filter { e.apparences[$0.id]?.cercle == true }.map(\.id))
+        #expect(!cercles.isEmpty)
+        #expect(cercles == Set(e.scene.noeuds.filter { $0.genre == .appareil && $0.routeur }.map(\.id)))
     }
 
     /// La cle de la disposition ne change pas avec l'etat d'un noeud ; elle change avec son nom. Elle suit les

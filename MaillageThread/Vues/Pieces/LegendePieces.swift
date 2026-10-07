@@ -131,16 +131,18 @@ extension LegendePieces {
     /// Une entree de la legende : un signe et son texte (spec du polissage B, section 2) ; la couronne du chef et la
     /// lune d'un endormi sont leur signe, dans un nom de noeud comme dans la scene.
     enum Entree: Hashable, CaseIterable {
-        case routeur, nonIdentifie, autrePartition, chef
+        /// `routeur` : un routeur de bordure ; `routeurSimple` : un routeur qui ne l'est pas.
+        case routeur, routeurSimple, nonIdentifie, autrePartition, chef
         case joignable, partitionCoupee, sansAdresse, disparu, endormi, pile
         case bonne, moyenne, faible, inconnue
         case versParent, rattachement, ailleurs, candidats
 
         var texte: String {
             switch self {
-            case .routeur: String(localized: "routeur")
+            case .routeur: String(localized: "routeur de bordure")
+            case .routeurSimple: String(localized: "routeur")
             case .nonIdentifie: String(localized: "non identifié")
-            case .autrePartition: String(localized: "autre partition")
+            case .autrePartition: String(localized: "routeur de bordure d'une autre partition")
             case .chef: String(localized: "chef du réseau Thread, élu automatiquement")
             case .joignable: String(localized: "joignable")
             case .partitionCoupee: String(localized: "partition coupée")
@@ -166,7 +168,7 @@ extension LegendePieces {
 
         var entrees: [Entree] {
             switch self {
-            case .routeurs: [.routeur, .nonIdentifie, .autrePartition, .chef]
+            case .routeurs: [.routeur, .routeurSimple, .nonIdentifie, .autrePartition, .chef]
             case .appareils: [.joignable, .partitionCoupee, .sansAdresse, .disparu, .endormi, .pile]
             case .liens: [.bonne, .moyenne, .faible, .inconnue]
             case .autres: [.versParent, .rattachement, .ailleurs, .candidats]
@@ -194,6 +196,8 @@ extension LegendePieces {
     /// si des reperes « ailleurs » sont poses (piece isolee).
     struct Lecture {
         var couleurs: [String: DessinNoeud.Couleur] = [:]
+        /// Les routeurs qui ne sont pas de bordure (leur cercle).
+        var routeursSimples: Set<String> = []
         var inconnus: Set<String> = []
         var chefs: Set<String> = []
         var endormis: Set<String> = []
@@ -221,6 +225,7 @@ extension LegendePieces {
             case .routeurInconnu, .appareil(.inconnu): break
             }
         }
+        if !l.routeursSimples.isEmpty { r.insert(.routeurSimple) }
         if !l.inconnus.isEmpty { r.insert(.nonIdentifie) }
         if !l.chefs.isEmpty { r.insert(.chef) }
         if !l.endormis.isEmpty { r.insert(.endormi) }
@@ -261,6 +266,7 @@ extension LegendePieces.Lecture {
         let ids = e.scene.noeuds.map(\.id)
         couleurs = Dictionary(ids.compactMap { id in e.apparences[id].map { (id, $0.couleur) } },
                               uniquingKeysWith: { a, _ in a })
+        routeursSimples = Set(ids.filter { e.apparences[$0]?.cercle == true })
         inconnus = Set(e.scene.noeuds.filter(\.inconnu).map(\.id))
         chefs = Set(e.scene.noeuds.filter(\.chef).map(\.id))
         endormis = Set(e.scene.noeuds.filter { LibellesNoeuds.endormi(e.appareils[$0.id], routeur: $0.routeur) }

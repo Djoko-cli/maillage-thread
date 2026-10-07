@@ -4,7 +4,8 @@ import SwiftUI
 /// Dessin d'un noeud, le meme que celui du graphe d'avant (spec de la vue par pieces, section 5) :
 /// routeur en sphere brillante (degrade du blanc vers sa couleur, decale en haut a gauche) avec un
 /// halo, appareil en pastille pleine de la couleur de son etat avec un halo, appareil disparu en
-/// anneau ; anneau blanc de la selection ; pastille orange d'une batterie faible.
+/// anneau ; cercle bleu autour d'un routeur qui n'est pas de bordure ; anneau blanc de la selection ; pastille
+/// orange d'une batterie faible.
 enum DessinNoeud {
     /// Couleur d'un noeud, resolue par la palette au dessin.
     enum Couleur: Hashable {
@@ -25,16 +26,18 @@ enum DessinNoeud {
     struct Apparence: Hashable {
         var forme: Forme
         var couleur: Couleur
+        /// Le cercle bleu d'un routeur qui n'est pas de bordure (demande de Djoko du 08/10).
+        var cercle = false
     }
 
     /// Apparence d'un noeud : sphere pour un routeur de bordure ou un routeur que seule la sonde
-    /// connait, pastille pour un appareil (qui route ou non), anneau pour un appareil disparu. `etat` :
+    /// connait, pastille pour un appareil, anneau pour un appareil disparu, avec un cercle s'il route. `etat` :
     /// celui de l'appareil ; `principale` : la partition du noeud est la principale. La legende reprend les
     /// memes (`apparenceRouteur`, `apparenceAppareil`).
     static func apparence(_ n: ScenePieces.Noeud, etat: EtatAffiche?, principale: Bool) -> Apparence {
         switch n.genre {
         case .centre, .routeur: apparenceRouteur(centre: n.genre == .centre, inconnu: n.inconnu, principale: principale)
-        case .appareil: apparenceAppareil(etat)
+        case .appareil: apparenceAppareil(etat, routeur: n.routeur)
         }
     }
 
@@ -44,11 +47,16 @@ enum DessinNoeud {
         Apparence(forme: .sphere(halo: centre ? 10 : 5), couleur: inconnu ? .routeurInconnu : .routeur(principale: principale))
     }
 
-    /// Un appareil : pastille de la couleur de son etat (inconnu sans etat), anneau s'il a disparu.
-    static func apparenceAppareil(_ etat: EtatAffiche?) -> Apparence {
+    /// Un appareil : pastille de la couleur de son etat (inconnu sans etat), anneau s'il a disparu ; entoure du cercle
+    /// bleu s'il route.
+    static func apparenceAppareil(_ etat: EtatAffiche?, routeur: Bool = false) -> Apparence {
         let e = etat ?? .inconnu
-        return Apparence(forme: e == .disparu ? .anneau : .pastille, couleur: .appareil(e))
+        return Apparence(forme: e == .disparu ? .anneau : .pastille, couleur: .appareil(e), cercle: routeur)
     }
+
+    /// Le cercle d'un routeur : 1,5 point, a 2 points de sa pastille ; il s'etend de `ecartCercle` au-dela d'elle.
+    static let epaisseurCercle: CGFloat = 1.5
+    static let ecartCercle: CGFloat = 2 + epaisseurCercle
 
     static func couleur(_ c: Couleur, palette: Palette) -> Color {
         switch c {
@@ -79,11 +87,17 @@ enum DessinNoeud {
         case .anneau:
             ctx.stroke(Path(ellipseIn: rect), with: .color(couleur), lineWidth: 2)
         }
+        if apparence.cercle {
+            let a = r + ecartCercle - epaisseurCercle / 2
+            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - a, y: c.y - a, width: 2 * a, height: 2 * a)),
+                       with: .color(palette.routeur(principale: true)), lineWidth: epaisseurCercle)
+        }
     }
 
-    /// Anneau du noeud selectionne, 4 points autour de sa pastille.
-    static func dessinerSelection(_ ctx: inout GraphicsContext, centre c: CGPoint, rayon r: CGFloat, palette: Palette) {
-        let a = r + 4
+    /// Anneau du noeud selectionne, 4 points autour de sa pastille, ou de son cercle (`cercle`).
+    static func dessinerSelection(_ ctx: inout GraphicsContext, centre c: CGPoint, rayon r: CGFloat, cercle: Bool = false,
+                                  palette: Palette) {
+        let a = r + 4 + (cercle ? ecartCercle : 0)
         ctx.stroke(Path(ellipseIn: CGRect(x: c.x - a, y: c.y - a, width: 2 * a, height: 2 * a)),
                    with: .color(palette.selection), lineWidth: 2)
     }

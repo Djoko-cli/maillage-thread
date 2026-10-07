@@ -4193,22 +4193,6 @@
         }
       }
     },
-    "autre partition" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "other partition"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "autre partition"
-          }
-        }
-      }
-    },
     "batterie OK" : {
       "localizations" : {
         "en" : {
@@ -5181,6 +5165,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "routeur"
+          }
+        }
+      }
+    },
+    "routeur de bordure" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "border router"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "routeur de bordure"
+          }
+        }
+      }
+    },
+    "routeur de bordure d'une autre partition" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "border router in another partition"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "routeur de bordure d'une autre partition"
           }
         }
       }
