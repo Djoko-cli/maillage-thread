@@ -112,6 +112,37 @@ void Gardees::commencer(uint32_t rid) {
 
 void Gardees::terminer() { ouverte_ = false; }
 
+void Gardees::inverser(size_t debut, size_t fin) {
+  while (debut + 1 < fin) {
+    const uint8_t o = o_[debut];
+    o_[debut++] = o_[--fin];
+    o_[fin] = o;
+  }
+}
+
+bool Gardees::reprendre(uint32_t rid) {
+  ouverte_ = false;
+  abandonnee_ = false;
+  // Les lignes d'une reponse se suivent : [debut, fin).
+  size_t debut = 0, fin = 0;
+  bool trouvee = false;
+  for (size_t i = 0; i < n_; i += kEntete + longueurA(i))
+    if (ridA(i) == rid) {
+      if (!trouvee) debut = i;
+      trouvee = true;
+      fin = i + kEntete + longueurA(i);
+    }
+  if (!trouvee) return false;
+  // Rotation vers la gauche de [debut, n_) par fin - debut : la reponse passe
+  // en fin de tampon, comme une reponse en cours (trois inversions, sans tampon).
+  inverser(debut, fin);
+  inverser(fin, n_);
+  inverser(debut, n_);
+  rid_ = rid;
+  ouverte_ = true;
+  return true;
+}
+
 void Gardees::ajouter(const uint8_t *ligne, size_t n) {
   if (!ouverte_ || abandonnee_) return;
   const size_t besoin = kEntete + n;

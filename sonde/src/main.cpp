@@ -853,36 +853,101 @@ static void diagsFinis() {
 // dechiffres), age_s (depuis le dernier). Une ligne fait moins de 400 octets :
 // elle passe par le reseau (1100 au plus). Ni la cle reseau ni une cle
 // derivee : seulement ce que les routeurs annoncent a leurs voisins.
+static void ligneAnnonces(const mle::Entendu &e, uint32_t maintenant, bool suite) {
+  debut("annonces");
+  ajoute(",\"rloc16\":\"%04X\"", e.rloc16);
+  hexa("ext", e.ext, sizeof(e.ext));
+  if (e.aPartition) ajoute(",\"partition\":\"%08lX\"", (unsigned long)e.partition);
+  else ajoute(",\"partition\":null");
+  if (e.nRoute64) {
+    hexa("route64", e.route64, e.nRoute64);
+    ajoute(",\"seq\":%u", e.route64[0]);
+  } else {
+    ajoute(",\"route64\":null,\"seq\":null");
+  }
+  ajoute(",\"rssi\":%d,\"rssi_min\":%d,\"rssi_max\":%d,\"nb\":%lu,\"age_s\":%lu", e.rssi, e.rssiMin, e.rssiMax,
+         (unsigned long)e.nb, (unsigned long)((maintenant - e.dernier) / 1000));
+  ajoute(",\"suite\":%s", suite ? "true" : "false");
+  fin();
+}
+
+static void ligneAnnoncesVide() {
+  debut("annonces");
+  ajoute(",\"vide\":true");
+  fin();
+}
+
+// Par le reseau, les lignes ne peuvent pas partir toutes ensemble : la file
+// d'emission n'a que 6 places (reseau.cpp) et ne se vide qu'en fin de tour,
+// alors que la table peut garder 32 routeurs. La commande en fait donc un
+// travail, repris a chaque tour de loop() (annoncesTour) : une ligne par place
+// libre, dans l'ordre, la derniere avec "suite":false, comme une reponse de
+// diag ou de resolution qui attend sa place. Un seul a la fois, sur une copie
+// de la table prise a la commande (la table change entre deux tours : la
+// reponse est un instantane, et sa fin ne peut pas disparaitre).
+struct AnnoncesEnVol {
+  bool actif = false;
+  Sortie sortie;         // session reseau et rid qui attendent la reponse
+  uint32_t debutMs = 0;  // millis() de la commande : age_s de toutes les lignes
+  uint8_t total = 0;     // lignes a envoyer (au moins une : "vide")
+  uint8_t emises = 0;
+  uint8_t routeurs = 0;  // entrees copiees dans sInstantane
+  bool gardee = true;    // la reponse est encore gardee pour un rid repete
+};
+static AnnoncesEnVol sAnnonces;
+static mle::Entendu sInstantane[mle::TableEntendus::kPlaces];
+
 static void cmdAnnonces() {
   const mle::TableEntendus &t = ecoute::entendus();
   const uint32_t maintenant = millis();
-  size_t restants = t.nombre();
-  if (restants == 0) {
-    debut("annonces");
-    ajoute(",\"vide\":true");
-    fin();
+  if (sSortie.reseau) {
+    if (sAnnonces.actif) return repondreErreur("occupee");
+    AnnoncesEnVol a;
+    a.actif = true;
+    a.sortie = sSortie;
+    a.debutMs = maintenant;
+    for (size_t k = 0; k < mle::TableEntendus::kPlaces; k++)
+      if (t.place(k).utilise) sInstantane[a.routeurs++] = t.place(k);
+    a.total = a.routeurs ? a.routeurs : 1;
+    sAnnonces = a;
     return;
   }
+  size_t restants = t.nombre();
+  if (restants == 0) return ligneAnnoncesVide();
   for (size_t k = 0; k < mle::TableEntendus::kPlaces; k++) {
     const mle::Entendu &e = t.place(k);
     if (!e.utilise) continue;
     restants--;
-    debut("annonces");
-    ajoute(",\"rloc16\":\"%04X\"", e.rloc16);
-    hexa("ext", e.ext, sizeof(e.ext));
-    if (e.aPartition) ajoute(",\"partition\":\"%08lX\"", (unsigned long)e.partition);
-    else ajoute(",\"partition\":null");
-    if (e.nRoute64) {
-      hexa("route64", e.route64, e.nRoute64);
-      ajoute(",\"seq\":%u", e.route64[0]);
-    } else {
-      ajoute(",\"route64\":null,\"seq\":null");
-    }
-    ajoute(",\"rssi\":%d,\"rssi_min\":%d,\"rssi_max\":%d,\"nb\":%lu,\"age_s\":%lu", e.rssi, e.rssiMin, e.rssiMax,
-           (unsigned long)e.nb, (unsigned long)((maintenant - e.dernier) / 1000));
-    ajoute(",\"suite\":%s", restants ? "true" : "false");
-    fin();
+    ligneAnnonces(e, maintenant, restants != 0);
   }
+}
+
+// Tour de loop() : les lignes d'annonces que la file d'emission peut prendre.
+// Session partie entre-temps : le travail tombe (reseauSessionPartie a deja
+// vide les reponses gardees de la place). Sinon la reponse est gardee ligne
+// apres ligne pour un rid repete, reprise a chaque tour ; si elle a ete chassee
+// du tampon entre-temps, ou ne tient pas, le reste part sans etre garde, et un
+// rid repete apres la fin relance la commande (une lecture, sans effet).
+static void annoncesTour() {
+  AnnoncesEnVol &a = sAnnonces;
+  if (!a.actif) return;
+  if (!reseauSessionActive(a.sortie.place, a.sortie.generation)) {
+    a = AnnoncesEnVol();
+    return;
+  }
+  if (!reseauPlacesLibres()) return;
+  distant::Gardees &g = sGardees[a.sortie.place];
+  if (a.emises == 0) g.commencer(a.sortie.rid);
+  else if (a.gardee) a.gardee = g.reprendre(a.sortie.rid);
+  sSortie = a.sortie;
+  while (a.emises < a.total && reseauPlacesLibres()) {
+    if (a.routeurs) ligneAnnonces(sInstantane[a.emises], a.debutMs, a.emises + 1 < a.total);
+    else ligneAnnoncesVide();
+    a.emises++;
+  }
+  sSortie = Sortie();
+  g.terminer();
+  if (a.emises >= a.total) a = AnnoncesEnVol();
 }
 
 // ---------------------------------------------------------------------------
@@ -1194,6 +1259,9 @@ void reseauSessionPartie(uint8_t place) {
   if (place >= kPlacesReseau) return;
   sGardees[place].vider();
   sCadences[place] = distant::Cadence();
+  // Annonces en cours pour cette session : abandonnees (le loop() les aurait
+  // vues tomber, mais une session neuve de la meme place ne doit pas attendre).
+  if (sAnnonces.actif && sAnnonces.sortie.place == place) sAnnonces = AnnoncesEnVol();
 }
 
 // Une ligne gardee repart vers l'app, "<rid> <ligne JSON>".
@@ -1212,7 +1280,7 @@ static void executer(char *c);
 
 // "<rid> <commande>" d'une session etablie. Sans rid lisible, aucune reponse
 // possible : ignoree. Un rid deja servi ne relance rien : la reponse gardee
-// repart, ou rien si un diag ou une resolution de ce rid est encore en vol. Puis la cadence,
+// repart, ou rien si un diag, une resolution ou des annonces de ce rid sont encore en vol. Puis la cadence,
 // comme Halo apres l'id (benq cli.cpp) : plus de 20 commandes dans la seconde,
 // rien, sans reponse (l'app renvoie), mais le refus est compte
 // (sRefusCadence). Hors liste blanche : erreur « refuse ».
@@ -1229,6 +1297,9 @@ void reseauRecu(uint8_t place, char *charge) {
     if (r.enVol && r.sortie.reseau && r.sortie.place == place && r.sortie.generation == generation &&
         r.sortie.rid == rid)
       return;
+  if (sAnnonces.actif && sAnnonces.sortie.place == place && sAnnonces.sortie.generation == generation &&
+      sAnnonces.sortie.rid == rid)
+    return;
   Renvoi renvoi;
   renvoi.place = place;
   renvoi.n = distant::texteRid(rid, renvoi.prefixe);
@@ -1348,6 +1419,7 @@ void loop() {
   ecoute::tour(millis());
   resolutionsTour(millis());
   resolutionsFinies();
+  annoncesTour();
   reseauTour();
   surveillerAppairage(millis());
   voyantTour(millis());
