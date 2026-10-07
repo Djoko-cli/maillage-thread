@@ -9,7 +9,7 @@ struct MaillageTests {
     }
 
     /// Tournee de la capture : Route64 du chef (6000), 5000 et 6000 qui repondent,
-    /// les 5 routeurs de bordure muets, Network Data, balayage sous AC00, la sonde.
+    /// les 5 routeurs de bordure muets, Network Data, enfants resolus sous AC00, la sonde.
     static func tournee() throws -> Maillage {
         var c = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
         c.routeurs(try #require(try reponse(204).route64), chef: 24)
@@ -23,7 +23,7 @@ struct MaillageTests {
         for id in 503...508 {
             let r = try reponse(id)
             c.enfant(EnfantMaillage(rloc16: try #require(r.rloc16), extMac: r.extMac, endormi: r.mode?.endormi,
-                                    source: .balayage))
+                                    source: .resolution))
         }
         c.enfant(EnfantMaillage(rloc16: 0xAC09, qualite: 3, source: .sonde))
         c.identite("E000000000000007", routeur: 43)
@@ -100,7 +100,7 @@ struct MaillageTests {
         #expect(plusPetitEnDernier.qualite == 1)
     }
 
-    /// Enfants : tables de 5000 et 6000, balayage sous AC00, la sonde.
+    /// Enfants : tables de 5000 et 6000, enfants resolus sous AC00, la sonde.
     @Test func enfants() throws {
         let m = try Self.tournee()
         #expect(m.enfants.count == 13)
@@ -112,7 +112,7 @@ struct MaillageTests {
         let ac04 = try #require(de43.first { $0.rloc16 == 0xAC04 })
         #expect(ac04.extMac == "E00000000000000A")
         #expect(ac04.qualite == nil, "sous un routeur muet")
-        #expect(ac04.source == .balayage)
+        #expect(ac04.source == .resolution)
         #expect(de43.last?.source == .sonde)
         #expect(m.enfants(de: 24).count == 4)
     }
@@ -124,7 +124,7 @@ struct MaillageTests {
         #expect(c.enfantsSansIdentite == [0x5001, 0x5004])
         let adresse = try #require(AdresseIPv6("fd00:5555:6666:0:a00::7"))
         c.enfant(EnfantMaillage(rloc16: 0x5004, extMac: "E000000000000004", endormi: true, adresses: [adresse],
-                                source: .balayage))
+                                source: .resolution))
         #expect(c.enfantsSansIdentite == [0x5001])
         let e = try #require(c.maillage().enfants.first { $0.rloc16 == 0x5004 })
         #expect(e.extMac == "E000000000000004")
@@ -140,10 +140,10 @@ struct MaillageTests {
         let a1 = try #require(AdresseIPv6("fd00:5555:6666:0:a00::1"))
         let a2 = try #require(AdresseIPv6("fd00:5555:6666:0:a00::2"))
         let table = EnfantMaillage(rloc16: 0x5004, qualite: 2, delai: 256, endormi: true, source: .tableEnfants)
-        let balayage = EnfantMaillage(rloc16: 0x5004, extMac: "E0000000000000AA", qualite: 1, delai: 30, endormi: false,
-                                      adresses: [a1], source: .balayage)
+        let resolu = EnfantMaillage(rloc16: 0x5004, extMac: "E0000000000000AA", qualite: 1, delai: 30, endormi: false,
+                                    adresses: [a1], source: .resolution)
         let autre = EnfantMaillage(rloc16: 0x5004, extMac: "E0000000000000BB", qualite: 3, delai: 60, endormi: true,
-                                   adresses: [a2], source: .balayage)
+                                   adresses: [a2], source: .resolution)
         func fusion(_ premier: EnfantMaillage, _ second: EnfantMaillage) throws -> EnfantMaillage {
             var c = ConstructionMaillage(date: .now, partition: "46CBEBCD")
             c.enfant(premier)
@@ -152,15 +152,15 @@ struct MaillageTests {
             try #require(enfants.count == 1, "un seul RLOC16, une seule entree")
             return enfants[0]
         }
-        // Table d'abord, incomplete : ses valeurs restent, le balayage comble l'ExtMac et les adresses.
-        #expect(try fusion(table, balayage) == EnfantMaillage(rloc16: 0x5004, extMac: "E0000000000000AA", qualite: 2,
+        // Table d'abord, incomplete : ses valeurs restent, la resolution comble l'ExtMac et les adresses.
+        #expect(try fusion(table, resolu) == EnfantMaillage(rloc16: 0x5004, extMac: "E0000000000000AA", qualite: 2,
                                                               delai: 256, endormi: true, adresses: [a1],
                                                               source: .tableEnfants))
-        // Balayage d'abord, complet : rien n'est remplace, ni par la table, ni par sa source.
-        #expect(try fusion(balayage, table) == balayage)
+        // Resolution d'abord, complete : rien n'est remplace, ni par la table, ni par sa source.
+        #expect(try fusion(resolu, table) == resolu)
         // Deux entrees completes : la premiere gagne partout.
-        #expect(try fusion(balayage, autre) == balayage)
-        #expect(try fusion(autre, balayage) == autre)
+        #expect(try fusion(resolu, autre) == resolu)
+        #expect(try fusion(autre, resolu) == autre)
     }
 
     /// Promotion `.sonde` : une entree connue devient celle de la sonde quand la sonde la donne, dans les deux
@@ -411,7 +411,7 @@ struct MaillageTests {
     }
 
     /// Enfant resolu sous un routeur qui repond par son propre RLOC16 (Apple) : un numero invente, bit 9 a 1, jamais
-    /// un vrai RLOC16 ; son parent reste juste. Comme une entree de balayage, une entree resolue dont l'ExtMac est
+    /// un vrai RLOC16 ; son parent reste juste. Une entree resolue dont l'ExtMac est
     /// celle d'un routeur est ecartee des enfants identifies, et passe apres la sonde et une table.
     @Test func enfantResolu() {
         let e = EnfantMaillage(rloc16: 0xAC00 | EnfantMaillage.bitInvente | 2, extMac: "E0000000000000C1",

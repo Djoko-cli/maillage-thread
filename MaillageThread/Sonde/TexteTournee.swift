@@ -10,12 +10,13 @@ enum TexteTournee {
         case .listeRouteurs: String(localized: "Liste des routeurs")
         case .routeurs: String(localized: "Routeurs")
         case .pileEtReseau: String(localized: "Pile et Network Data")
-        case .balayage: String(localized: "Balayage des routeurs muets")
+        case .resolution: String(localized: "Résolution des parents")
+        case .compteurs: String(localized: "Compteurs des enfants")
         case .identites: String(localized: "Identité des enfants")
         }
     }
 
-    /// « Balayage des routeurs muets · 24/48 » ; l'etape seule quand elle n'a rien a faire.
+    /// « Resolution des parents · 12/26 » ; l'etape seule quand elle n'a rien a faire.
     static func avancement(_ a: AvancementTournee) -> String {
         guard a.total > 0 else { return etape(a.etape) }
         return String(localized: "\(etape(a.etape)) · \(a.fait)/\(a.total)")
@@ -34,7 +35,7 @@ enum TexteTournee {
             .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
     }
 
-    /// Barre du graphe : « Balayage des routeurs muets · 24/48 · 0:42 ».
+    /// Barre du graphe : « Resolution des parents · 12/26 · 0:42 ».
     static func barre(_ a: AvancementTournee, debut: Date, maintenant: Date) -> String {
         String(localized: "\(avancement(a)) · \(chrono(maintenant.timeIntervalSince(debut)))")
     }
@@ -45,12 +46,12 @@ enum TexteTournee {
         String(localized: "\(avancement(AvancementTournee(etape: e, fait: 888, total: 888))) · \(chrono(99 * 60 + 59))")
     }
 
-    /// Reglages › Sonde : « Balayage des routeurs muets · 24/48 · depuis 42 s ».
+    /// Reglages › Sonde : « Resolution des parents · 12/26 · depuis 42 s ».
     static func reglages(_ a: AvancementTournee, debut: Date, maintenant: Date) -> String {
         String(localized: "\(avancement(a)) · depuis \(duree(maintenant.timeIntervalSince(debut)))")
     }
 
-    /// Menu : « SONDE-01 : Balayage des routeurs muets 24/48… ».
+    /// Menu : « SONDE-01 : Resolution des parents 12/26… ».
     static func menu(_ a: AvancementTournee, nom: String) -> String {
         guard a.total > 0 else { return String(localized: "\(nom) : \(etape(a.etape))…") }
         return String(localized: "\(nom) : \(etape(a.etape)) \(a.fait)/\(a.total)…")

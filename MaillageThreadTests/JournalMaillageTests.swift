@@ -79,9 +79,9 @@ struct JournalMaillageTests {
         #expect(!FileManager.default.fileExists(atPath: ancien.path), "mois fini depuis plus de 90 jours")
     }
 
-    /// Appareil vu deux fois (le balayage ancien d'un routeur muet, et la table de son nouveau
+    /// Appareil vu deux fois (la resolution ancienne sous un routeur muet, et la table de son nouveau
     /// parent) : le journal le nomme comme l'appareil, sous son nouveau parent, meme si le graphe
-    /// donne son id a l'entree du balayage (le premier RLOC16).
+    /// donne son id a l'entree de la resolution (le premier RLOC16).
     @Test func appareilVuDeuxFois() throws {
         let s = Self.surveillance(dossier: nil)
         let t = Date()
@@ -90,7 +90,7 @@ struct JournalMaillageTests {
         c.routeurs(Route64(sequence: 1, routes: [1, 5].map { RouteRouteur(idRouteur: $0, qualiteSortante: 3, qualiteEntrante: 3, cout: 1) }),
                    chef: 1)
         c.muet(1)
-        c.enfant(EnfantMaillage(rloc16: 0x0405, extMac: Self.appareil, source: .balayage))
+        c.enfant(EnfantMaillage(rloc16: 0x0405, extMac: Self.appareil, source: .resolution))
         c.enfant(EnfantMaillage(rloc16: 0x1402, extMac: Self.appareil, qualite: 2, source: .tableEnfants))
         s.recevoir(c.maillage(), a: t.addingTimeInterval(300))
         let e = try #require(s.evenements.last)

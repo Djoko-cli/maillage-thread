@@ -262,7 +262,7 @@ final class Surveillance {
 
     /// Noeuds d'un maillage pour le journal : leur id dans le graphe et leur nom affiche,
     /// d'apres le rapprochement avec le reseau de sa partition (a defaut, le reseau affiche). Un
-    /// enfant identifie est d'abord l'appareil de meme ExtMac : vu deux fois (balayage ancien,
+    /// enfant identifie est d'abord l'appareil de meme ExtMac : vu deux fois (resolution ancienne,
     /// table), il n'a son id d'appareil qu'une fois dans le graphe.
     func sujets(_ m: Maillage) -> SujetsMaillage {
         let affiche = rapprochement(m)

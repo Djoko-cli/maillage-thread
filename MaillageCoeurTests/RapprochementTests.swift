@@ -32,10 +32,15 @@ struct RapprochementTests {
         return Instantane(annonces: b.annonces)
     }
 
-    /// Maillage de la capture ; `entendus` : les routeurs que la sonde entend (RLOC16 -> ExtMac).
+    /// Maillage de la capture ; `entendus` : les routeurs que la sonde entend (RLOC16 -> ExtMac). L'appareil
+    /// E00000000000000A est resolu sous AC00, muet, qui repond pour lui avec son propre RLOC16.
     static func maillage(entendus: [UInt16: String] = [:]) async throws -> Maillage {
-        let sonde = try SondeRejouee.capture(table: SondeRejouee.table(entendus: entendus))
-        return try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: .now)).maillage
+        let cible = "fd00:5555:6666:0:b00::6"
+        let sonde = try SondeRejouee.capture(table: SondeRejouee.table(entendus: entendus),
+                                             resolutions: [cible: ResultatResolution(id: 0, cible: cible, ok: true, rloc16: "AC00")])
+        let appareils = [AppareilAResoudre(id: "E00000000000000A", partition: "46CBEBCD", adresse: try #require(AdresseIPv6(cible)))]
+        return try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: .now,
+                                                       appareils: appareils)).maillage
     }
 
     static func affiches(_ i: Instantane) -> [AppareilAffiche] {
@@ -65,7 +70,7 @@ struct RapprochementTests {
         #expect(m.enfants[0x6002]?.id == "rloc:6002")
         #expect(m.enfants[0xAC09]?.id == "rloc:AC09", "la sonde, sans ExtMac (firmware d'essai)")
         #expect(m.inconnus.filter { $0.genre == .routeur }.map(\.id) == ["rloc:0400", "rloc:CC00", "rloc:E400"])
-        #expect(m.inconnus.count == 12)
+        #expect(m.inconnus.count == 7, "3 routeurs ; 6002, 6005 et 6006, sans identite ; la sonde")
         #expect(m.liens.contains(LienAffiche(de: "E000000000000002", vers: "E000000000000003", genre: .radio, qualite: 3)))
         #expect(m.liens.contains(LienAffiche(de: "E000000000000004", vers: "E000000000000002", genre: .parent, qualite: 2)))
         #expect(m.liens.contains(LienAffiche(de: "E00000000000000A", vers: "HomePod bureau", genre: .parent, qualite: nil)))

@@ -75,8 +75,6 @@ public struct CouvertureEcoute: Hashable, Sendable {
 public enum SourceEnfant: String, Hashable, Sendable {
     /// Child Table de son parent, un routeur qui repond.
     case tableEnfants
-    /// Trouve par balayage sous un routeur muet.
-    case balayage
     /// Rattache a son parent par la resolution d'adresse (spec de la sonde tout-en-un, section 2.2), sous un routeur
     /// qui ne repond pas au diagnostic.
     case resolution
@@ -155,9 +153,9 @@ public struct Maillage: Hashable, Sendable {
     /// Signal des routeurs de la liste que la sonde entend, son parent compris, par identifiant
     /// croissant.
     public let signaux: [SignalSonde]
-    /// Date du balayage dont viennent les enfants balayes de ce maillage
-    /// (`MemoireTournee.dernierBalayage`) ; nil sans balayage.
-    public var balayage: Date?
+    /// Date de la resolution complete dont viennent les enfants resolus de ce maillage
+    /// (`MemoireTournee.derniereResolution`) ; nil sans resolution.
+    public var resolution: Date?
     /// La sonde a rendu ses annonces a cette tournee (firmware 1.1.0) : un routeur sans `entendu` n'est pas entendu.
     public var annoncesLues = false
 
@@ -176,23 +174,22 @@ public struct Maillage: Hashable, Sendable {
 
     /// Enfants identifies (ExtMac connue), un par ExtMac. Vu deux fois (il a change de parent),
     /// l'entree la plus fraiche l'emporte : la sonde (elle sait son parent), puis la table d'un
-    /// routeur qui repond (l'ancien parent garde l'enfant jusqu'a son echeance), puis le balayage
-    /// ou la resolution sous un routeur muet, qui peuvent dater de 30 minutes ; a egalite, la premiere
-    /// par RLOC16. Une entree du balayage ou de la resolution dont l'ExtMac est celle d'un routeur du
-    /// maillage est ecartee : l'enfant est devenu routeur depuis.
+    /// routeur qui repond (l'ancien parent garde l'enfant jusqu'a son echeance), puis la resolution
+    /// sous un routeur muet, qui peut dater de 30 minutes ; a egalite, la premiere par RLOC16. Une
+    /// entree de la resolution dont l'ExtMac est celle d'un routeur du maillage est ecartee : l'enfant
+    /// est devenu routeur depuis.
     public var enfantsIdentifies: [String: EnfantMaillage] {
         func rang(_ s: SourceEnfant) -> Int {
             switch s {
             case .sonde: 0
             case .tableEnfants: 1
-            case .balayage, .resolution: 2
+            case .resolution: 2
             }
         }
         let routeursExt = Set(routeurs.compactMap(\.extMac))
         var parExtMac: [String: EnfantMaillage] = [:]
         for e in enfants {
-            let ancien = e.source == .balayage || e.source == .resolution
-            guard let x = e.extMac, !(ancien && routeursExt.contains(x)) else { continue }
+            guard let x = e.extMac, !(e.source == .resolution && routeursExt.contains(x)) else { continue }
             if let deja = parExtMac[x], rang(deja.source) <= rang(e.source) { continue }
             parExtMac[x] = e
         }
@@ -293,7 +290,7 @@ public struct ConstructionMaillage: Sendable {
         routeurs[id, default: RouteurMaillage(id: id)].muet = true
     }
 
-    /// Enfant trouve (table, balayage, sonde) ; complete celui qui est deja connu.
+    /// Enfant trouve (table, resolution, sonde) ; complete celui qui est deja connu.
     public mutating func enfant(_ e: EnfantMaillage) {
         guard var connu = enfants[e.rloc16] else {
             enfants[e.rloc16] = e

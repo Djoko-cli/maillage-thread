@@ -45,7 +45,7 @@ struct FenetreTests {
     /// retenue, cachee, mais sa place comptee dans la marge du haut (la scene ne bouge pas au debut ni a la fin d'une
     /// tournee) ; rien sans sonde. Le gabarit que compte la marge a la taille de la ligne montree.
     @Test func placeDeLaTournee() {
-        let a = AvancementTournee(etape: .balayage, fait: 24, total: 48)
+        let a = AvancementTournee(etape: .resolution, fait: 24, total: 48)
         let debut = Date(timeIntervalSince1970: 1_790_000_000)
         #expect(LigneTournee.place(serie: "A0:00:00:00:00:01", debut: debut) == .montree)
         #expect(LigneTournee.place(serie: "A0:00:00:00:00:01", debut: nil) == .comptee)

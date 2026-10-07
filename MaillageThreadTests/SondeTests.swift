@@ -102,13 +102,15 @@ final class CanalRejoue: CanalSonde {
     /// Reseau d'un seul routeur, le chef 0, qui ne donne que sa Route64 : la tournee
     /// aboutit (maillage d'un routeur muet, sans enfant). `diag <cible> <tlv> <id> <ms>` :
     /// la Route64 a la demande de la liste des routeurs, `delai` a toute autre requete ;
-    /// `routeurs` : le chef seul, parent de la sonde, donc sans ExtMac ; `voisins` : aucun.
+    /// `routeurs` : le chef seul, parent de la sonde, donc sans ExtMac ; `voisins` : aucun ;
+    /// `annonces` (firmware 1.1.0) : aucun routeur entendu.
     static func reseauMinimal(_ ligne: String) -> [String] {
         switch ligne {
         case "bonjour\n": return [bonjour]
         case "etat\n": return [etatAttache]
         case "routeurs\n": return [routeurs([("0000", nil)], suite: false)]
         case "voisins\n": return [voisins([])]
+        case "annonces\n": return [annoncesVides]
         default: break
         }
         let mots = ligne.trimmingCharacters(in: .newlines).split(separator: " ").map(String.init)

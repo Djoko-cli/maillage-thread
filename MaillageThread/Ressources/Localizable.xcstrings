@@ -1121,22 +1121,6 @@
         }
       }
     },
-    "Balayage des routeurs muets" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Scan of silent routers"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Balayage des routeurs muets"
-          }
-        }
-      }
-    },
     "Candidats :" : {
       "localizations" : {
         "en" : {
@@ -1261,6 +1245,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Code Matter de la sonde"
+          }
+        }
+      }
+    },
+    "Compteurs des enfants" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Child counters"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compteurs des enfants"
           }
         }
       }
@@ -3549,6 +3549,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Réseau scindé en %1$lld partitions, constaté le %2$@ · à part : %3$@"
+          }
+        }
+      }
+    },
+    "Résolution des parents" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parent resolution"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Résolution des parents"
           }
         }
       }

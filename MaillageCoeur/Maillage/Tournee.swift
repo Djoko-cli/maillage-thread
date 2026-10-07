@@ -11,8 +11,16 @@ public protocol InterlocuteurSonde: Sendable {
     /// Routeurs voisins que la sonde entend (`voisins`), avec leur signal ; son parent n'y est
     /// pas (`etat` le donne). Requete locale, sans delai reseau.
     func voisins() async throws -> [VoisinSonde]
+    /// Routeurs dont la sonde a entendu les messages MLE (`annonces`, lignes `suite` reunies ; firmware 1.1.0),
+    /// avec leur derniere Route64 brute. Requete locale, sans delai reseau. Un firmware plus ancien ne la connait pas.
+    func annonces() async throws -> [AnnonceSonde]
     /// `DIAG_GET` vers un RLOC16 : la reponse, ou l'echec (`delai`, `occupee`...).
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag
+    /// `DIAG_GET` vers une adresse du reseau maille (le ML-EID d'un enfant) : la reponse, ou l'echec.
+    func diag(adresse: AdresseIPv6, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag
+    /// Resolution d'une adresse (`resoudre`, firmware 1.1.0) : le RLOC16 trouve en 15 s au plus, ou l'echec
+    /// (`introuvable`, un refus).
+    func resoudre(_ adresse: AdresseIPv6) async throws -> ResultatResolution
 }
 
 /// Avancement d'une tournee : l'etape en cours, ses requetes revenues et le total prevu a
@@ -20,13 +28,12 @@ public protocol InterlocuteurSonde: Sendable {
 /// ne baisse jamais. Liste des routeurs : le chef et les secours, puis, s'il faut chercher,
 /// les autres routeurs de la table de la sonde et tous les autres identifiants (ceux-ci pas
 /// dans les 30 min qui suivent une recherche complete vaine) ; l'etape s'arrete a la premiere
-/// Route64, souvent avant son total. Balayage : pour chaque routeur, les numeros jusqu'a 8
-/// apres le dernier enfant trouve ; le total grandit quand un enfant repond loin, et finit
-/// egal aux requetes envoyees.
+/// Route64, souvent avant son total.
 public struct AvancementTournee: Hashable, Sendable {
     /// Etapes d'une tournee, dans l'ordre.
     public enum Etape: CaseIterable, Hashable, Sendable {
-        /// `etat` de la sonde, puis sa table des routeurs (`routeurs`) et ses voisins (`voisins`).
+        /// `etat` de la sonde, puis sa table des routeurs (`routeurs`), ses voisins (`voisins`) et les routeurs
+        /// qu'elle entend (`annonces`).
         case etatSonde
         /// Route64 : au chef, aux secours, puis recherche.
         case listeRouteurs
@@ -34,8 +41,10 @@ public struct AvancementTournee: Hashable, Sendable {
         case routeurs
         /// Pile (une fois par routeur qui repond) et Network Data.
         case pileEtReseau
-        /// Balayage des enfants des routeurs muets.
-        case balayage
+        /// Resolution des parents des appareils (toutes les 30 min, et un appareil nouveau).
+        case resolution
+        /// Compteurs MAC des enfants resolus sous un routeur qui ne repond pas.
+        case compteurs
         /// Identite des enfants des tables.
         case identites
     }
@@ -60,17 +69,23 @@ public struct MemoireTournee: Hashable, Sendable {
     public var echecs: [Int: Int] = [:]
     /// Derniere interrogation d'un routeur muet : une fois par heure.
     public var muetInterroge: [Int: Date] = [:]
-    /// Routeurs qui ont repondu au moins une fois depuis le debut de cette memoire :
-    /// un seul echec ne les fait pas balayer, il faut qu'ils soient muets.
-    public var dejaRepondu: Set<Int> = []
     /// Pile (TLV 28), demandee une fois par routeur qui repond ; "" : aucune.
     public var piles: [Int: String] = [:]
     /// ExtMac des routeurs, par RLOC16 : parents successifs de la sonde, routeurs qui repondent,
-    /// routeurs que la sonde entend (sa table des routeurs). Une ExtMac n'a qu'un RLOC16 (`retenir`).
+    /// routeurs que la sonde entend (sa table des routeurs, ses annonces). Une ExtMac n'a qu'un RLOC16 (`retenir`).
     public var identites: [UInt16: String] = [:]
-    /// Enfants des routeurs balayes, trouves au dernier balayage (un balayage dont la sonde a
-    /// refuse toutes les requetes ne compte pas) ; oublies quand leur parent sort de la liste.
-    public var balayes: [UInt16: EnfantMaillage] = [:]
+    /// Parents trouves par la resolution d'adresse, par appareil (spec de la sonde tout-en-un, section 2.2) : ceux de
+    /// la derniere resolution complete, et des appareils nouveaux depuis ; oublies quand leur parent sort de la liste.
+    public var resolutions: [String: ResolutionAppareil] = [:]
+    /// Appareils demandes depuis la derniere resolution complete, resolus ou non (une demande que la sonde refuse ne
+    /// compte pas) : un appareil qui n'y est pas est nouveau, et se resout a la tournee suivante.
+    public var demandes: Set<String> = []
+    /// Derniere resolution complete (toutes les 30 min ; une resolution dont la sonde a refuse toutes les demandes ne
+    /// compte pas).
+    public var derniereResolution: Date?
+    /// Dernier releve des compteurs MAC de chaque enfant resolu sous un routeur muet, par appareil : le prochain
+    /// donnera son taux d'echec (`QualiteCompteurs`).
+    public var compteurs: [String: CompteursMac] = [:]
     /// Enfants des tables identifies (ExtMac, adresses), par RLOC16 : gardes jusqu'a une nouvelle
     /// reponse ; oublies quand leur parent sort de la liste des routeurs, ou qu'ils manquent a la
     /// table de leur parent qui l'a donnee.
@@ -79,13 +94,6 @@ public struct MemoireTournee: Hashable, Sendable {
     /// au plus, qu'il ait repondu ou non (une demande refusee par la sonde ne compte pas) ;
     /// oubliee avec son identite.
     public var identiteDemandee: [UInt16: Date] = [:]
-    public var dernierBalayage: Date?
-    /// Routeurs balayes la derniere fois (muets, ou qui n'ont jamais repondu) : un autre ensemble
-    /// relance le balayage. Il n'est pas filtre par la liste : un routeur balaye qui en sort change
-    /// l'ensemble, et le balayage des autres est refait. Limite connue : un identifiant reattribue
-    /// qui etait le seul routeur balaye n'est rebalaye qu'a l'echeance ; ses enfants manquent en
-    /// attendant, mais aucun enfant faux ne s'affiche (`balayes` est filtre).
-    public var muetsBalayes: Set<Int> = []
     /// Routeurs qui ont repondu a la derniere tournee ou l'un a repondu : Route64 de
     /// secours quand le chef ne la donne pas.
     public var repondants: [Int] = []
@@ -112,51 +120,54 @@ public struct MemoireTournee: Hashable, Sendable {
     }
 }
 
-/// Tournee de la sonde : liste des routeurs, routeurs qui repondent, roles,
-/// puis balayage des enfants des routeurs muets.
+/// Tournee de la sonde : liste des routeurs, routeurs qui repondent, roles, liens entendus par la
+/// sonde, puis resolution des parents des appareils et qualite des enfants des routeurs muets.
 public enum Tournee {
     public static let tlvChef: [UInt8] = [TypeTLV.route64, TypeTLV.donneesChef]
     public static let tlvRouteur: [UInt8] = [TypeTLV.extMac, TypeTLV.address16, TypeTLV.route64, TypeTLV.tableEnfants,
                                              TypeTLV.adresses, TypeTLV.version]
     public static let tlvPile: [UInt8] = [TypeTLV.fabricant, TypeTLV.modele, TypeTLV.versionLogicielle, TypeTLV.pile]
     public static let tlvReseau: [UInt8] = [TypeTLV.donneesReseau]
-    public static let tlvBalayage: [UInt8] = [TypeTLV.extMac, TypeTLV.address16, TypeTLV.mode, TypeTLV.adresses]
     public static let tlvIdentite: [UInt8] = [TypeTLV.extMac, TypeTLV.adresses]
+    /// Compteurs MAC d'un enfant, demandes a son ML-EID (spec de la sonde tout-en-un, section 2.3).
+    public static let tlvCompteurs: [UInt8] = [TypeTLV.compteursMac]
     public static let delaiRouteur = 6000
-    public static let delaiBalayage = 8000
-    /// Requetes en vol a la fois (la sonde en tient 8).
+    /// Requetes en vol a la fois (la sonde en tient 8, et 8 resolutions).
     public static let enVol = 8
     /// Delai d'un enfant : un endormi ne repond qu'a son reveil.
     public static let delaiEnfant = 8000
-    /// Numeros d'enfant balayes sous un routeur muet : de 1 a 32, et 8 apres le dernier trouve.
-    public static let numerosMax = 32
-    public static let apresDernier = 8
-    public static let periodeBalayage: TimeInterval = 30 * 60
+    /// Identites des enfants des tables : redemandees apres ce delai.
+    public static let periodeIdentite: TimeInterval = 30 * 60
+    /// Resolution complete des parents : toutes les 30 min (un appareil nouveau, a la tournee suivante).
+    public static let periodeResolution: TimeInterval = 30 * 60
     public static let periodeMuet: TimeInterval = 3600
     /// Apres une recherche complete de la Route64 vaine, delai avant la suivante.
     public static let periodeRecherche: TimeInterval = 30 * 60
 
-    /// Une tournee, et le balayage s'il est du : le maillage et la memoire a garder. Pas de
-    /// maillage si la sonde n'est pas attachee, ou suspendue dans Maison (ses requetes
-    /// echoueraient toutes : aucun routeur ne doit passer pour muet ; memoire inchangee), ou si
-    /// aucun routeur n'a donne la liste des routeurs (Route64) : la memoire rendue est alors
-    /// celle d'avant (remise a zero dans une autre partition), avec les seules identites
-    /// apprises par `etat` et la table des routeurs, qu'une sonde promenee garde ainsi, et la
+    /// Une tournee, et la resolution des parents si elle est due : le maillage et la memoire a garder. Pas de
+    /// maillage si la sonde n'est pas attachee, ou suspendue dans Maison (ses requetes echoueraient toutes : aucun
+    /// routeur ne doit passer pour muet ; memoire inchangee), ou si aucun routeur n'a donne la liste des routeurs
+    /// (Route64) : la memoire rendue est alors celle d'avant (remise a zero dans une autre partition), avec les seules
+    /// identites apprises par `etat`, la table des routeurs et les annonces, qu'une sonde promenee garde ainsi, et la
     /// date d'une recherche complete vaine.
-    /// Le maillage porte aussi le signal des routeurs que la sonde entend (`voisins`) et celui
-    /// de son parent (`etat`), pour l'historique (spec de la sonde, section 6).
-    /// `avancement` est appele au debut de chaque etape atteinte, puis a chaque requete
-    /// revenue (voir `AvancementTournee`), depuis la tache de la tournee.
+    /// Le maillage porte aussi le signal des routeurs que la sonde entend (`voisins`) et celui de son parent (`etat`),
+    /// pour l'historique (spec de la sonde, section 6) ; et, depuis le firmware 1.1.0 (spec de la sonde tout-en-un,
+    /// section 2), les liens des routeurs dont la sonde entend les annonces, fusionnes avec ceux du diagnostic, et les
+    /// enfants des routeurs muets rattaches par la resolution d'adresse de `appareils` (ceux de la partition de la
+    /// sonde, elle exceptee), avec la qualite que donnent leurs compteurs MAC.
+    /// `avancement` est appele au debut de chaque etape atteinte, puis a chaque requete revenue (voir
+    /// `AvancementTournee`), depuis la tache de la tournee.
     public static func executer(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,
+                                appareils: [AppareilAResoudre] = [],
                                 avancement: (@Sendable (AvancementTournee) -> Void)? = nil)
         async throws -> (maillage: Maillage?, memoire: MemoireTournee) {
         func signaler(_ etape: AvancementTournee.Etape, _ fait: Int, _ total: Int) {
             avancement?(AvancementTournee(etape: etape, fait: fait, total: total))
         }
         var mem = memoire
-        signaler(.etatSonde, 0, 3)
+        signaler(.etatSonde, 0, 4)
         let etat = try await sonde.etat()
-        signaler(.etatSonde, 1, 3)
+        signaler(.etatSonde, 1, 4)
         guard etat.estAttachee, !etat.suspendue, let partition = etat.partition, let chef = etat.chef,
               let moi = etat.rloc16Valeur else { return (nil, memoire) }
         // Autre partition : les identifiants de routeur y sont redistribues, rien ne vaut plus.
@@ -165,14 +176,27 @@ public enum Tournee {
         // Table des routeurs de la sonde (requete locale, sans delai reseau) : ExtMac des routeurs
         // qu'elle entend. Sans table (firmware sans `routeurs`, sonde occupee), la tournee continue.
         let table = (try? await sonde.routeurs()) ?? []
-        signaler(.etatSonde, 2, 3)
+        signaler(.etatSonde, 2, 4)
         // Voisins de la sonde (requete locale) : le signal de chaque routeur qu'elle entend. Sans
         // reponse, la tournee continue sans eux.
         let voisins = (try? await sonde.voisins()) ?? []
-        signaler(.etatSonde, 3, 3)
+        signaler(.etatSonde, 3, 4)
+        // Routeurs dont la sonde entend les messages MLE (requete locale, firmware 1.1.0) : ceux de sa partition, du
+        // plus ancien message au plus recent. Sans reponse (firmware 1.0.x), la tournee continue sans l'ecoute, sans
+        // la resolution et sans les compteurs, que la sonde ne connait pas.
+        let annonces = (try? await sonde.annonces()).map { liste in
+            liste.filter { $0.partition == partition && ($0.rloc16Valeur.map { $0 & 0x3FF == 0 } ?? false) }
+                .sorted { $0.ageS > $1.ageS }
+        }
+        signaler(.etatSonde, 4, 4)
         var c = ConstructionMaillage(date: maintenant, partition: partition)
         for v in voisins where v.routeur {
             if let r = UInt16(v.rloc16, radix: 16) { c.signal(SignalSonde(routeur: Int(r >> 10), rssi: v.rssi)) }
+        }
+        // Chaque annonce relie un RLOC16 a une ExtMac, comme le parent de la sonde ; la plus recente l'emporte, et le
+        // parent et la table, plus frais, passent apres.
+        for a in annonces ?? [] {
+            if let r = a.rloc16Valeur { mem.retenir(a.ext, rloc16: r) }
         }
         if let p = etat.parent, let rp = UInt16(p.rloc16, radix: 16) {
             mem.retenir(p.ext, rloc16: rp)
@@ -216,17 +240,15 @@ public enum Tournee {
         guard let route64 else { return (nil, mem) }
         c.routeurs(route64, chef: chef)
         // Routeurs sortis de la liste (routeur disparu, identifiant libere) : leur paire, leurs
-        // echecs, leur pile, leur place de secours et leurs enfants balayes sont oublies ; un
-        // identifiant reattribue repart de zero. `muetsBalayes` reste tel quel : c'est le
-        // declencheur du balayage (voir sa doc).
+        // echecs, leur pile, leur place de secours et les enfants resolus sous eux sont oublies ; un
+        // identifiant reattribue repart de zero.
         let liste = Set(route64.routeurs)
         mem.identites = mem.identites.filter { liste.contains(Int($0.key >> 10)) }
         mem.echecs = mem.echecs.filter { liste.contains($0.key) }
         mem.muetInterroge = mem.muetInterroge.filter { liste.contains($0.key) }
-        mem.dejaRepondu.formIntersection(liste)
         mem.piles = mem.piles.filter { liste.contains($0.key) }
         mem.repondants = mem.repondants.filter { liste.contains($0) }
-        mem.balayes = mem.balayes.filter { liste.contains(Int($0.key >> 10)) }
+        mem.resolutions = mem.resolutions.filter { liste.contains($0.value.parent) }
 
         // 2. Chaque routeur, en parallele, sauf un muet deja interroge dans l'heure.
         let aInterroger = route64.routeurs.filter { id in
@@ -261,7 +283,6 @@ public enum Tournee {
                 c.reponse(rep, routeur: id)
                 mem.echecs[id] = 0
                 mem.muetInterroge[id] = nil
-                mem.dejaRepondu.insert(id)
                 if let ext = rep.extMac {
                     mem.retenir(ext, rloc16: rloc16(id))
                 } else {
@@ -314,44 +335,68 @@ public enum Tournee {
             c.reseau(d, seulementConnus: true)
         }
 
-        // 4. Balayage des enfants des routeurs sans reponse qui sont muets (deux echecs de
-        // suite) ou n'ont jamais repondu ; pas d'un routeur qui rate une seule tournee.
-        // Toutes les 30 min, ou si cet ensemble change. Les enfants trouves restent
-        // affiches sous leur parent tant qu'il ne repond pas (ajoutes a la fin, etape 5).
-        let aBalayer = muets.filter { mem.estMuet($0) || !mem.dejaRepondu.contains($0) }
-        let du = mem.dernierBalayage.map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
-        if du || (!aBalayer.isEmpty && aBalayer != mem.muetsBalayes) {
-            let routeurs = aBalayer.sorted()
-            // Total courant : les numeros prevus de chaque routeur a ce moment (voir `AvancementTournee`).
-            var prevues = routeurs.map { numerosPrevus(routeur: $0, dernier: dernierConnu(routeur: $0, sauf: moi), sauf: moi) }
-            var faitesAvant = 0
-            signaler(.balayage, 0, prevues.reduce(0, +))
-            var trouves: [UInt16: EnfantMaillage] = [:]
-            // Sans routeur a balayer, rien n'est refuse : le balayage du remplace le precedent par rien.
-            var refuse = !routeurs.isEmpty
-            for (i, m) in routeurs.enumerated() {
-                var faites = 0
-                let b = try await balayer(sonde, routeur: m, sauf: moi) { f, p in
-                    faites = f
-                    prevues[i] = p
-                    signaler(.balayage, faitesAvant + f, prevues.reduce(0, +))
-                }
-                for e in b.enfants { trouves[e.rloc16] = e }
-                refuse = refuse && b.refuse
-                faitesAvant += faites
+        // 4. Ecoute (spec de la sonde tout-en-un, section 2.1) : la Route64 de chaque annonce d'un routeur de la
+        // liste donne ses liens, dates de l'age que donne la sonde ; chaque sens garde la mesure la plus recente,
+        // diagnostic ou ecoute (`ConstructionMaillage.lien`).
+        if let annonces {
+            for a in annonces {
+                guard let r = a.rloc16Valeur else { continue }
+                c.ecoute(a.route64Decodee, routeur: Int(r >> 10), date: maintenant.addingTimeInterval(-TimeInterval(a.ageS)))
             }
-            // Toutes ses requetes refusees par la sonde : il ne dit rien des enfants. Le precedent
-            // reste, et le balayage est refait a la tournee suivante.
-            if !refuse {
-                mem.balayes = trouves
-                mem.dernierBalayage = maintenant
-                mem.muetsBalayes = aBalayer
-            }
-        } else {
-            signaler(.balayage, 0, 0)
+            c.annoncesRecues()
         }
 
-        // 5. Enfants des tables : ExtMac et adresses, gardees jusqu'a une nouvelle reponse ;
+        // 5. Resolution des parents (spec de la sonde tout-en-un, section 2.2), a la place du balayage : toutes les
+        // 30 min, et pour un appareil nouveau a la tournee suivante ; 8 en vol. Une demande que la sonde refuse ne
+        // compte pas : elle est refaite a la tournee suivante. Une resolution complete remplace la precedente, sauf
+        // si la sonde a refuse toutes ses demandes ; un appareil non resolu reste en rattachement suppose.
+        let moiExt = etat.ext?.uppercased()
+        let cibles = appareils.filter { $0.partition == partition && $0.id.uppercased() != moiExt }.sorted { $0.id < $1.id }
+        let complete = mem.derniereResolution.map { maintenant.timeIntervalSince($0) >= periodeResolution } ?? true
+        let aResoudre = annonces == nil ? [] : complete ? cibles : cibles.filter { !mem.demandes.contains($0.id) }
+        signaler(.resolution, 0, aResoudre.count)
+        let resolues = try await parallele(aResoudre, { try await sonde.resoudre($0.adresse) },
+                                           apresChacune: { n, _, _ in signaler(.resolution, n, aResoudre.count) })
+        var nouvelles: [String: ResolutionAppareil] = [:]
+        var demandees: Set<String> = []
+        for (a, r) in resolues where !r.refus {
+            demandees.insert(a.id)
+            if let rloc = r.rloc16Valeur {
+                nouvelles[a.id] = ResolutionAppareil(rloc16: rloc, mleid: r.adresseMleid, adresse: a.adresse, date: maintenant)
+            }
+        }
+        if complete && annonces != nil {
+            if aResoudre.isEmpty || !demandees.isEmpty {
+                // Un appareil refuse cette fois garde sa resolution d'avant, et sera demande de nouveau.
+                let refuses = Set(aResoudre.map(\.id)).subtracting(demandees)
+                mem.resolutions = nouvelles.merging(mem.resolutions.filter { refuses.contains($0.key) }) { n, _ in n }
+                mem.demandes = demandees
+                mem.derniereResolution = maintenant
+            }
+        } else {
+            mem.resolutions.merge(nouvelles) { _, n in n }
+            mem.demandes.formUnion(demandees)
+        }
+
+        // 6. Compteurs MAC (spec de la sonde tout-en-un, section 2.3) : a sa resolution, chaque enfant d'un routeur
+        // muet (Apple) dont la sonde connait le ML-EID ; le taux d'echec entre deux releves donne sa qualite. Sans
+        // reponse, la qualite reste inconnue et le releve d'avant reste.
+        let aMesurer = nouvelles.filter { muets.contains($0.value.parent) }.sorted { $0.key < $1.key }
+            .compactMap { id, r in r.mleid.map { (id, $0) } }
+        signaler(.compteurs, 0, aMesurer.count)
+        let mesures = try await parallele(aMesurer, {
+            try await sonde.diag(adresse: $0.1, tlvCompteurs, delaiMs: delaiEnfant)
+        }, apresChacune: { n, _, _ in signaler(.compteurs, n, aMesurer.count) })
+        for ((id, _), r) in mesures {
+            guard let releve = r.reponse?.compteursMac else { continue }
+            if let avant = mem.compteurs[id], let q = QualiteCompteurs.mesure(avant: avant, apres: releve) {
+                mem.resolutions[id]?.qualite = q.qualite
+                mem.resolutions[id]?.echecs = q.taux
+            }
+            mem.compteurs[id] = releve
+        }
+
+        // 7. Enfants des tables : ExtMac et adresses, gardees jusqu'a une nouvelle reponse ;
         // demandees de nouveau apres 30 min, que l'enfant ait repondu ou non.
         // Endormis sous un routeur qui repond : interroges au plus une fois par demi-heure, la Child Table ne donnant pas leur ExtMac.
         // L'identite d'un enfant (et la date de sa demande) est oubliee quand son parent sort de la
@@ -364,7 +409,7 @@ public enum Tournee {
         mem.identifies = mem.identifies.filter { garde($0.key) }
         mem.identiteDemandee = mem.identiteDemandee.filter { garde($0.key) }
         let aIdentifier = c.enfantsSansIdentite.filter { cible in
-            mem.identiteDemandee[cible].map { maintenant.timeIntervalSince($0) >= periodeBalayage } ?? true
+            mem.identiteDemandee[cible].map { maintenant.timeIntervalSince($0) >= periodeIdentite } ?? true
         }
         signaler(.identites, 0, aIdentifier.count)
         let identites = try await parallele(aIdentifier, {
@@ -379,16 +424,35 @@ public enum Tournee {
         for cible in c.enfantsSansIdentite {
             if let e = mem.identifies[cible] { c.enfant(e) }
         }
-        // Enfants balayes, sous leur parent muet, apres les identites : pas celui dont l'ExtMac est
-        // celle d'un enfant des tables ou de la sonde (il a change de parent depuis le balayage).
-        let dejaLa = Set(c.maillage().enfants.compactMap(\.extMac))
-        for e in mem.balayes.values.sorted(by: { $0.rloc16 < $1.rloc16 }) where muets.contains(e.parent) {
-            if let ext = e.extMac, dejaLa.contains(ext) { continue }
-            c.enfant(e)
+
+        // 8. Enfants resolus, sous leur parent muet (sous un routeur qui repond, sa table fait foi), apres les
+        // identites : pas un appareil deja la (meme ExtMac ou meme adresse qu'un enfant des tables ou de la sonde : il
+        // a change de parent depuis), ni un routeur lui-meme. Le RLOC16 rendu est celui de l'enfant (routeur tiers),
+        // ou celui du parent (routeur Apple) : l'enfant recoit alors un numero invente sous lui
+        // (`EnfantMaillage.bitInvente`), dans l'ordre des appareils.
+        let dejaLa = c.maillage()
+        let extMacs = Set(dejaLa.enfants.compactMap(\.extMac)), adresses = Set(dejaLa.enfants.flatMap(\.adresses))
+        var inventes: [Int: UInt16] = [:]
+        for (id, r) in mem.resolutions.sorted(by: { $0.key < $1.key }) where muets.contains(r.parent) {
+            let ext = GrapheReseau.extMac(hote: id)
+            if let ext, extMacs.contains(ext) { continue }
+            if adresses.contains(r.adresse) { continue }
+            var rloc = r.rloc16
+            if rloc & 0x3FF == 0 {
+                // Le RLOC16 d'un routeur : l'appareil est ce routeur lui-meme (son ExtMac), ou un enfant d'un routeur Apple.
+                if let ext, ext == dejaLa.routeur(r.parent)?.extMac?.uppercased() { continue }
+                let k = inventes[r.parent, default: 0]
+                inventes[r.parent] = k + 1
+                rloc = rloc16(r.parent) | EnfantMaillage.bitInvente | (k & 0x1FF)
+            } else if rloc == moi {
+                continue
+            }
+            c.enfant(EnfantMaillage(rloc16: rloc, extMac: ext, qualite: r.qualite, adresses: [r.adresse],
+                                    source: .resolution, resolu: r.date, echecs: r.echecs))
         }
         var maillage = c.maillage()
-        // Date du balayage reussi dont viennent les enfants balayes (un balayage rate ne la change pas).
-        maillage.balayage = mem.dernierBalayage
+        // Date de la resolution complete dont viennent les enfants resolus (une resolution refusee ne la change pas).
+        maillage.resolution = mem.derniereResolution
         return (maillage, mem)
     }
 
@@ -431,61 +495,14 @@ public enum Tournee {
         return (nil, refusee)
     }
 
-    /// Dernier numero d'enfant connu sous un routeur avant son balayage : celui de la
-    /// sonde si elle est son enfant (elle compte, sans etre interrogee).
-    static func dernierConnu(routeur m: Int, sauf moi: UInt16) -> Int {
-        moi >> 10 == UInt16(m) ? Int(moi & 0x1FF) : 0
-    }
-
-    /// Requetes prevues sous un routeur : de 1 a 8 numeros apres le dernier trouve (32 au
-    /// plus), la sonde exceptee.
-    static func numerosPrevus(routeur m: Int, dernier: Int, sauf moi: UInt16) -> Int {
-        (1...min(numerosMax, dernier + apresDernier)).count(where: { rloc16(m) | UInt16($0) != moi })
-    }
-
-    /// Enfants d'un routeur muet, numero par numero, 8 en vol : de 1 a 32, en
-    /// s'arretant 8 numeros apres le dernier trouve (la sonde compte, sans etre interrogee).
-    /// `refuse` : la sonde a refuse toutes les requetes. `suivi` : requetes revenues et prevues
-    /// sous ce routeur, a chaque requete revenue ; un enfant qui repond loin repousse la fin tout
-    /// de suite.
-    static func balayer(_ sonde: some InterlocuteurSonde, routeur m: Int, sauf moi: UInt16,
-                        suivi: (_ faites: Int, _ prevues: Int) -> Void = { _, _ in }) async throws
-        -> (enfants: [EnfantMaillage], refuse: Bool) {
-        var trouves: [EnfantMaillage] = []
-        var refuse = true
-        var dernier = dernierConnu(routeur: m, sauf: moi)
-        var debut = 1
-        var faites = 0
-        while debut <= min(numerosMax, dernier + apresDernier) {
-            let fin = min(debut + enVol - 1, numerosMax, dernier + apresDernier)
-            let cibles = (debut...fin).map { rloc16(m) | UInt16($0) }.filter { $0 != moi }
-            let avant = faites
-            let resultats = try await parallele(cibles, {
-                try await sonde.diag($0, tlvBalayage, delaiMs: delaiBalayage)
-            }, apresChacune: { n, cible, r in
-                if r.reponse != nil { dernier = max(dernier, Int(cible & 0x1FF)) }
-                suivi(avant + n, numerosPrevus(routeur: m, dernier: dernier, sauf: moi))
-            })
-            for (cible, r) in resultats {
-                refuse = refuse && r.refus
-                guard let rep = r.reponse else { continue }
-                trouves.append(EnfantMaillage(rloc16: cible, extMac: rep.extMac, endormi: rep.mode?.endormi,
-                                              adresses: rep.adresses, source: .balayage))
-            }
-            faites += cibles.count
-            debut = fin + 1
-        }
-        return (trouves, refuse)
-    }
-
     /// Au plus `enVol` requetes a la fois ; resultats dans l'ordre des elements.
     /// `apresChacune` : a chaque requete revenue, le nombre de revenues, l'element et son resultat.
-    static func parallele<E: Sendable>(_ elements: [E],
-                                       _ requete: @escaping @Sendable (E) async throws -> ResultatDiag,
-                                       apresChacune: (_ faites: Int, _ element: E, _ resultat: ResultatDiag) -> Void = { _, _, _ in })
-        async throws -> [(E, ResultatDiag)] {
-        var resultats: [(Int, E, ResultatDiag)] = []
-        try await withThrowingTaskGroup(of: (Int, E, ResultatDiag).self) { groupe in
+    static func parallele<E: Sendable, R: Sendable>(_ elements: [E],
+                                                    _ requete: @escaping @Sendable (E) async throws -> R,
+                                                    apresChacune: (_ faites: Int, _ element: E, _ resultat: R) -> Void = { _, _, _ in })
+        async throws -> [(E, R)] {
+        var resultats: [(Int, E, R)] = []
+        try await withThrowingTaskGroup(of: (Int, E, R).self) { groupe in
             var suivant = 0
             func lancer() {
                 let i = suivant
@@ -513,4 +530,10 @@ fileprivate extension ResultatDiag {
     /// la requete (`occupee`, `suspendue`, `envoi...`), ou elle rend une autre erreur d'OpenThread
     /// apres l'envoi (`Abort`...) : dans les deux cas, rien n'est dit de la cible.
     var refus: Bool { !ok && !tropLong && !silence }
+}
+
+fileprivate extension ResultatResolution {
+    /// Refus : ni le RLOC16 trouve, ni `introuvable`. La sonde n'a pas fait la demande (`occupee`, `suspendue`,
+    /// `envoi...`, `syntaxe`), ou ne l'a pas rendue a temps (`delai`) : rien n'est dit de l'appareil.
+    var refus: Bool { !ok && !introuvable }
 }

@@ -117,8 +117,8 @@ struct LigneTournee: View {
     }
 }
 
-/// Tournee de la sonde en cours : un petit indicateur de progression et « Balayage des
-/// routeurs muets · 24/48 · 0:42 », la duree a jour chaque seconde. Sans debut : la place de la
+/// Tournee de la sonde en cours : un petit indicateur de progression et « Resolution des
+/// parents · 12/26 · 0:42 », la duree a jour chaque seconde. Sans debut : la place de la
 /// ligne, sans horloge.
 struct IndicateurTournee: View {
     let avancement: AvancementTournee

@@ -15,11 +15,11 @@ struct SuiviMaillageTests {
 
     /// Maillage de la partition 0000000A a `minutes` de t0 (valeurs inventees) : le chef 0 (routeur
     /// de bordure), et les routeurs 1 et 2 par defaut ; `muets` ; ExtMac des routeurs `routeursExt` ;
-    /// `balayage` : date du balayage dont viennent les enfants balayes, en minutes apres t0 (nil :
-    /// aucun balayage).
+    /// `resolution` : date de la resolution dont viennent les enfants resolus, en minutes apres t0
+    /// (nil : aucune resolution).
     static func maillage(_ minutes: Double, routeurs: [Int] = [0, 1, 2], bordures: Set<Int> = [0], muets: Set<Int> = [],
                          routeursExt: [Int: String] = [:], enfants: [Enfant], partition: String = "0000000A",
-                         balayage: Double? = nil) -> Maillage {
+                         resolution: Double? = nil) -> Maillage {
         var c = ConstructionMaillage(date: t0.addingTimeInterval(minutes * 60), partition: partition)
         c.routeurs(Route64(sequence: 1, routes: routeurs.map { RouteRouteur(idRouteur: $0, qualiteSortante: 0, qualiteEntrante: 0, cout: 1) }),
                    chef: routeurs[0])
@@ -27,10 +27,10 @@ struct SuiviMaillageTests {
         for id in muets { c.muet(id) }
         for (id, ext) in routeursExt { c.identite(ext, routeur: id) }
         for e in enfants {
-            c.enfant(EnfantMaillage(rloc16: e.rloc16, extMac: e.ext, qualite: e.source == .balayage ? nil : 3, source: e.source))
+            c.enfant(EnfantMaillage(rloc16: e.rloc16, extMac: e.ext, qualite: e.source == .resolution ? nil : 3, source: e.source))
         }
         var m = c.maillage()
-        m.balayage = balayage.map { t0.addingTimeInterval($0 * 60) }
+        m.resolution = resolution.map { t0.addingTimeInterval($0 * 60) }
         return m
     }
 
@@ -171,56 +171,56 @@ struct SuiviMaillageTests {
     }
 
     /// Enfant lu dans la table d'un routeur qui se tait ensuite : son absence ne dit rien (le
-    /// routeur n'a pas ete interroge). Enfant balaye sous un routeur muet : absent, c'est qu'un
-    /// nouveau balayage ne l'a pas trouve ; il faut deux balayages distincts (ici aux minutes 5 et 10).
+    /// routeur n'a pas ete interroge). Enfant resolu sous un routeur muet : absent, c'est qu'une
+    /// nouvelle resolution ne l'a pas trouve ; il faut deux resolutions distinctes (ici aux minutes 5 et 10).
     @Test func absenceSousUnRouteurMuet() {
         let b2 = "E0000000000000B2"
         let ev = Self.suivre([
             Self.maillage(0, muets: [2], enfants: [Enfant(rloc16: 0x0401, ext: Self.b1),
-                                                     Enfant(rloc16: 0x0805, ext: b2, source: .balayage)], balayage: 0),
-            Self.maillage(5, muets: [1, 2], enfants: [], balayage: 5),
-            Self.maillage(10, muets: [1, 2], enfants: [], balayage: 10),
+                                                     Enfant(rloc16: 0x0805, ext: b2, source: .resolution)], resolution: 0),
+            Self.maillage(5, muets: [1, 2], enfants: [], resolution: 5),
+            Self.maillage(10, muets: [1, 2], enfants: [], resolution: 10),
         ])
         #expect(ev[1].isEmpty)
         #expect(ev[2].map(\.type) == [.sansParent])
         #expect(ev[2].first?.sujet?.id == b2)
     }
 
-    /// Un balayage est reutilise par les tournees jusqu'au suivant : une seule observation, meme
-    /// comptee a chaque tournee, n'est pas une absence de plus. Enfant balaye sous un routeur muet
-    /// (2), present au balayage de la minute 0, absent de celui de la minute 5 (reutilise aux
-    /// minutes 10 et 15) : une absence. Absent de celui de la minute 35 : « sans parent », une seule
-    /// fois.
-    @Test func unBalayageNeCompteQuUneFois() {
+    /// Une resolution est reutilisee par les tournees jusqu'a la suivante : une seule observation,
+    /// meme comptee a chaque tournee, n'est pas une absence de plus. Enfant resolu sous un routeur
+    /// muet (2), present a la resolution de la minute 0, absent de celle de la minute 5 (reutilisee
+    /// aux minutes 10 et 15) : une absence. Absent de celle de la minute 35 : « sans parent », une
+    /// seule fois.
+    @Test func uneResolutionNeCompteQuUneFois() {
         let b2 = "E0000000000000B2"
-        let absent = { (minutes: Double, balayage: Double) in
-            Self.maillage(minutes, muets: [2], enfants: [], balayage: balayage)
+        let absent = { (minutes: Double, resolution: Double) in
+            Self.maillage(minutes, muets: [2], enfants: [], resolution: resolution)
         }
         let ev = Self.suivre([
-            Self.maillage(0, muets: [2], enfants: [Enfant(rloc16: 0x0805, ext: b2, source: .balayage)], balayage: 0),
+            Self.maillage(0, muets: [2], enfants: [Enfant(rloc16: 0x0805, ext: b2, source: .resolution)], resolution: 0),
             absent(5, 5), absent(10, 5), absent(15, 5),
             absent(35, 35), absent(40, 35),
         ])
-        #expect(ev[1].isEmpty && ev[2].isEmpty && ev[3].isEmpty, "le meme balayage, vu trois fois")
-        #expect(ev[4].map(\.type) == [.sansParent], "un second balayage ne le trouve pas")
+        #expect(ev[1].isEmpty && ev[2].isEmpty && ev[3].isEmpty, "la meme resolution, vue trois fois")
+        #expect(ev[4].map(\.type) == [.sansParent], "une seconde resolution ne le trouve pas")
         #expect(ev[4].first?.sujet?.id == b2 && ev[4].first?.avant == "R2")
         #expect(ev[5].isEmpty, "pas de seconde fois")
     }
 
-    /// Sans balayage (nil) sous un parent muet : l'enfant balaye n'est pas retrouve, mais rien n'a
-    /// ete observe : aucune absence. Seuls deux balayages distincts (minutes 25 et 30) comptent.
-    @Test func sansBalayageSousUnParentMuet() {
+    /// Sans resolution (nil) sous un parent muet : l'enfant resolu n'est pas retrouve, mais rien n'a
+    /// ete observe : aucune absence. Seules deux resolutions distinctes (minutes 25 et 30) comptent.
+    @Test func sansResolutionSousUnParentMuet() {
         let b2 = "E0000000000000B2"
-        let sans = { (minutes: Double) in Self.maillage(minutes, muets: [2], enfants: [], balayage: nil) }
+        let sans = { (minutes: Double) in Self.maillage(minutes, muets: [2], enfants: [], resolution: nil) }
         let ev = Self.suivre([
-            Self.maillage(0, muets: [2], enfants: [Enfant(rloc16: 0x0805, ext: b2, source: .balayage)], balayage: 0),
+            Self.maillage(0, muets: [2], enfants: [Enfant(rloc16: 0x0805, ext: b2, source: .resolution)], resolution: 0),
             sans(5), sans(10), sans(15), sans(20),
-            Self.maillage(25, muets: [2], enfants: [], balayage: 25),
-            Self.maillage(30, muets: [2], enfants: [], balayage: 30),
+            Self.maillage(25, muets: [2], enfants: [], resolution: 25),
+            Self.maillage(30, muets: [2], enfants: [], resolution: 30),
         ])
-        #expect(ev[1...4].allSatisfy { $0.isEmpty }, "quatre tournees sans balayage : pas une absence")
-        #expect(ev[5].isEmpty, "premier balayage qui ne le trouve pas")
-        #expect(ev[6].map(\.type) == [.sansParent], "second balayage : le compte n'avait pas avance avant")
+        #expect(ev[1...4].allSatisfy { $0.isEmpty }, "quatre tournees sans resolution : pas une absence")
+        #expect(ev[5].isEmpty, "premiere resolution qui ne le trouve pas")
+        #expect(ev[6].map(\.type) == [.sansParent], "seconde resolution : le compte n'avait pas avance avant")
     }
 
     /// « N'a plus de parent » nomme l'enfant et son dernier parent connu (R2, pas R1 d'avant son

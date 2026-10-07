@@ -23,13 +23,13 @@ public struct SujetsMaillage: Sendable {
 /// - un enfant identifie absent de deux observations ou son absence est sure : « X n'a plus de
 ///   parent ». Elle l'est si son dernier parent a repondu (sa table des enfants est fraiche) ou
 ///   s'il a quitte la liste des routeurs : une absence par tournee. Elle l'est aussi si l'enfant
-///   venait d'un balayage et que son parent est toujours muet (un routeur muet garde ses enfants
-///   balayes jusqu'au balayage suivant) : le balayage est reutilise par toutes les tournees
-///   jusqu'au suivant, donc l'absence doit etre vue par deux balayages distincts, et non par deux
-///   tournees (choix de Djoko, 30/09 : un balayage qui rate un appareil endormi trop lent ne suffit
-///   pas ; l'alerte vient apres 30 a 60 min). Sous un parent qui s'est tu sans etre balaye, on ne
-///   sait pas. La sonde n'est jamais « sans parent » (detachee, elle ne rend pas de maillage),
-///   ni un enfant devenu routeur ;
+///   venait d'une resolution et que son parent est toujours muet (un routeur muet garde ses enfants
+///   resolus jusqu'a la resolution suivante) : la resolution est reutilisee par toutes les tournees
+///   jusqu'a la suivante, donc l'absence doit etre vue par deux resolutions distinctes, et non par
+///   deux tournees (choix de Djoko, 30/09, pour le balayage qu'elle remplace : une resolution qui
+///   rate un appareil ne suffit pas ; l'alerte vient apres 30 a 60 min). Sous un parent qui s'est tu
+///   sans resolution, on ne sait pas. La sonde n'est jamais « sans parent » (detachee, elle ne rend
+///   pas de maillage), ni un enfant devenu routeur ;
 /// - un routeur hors routeurs de bordure qui entre dans la liste des routeurs, ou en sort.
 /// Le premier maillage, et le premier d'une autre partition (les identifiants de routeur y sont
 /// redistribues), sont un point de depart : aucun evenement.
@@ -44,8 +44,8 @@ public struct SuiviMaillage: Sendable {
         var source: SourceEnfant
         var absences = 0
         var perdu = false
-        /// Date du balayage de la derniere absence comptee sous un parent muet.
-        var balayageCompte: Date?
+        /// Date de la resolution de la derniere absence comptee sous un parent muet.
+        var resolutionComptee: Date?
     }
 
     private struct EtatRouteur: Sendable {
@@ -99,12 +99,12 @@ public struct SuiviMaillage: Sendable {
                 continue
             }
             let parent = parId[e.parent]
-            guard e.source != .sonde, parent == nil || parent?.muet == false || e.source == .balayage else { continue }
+            guard e.source != .sonde, parent == nil || parent?.muet == false || e.source == .resolution else { continue }
             if parent?.muet == true {
-                // Parent toujours dans la liste et muet : l'absence ne vient que du balayage, reutilise
-                // par chaque tournee jusqu'au suivant ; elle ne compte qu'une fois par balayage.
-                guard let balayage = m.balayage, balayage != e.balayageCompte else { continue }
-                e.balayageCompte = balayage
+                // Parent toujours dans la liste et muet : l'absence ne vient que de la resolution, reutilisee
+                // par chaque tournee jusqu'a la suivante ; elle ne compte qu'une fois par resolution.
+                guard let resolution = m.resolution, resolution != e.resolutionComptee else { continue }
+                e.resolutionComptee = resolution
             }
             e.absences += 1
             if e.absences >= Self.absencesAvantPerte {

@@ -40,12 +40,12 @@ public enum MaillageDemo {
         for (k, a) in ids.suffix(qui.count).enumerated() where bordures.count > 1 {
             c.lien(a, ids[1 + k % (bordures.count - 1)], sortante: 2, entrante: 1)
         }
-        // Enfants, a tour de role ; sous le routeur muet, sans qualite.
+        // Enfants, a tour de role ; sous le routeur muet, resolus, sans qualite.
         for (k, a) in enfants.enumerated() {
             let parent = ids[k % ids.count]
             c.enfant(EnfantMaillage(rloc16: UInt16(parent) << 10 | UInt16(1 + k / ids.count), extMac: a.id,
                                     qualite: parent == muet ? nil : qualites[k % 4], endormi: a.endormi,
-                                    source: parent == muet ? .balayage : .tableEnfants))
+                                    source: parent == muet ? .resolution : .tableEnfants))
         }
         c.enfant(EnfantMaillage(rloc16: UInt16(chef) << 10 | 0x1F, extMac: "E0000000000000FF", qualite: 1, endormi: true,
                                 source: .tableEnfants))

@@ -28,24 +28,30 @@ final class ReleveAvancement: Sendable {
 
 /// Sonde rejouee : repond avec les TLV de la capture, echoue en `delai` pour le reste (ou en
 /// `trop_long`, reponse de plus de 1100 octets par le reseau, pour `tropLongs` ; ou refuse la
-/// requete, pour `refus`), et note ses requetes.
+/// requete, pour `refus`), et note ses requetes. Depuis le firmware 1.1.0 : ses annonces, et ses
+/// resolutions (`introuvable` pour une adresse qu'elle ne connait pas).
 struct SondeRejouee: InterlocuteurSonde {
     actor Registre {
-        /// Requetes `diag`, "<cible>|<tlv,...>".
+        /// Requetes `diag`, "<cible>|<tlv,...>", et `resoudre`, "<adresse>|resoudre".
         var requetes: [String] = []
         /// Demandes de la table des routeurs (`routeurs`).
         var tables = 0
         /// Demandes des voisins (`voisins`).
         var voisins = 0
+        /// Demandes des routeurs entendus (`annonces`).
+        var annonces = 0
         func noter(_ r: String) { requetes.append(r) }
         func noterTable() { tables += 1 }
         func noterVoisins() { voisins += 1 }
+        func noterAnnonces() { annonces += 1 }
     }
 
     /// La sonde ne rend pas sa table (firmware sans `routeurs`, verrou d'OpenThread refuse).
     struct SansTable: Error {}
     /// La sonde ne rend pas ses voisins (verrou d'OpenThread refuse, liste trop longue).
     struct SansVoisins: Error {}
+    /// La sonde ne rend pas ses annonces (firmware 1.0.x).
+    struct SansAnnonces: Error {}
 
     let etatSonde: EtatSonde
     /// "<cible>|<tlv,...>" -> TLV hexa.
@@ -61,12 +67,24 @@ struct SondeRejouee: InterlocuteurSonde {
     var retards: [String: Duration] = [:]
     /// Routeurs voisins que la sonde entend ; nil : elle ne rend pas la liste.
     var listeVoisins: [VoisinSonde]? = []
+    /// Routeurs dont la sonde entend les annonces ; nil : elle ne les rend pas (firmware 1.0.x).
+    var listeAnnonces: [AnnonceSonde]? = []
+    /// Resolutions, par adresse (sa forme courte) ; une autre adresse : `introuvable`.
+    var resolutions: [String: ResultatResolution] = [:]
     let registre = Registre()
 
     /// Cle d'une requete : "<cible>|<tlv,...>".
     static func cle(_ cible: UInt16, _ tlv: [UInt8]) -> String {
         String(format: "%04X|", cible) + tlv.map(String.init).joined(separator: ",")
     }
+
+    /// Cle d'une requete vers une adresse : "<adresse>|<tlv,...>".
+    static func cle(_ adresse: AdresseIPv6, _ tlv: [UInt8]) -> String {
+        "\(adresse)|" + tlv.map(String.init).joined(separator: ",")
+    }
+
+    /// Cle d'une resolution : "<adresse>|resoudre".
+    static func cleResolution(_ adresse: AdresseIPv6) -> String { "\(adresse)|resoudre" }
 
     func etat() async throws -> EtatSonde { etatSonde }
 
@@ -80,6 +98,29 @@ struct SondeRejouee: InterlocuteurSonde {
         await registre.noterVoisins()
         guard let listeVoisins else { throw SansVoisins() }
         return listeVoisins
+    }
+
+    func annonces() async throws -> [AnnonceSonde] {
+        await registre.noterAnnonces()
+        guard let listeAnnonces else { throw SansAnnonces() }
+        return listeAnnonces
+    }
+
+    func diag(adresse: AdresseIPv6, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
+        let cle = Self.cle(adresse, tlv)
+        await registre.noter(cle)
+        if let e = refus(cle) { return ResultatDiag(id: 0, cible: "\(adresse)", ok: false, erreur: e) }
+        guard let t = reponses[cle] else {
+            return ResultatDiag(id: 0, cible: "\(adresse)", ok: false, ms: delaiMs, erreur: "delai")
+        }
+        return ResultatDiag(id: 0, cible: "\(adresse)", ok: true, ms: 900, code: "2.04", tlv: t)
+    }
+
+    func resoudre(_ adresse: AdresseIPv6) async throws -> ResultatResolution {
+        let cle = Self.cleResolution(adresse)
+        await registre.noter(cle)
+        if let e = refus(cle) { return ResultatResolution(id: 0, cible: "\(adresse)", ok: false, erreur: e) }
+        return resolutions["\(adresse)"] ?? ResultatResolution(id: 0, cible: "\(adresse)", ok: false, erreur: "introuvable")
     }
 
     /// Table des 7 routeurs de la capture, telle qu'une sonde en FED la donne : tous par leur
@@ -114,7 +155,8 @@ struct SondeRejouee: InterlocuteurSonde {
     /// defaut (la capture n'en a pas).
     static func capture(chef: Int = 24, ext: String? = nil, reponsesEnPlus: [String: String] = [:],
                         table: [RouteurSonde]? = SondeRejouee.table(), tropLongs: Set<String> = [],
-                        voisins: [VoisinSonde]? = []) throws -> SondeRejouee {
+                        voisins: [VoisinSonde]? = [], annonces: [AnnonceSonde]? = [],
+                        resolutions: [String: ResultatResolution] = [:]) throws -> SondeRejouee {
         let champExt = ext.map { #","ext":"\#($0)""# } ?? ""
         let base = #"{"v":1,"t":"etat","role":"child","rloc16":"AC09"\#(champExt),"mode":"rn","parent":{"rloc16":"AC00","ext":"E000000000000007","lqIn":3,"lqOut":3,"rssi":-89},"partition":"46CBEBCD","chef":\#(chef),"canal":25,"prefixeMaille":"FD00111122220C87","xp":"A0A1A2A3A4A5A6A7","suspendue":false}"#
         guard case .etat(let e)? = MessageSonde.lire(Data(base.utf8)) else { throw CaptureSonde.ErreurCapture(id: 0) }
@@ -132,19 +174,22 @@ struct SondeRejouee: InterlocuteurSonde {
         ]
         for (n, id) in zip(3...8, 503...508) { r[String(format: "AC%02X|0,1,2,8", n)] = try CaptureSonde.tlv(id) }
         r.merge(reponsesEnPlus) { _, b in b }
-        return SondeRejouee(etatSonde: e, reponses: r, table: table, tropLongs: tropLongs, listeVoisins: voisins)
+        return SondeRejouee(etatSonde: e, reponses: r, table: table, tropLongs: tropLongs, listeVoisins: voisins,
+                            listeAnnonces: annonces, resolutions: resolutions)
     }
 
     /// La meme sonde, avec seulement les reponses dont la cle est gardee ; registre neuf.
     func filtree(_ garder: (String) -> Bool) -> SondeRejouee {
         SondeRejouee(etatSonde: etatSonde, reponses: reponses.filter { garder($0.key) }, table: table, tropLongs: tropLongs,
-                     refus: refus, retards: retards, listeVoisins: listeVoisins)
+                     refus: refus, retards: retards, listeVoisins: listeVoisins, listeAnnonces: listeAnnonces,
+                     resolutions: resolutions)
     }
 
     /// La meme sonde, qui refuse (`erreur`) les requetes dont la cle est choisie ; registre neuf.
     func refusant(_ erreur: String = "occupee", _ choisies: @escaping @Sendable (String) -> Bool) -> SondeRejouee {
         SondeRejouee(etatSonde: etatSonde, reponses: reponses, table: table, tropLongs: tropLongs,
-                     refus: { choisies($0) ? erreur : nil }, retards: retards, listeVoisins: listeVoisins)
+                     refus: { choisies($0) ? erreur : nil }, retards: retards, listeVoisins: listeVoisins,
+                     listeAnnonces: listeAnnonces, resolutions: resolutions)
     }
 }
 
@@ -159,10 +204,21 @@ struct SondeFermee: InterlocuteurSonde {
     func etat() async throws -> EtatSonde { try await base.etat() }
     func routeurs() async throws -> [RouteurSonde] { try await base.routeurs() }
     func voisins() async throws -> [VoisinSonde] { try await base.voisins() }
+    func annonces() async throws -> [AnnonceSonde] { try await base.annonces() }
 
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
         if SondeRejouee.cle(cible, tlv) == sur { throw Fermee() }
         return try await base.diag(cible, tlv, delaiMs: delaiMs)
+    }
+
+    func diag(adresse: AdresseIPv6, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
+        if SondeRejouee.cle(adresse, tlv) == sur { throw Fermee() }
+        return try await base.diag(adresse: adresse, tlv, delaiMs: delaiMs)
+    }
+
+    func resoudre(_ adresse: AdresseIPv6) async throws -> ResultatResolution {
+        if SondeRejouee.cleResolution(adresse) == sur { throw Fermee() }
+        return try await base.resoudre(adresse)
     }
 }
 
@@ -196,9 +252,10 @@ actor EnVol {
 extension Tournee {
     /// Tournee qui doit rendre un maillage (tests) : le maillage et la memoire ; nil sans maillage.
     static func complete(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,
-                         avancement: (@Sendable (AvancementTournee) -> Void)? = nil)
+                         appareils: [AppareilAResoudre] = [], avancement: (@Sendable (AvancementTournee) -> Void)? = nil)
         async throws -> (maillage: Maillage, memoire: MemoireTournee)? {
-        let r = try await executer(sonde, memoire: memoire, maintenant: maintenant, avancement: avancement)
+        let r = try await executer(sonde, memoire: memoire, maintenant: maintenant, appareils: appareils,
+                                   avancement: avancement)
         return r.maillage.map { ($0, r.memoire) }
     }
 }
@@ -212,7 +269,68 @@ struct TourneeTests {
         UInt16(requete.prefix(4), radix: 16).map { Int($0 >> 10) }
     }
 
-    /// Premiere tournee : routeurs, roles, liens, enfants des tables et du balayage, memoire.
+    // MARK: Donnees de la sonde tout-en-un (inventees)
+
+    /// Adresse OMR inventee d'un appareil : fd00:aaaa:bbbb:1::<n>.
+    static func omr(_ n: Int) -> AdresseIPv6 { AdresseIPv6("fd00:aaaa:bbbb:1::\(String(n, radix: 16))")! }
+
+    /// Appareils de la partition de la capture, et leur adresse OMR : sous AC00 (routeur Apple, muet), resolu par son
+    /// RLOC16 (0A) ; sous AC00, resolu par celui de l'enfant (0B, AC05) ; introuvable (0C) ; sous le 20, qui repond (04) ;
+    /// le routeur AC00 lui-meme (07) ; la sonde (AA) ; un accessoire HomeKit, dont l'hote n'est pas l'ExtMac, sous AC00 ;
+    /// puis un appareil d'une autre partition.
+    static let appareils: [AppareilAResoudre] = [
+        AppareilAResoudre(id: "E00000000000000A", partition: "46CBEBCD", adresse: omr(0x0A)),
+        AppareilAResoudre(id: "E00000000000000B", partition: "46CBEBCD", adresse: omr(0x0B)),
+        AppareilAResoudre(id: "E00000000000000C", partition: "46CBEBCD", adresse: omr(0x0C)),
+        AppareilAResoudre(id: "E000000000000004", partition: "46CBEBCD", adresse: omr(0x04)),
+        AppareilAResoudre(id: "E000000000000007", partition: "46CBEBCD", adresse: omr(0x07)),
+        AppareilAResoudre(id: "E0000000000000AA", partition: "46CBEBCD", adresse: omr(0xAA)),
+        AppareilAResoudre(id: "Prise-HomeKit", partition: "46CBEBCD", adresse: omr(0x50)),
+        AppareilAResoudre(id: "E0000000000000F1", partition: "73586B68", adresse: omr(0xF1)),
+    ]
+
+    /// Les resolutions de la sonde, par adresse : le RLOC16 du parent (AC00, routeur Apple) ou de l'enfant (AC05 ;
+    /// 5004 sous le 20) ; le ML-EID (fd00:1111:2222:c87::<n>) quand le cache le donne.
+    static let resolutions: [String: ResultatResolution] = {
+        func ok(_ n: Int, _ rloc16: String, mleid: Bool) -> (String, ResultatResolution) {
+            let cible = "\(omr(n))"
+            return (cible, ResultatResolution(id: 0, cible: cible, ok: true, ms: 300, rloc16: rloc16,
+                                              mleid: mleid ? String(format: "FD00111122220C87%016lX", n) : nil))
+        }
+        return Dictionary(uniqueKeysWithValues: [ok(0x0A, "AC00", mleid: true), ok(0x0B, "AC05", mleid: false),
+                                                 ok(0x04, "5004", mleid: true), ok(0x07, "AC00", mleid: false),
+                                                 ok(0x50, "AC00", mleid: true)])
+    }()
+
+    /// ML-EID d'un appareil resolu : fd00:1111:2222:c87::<n>.
+    static func mleid(_ n: Int) -> AdresseIPv6 { AdresseIPv6("fd00:1111:2222:c87::\(String(n, radix: 16))")! }
+
+    /// Requete des compteurs MAC d'un enfant, a son ML-EID.
+    static func cleCompteurs(_ n: Int) -> String { SondeRejouee.cle(mleid(n), Tournee.tlvCompteurs) }
+
+    /// TLV 9 (hexa) : `envois` trames unicast envoyees, dont `echecs` en echec.
+    static func compteurs(envois: UInt32, echecs: UInt32) -> String {
+        let c: [UInt32] = [0, 0, echecs, 500, 20, 0, envois, 12, 0]
+        return Data([TypeTLV.compteursMac, 36] + c.flatMap { v in (0..<4).map { UInt8(truncatingIfNeeded: v >> (24 - 8 * $0)) } }).hexa
+    }
+
+    /// La sonde de la capture, la sonde ayant pour ExtMac E0000000000000AA, avec ses resolutions.
+    static func sondeResolue(reponsesEnPlus: [String: String] = [:], annonces: [AnnonceSonde]? = [],
+                             resolutions: [String: ResultatResolution] = TourneeTests.resolutions) throws -> SondeRejouee {
+        try SondeRejouee.capture(ext: "E0000000000000AA", reponsesEnPlus: reponsesEnPlus, annonces: annonces,
+                                 resolutions: resolutions)
+    }
+
+    /// Annonce entendue d'un routeur de la capture, de la partition de la capture sauf `partition` ; Route64 des 7
+    /// routeurs, avec les liens de `qualites` (sortante et entrante, vues par lui).
+    static func annonce(_ rloc16: String, _ ext: String, qualites: [Int: (sortante: Int, entrante: Int)], age: Int,
+                        partition: String = "46CBEBCD") -> AnnonceSonde {
+        let route = String(Self.route64([1, 20, 24, 43, 45, 51, 57], qualites: qualites).dropFirst(4))
+        return AnnonceSonde(rloc16: rloc16, ext: ext, partition: partition, route64: route, seq: 1, rssi: -70, rssiMin: -80,
+                            rssiMax: -60, nb: 4, ageS: age)
+    }
+
+    /// Premiere tournee : routeurs, roles, liens, enfants des tables, memoire ; aucun appareil a resoudre.
     @Test func premiere() async throws {
         let sonde = try SondeRejouee.capture()
         let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
@@ -225,9 +343,9 @@ struct TourneeTests {
         #expect(m.routeur(43)?.extMac == "E000000000000007", "parent de la sonde")
         #expect(m.routeur(20)?.pile?.hasPrefix("SL-OPENTHREAD") == true)
         #expect(m.liens.count == 7)
-        #expect(m.enfants(de: 43).map(\.rloc16) == [0xAC01, 0xAC03, 0xAC04, 0xAC05, 0xAC06, 0xAC07, 0xAC08, 0xAC09])
+        #expect(m.enfants(de: 43).map(\.rloc16) == [0xAC09], "la sonde ; sans appareil a resoudre, aucun enfant resolu")
         #expect(m.enfants(de: 43).last?.source == .sonde)
-        #expect(m.enfants.count == 14)
+        #expect(m.enfants.count == 7)
         let de20 = m.enfants(de: 20)
         #expect(de20.map(\.extMac) == ["E000000000000005", "E000000000000004"], "tables : identifies une fois")
         #expect(de20.first?.adresses.count == 4)
@@ -237,17 +355,17 @@ struct TourneeTests {
         #expect(mem.repondants == [20, 24])
         #expect(mem.identites[0xAC00] == "E000000000000007")
         #expect(mem.identites[0x5000] == "E000000000000002")
-        #expect(mem.dernierBalayage == Self.t0)
-        #expect(m.balayage == Self.t0, "le maillage dit de quel balayage viennent ses enfants balayes")
-        #expect(mem.muetsBalayes == [1, 43, 45, 51, 57])
+        #expect(mem.derniereResolution == Self.t0, "une resolution complete, sans appareil")
+        #expect(m.resolution == Self.t0, "le maillage dit de quelle resolution viennent ses enfants resolus")
+        #expect(m.annoncesLues && m.couverture == CouvertureEcoute(entendus: 0, routeurs: 7), "rien d'entendu")
         let requetes = await sonde.registre.requetes
-        #expect(requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48, "AC00 : 1 a 17 sauf 9 ; les autres : 1 a 8")
+        #expect(!requetes.contains { $0.hasSuffix("|resoudre") })
         #expect(requetes.filter { $0.hasSuffix("|25,26,27,28") }.count == 2)
         #expect(requetes.filter { $0.hasSuffix("|0,8") }.count == 6, "les 6 enfants des tables")
         #expect(mem.identifies.count == 3)
     }
 
-    /// Deuxieme tournee (5 min) : les muets le deviennent ; pas de nouveau balayage ;
+    /// Deuxieme tournee (5 min) : les muets le deviennent ; pas de nouvelle resolution ;
     /// pile deja connue ; les enfants des tables sans reponse attendent 30 min.
     /// Troisieme (10 min) : les muets ne sont plus interroges.
     @Test func suivantes() async throws {
@@ -259,8 +377,8 @@ struct TourneeTests {
         #expect(requetes2.count == 9, "chef, 7 routeurs, Network Data ; pas 6002, 6005, 6006, demandes il y a 5 min")
         #expect(mem2.estMuet(43))
         #expect(mem2.muetInterroge[43] == Self.t0 + 300)
-        #expect(m2.enfants(de: 43).count == 8, "enfants du balayage garde")
-        #expect(m2.balayage == Self.t0, "pas de nouveau balayage : celui de la premiere tournee")
+        #expect(m2.enfants(de: 43).count == 1, "la sonde")
+        #expect(m2.resolution == Self.t0, "pas de nouvelle resolution : celle de la premiere tournee")
 
         let avant3 = await sonde.registre.requetes.count
         let (m3, _) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 600))
@@ -269,25 +387,163 @@ struct TourneeTests {
         #expect(requetes3.sorted() == ["5000|0,1,5,16,8,24", "5000|7", "6000|0,1,5,16,8,24", "6000|5,6"],
                 "en parallele : dans le desordre")
         #expect(m3.routeurs.filter(\.muet).map(\.id) == [1, 43, 45, 51, 57])
-        #expect(m3.enfants.count == 14)
-        #expect(m3.balayage == Self.t0)
+        #expect(m3.enfants.count == 7)
+        #expect(m3.resolution == Self.t0)
     }
 
-    /// Balayage de nouveau apres 30 min, et les 6 identites des enfants des tables
-    /// redemandees parce que 30 min ont passe ; une seconde avant, ni l'un ni l'autre.
-    @Test func balayageDu() async throws {
-        let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+    /// Resolution de nouveau apres 30 min, et les 6 identites des enfants des tables redemandees
+    /// parce que 30 min ont passe ; une seconde avant, ni l'une ni les autres.
+    @Test func resolutionDue() async throws {
+        let sonde = try Self.sondeResolue()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: Self.appareils))
         let avant = await sonde.registre.requetes.count
-        let (m2, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 1799))
+        let (m2, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 1799,
+                                                                appareils: Self.appareils))
         let pendant = await sonde.registre.requetes.count
-        let (m3, _) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 1800))
-        #expect(m2.balayage == Self.t0 && m3.balayage == Self.t0 + 1800, "un nouveau balayage, une nouvelle date")
+        let (m3, _) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 1800,
+                                                             appareils: Self.appareils))
+        #expect(m2.resolution == Self.t0 && m3.resolution == Self.t0 + 1800, "une nouvelle resolution, une nouvelle date")
         let toutes = await sonde.registre.requetes
         let presque = toutes[avant..<pendant], requetes = toutes[pendant...]
-        #expect(presque.filter { $0.hasSuffix("|0,1,2,8") || $0.hasSuffix("|0,8") }.isEmpty, "29 min 59 s : rien de du")
-        #expect(requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48)
+        #expect(presque.filter { $0.hasSuffix("|resoudre") || $0.hasSuffix("|0,8") || $0.hasSuffix("|9") }.isEmpty,
+                "29 min 59 s : rien de du")
+        #expect(requetes.filter { $0.hasSuffix("|resoudre") }.count == 6)
+        #expect(requetes.filter { $0.hasSuffix("|9") }.count == 2, "les compteurs, avec la resolution")
         #expect(requetes.filter { $0.hasSuffix("|0,8") }.count == 6, "30 min ont passe : identites redemandees")
+    }
+
+    /// Resolution des parents (spec de la sonde tout-en-un, section 2.2) : chaque appareil de la partition de la sonde,
+    /// elle exceptee, sauf ceux d'une autre partition. Le parent est le RLOC16 rendu, sans ses 10 bits de poids faible.
+    /// Sous AC00, muet : l'appareil resolu par le RLOC16 de AC00 recoit un numero invente (AE00, AE01 : bit 9, dans
+    /// l'ordre des appareils), celui resolu par AC05 le garde ; l'accessoire HomeKit est rattache par son adresse.
+    /// Ni le routeur AC00 lui-meme, ni l'appareil sous le 20 (sa table fait foi), ni l'introuvable.
+    @Test func resolutionDesParents() async throws {
+        let sonde = try Self.sondeResolue()
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: Self.appareils))
+        let demandes = await sonde.registre.requetes.filter { $0.hasSuffix("|resoudre") }
+        #expect(demandes.sorted() == [0x04, 0x07, 0x0A, 0x0B, 0x0C, 0x50].map { "\(Self.omr($0))|resoudre" }.sorted(),
+                "ni la sonde, ni l'autre partition")
+        #expect(m.enfants(de: 43).map(\.rloc16) == [0xAC05, 0xAC09, 0xAE00, 0xAE01])
+        let a = try #require(m.enfants.first { $0.rloc16 == 0xAE00 })
+        #expect(a.extMac == "E00000000000000A" && a.source == .resolution && a.resolu == Self.t0 && !a.rloc16Connu)
+        #expect(a.adresses == [Self.omr(0x0A)] && a.qualite == nil)
+        let b = try #require(m.enfants.first { $0.rloc16 == 0xAC05 })
+        #expect(b.extMac == "E00000000000000B" && b.rloc16Connu)
+        let h = try #require(m.enfants.first { $0.rloc16 == 0xAE01 })
+        #expect(h.extMac == nil && h.adresses == [Self.omr(0x50)], "HomeKit : rapproche par son adresse")
+        #expect(!m.enfants.contains { $0.extMac == "E000000000000007" }, "le routeur AC00 lui-meme")
+        #expect(!m.enfants.contains { $0.adresses.contains(Self.omr(0x04)) }, "sous le 20 : sa table")
+        #expect(Set(mem.resolutions.keys) == ["E00000000000000A", "E00000000000000B", "E000000000000004",
+                                              "E000000000000007", "Prise-HomeKit"])
+        #expect(mem.resolutions["E00000000000000A"]?.mleid == Self.mleid(0x0A))
+        #expect(mem.demandes == ["E00000000000000A", "E00000000000000B", "E00000000000000C", "E000000000000004",
+                                 "E000000000000007", "Prise-HomeKit"], "l'introuvable compte comme demande")
+        #expect(mem.derniereResolution == Self.t0 && m.resolution == Self.t0)
+        // Gardes 30 min, comme le balayage qu'elles remplacent : a 5 min, les memes enfants, sans requete.
+        let avant = await sonde.registre.requetes.count
+        let (m2, _) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0 + 300,
+                                                              appareils: Self.appareils))
+        #expect(m2.enfants(de: 43).map(\.rloc16) == [0xAC05, 0xAC09, 0xAE00, 0xAE01])
+        #expect(await sonde.registre.requetes.dropFirst(avant).filter { $0.hasSuffix("|resoudre") }.isEmpty)
+    }
+
+    /// Qualite des enfants des routeurs Apple (spec de la sonde tout-en-un, section 2.3) : a chaque resolution, les
+    /// compteurs MAC (TLV 9) de chaque enfant resolu sous un routeur muet qui a un ML-EID, demandes a ce ML-EID. Le
+    /// taux d'echec entre deux releves donne sa qualite (0,7 % : 3) ; moins de 50 trames entre les deux, ou un
+    /// compteur qui baisse (l'appareil a redemarre) : inconnue, et le releve repart. Un enfant qui ne repond pas : rien.
+    @Test func compteursDesEnfants() async throws {
+        func sonde(_ envois: UInt32, _ echecs: UInt32) throws -> SondeRejouee {
+            try Self.sondeResolue(reponsesEnPlus: [Self.cleCompteurs(0x0A): Self.compteurs(envois: envois, echecs: echecs)])
+        }
+        func enfant(_ m: Maillage) throws -> EnfantMaillage { try #require(m.enfants.first { $0.rloc16 == 0xAE00 }) }
+        let s1 = try sonde(1000, 3)
+        let (m1, mem1) = try #require(try await Tournee.complete(s1, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                                 appareils: Self.appareils))
+        #expect(await s1.registre.requetes.filter { $0.hasSuffix("|9") }.sorted() == [Self.cleCompteurs(0x0A), Self.cleCompteurs(0x50)].sorted(),
+                "les deux enfants de AC00 qui ont un ML-EID")
+        #expect(try enfant(m1).qualite == nil, "un seul releve")
+        #expect(mem1.compteurs["E00000000000000A"]?.unicastEmis == 1000)
+        #expect(mem1.compteurs["Prise-HomeKit"] == nil, "muet : rien")
+        let (m2, mem2) = try #require(try await Tournee.complete(try sonde(2000, 10), memoire: mem1,
+                                                                 maintenant: Self.t0 + 1800, appareils: Self.appareils))
+        let e2 = try enfant(m2)
+        #expect(e2.qualite == 3 && e2.echecs.map { abs($0 - 0.007) < 1e-12 } == true, "7 echecs sur 1000 envois")
+        #expect(mem2.resolutions["E00000000000000A"]?.qualite == 3)
+        let (m3, mem3) = try #require(try await Tournee.complete(try sonde(2040, 15), memoire: mem2,
+                                                                 maintenant: Self.t0 + 3600, appareils: Self.appareils))
+        #expect(try enfant(m3).qualite == nil && mem3.compteurs["E00000000000000A"]?.unicastEmis == 2040, "40 trames")
+        let (m4, mem4) = try #require(try await Tournee.complete(try sonde(100, 0), memoire: mem3,
+                                                                 maintenant: Self.t0 + 5400, appareils: Self.appareils))
+        #expect(try enfant(m4).qualite == nil && mem4.compteurs["E00000000000000A"]?.unicastEmis == 100, "redemarre")
+        let (m5, _) = try #require(try await Tournee.complete(try sonde(400, 20), memoire: mem4,
+                                                              maintenant: Self.t0 + 7200, appareils: Self.appareils))
+        #expect(try enfant(m5).qualite == 1, "20 echecs sur 300 : 6,7 %")
+    }
+
+    /// Sans annonces (firmware 1.0.x, ou la sonde ne les rend pas) : ni ecoute, ni resolution, ni compteurs ; la
+    /// couverture est inconnue, la resolution reste due.
+    @Test func sansAnnonces() async throws {
+        let sonde = try Self.sondeResolue(annonces: nil)
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: Self.appareils))
+        #expect(!m.annoncesLues && m.couverture == nil)
+        #expect(await !sonde.registre.requetes.contains { $0.hasSuffix("|resoudre") || $0.hasSuffix("|9") })
+        #expect(mem.derniereResolution == nil && mem.resolutions.isEmpty && m.resolution == nil)
+        #expect(await sonde.registre.annonces == 1)
+    }
+
+    /// Annonces entendues (spec de la sonde tout-en-un, section 2.1) : les liens entre routeurs Apple, muets au
+    /// diagnostic, viennent de leur Route64, dates de l'age de l'annonce ; chaque sens garde la mesure la plus recente,
+    /// et le diagnostic d'un routeur qui repond l'emporte. Chaque annonce donne l'identite de son routeur. Une annonce
+    /// d'une autre partition, ou d'un enfant, est ecartee. Couverture : 3 routeurs entendus sur 7 (ExtMac inventees).
+    @Test func ecouteDesAnnonces() async throws {
+        let annonces = [
+            Self.annonce("AC00", "E000000000000007", qualites: [1: (3, 3), 57: (2, 1)], age: 30),
+            Self.annonce("E400", "E0000000000000E4", qualites: [43: (3, 3), 45: (3, 2)], age: 120),
+            Self.annonce("5000", "E000000000000002", qualites: [24: (1, 1)], age: 10),
+            Self.annonce("CC00", "E0000000000000CC", qualites: [57: (3, 3)], age: 5, partition: "73586B68"),
+            Self.annonce("AC05", "E0000000000000D5", qualites: [43: (3, 3)], age: 5),
+        ]
+        let sonde = try SondeRejouee.capture(annonces: annonces)
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
+        let l4357 = try #require(m.liens.first { $0.a == 43 && $0.b == 57 })
+        #expect(l4357.qualiteAB == 2 && l4357.qualiteBA == 1, "l'annonce de 43, plus recente que celle de 57")
+        #expect(l4357.sourceAB == .ecoute && l4357.dateAB == Self.t0 - 30)
+        let l4557 = try #require(m.liens.first { $0.a == 45 && $0.b == 57 })
+        #expect(l4557.qualiteAB == 2 && l4557.qualiteBA == 3 && l4557.dateBA == Self.t0 - 120, "connu de 57 seul")
+        #expect(m.liens.first { $0.a == 1 && $0.b == 43 }?.sourceBA == .ecoute, "entre deux routeurs Apple")
+        let l2024 = try #require(m.liens.first { $0.a == 20 && $0.b == 24 })
+        #expect(l2024.sourceAB == .diagnostic && l2024.qualite == 3, "le diagnostic, plus recent")
+        #expect(!m.liens.contains { $0.a == 51 && $0.b == 57 }, "l'annonce de l'autre partition est ecartee")
+        #expect(m.routeur(43)?.entendu == Self.t0 - 30 && m.routeur(57)?.entendu == Self.t0 - 120)
+        #expect(m.routeur(51)?.entendu == nil && m.routeur(1)?.entendu == nil)
+        #expect(mem.identites[0xE400] == "E0000000000000E4" && mem.identites[0xCC00] == nil && mem.identites[0xAC05] == nil)
+        #expect(m.routeur(57)?.extMac == "E0000000000000E4", "muet : l'identite de son annonce")
+        #expect(m.couverture == CouvertureEcoute(entendus: 3, routeurs: 7))
+        #expect(await sonde.registre.annonces == 1)
+    }
+
+    /// Un appareil apparait entre deux resolutions completes : il est resolu a la tournee suivante, seul, et les autres
+    /// gardent la leur. Un appareil deja demande, meme introuvable, ne l'est plus avant la resolution complete suivante.
+    @Test func resolutionDUnAppareilNouveau() async throws {
+        let sonde = try Self.sondeResolue()
+        let deux = Array(Self.appareils.prefix(2))
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: deux))
+        #expect(mem1.demandes == ["E00000000000000A", "E00000000000000B"])
+        let avant = await sonde.registre.requetes.count
+        let (m2, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 300,
+                                                                appareils: Self.appareils))
+        let demandees = await sonde.registre.requetes.dropFirst(avant).filter { $0.hasSuffix("|resoudre") }
+        #expect(demandees.sorted() == [0x04, 0x07, 0x0C, 0x50].map { "\(Self.omr($0))|resoudre" }.sorted(), "les nouveaux seuls")
+        #expect(mem2.derniereResolution == Self.t0, "pas une resolution complete")
+        #expect(mem2.resolutions.count == 5 && mem2.demandes.count == 6)
+        #expect(m2.enfants(de: 43).map(\.rloc16) == [0xAC05, 0xAC09, 0xAE00, 0xAE01])
+        let avant3 = await sonde.registre.requetes.count
+        _ = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 600, appareils: Self.appareils))
+        #expect(await sonde.registre.requetes.dropFirst(avant3).filter { $0.hasSuffix("|resoudre") }.isEmpty)
     }
 
     /// Chef muet : Route64 d'un routeur qui a repondu a la tournee precedente.
@@ -442,26 +698,22 @@ struct TourneeTests {
         }
     }
 
-    /// Echec passager : le 20, qui repond d'habitude, rate une tournee. Muet dans ce
-    /// maillage, mais pas balaye ; il l'est au second echec de suite.
+    /// Echec passager : le 20, qui repond d'habitude, rate une tournee. Sans reponse dans ce
+    /// maillage, un echec ; muet au second echec de suite.
     @Test func echecPassager() async throws {
         let sonde = try SondeRejouee.capture()
         let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         let sans20 = sonde.filtree { !$0.hasPrefix("5000|") }
         let (m2, mem2) = try #require(try await Tournee.complete(sans20, memoire: mem1, maintenant: Self.t0 + 300))
-        #expect(await sans20.registre.requetes.filter { $0.hasSuffix("|0,1,2,8") }.isEmpty, "pas de balayage")
-        #expect(mem2.dernierBalayage == Self.t0)
-        #expect(mem2.muetsBalayes == [1, 43, 45, 51, 57])
+        #expect(mem2.echecs[20] == 1 && !mem2.estMuet(20))
         #expect(m2.routeur(20)?.muet == true)
 
         let (_, mem3) = try #require(try await Tournee.complete(sans20, memoire: mem2, maintenant: Self.t0 + 600))
         #expect(mem3.estMuet(20))
-        #expect(mem3.muetsBalayes == [1, 20, 43, 45, 51, 57], "muet : balaye")
-        #expect(await sans20.registre.requetes.contains("5001|0,1,2,8"))
     }
 
     /// La sonde refuse (`occupee`) les requetes aux routeurs deux tournees de suite : ce n'est pas
-    /// un silence des routeurs. Aucun echec de plus, aucun routeur muet ni balaye ; le maillage
+    /// un silence des routeurs. Aucun echec de plus, aucun routeur muet ; le maillage
     /// les marque sans reponse a la tournee, et les secours restent.
     @Test func refusNeComptentPasCommeSilence() async throws {
         let sonde = try SondeRejouee.capture()
@@ -473,15 +725,13 @@ struct TourneeTests {
         #expect(!mem3.estMuet(20) && !mem3.estMuet(24) && !mem3.estMuet(43))
         #expect(mem3.muetInterroge.isEmpty)
         #expect(m2.routeurs.filter(\.muet).count == 7 && m3.routeurs.filter(\.muet).count == 7, "sans reponse")
-        #expect(mem3.muetsBalayes == [1, 43, 45, 51, 57], "ni 20 ni 24 balayes")
         let requetes = await occupee.registre.requetes
-        #expect(!requetes.contains { ($0.hasPrefix("50") || $0.hasPrefix("60")) && $0.hasSuffix("|0,1,2,8") })
         #expect(requetes.filter { $0 == "AC00|0,1,5,16,8,24" }.count == 2, "pas muet : interroge a chaque tournee")
         #expect(mem3.repondants == [20, 24])
     }
 
     /// Reponse `ok` illisible du 20 (TLV tronquee), deux tournees de suite : ce n'est pas un
-    /// silence. Ses echecs ne bougent pas, il n'est ni muet ni balaye ; le maillage le marque
+    /// silence. Ses echecs ne bougent pas, il n'est pas muet ; le maillage le marque
     /// sans reponse a la tournee.
     @Test func reponseIllisibleNEstPasUnSilence() async throws {
         let (_, mem1) = try #require(try await Tournee.complete(try SondeRejouee.capture(), memoire: MemoireTournee(),
@@ -491,54 +741,70 @@ struct TourneeTests {
         let (m3, mem3) = try #require(try await Tournee.complete(illisible, memoire: mem2, maintenant: Self.t0 + 600))
         #expect(mem3.echecs[20] == 0 && !mem3.estMuet(20))
         #expect(m2.routeur(20)?.muet == true && m3.routeur(20)?.muet == true, "sans reponse")
-        #expect(!mem3.muetsBalayes.contains(20))
     }
 
-    /// Balayage du (30 min) dont la sonde refuse toutes les requetes : il ne remplace pas le
-    /// precedent. Les enfants trouves restent affiches, et il est refait a la tournee suivante. Un
-    /// balayage de silences (`delai` : plus aucun enfant) remplace le precedent, lui.
-    @Test func balayageRefuseGardeLePrecedent() async throws {
-        let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
-        #expect(mem1.balayes.count == 7)
-        let refuse = sonde.refusant("suspendue") { $0.hasSuffix("|0,1,2,8") }
-        let (m2, mem2) = try #require(try await Tournee.complete(refuse, memoire: mem1, maintenant: Self.t0 + 1800))
-        #expect(await refuse.registre.requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48, "balayage tente")
-        #expect(mem2.balayes == mem1.balayes)
-        #expect(mem2.dernierBalayage == Self.t0 && mem2.muetsBalayes == mem1.muetsBalayes, "a refaire")
-        #expect(m2.enfants(de: 43).count == 8, "7 enfants balayes et la sonde")
-        #expect(m2.balayage == Self.t0, "balayage refuse : ses enfants restent ceux du precedent")
+    /// Resolution due (30 min) dont la sonde refuse toutes les demandes : elle ne remplace pas la precedente. Les
+    /// enfants resolus restent affiches, et elle est refaite a la tournee suivante. Une resolution ou rien n'est trouve
+    /// (`introuvable`) remplace la precedente, elle : les appareils reviennent en rattachement suppose.
+    @Test func resolutionRefuseeGardeLaPrecedente() async throws {
+        let sonde = try Self.sondeResolue()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: Self.appareils))
+        #expect(mem1.resolutions.count == 5)
+        let refusee = sonde.refusant("suspendue") { $0.hasSuffix("|resoudre") }
+        let (m2, mem2) = try #require(try await Tournee.complete(refusee, memoire: mem1, maintenant: Self.t0 + 1800,
+                                                                appareils: Self.appareils))
+        #expect(await refusee.registre.requetes.filter { $0.hasSuffix("|resoudre") }.count == 6, "resolution tentee")
+        #expect(mem2.resolutions == mem1.resolutions && mem2.demandes == mem1.demandes)
+        #expect(mem2.derniereResolution == Self.t0, "a refaire")
+        #expect(m2.enfants(de: 43).count == 4, "3 enfants resolus et la sonde")
+        #expect(m2.resolution == Self.t0, "resolution refusee : ses enfants restent ceux de la precedente")
 
         let avant = await sonde.registre.requetes.count
-        let (_, mem3) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 2100))
-        #expect(await sonde.registre.requetes.dropFirst(avant).filter { $0.hasSuffix("|0,1,2,8") }.count == 48, "refait")
-        #expect(mem3.dernierBalayage == Self.t0 + 2100)
+        let (_, mem3) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 2100,
+                                                               appareils: Self.appareils))
+        #expect(await sonde.registre.requetes.dropFirst(avant).filter { $0.hasSuffix("|resoudre") }.count == 6, "refaite")
+        #expect(mem3.derniereResolution == Self.t0 + 2100)
 
-        let silences = sonde.filtree { !$0.hasSuffix("|0,1,2,8") }
-        let (m4, mem4) = try #require(try await Tournee.complete(silences, memoire: mem1, maintenant: Self.t0 + 1800))
-        #expect(mem4.balayes.isEmpty && mem4.dernierBalayage == Self.t0 + 1800)
+        let rien = try Self.sondeResolue(resolutions: [:])
+        let (m4, mem4) = try #require(try await Tournee.complete(rien, memoire: mem1, maintenant: Self.t0 + 1800,
+                                                                appareils: Self.appareils))
+        #expect(mem4.resolutions.isEmpty && mem4.derniereResolution == Self.t0 + 1800)
         #expect(m4.enfants(de: 43).map(\.source) == [.sonde])
-        #expect(m4.balayage == Self.t0 + 1800, "un balayage de silences est un balayage")
+        #expect(m4.resolution == Self.t0 + 1800, "une resolution d'introuvables est une resolution")
     }
 
-    /// Balayage du sans aucun routeur a balayer : le 20 et le 24 ont deja repondu, et la sonde
-    /// refuse la requete au 20 a cette tournee. Ce n'est pas un balayage refuse : il remplace le
-    /// precedent par rien et prend la date de la tournee ; l'enfant balaye d'avant ne s'affiche
-    /// plus sous le 20 (Route64 et enfant inventes).
-    @Test func balayageDuSansRouteurABalayer() async throws {
-        let sonde = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([20, 24])])
-            .refusant { $0 == "5000|0,1,5,16,8,24" }
-        var mem = MemoireTournee()
-        mem.partition = "46CBEBCD"
-        mem.balayes[0x5003] = EnfantMaillage(rloc16: 0x5003, extMac: "E0000000000000B3", source: .balayage)
-        mem.dernierBalayage = Self.t0 - 1800
-        mem.dejaRepondu = [20]
-        let (m, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0))
-        #expect(m.routeur(20)?.muet == true, "sans reponse a cette tournee")
-        #expect(mem2.balayes.isEmpty)
-        #expect(mem2.dernierBalayage == Self.t0)
-        #expect(m.enfants(de: 20).isEmpty, "aucun enfant balaye sous le 20")
-        #expect(m.balayage == Self.t0)
+    /// Resolution refusee en partie : l'appareil refuse garde sa resolution d'avant, et il est demande de nouveau a la
+    /// tournee suivante, seul.
+    @Test func resolutionRefuseeEnPartie() async throws {
+        let sonde = try Self.sondeResolue()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: Self.appareils))
+        let cleB = "\(Self.omr(0x0B))|resoudre"
+        let refusee = sonde.refusant { $0 == cleB }
+        let (m2, mem2) = try #require(try await Tournee.complete(refusee, memoire: mem1, maintenant: Self.t0 + 1800,
+                                                                appareils: Self.appareils))
+        #expect(mem2.derniereResolution == Self.t0 + 1800)
+        #expect(mem2.resolutions["E00000000000000B"] == mem1.resolutions["E00000000000000B"], "sa resolution d'avant")
+        #expect(!mem2.demandes.contains("E00000000000000B"))
+        #expect(m2.enfants.contains { $0.rloc16 == 0xAC05 })
+        let avant = await sonde.registre.requetes.count
+        let (_, mem3) = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: Self.t0 + 2100,
+                                                               appareils: Self.appareils))
+        #expect(await sonde.registre.requetes.dropFirst(avant).filter { $0.hasSuffix("|resoudre") } == [cleB])
+        #expect(mem3.demandes.contains("E00000000000000B") && mem3.resolutions["E00000000000000B"]?.date == Self.t0 + 2100)
+    }
+
+    /// Resolution due sans aucun appareil a resoudre (tous partis de l'instantane) : elle remplace la precedente par
+    /// rien et prend la date de la tournee ; les enfants resolus d'avant ne s'affichent plus.
+    @Test func resolutionSansAppareil() async throws {
+        let sonde = try Self.sondeResolue()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: Self.appareils))
+        #expect(!mem1.resolutions.isEmpty)
+        let (m, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 1800))
+        #expect(mem2.resolutions.isEmpty && mem2.demandes.isEmpty && mem2.derniereResolution == Self.t0 + 1800)
+        #expect(m.enfants(de: 43).map(\.source) == [.sonde])
     }
 
     /// Recherche sans aucun groupe a interroger : rien n'a ete refuse.
@@ -618,7 +884,7 @@ struct TourneeTests {
 
     /// Reponse du routeur 20 trop longue pour le reseau (`trop_long` : plus de 1100 octets) : il a
     /// repondu. Sa requete est refaite une fois en deux moities de TLV, reunies : le maillage et
-    /// la memoire sont ceux d'une reponse entiere ; ni echec, ni balayage de ses enfants.
+    /// la memoire sont ceux d'une reponse entiere ; aucun echec.
     @Test func tropLongEnDeuxMoities() async throws {
         let (m0, mem0) = try #require(try await Tournee.complete(try SondeRejouee.capture(), memoire: MemoireTournee(),
                                                                   maintenant: Self.t0))
@@ -639,11 +905,10 @@ struct TourneeTests {
         let de20 = requetes.filter { $0.hasPrefix("5000|") && $0 != "5000|7" && $0 != "5000|25,26,27,28" }
         #expect(de20.first == "5000|0,1,5,16,8,24", "la requete entiere d'abord")
         #expect(de20.dropFirst().sorted() == ["5000|0,1,5", "5000|16,8,24"], "puis ses moities, une seule fois, en parallele : dans le desordre")
-        #expect(!requetes.contains("5001|0,1,2,8"), "pas de balayage de ses enfants")
     }
 
     /// Une moitie encore trop longue : ce qu'on a est garde (ExtMac, liens), sans nouveau
-    /// decoupage, et le routeur n'est ni muet, ni en echec, ni balaye.
+    /// decoupage, et le routeur n'est ni muet, ni en echec.
     @Test func tropLongUneMoitieTropLongue() async throws {
         let (m0, _) = try #require(try await Tournee.complete(try SondeRejouee.capture(), memoire: MemoireTournee(),
                                                                maintenant: Self.t0))
@@ -657,12 +922,10 @@ struct TourneeTests {
         #expect(m.enfants(de: 20).isEmpty, "table des enfants dans la moitie trop longue")
         #expect(mem.echecs[20] == 0)
         #expect(mem.repondants == [20, 24])
-        #expect(!mem.muetsBalayes.contains(20))
         let requetes = await sonde.registre.requetes
         let de20 = requetes.filter { $0.hasPrefix("5000|0,1,5") || $0.hasPrefix("5000|16,8") }
         #expect(de20.first == "5000|0,1,5,16,8,24", "la requete entiere d'abord")
         #expect(de20.dropFirst().sorted() == ["5000|0,1,5", "5000|16,8,24"], "ses moities, pas de troisieme decoupage")
-        #expect(!requetes.contains("5001|0,1,2,8"))
     }
 
     /// Un routeur qui repond sans son ExtMac (ici la moitie qui la porte reste sans reponse)
@@ -860,74 +1123,31 @@ struct TourneeTests {
     }
 
     /// Routeur sorti de la liste des routeurs (identifiant libere) : ses echecs, sa derniere
-    /// interrogation de muet, son passe de repondant, sa pile, sa place de secours et ses enfants
-    /// balayes sont oublies des que la tournee a la Route64. L'identifiant reattribue repart de
-    /// zero : interroge tout de suite, et non tenu pour un muet deja interroge dans l'heure
-    /// (Route64 et enfant inventes).
+    /// interrogation de muet, sa pile, sa place de secours et les enfants resolus sous lui sont
+    /// oublies des que la tournee a la Route64. L'identifiant reattribue repart de zero :
+    /// interroge tout de suite, et non tenu pour un muet deja interroge dans l'heure (Route64 et
+    /// appareils inventes).
     @Test func memoireOublieeHorsDeLaListe() async throws {
         let sonde = try SondeRejouee.capture()
         var mem = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0)).memoire
         mem.echecs[2] = 2
         mem.muetInterroge[2] = Self.t0
-        mem.dejaRepondu.insert(2)
         mem.piles[2] = "SL-OPENTHREAD"
         mem.repondants = [2, 20]
-        mem.balayes[0x0801] = EnfantMaillage(rloc16: 0x0801, extMac: "E0000000000000E2", source: .balayage)
+        mem.resolutions["E0000000000000E2"] = ResolutionAppareil(rloc16: 0x0800, mleid: nil, adresse: Self.omr(0xE2), date: Self.t0)
+        mem.resolutions["E0000000000000E3"] = ResolutionAppareil(rloc16: 0xAC00, mleid: nil, adresse: Self.omr(0xE3), date: Self.t0)
         let seulChef = sonde.filtree { $0 == "6000|5,6" }
         let (_, mem2) = try #require(try await Tournee.complete(seulChef, memoire: mem, maintenant: Self.t0 + 300))
         #expect(mem2.echecs[2] == nil && mem2.muetInterroge[2] == nil && mem2.piles[2] == nil)
-        #expect(!mem2.dejaRepondu.contains(2))
         #expect(mem2.repondants == [20], "aucun routeur n'a repondu : les secours d'avant, sans le 2")
-        #expect(mem2.dernierBalayage == Self.t0, "pas de nouveau balayage")
-        #expect(mem2.balayes[0x0801] == nil && mem2.balayes.count == 7, "ses enfants balayes, eux seuls")
+        #expect(mem2.derniereResolution == Self.t0, "pas de nouvelle resolution")
+        #expect(Set(mem2.resolutions.keys) == ["E0000000000000E3"], "l'appareil resolu sous le 2, lui seul")
 
         let avec2 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([1, 2, 20, 24, 43, 45, 51, 57])])
         let (m3, mem3) = try #require(try await Tournee.complete(avec2, memoire: mem2, maintenant: Self.t0 + 600))
         #expect(await avec2.registre.requetes.contains("0800|0,1,5,16,8,24"), "interroge")
         #expect(mem3.echecs[2] == 1, "premier silence")
         #expect(m3.routeur(2)?.muet == true)
-    }
-
-    /// Le 2, seul routeur balaye, sort de la liste : ses enfants balayes sont oublies. Son
-    /// identifiant, reattribue a un routeur muet, n'affiche pas les enfants de l'ancien. Limite
-    /// connue : l'ensemble a balayer ({2}) n'ayant pas change, le nouveau 2 n'est balaye qu'a
-    /// l'echeance ; ses enfants manquent en attendant (Route64 et enfant inventes ; le 20 et le
-    /// 24 repondent).
-    @Test func balayesOubliesHorsDeLaListe() async throws {
-        var mem = MemoireTournee()
-        mem.partition = "46CBEBCD"
-        mem.dejaRepondu = [20, 24]
-        mem.balayes[0x0801] = EnfantMaillage(rloc16: 0x0801, extMac: "E0000000000000E2", source: .balayage)
-        mem.muetsBalayes = [2]
-        mem.dernierBalayage = Self.t0 - 60
-        let sans2 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([20, 24])])
-        let (_, mem1) = try #require(try await Tournee.complete(sans2, memoire: mem, maintenant: Self.t0))
-        #expect(mem1.dernierBalayage == Self.t0 - 60, "rien a balayer, pas du")
-        #expect(mem1.balayes.isEmpty, "ses enfants balayes, oublies")
-        #expect(mem1.muetsBalayes == [2], "le declencheur n'est pas filtre")
-
-        let nouveau2 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([2, 20, 24])])
-        let (m2, mem2) = try #require(try await Tournee.complete(nouveau2, memoire: mem1, maintenant: Self.t0 + 300))
-        #expect(m2.enfants(de: 2).isEmpty, "pas les enfants de l'ancien 2")
-        #expect(await !nouveau2.registre.requetes.contains("0801|0,1,2,8"), "pas balaye avant l'echeance")
-        #expect(mem2.dernierBalayage == Self.t0 - 60)
-
-        let (_, mem3) = try #require(try await Tournee.complete(nouveau2, memoire: mem2, maintenant: Self.t0 + 1740))
-        #expect(await nouveau2.registre.requetes.contains("0801|0,1,2,8"), "balaye a l'echeance")
-        #expect(mem3.muetsBalayes == [2] && mem3.dernierBalayage == Self.t0 + 1740)
-    }
-
-    /// Un routeur balaye qui sort de la liste change l'ensemble a balayer (spec, section 4) : le
-    /// balayage des autres est refait tout de suite, ses enfants ayant pu passer sous l'un d'eux
-    /// (Route64 inventee, sans le 57).
-    @Test func balayageRefaitQuandUnBalayeSort() async throws {
-        let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
-        #expect(mem1.muetsBalayes == [1, 43, 45, 51, 57])
-        let sans57 = try SondeRejouee.capture(reponsesEnPlus: ["6000|5,6": Self.route64([1, 20, 24, 43, 45, 51])])
-        let (_, mem2) = try #require(try await Tournee.complete(sans57, memoire: mem1, maintenant: Self.t0 + 300))
-        #expect(await sans57.registre.requetes.contains { $0.hasSuffix("|0,1,2,8") }, "balayage refait")
-        #expect(mem2.dernierBalayage == Self.t0 + 300 && mem2.muetsBalayes == [1, 43, 45, 51])
     }
 
     /// Enfant absent de la table de son parent, qui a repondu : son identite (ExtMac, adresses) et
@@ -972,36 +1192,39 @@ struct TourneeTests {
         #expect(mem2.identifies[0x5001] != nil && mem2.identiteDemandee[0x5001] == demande, "table du 20 pas venue")
     }
 
-    /// Enfant balaye sous un routeur muet (AC05) passe a un routeur qui repond (5002, dans sa
-    /// table) : a la tournee suivante, avant le balayage suivant, son identite le reconnait, et il
-    /// n'est plus affiche sous l'ancien parent. Les autres enfants balayes restent.
+    /// Enfant resolu sous un routeur muet (AC05) passe a un routeur qui repond (5002, dans sa
+    /// table) : a la tournee suivante, avant la resolution suivante, son identite le reconnait, et il
+    /// n'est plus affiche sous l'ancien parent. Les autres enfants resolus restent.
     @Test func enfantAyantChangeDeParent() async throws {
-        let sonde = try SondeRejouee.capture()
-        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
-        #expect(mem1.balayes[0xAC05]?.extMac == "E00000000000000B")
+        let sonde = try Self.sondeResolue()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: Self.appareils))
+        #expect(mem1.resolutions["E00000000000000B"]?.rloc16 == 0xAC05)
         let table20 = try Self.garder(try CaptureSonde.tlv(104), [0, 1, 5, 8, 24]) + Self.tableEnfants([4, 1, 2])
-        let parti = try SondeRejouee.capture(reponsesEnPlus: ["5000|0,1,5,16,8,24": table20, "5002|0,8": "0008E00000000000000B"])
-        let (m2, mem2) = try #require(try await Tournee.complete(parti, memoire: mem1, maintenant: Self.t0 + 300))
-        #expect(mem2.dernierBalayage == Self.t0, "pas de nouveau balayage")
+        let parti = try Self.sondeResolue(reponsesEnPlus: ["5000|0,1,5,16,8,24": table20, "5002|0,8": "0008E00000000000000B"])
+        let (m2, mem2) = try #require(try await Tournee.complete(parti, memoire: mem1, maintenant: Self.t0 + 300,
+                                                                appareils: Self.appareils))
+        #expect(mem2.derniereResolution == Self.t0, "pas de nouvelle resolution")
         #expect(m2.enfants.filter { $0.extMac == "E00000000000000B" }.map(\.rloc16) == [0x5002], "une seule fois")
-        #expect(m2.enfants(de: 43).map(\.rloc16) == [0xAC01, 0xAC03, 0xAC04, 0xAC06, 0xAC07, 0xAC08, 0xAC09])
+        #expect(m2.enfants(de: 43).map(\.rloc16) == [0xAC09, 0xAE00, 0xAE01])
     }
 
-    /// Enfant balaye qui porte l'ExtMac de la sonde (balayage d'avant un changement de RLOC16 de
-    /// la sonde) : ecarte, la sonde n'est affichee qu'une fois (ExtMac inventee).
-    @Test func sondeBalayeeEcartee() async throws {
-        let sonde = try SondeRejouee.capture(ext: "E0000000000000AA")
-        var mem = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0)).memoire
-        mem.balayes[0xAC0A] = EnfantMaillage(rloc16: 0xAC0A, extMac: "E0000000000000AA", source: .balayage)
-        let (m, _) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: Self.t0 + 300))
+    /// La sonde est un appareil Matter de l'instantane : elle n'est jamais resolue (elle se connait), ni un appareil
+    /// d'une autre partition (la resolution ne traverse pas les partitions) ; la sonde n'est affichee qu'une fois.
+    @Test func sondeEtAutrePartitionJamaisResolues() async throws {
+        let sonde = try Self.sondeResolue()
+        let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: Self.appareils))
+        let demandes = await sonde.registre.requetes.filter { $0.hasSuffix("|resoudre") }
+        #expect(!demandes.contains("\(Self.omr(0xAA))|resoudre") && !demandes.contains("\(Self.omr(0xF1))|resoudre"))
         #expect(m.enfants.filter { $0.extMac == "E0000000000000AA" }.map(\.rloc16) == [0xAC09], "la sonde, une fois")
-        #expect(m.enfants(de: 43).count == 8)
+        #expect(!mem.demandes.contains("E0000000000000AA") && !mem.demandes.contains("E0000000000000F1"))
     }
 
     /// Autre partition (panne, fusion) : les identifiants de routeur y sont
-    /// redistribues ; ce qui etait retenu de l'ancienne ne sert plus : routeurs qui avaient
-    /// repondu (1 et 43, balayes de nouveau), identites d'enfants et dates de leurs demandes,
-    /// recherche vaine (ExtMac inventees).
+    /// redistribues ; ce qui etait retenu de l'ancienne ne sert plus : resolutions, demandes et
+    /// releves des compteurs (la resolution est refaite), identites d'enfants et dates de leurs
+    /// demandes, recherche vaine (ExtMac inventees).
     @Test func autrePartition() async throws {
         let sonde = try SondeRejouee.capture()
         var mem = MemoireTournee()
@@ -1009,9 +1232,12 @@ struct TourneeTests {
         mem.identites[0xB400] = "E0000000000000EE"
         mem.echecs[20] = 2
         mem.muetInterroge[20] = Self.t0
-        mem.dernierBalayage = Self.t0
-        mem.muetsBalayes = [1, 43, 45, 51, 57]
-        mem.dejaRepondu = [1, 43]
+        mem.resolutions["E0000000000000E2"] = ResolutionAppareil(rloc16: 0xAC00, mleid: nil, adresse: Self.omr(0xE2), date: Self.t0)
+        mem.demandes = ["E0000000000000E2"]
+        mem.derniereResolution = Self.t0
+        mem.compteurs["E0000000000000E2"] = CompteursMac(protocolesInconnus: 0, erreursRecues: 0, erreursEmises: 1,
+                                                         unicastRecus: 0, diffusionsRecues: 0, rejetsRecus: 0,
+                                                         unicastEmis: 100, diffusionsEmises: 0, rejetsEmis: 0)
         mem.identiteDemandee[0x5001] = Self.t0 + 30
         mem.identifies[0x6002] = EnfantMaillage(rloc16: 0x6002, extMac: "E0000000000000EF", source: .tableEnfants)
         mem.rechercheVaine = Self.t0
@@ -1019,9 +1245,8 @@ struct TourneeTests {
         #expect(mem2.partition == "46CBEBCD")
         #expect(m.routeur(45)?.extMac == nil, "B400 : pas l'ExtMac retenu dans l'autre partition")
         #expect(m.routeur(20)?.muet == false, "5000 interroge de nouveau")
-        #expect(mem2.dernierBalayage == Self.t0 + 60, "balayage refait")
-        #expect(mem2.dejaRepondu == [20, 24])
-        #expect(mem2.muetsBalayes == [1, 43, 45, 51, 57], "1 et 43 n'ont jamais repondu dans cette partition")
+        #expect(mem2.derniereResolution == Self.t0 + 60, "resolution refaite")
+        #expect(mem2.resolutions.isEmpty && mem2.demandes.isEmpty && mem2.compteurs.isEmpty)
         #expect(await sonde.registre.requetes.contains("5001|0,8"), "identite redemandee")
         #expect(mem2.identiteDemandee[0x5001] == Self.t0 + 60)
         let e = try #require(m.enfants.first { $0.rloc16 == 0x6002 })
@@ -1045,35 +1270,37 @@ struct TourneeTests {
         #expect(await sonde.registre.requetes.isEmpty)
         #expect(await sonde.registre.tables == 0, "ni la table des routeurs")
         #expect(await sonde.registre.voisins == 0, "ni les voisins")
+        #expect(await sonde.registre.annonces == 0, "ni les annonces")
     }
 
-    /// Avancement de la premiere tournee : les six etapes dans l'ordre, chacune annoncee a 0
+    /// Avancement de la premiere tournee : les sept etapes dans l'ordre, chacune annoncee a 0
     /// puis une requete a la fois jusqu'a son total, connu des son debut ici. Les totaux sont
-    /// les requetes envoyees : `etat`, `routeurs` et `voisins` pour la sonde, 48 pour le balayage.
+    /// les requetes envoyees : `etat`, `routeurs`, `voisins` et `annonces` pour la sonde, 6
+    /// resolutions et 2 releves de compteurs.
     @Test func avancementPremiere() async throws {
-        let sonde = try SondeRejouee.capture()
+        let sonde = try Self.sondeResolue()
         let releve = ReleveAvancement()
         _ = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
-                                                   avancement: { releve.noter($0) }))
+                                                   appareils: Self.appareils, avancement: { releve.noter($0) }))
         #expect(releve.etapes == AvancementTournee.Etape.allCases)
-        let totaux: [AvancementTournee.Etape: Int] = [.etatSonde: 3, .listeRouteurs: 1, .routeurs: 7, .pileEtReseau: 3,
-                                                       .balayage: 48, .identites: 6]
+        let totaux: [AvancementTournee.Etape: Int] = [.etatSonde: 4, .listeRouteurs: 1, .routeurs: 7, .pileEtReseau: 3,
+                                                       .resolution: 6, .compteurs: 2, .identites: 6]
         for (etape, total) in totaux {
             let a = releve.de(etape)
             #expect(a.map(\.fait) == Array(0...total), "\(etape)")
             #expect(a.allSatisfy { $0.total == total }, "\(etape)")
         }
         let requetes = await sonde.registre.requetes
-        #expect(requetes.count == totaux.values.reduce(0, +) - 3,
-                "une requete diag par pas, hors etat, routeurs et voisins de la sonde")
+        #expect(requetes.count == totaux.values.reduce(0, +) - 4,
+                "une requete par pas, hors etat, routeurs, voisins et annonces de la sonde")
         #expect(await sonde.registre.tables == 1)
         #expect(await sonde.registre.voisins == 1)
-        #expect(requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 48)
+        #expect(await sonde.registre.annonces == 1)
     }
 
     /// Deuxieme tournee (5 min) : la liste des routeurs s'arrete au chef, avant son total
-    /// (le chef et un secours) ; piles connues : Network Data seules ; le balayage (pas du)
-    /// et les identites (demandees il y a 5 min) sont annonces sans rien a faire.
+    /// (le chef et un secours) ; piles connues : Network Data seules ; la resolution (pas due),
+    /// les compteurs et les identites (demandees il y a 5 min) sont annonces sans rien a faire.
     @Test func avancementSuivante() async throws {
         let sonde = try SondeRejouee.capture()
         let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
@@ -1084,7 +1311,8 @@ struct TourneeTests {
         #expect(releve.de(.listeRouteurs) == [AvancementTournee(etape: .listeRouteurs, fait: 0, total: 2),
                                               AvancementTournee(etape: .listeRouteurs, fait: 1, total: 2)])
         #expect(releve.de(.pileEtReseau).last == AvancementTournee(etape: .pileEtReseau, fait: 1, total: 1))
-        #expect(releve.de(.balayage) == [AvancementTournee(etape: .balayage, fait: 0, total: 0)])
+        #expect(releve.de(.resolution) == [AvancementTournee(etape: .resolution, fait: 0, total: 0)])
+        #expect(releve.de(.compteurs) == [AvancementTournee(etape: .compteurs, fait: 0, total: 0)])
         #expect(releve.de(.identites) == [AvancementTournee(etape: .identites, fait: 0, total: 0)])
         #expect(ReleveAvancement.croissants(releve.de(.routeurs)))
     }
@@ -1108,20 +1336,6 @@ struct TourneeTests {
             #expect(ReleveAvancement.croissants(liste))
             #expect(await sonde.registre.requetes.filter { $0.hasSuffix("|5,6") }.count == faites)
         }
-    }
-
-    /// Un enfant repond loin sous un routeur muet (le numero 8 du routeur 1) : le total du
-    /// balayage grandit de 8 numeros sans jamais baisser, et finit sur les requetes envoyees.
-    @Test func avancementBalayageQuiGrandit() async throws {
-        let sonde = try SondeRejouee.capture(reponsesEnPlus: ["0408|0,1,2,8": try CaptureSonde.tlv(503)])
-        let releve = ReleveAvancement()
-        _ = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
-                                                   avancement: { releve.noter($0) }))
-        let balayage = releve.de(.balayage)
-        #expect(balayage.first == AvancementTournee(etape: .balayage, fait: 0, total: 48))
-        #expect(balayage.last == AvancementTournee(etape: .balayage, fait: 56, total: 56))
-        #expect(ReleveAvancement.croissants(balayage))
-        #expect(await sonde.registre.requetes.filter { $0.hasSuffix("|0,1,2,8") }.count == 56)
     }
 
     /// `parallele` sur 20 elements, en fenetre glissante : jamais plus de 8 requetes en vol, et
@@ -1212,8 +1426,8 @@ struct TourneeTests {
         #expect(r.maillage == nil && r.memoire == MemoireTournee())
         #expect(await sonde.registre.tables == 0, "pas de table hors d'une partition")
         #expect(await sonde.registre.voisins == 0, "ni de voisins")
-        #expect(releve.avancements == [AvancementTournee(etape: .etatSonde, fait: 0, total: 3),
-                                       AvancementTournee(etape: .etatSonde, fait: 1, total: 3)],
+        #expect(releve.avancements == [AvancementTournee(etape: .etatSonde, fait: 0, total: 4),
+                                       AvancementTournee(etape: .etatSonde, fait: 1, total: 4)],
                 "l'etape s'arrete avant son total")
     }
 }

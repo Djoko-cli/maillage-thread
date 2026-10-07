@@ -87,7 +87,7 @@ public struct MaillageAffiche: Hashable, Sendable {
     /// connus tous deux et differents, ou dont le `xa` est l'ExtMac connue d'un autre routeur.
     /// Un enfant vu deux fois (meme ExtMac, precision 26 du plan 4b) ne donne qu'un noeud et un
     /// lien : ceux de l'entree que retient `Maillage.enfantsIdentifies` ; l'autre est ecartee. L'entree
-    /// du balayage d'un enfant devenu routeur (l'ExtMac d'un routeur du maillage) n'en donne aucun.
+    /// de la resolution d'un enfant devenu routeur (l'ExtMac d'un routeur du maillage) n'en donne aucun.
     /// Chaque noeud garde l'ExtMac que la sonde lui connait (`extMacs`).
     public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil]) {
         partition = maillage.partition
@@ -153,11 +153,11 @@ public struct MaillageAffiche: Hashable, Sendable {
                                         bordure: r.bordure, candidats: candidats, deduit: deduit == r.id)
         }
 
-        // Un enfant vu deux fois (il a change de parent, et l'ancienne entree du balayage d'un routeur
-        // muet peut rester 30 minutes) n'est qu'un noeud : l'entree que retient
-        // `Maillage.enfantsIdentifies` (la sonde, puis une table, puis le balayage) ; l'autre est
-        // ecartee, sans noeud ni lien. De meme pour l'entree du balayage d'un enfant devenu routeur,
-        // qu'elle ne retient pas.
+        // Un enfant vu deux fois (il a change de parent, et l'ancienne entree de la resolution sous un
+        // routeur muet peut rester 30 minutes) n'est qu'un noeud : l'entree que retient
+        // `Maillage.enfantsIdentifies` (la sonde, puis une table, puis la resolution) ; l'autre est
+        // ecartee, sans noeud ni lien. De meme pour l'entree de la resolution d'un enfant devenu
+        // routeur, qu'elle ne retient pas.
         let retenus = maillage.enfantsIdentifies
         var enfants: [UInt16: NoeudSonde] = [:]
         for e in maillage.enfants {

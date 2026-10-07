@@ -13,7 +13,7 @@ struct HistoriqueTests {
     }
 
     /// Petit maillage (valeurs inventees) : le chef 0 et le routeur 1, muet, sans ExtMac ; la sonde
-    /// 0001 sous 0 ; un enfant balaye sous 1 ; un enfant de table sans ExtMac ; deux signaux.
+    /// 0001 sous 0 ; un enfant resolu sous 1 ; un enfant de table sans ExtMac ; deux signaux.
     static func maillage(_ date: Date) -> Maillage {
         var c = ConstructionMaillage(date: date, partition: "0000000A")
         c.routeurs(Route64(sequence: 1, routes: [RouteRouteur(idRouteur: 0, qualiteSortante: 3, qualiteEntrante: 2, cout: 1),
@@ -23,7 +23,7 @@ struct HistoriqueTests {
         c.muet(1)
         c.lien(0, 1, sortante: 3, entrante: 2)
         c.enfant(EnfantMaillage(rloc16: 0x0001, extMac: "E0000000000000B1", qualite: 3, source: .sonde))
-        c.enfant(EnfantMaillage(rloc16: 0x0402, extMac: "E0000000000000B2", source: .balayage))
+        c.enfant(EnfantMaillage(rloc16: 0x0402, extMac: "E0000000000000B2", source: .resolution))
         c.enfant(EnfantMaillage(rloc16: 0x0003, qualite: 2, source: .tableEnfants))
         c.signal(SignalSonde(routeur: 0, rssi: -60))
         c.signal(SignalSonde(routeur: 1, rssi: -75))
@@ -42,17 +42,17 @@ struct HistoriqueTests {
     }
 
     /// Un enfant vu deux fois (il a change de parent) : la sonde passe avant une table, une table
-    /// avant le balayage d'un routeur muet (qui peut dater de 30 minutes), quel que soit l'ordre
+    /// avant la resolution sous un routeur muet (qui peut dater de 30 minutes), quel que soit l'ordre
     /// des RLOC16 (donc des insertions). La sonde compte : son ancien parent la garde dans sa
     /// table jusqu'a l'echeance de l'enfant, et peut avoir le plus petit identifiant.
     @Test(arguments: [
         // (source de l'entree au plus petit RLOC16, parent ; source de l'autre, parent ; parent attendu)
-        (SourceEnfant.balayage, 1, SourceEnfant.tableEnfants, 2, 2),
-        (.tableEnfants, 2, .balayage, 1, 2),
+        (SourceEnfant.resolution, 1, SourceEnfant.tableEnfants, 2, 2),
+        (.tableEnfants, 2, .resolution, 1, 2),
         (.tableEnfants, 1, .sonde, 2, 2),
         (.sonde, 1, .tableEnfants, 2, 1),
-        (.balayage, 1, .sonde, 2, 2),
-        (.sonde, 1, .balayage, 2, 1),
+        (.resolution, 1, .sonde, 2, 2),
+        (.sonde, 1, .resolution, 2, 1),
     ])
     func enfantVuDeuxFois(premiere: SourceEnfant, parentPremiere: Int, seconde: SourceEnfant, parentSeconde: Int,
                           attendu: Int) {
@@ -66,9 +66,9 @@ struct HistoriqueTests {
         #expect(ReleveMaillage(m).enfants.map(\.parent) == [attendu])
     }
 
-    /// Un enfant devenu routeur garde jusqu'a 30 minutes son entree du balayage d'un routeur muet : elle
-    /// est ecartee, son ExtMac etant celle d'un routeur du maillage. L'historique n'a pas d'enfant de
-    /// trop ; un autre enfant du meme balayage reste.
+    /// Un enfant devenu routeur garde jusqu'a 30 minutes son entree de la resolution sous un routeur muet :
+    /// elle est ecartee, son ExtMac etant celle d'un routeur du maillage. L'historique n'a pas d'enfant de
+    /// trop ; un autre enfant de la meme resolution reste.
     @Test func enfantDevenuRouteur() {
         var c = ConstructionMaillage(date: Self.date("2026-09-30T10:00:00Z"), partition: "0000000A")
         c.routeurs(Route64(sequence: 1, routes: [0, 1, 2].map {
@@ -76,15 +76,15 @@ struct HistoriqueTests {
         }), chef: 0)
         c.identite("E0000000000000B2", routeur: 2)
         c.muet(1)
-        c.enfant(EnfantMaillage(rloc16: 0x0402, extMac: "E0000000000000B2", source: .balayage))
-        c.enfant(EnfantMaillage(rloc16: 0x0403, extMac: "E0000000000000B3", source: .balayage))
+        c.enfant(EnfantMaillage(rloc16: 0x0402, extMac: "E0000000000000B2", source: .resolution))
+        c.enfant(EnfantMaillage(rloc16: 0x0403, extMac: "E0000000000000B3", source: .resolution))
         let m = c.maillage()
         #expect(m.enfantsIdentifies["E0000000000000B2"] == nil, "devenu routeur")
         #expect(m.enfantsIdentifies["E0000000000000B3"]?.rloc16 == 0x0403)
         #expect(ReleveMaillage(m).enfants.map(\.extMac) == ["E0000000000000B3"])
     }
 
-    /// Seule l'entree du balayage est ecartee : une entree de la table d'un routeur ou de la sonde, que
+    /// Seule l'entree de la resolution est ecartee : une entree de la table d'un routeur ou de la sonde, que
     /// l'on vient de lire, garde son enfant, meme si son ExtMac est celle d'un routeur du maillage.
     @Test func entreeFraicheDunRouteurGardee() {
         var c = ConstructionMaillage(date: Self.date("2026-09-30T10:00:00Z"), partition: "0000000A")
@@ -196,7 +196,7 @@ struct HistoriqueTests {
         #expect(r.cle(routeur: 62) == "rloc:F800")
     }
 
-    /// Tournee de la capture, avec des voisins : 7 routeurs et 10 enfants identifies tiennent en
+    /// Tournee de la capture, avec des voisins : 7 routeurs et 3 enfants identifies tiennent en
     /// moins de 700 octets ; avec 20 enfants (26 octets chacun), en moins de 1 Ko.
     @Test func tailleDUneLigne() async throws {
         let voisins = [VoisinSonde(rloc16: "E400", ext: "E0000000000000E4", rssi: -72, lqi: 3, routeur: true),
@@ -205,11 +205,11 @@ struct HistoriqueTests {
                                                                memoire: MemoireTournee(), maintenant: Self.date("2026-09-30T10:00:00Z")))
         let r = ReleveMaillage(m)
         #expect(r.routeurs.count == 7 && r.liens.count == 7)
-        #expect(r.enfants.count == 10, "balayes sous AC00, et les enfants des tables qui ont donne leur identite")
+        #expect(r.enfants.count == 3, "les enfants des tables qui ont donne leur identite")
         let octets = try CodageJSON.encodeur().encode(r).count
         #expect(octets < 700, "\(octets) octets")
         var vingt = r.enfants
-        for n in 0..<10 { vingt.append(ReleveMaillage.Enfant(extMac: String(format: "E0000000000001%02X", n), parent: 24, qualite: 3)) }
+        for n in 0..<17 { vingt.append(ReleveMaillage.Enfant(extMac: String(format: "E0000000000001%02X", n), parent: 24, qualite: 3)) }
         let grand = ReleveMaillage(date: r.date, partition: r.partition, routeurs: r.routeurs, liens: r.liens, enfants: vingt,
                                    signaux: r.signaux, parentSonde: r.parentSonde)
         #expect(try CodageJSON.encodeur().encode(grand).count < 1024)

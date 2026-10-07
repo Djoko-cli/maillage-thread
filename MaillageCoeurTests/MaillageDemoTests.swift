@@ -21,7 +21,7 @@ struct MaillageDemoTests {
         #expect(affiche.inconnus.map(\.id) == ["rloc:041F"], "tous les routeurs reconnus ; un enfant inconnu")
         #expect(affiche.routeurs.values.filter { $0.bordure }.allSatisfy { $0.reconnu })
         let muet = try #require(m.routeurs.first { $0.muet })
-        #expect(m.enfants(de: muet.id).allSatisfy { $0.qualite == nil && $0.source == .balayage })
+        #expect(m.enfants(de: muet.id).allSatisfy { $0.qualite == nil && $0.source == .resolution })
     }
 
     /// Routeurs de bordure laisses sans identite : non identifies, chacun avec les deux annonces

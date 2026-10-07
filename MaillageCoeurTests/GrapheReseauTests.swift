@@ -69,14 +69,14 @@ struct GrapheReseauTests {
         #expect(!g.liens.contains { $0.de == "E000000000000004" && $0.genre == .rattachement })
     }
 
-    /// Un enfant vu deux fois (il a change de parent ; l'ancienne entree du balayage d'un routeur muet
+    /// Un enfant vu deux fois (il a change de parent ; l'ancienne entree de la resolution sous un routeur muet
     /// peut rester 30 minutes) n'est qu'un noeud, pas un « rloc:XXXX » inconnu de plus : il est
     /// rattache par l'entree que retient `Maillage.enfantsIdentifies` (la sonde, puis la table d'un
-    /// routeur qui repond, puis le balayage), quel que soit l'ordre des RLOC16.
+    /// routeur qui repond, puis la resolution), quel que soit l'ordre des RLOC16.
     @Test(arguments: [
         // (source de l'entree sous le routeur 0 ; source de l'entree sous le routeur 1 ; parent attendu)
-        (SourceEnfant.balayage, SourceEnfant.tableEnfants, "rloc:0400"),
-        (.tableEnfants, .balayage, "rloc:0000"),
+        (SourceEnfant.resolution, SourceEnfant.tableEnfants, "rloc:0400"),
+        (.tableEnfants, .resolution, "rloc:0000"),
         (.tableEnfants, .sonde, "rloc:0400"),
     ])
     func enfantVuDeuxFois(premiere: SourceEnfant, seconde: SourceEnfant, attendu: String) throws {
@@ -96,7 +96,7 @@ struct GrapheReseauTests {
         #expect(g.parent(de: "E000000000000004") == attendu)
     }
 
-    /// Un enfant devenu routeur garde jusqu'a 30 minutes son entree du balayage d'un routeur muet, sous
+    /// Un enfant devenu routeur garde jusqu'a 30 minutes son entree de la resolution sous un routeur muet, sous
     /// son ancien RLOC16 : elle est ecartee, son ExtMac etant celle d'un routeur du maillage. Pas de
     /// noeud « Non identifie » en double, ni de lien, ni d'ExtMac a son nom (la cle d'un choix de piece).
     @Test func enfantDevenuRouteur() throws {
@@ -108,7 +108,7 @@ struct GrapheReseauTests {
         }), chef: 0)
         c.identite("E000000000000004", routeur: 1)
         c.muet(2)
-        c.enfant(EnfantMaillage(rloc16: 0x0802, extMac: "E000000000000004", source: .balayage))
+        c.enfant(EnfantMaillage(rloc16: 0x0802, extMac: "E000000000000004", source: .resolution))
         let m = MaillageAffiche(maillage: c.maillage(), reseau: r, appareils: i.appareils)
         let g = GrapheReseau(reseau: r, appareils: RapprochementTests.affiches(i), maillage: m)
         #expect(g.noeud("rloc:0802") == nil, "pas de noeud en double")
