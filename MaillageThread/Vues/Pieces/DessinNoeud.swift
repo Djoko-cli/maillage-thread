@@ -113,6 +113,9 @@ enum DessinNoeud {
             for (ecart, opacite) in [(CGFloat(3), 0.9), (6, 0.55)] {
                 var ondes = Path()
                 for milieu in [0.0, 180.0] {
+                    // Chaque arc a part : sans ce saut, `addArc` relierait la fin du premier au debut du second.
+                    let debut = Angle.degrees(milieu - 35).radians
+                    ondes.move(to: CGPoint(x: c.x + (r + ecart) * cos(debut), y: c.y + (r + ecart) * sin(debut)))
                     ondes.addArc(center: c, radius: r + ecart, startAngle: .degrees(milieu - 35),
                                  endAngle: .degrees(milieu + 35), clockwise: false)
                 }

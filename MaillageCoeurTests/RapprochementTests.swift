@@ -285,7 +285,7 @@ struct RapprochementTests {
     /// Origine de chaque lien, pour la fiche (spec de la sonde tout-en-un, section 2.4) : la source et l'age. Un lien
     /// radio entendu puis mesure par le diagnostic, plus recent, n'a plus que lui ; un lien sans source (maillage de
     /// demo) n'en a pas. Un enfant : la table de son parent, la resolution et le taux de ses compteurs,
-    /// ou la sonde. Les routeurs muets, entendus ou non, et si la sonde a rendu ses annonces.
+    /// ou la sonde. Les routeurs muets, entendus ou non, et si la sonde a rendu ses annonces. Le noeud de la sonde.
     @Test func origineDesLiens() throws {
         let i = Self.instantane()
         let r = try #require(i.reseaux.first)
@@ -318,6 +318,7 @@ struct RapprochementTests {
         #expect(m.liens.first { $0.de == "E000000000000004" }?.origine == OrigineLien(diagnostic: true))
         #expect(m.liens.first { $0.de == "E000000000000005" }?.origine == OrigineLien(resolu: t0, echecs: 0.004))
         #expect(m.liens.first { $0.de == "rloc:0402" }?.origine == OrigineLien(sonde: true))
+        #expect(m.sonde == "rloc:0402", "la sonde, meme inconnue de l'instantane")
         #expect(m.routeursMuets == [2, 3, 4] && m.entendus == [2: t0 - 180, 4: t0 - 60] && m.annoncesLues)
         #expect(m.jamaisEntendu(try #require(m.routeurs[3]?.id)), "muet, jamais entendu")
         #expect(!m.jamaisEntendu(try #require(m.routeurs[2]?.id)), "entendu")
@@ -328,6 +329,7 @@ struct RapprochementTests {
         sans.muet(3)
         let ancien = MaillageAffiche(maillage: sans.maillage(), reseau: r, appareils: i.appareils)
         #expect(!ancien.jamaisEntendu(try #require(ancien.routeurs[3]?.id)), "sans annonces (1.0.3), on ne sait pas")
+        #expect(ancien.sonde == nil, "la sonde ne s'est pas donnee")
     }
 
     /// Appareils a resoudre (spec de la sonde tout-en-un, section 2.2) : les appareils Thread de l'instantane qui ont
