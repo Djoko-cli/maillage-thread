@@ -210,7 +210,7 @@ catalog match.
 |---|---|
 | `MaillageCoeur/` | framework without UI: TXT decoding, snapshot (networks, partitions, prefixes, devices), tracking and log events, file log, names, routing table; tested on the real survey and on the replayed outage |
 | `MaillageCoeur/Scene/` | room view without UI: nodes and links, floors and rooms, cards, layout (deterministic, with a budget), kept places, camera and flight, label placement and semantic zoom, projection for the `Canvas` engine; optimized even in Debug |
-| `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, scan of silent routers), kept router identities, matching with the snapshot (elimination, candidates), log of parents and Thread routers, tour history and curves; tested on an anonymized capture |
+| `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, MLE advertisements heard, parent resolution, children's MAC counters), kept router identities, matching with the snapshot (elimination, candidates), log of parents and Thread routers, tour history and curves; tested on an anonymized capture |
 | `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, access over the Thread network (`Reseau/`: UDP transport and H1 envelope from the Halo bridge, key in the keychain, rid and resends), `SondeUSB` (requests matched by id and target, each with its own deadline), app model (probe remembered by its USB serial number, USB or network link, a tour every 5 minutes) |
 | `MaillageThread/Noms/` | Home names: launching Passeur Noms, receiving its reading over the loopback (TCP listener on 127.0.0.1, one-time token), last valid names kept in the app's container |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
@@ -398,7 +398,9 @@ into the Mac by USB and added to Home as a Matter over Thread device (a
 since firmware 1.0.2): it listens all the time but never relays, so it is
 nobody's parent. It sends Thread network diagnostics (`DIAG_GET`) for the app
 and passes the raw answers back, over USB or, once access is allowed, over
-the Thread network; the app decodes them and rebuilds the mesh.
+the Thread network; the app decodes them and rebuilds the mesh. Since
+firmware 1.1.0, it also hears the MLE advertisements of the routers around
+it and resolves the parent of each device (see below).
 
 The **Halo bridge** is the author's other ESP32-C6 project, a Matter over
 Thread bridge for a ScreenBar Halo lamp, in another repository. The probe's
@@ -448,7 +450,7 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   launches Passeur Noms; its help tag says which of these it will actually
   start. While a tour runs, a line at the top left, under the capsules (above
   the split-network banner), shows its step, a counter of requests and its
-  duration ("Scan of silent routers · 24/48 · 0:42"). It is only there during
+  duration ("Parent resolution · 12/26 · 0:42"). It is only there during
   the tour: the banner and the path move up when it goes, and back down
   when it comes. The view itself does not move: its top margin keeps the
   line's room while a probe is remembered, so as not to reframe every 5
@@ -464,17 +466,60 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   the Network Data, and asks each child listed in a router's child table for
   its identity (ExtMac, addresses) at most once every half hour, sleepy ones
   included (a Matter device's ExtMac is its host name).
-- **Apple's border routers never answer diagnostics.** The scan of possible
-  child RLOC16s targets the routers that never answered (Apple's) or that
-  stayed silent two tours in a row (a refusal by the probe, or an unreadable
-  answer, is not a silence), every 30 minutes or when that set changes; the
-  quality of those links stays unknown, and a link between two Apple routers
-  is never drawn.
+- **Apple's border routers never answer diagnostics.** Since firmware 1.1.0,
+  the probe makes up for it in three ways, below: listening, parent
+  resolution and the children's MAC counters. They replace the scan of
+  possible child RLOC16s, which missed the children that don't answer
+  diagnostics.
+- **Listening.** The probe hears the MLE advertisements of the routers within
+  its radio range and decrypts them on the board: it derives the MLE key from
+  the network key, which never leaves the board and is wiped right after.
+  Each advertisement carries the router's routing table (Route64), so its
+  links in both directions with every other router, Apple's included. After
+  the probe's state, its router table and its neighbors, the tour asks for
+  them (`annonces`; without an answer, it goes on without them) and keeps
+  the routers of its partition: those heard from another partition (an Aqara
+  hub's, for example) are set aside. For each pair of routers, each
+  direction keeps the most recent measure, diagnostics or listening, dated
+  by the age the probe gives; a link known from one end only is shown. Each
+  advertisement also ties a RLOC16 to an ExtMac, like the probe's parent.
+- **Parent resolution**, every 30 minutes and when a device appears: for each
+  Matter or HomeKit device on Thread that the app knows with an address on
+  its partition's OMR prefix, the probe has OpenThread resolve that address
+  (`resoudre`, 8 in flight). The parent answers for its sleepy child, and the
+  probe's address cache gives the RLOC16 found: without its 10 low bits, it
+  is the parent's. Apple routers answer with their own RLOC16, third-party
+  routers with the child's. The child is attached to its parent, dated
+  (under a router that answers diagnostics, its child table prevails); a
+  device that isn't resolved stays dotted ("assumed attachment"), as before.
+- **Quality of the children of Apple routers.** At each resolution, the app
+  asks each child of a silent router (Apple's) for its MAC counters (TLV 9,
+  at its ML-EID, which the address cache gives: diagnostics are only
+  accepted on the network's internal addresses). Between two readings,
+  failed sends over unicast sends give the quality: under 1 %, 3; from 1 to
+  5 %, 2; above, 1. Under 50 frames sent between the two readings, the
+  quality is unknown; a counter that goes down (the device restarted) starts
+  the readings over. A child that doesn't answer keeps an unknown quality;
+  under a third-party router, the quality comes from its child table, as
+  before.
+- **What listening brings, and its limits.** The probe only hears the
+  routers within its radio range; a single router heard gives all its
+  links, and a link shows as soon as one of its two ends is heard. A badly
+  placed probe never brings less than before: diagnostics, resolution and
+  counters don't depend on where it sits. Settings › Probe shows the
+  coverage, "routers heard: 5 of 7" (out of the routers of its partition);
+  moving the probe changes it. The quality seen by an Apple parent stays
+  unknown: only the child's, if it answers diagnostics, is measured.
+  Resolution doesn't cross partitions: the children of another partition
+  stay unknown. The mesh is a dated photo: links and parents change, and the
+  card gives the age of each piece of information. With a firmware older
+  than 1.1.0, the tour keeps to diagnostics.
 - **Border router identities.** A silent Apple router does not give its
   ExtMac, so not the name of its announcement either. The probe (firmware
   1.0.2) learns the ExtMac of the routers it hears: each tour reads its router
-  table (`routeurs`) and keeps every RLOC16 ↔ ExtMac pair, like the one of its
-  parent, even when the tour gets no mesh. These identities are kept from one
+  table (`routeurs`) and, since firmware 1.1.0, their MLE advertisements, and
+  keeps every RLOC16 ↔ ExtMac pair, like the one of its parent, even when the
+  tour gets no mesh. These identities are kept from one
   launch to the next with their partition (`identites-routeurs.json` in the
   app folder; another partition erases them, and the pair of a router that
   left the router list is forgotten): moved around the house, the probe
@@ -490,13 +535,18 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   card. Without a probe, every announcement stays drawn.
 - In the room view, solid lines between routers are radio links (2 points,
   colored by quality: green 3, yellow 2, orange 1, grey unknown); a child's
-  line to its parent stays thin. Dotted lines stay for what the probe does not
-  see. The mesh leader wears the crown. The card gives the parent and the
-  quality, or a router's number of neighbors and children. If the probe stops
-  answering, the last mesh is marked old 6 minutes after it was received
-  (never during a tour); after 15 minutes the view goes back to dotted lines.
-  The view redraws every minute: both changes show up within a minute, with
-  no other event needed, and so do the open card's "seen … ago" and curves.
+  line to its parent stays thin. A link is a link: same line and same color
+  whatever its source. Dotted lines stay for what the probe does not see. The
+  mesh leader wears the crown. The card gives the parent and the quality, or
+  a router's number of neighbors and children, and the source and age of
+  each link ("diagnostics", "heard 3 minutes ago", "resolved 12 minutes
+  ago", "child's counters: 0.7% failed"); for a router the probe has never
+  heard, "never heard by the probe; links seen only by its neighbors". If
+  the probe stops answering, the last mesh is marked old 6 minutes after it
+  was received (never during a tour); after 15 minutes the view goes back to
+  dotted lines. The view redraws every minute: both changes show up within a
+  minute, with no other event needed, and so do the open card's "seen … ago"
+  and curves.
 - Switching "Sonde maillage" off in Home suspends the probe: no tour, even
   after the probe restarts. The board's LED then gives a short orange flash
   every 5 s (firmware 1.0.3). After `oubli`, the USB command that unpairs
@@ -505,33 +555,38 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
 - **Log and history** (plan 3b). Each tour compares its mesh with the
   previous one and writes to the log ("Mesh" family): "X changed parent:
   A → B", "X has no parent anymore" (missing from two tours where its absence
-  is certain; for a child known only by the scan of a silent router, such as
-  an Apple border router, missing from two distinct scans, usually 30 to 60
-  min apart) and a Thread router other than a border router appearing or
-  disappearing; parent changes of one node within the hour fit on one line
-  ("X changed parent 4 times within 1 h"). Only identified children (ExtMac)
-  are followed. No notification by default ("Other changes"). Each tour also
+  is certain; for a child known only by resolution, under an Apple border
+  router, missing from two distinct resolutions, usually 30 to 60 min apart)
+  and a Thread router other than a border router appearing or disappearing;
+  parent changes of one node within the hour fit on one line ("X changed
+  parent 4 times within 1 h"). Only identified children (ExtMac) are
+  followed. No notification by default ("Other changes"). Each tour also
   adds a line to `maillage-AAAA-MM.jsonl` in the app folder (kept 90 days,
-  about 8 MB a month for 7 routers and 20 children): the quality of every
-  link, and the signal of every router the probe hears (`voisins`) and of its
-  parent (`etat`). A node's card draws its curves over 24 h, 7 d or 30 d: the
-  quality of its links, parent changes marked, and for a router the "Signal
-  seen by the probe", with the probe's own parent changes marked (the signal
-  depends first on where the probe sits); its scale, in tens of dBm, always
-  has its ticks, even for a single reading, and hovering gives the value and
-  time of the nearest reading. None of this in demo mode.
+  about 8 MB a month for 7 routers and 20 children, up to 12 MB with the
+  links heard and their sources): the quality of every link and, since
+  1.1.0, its source (diagnostics or listening) and the quality the counters
+  give the children (older files read as before), and the signal of every
+  router the probe hears (`voisins`) and of its parent (`etat`). A node's
+  card draws its curves over 24 h, 7 d or 30 d: the quality of its links,
+  parent changes marked, and for a router the "Signal seen by the probe",
+  with the probe's own parent changes marked (the signal depends first on
+  where the probe sits); its scale, in tens of dBm, always has its ticks,
+  even for a single reading, and hovering gives the value and time of the
+  nearest reading. None of this in demo mode.
 - Probe captures hold the home network's addresses:
   `outils/anonymiser-sonde.py` rewrites them consistently before they become
   test data (`docs/releves/2026-09-29/`): ExtMacs and the SRP host name,
   prefixes, addresses, the probe's MAC, name and key fingerprint (plan 3b).
   It knows the messages of firmware 1.0.3 and of that capture, the form of
   every field, and the diagnostic TLVs the tour asks for, down to the Network
-  Data; it fails on anything else, without writing anything. An already
-  anonymized capture comes out unchanged. Free texts (vendor, model, versions,
-  the probe's messages) are refused at the slightest identifier pattern, an
-  address or hex digits even when split by separators: an ISO date may be
-  refused too. An identifier deliberately disguised in a firmware string (hex
-  split by other letters) would still pass.
+  Data; it fails on anything else, the new messages of firmware 1.1.0
+  included (`annonces`, `resoudre`, the listening counters, TLV 9), without
+  writing anything. An already anonymized capture comes out unchanged. Free
+  texts (vendor, model, versions, the probe's messages) are refused at the
+  slightest identifier pattern, an address or hex digits even when split by
+  separators: an ISO date may be refused too. An identifier deliberately
+  disguised in a firmware string (hex split by other letters) would still
+  pass.
 
 ### Route to the Thread network
 

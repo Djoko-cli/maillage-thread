@@ -216,7 +216,7 @@ catalogue vont ensemble.
 |---|---|
 | `MaillageCoeur/` | framework sans interface : décodage des TXT, instantané (réseaux, partitions, préfixes, appareils), suivi et événements du journal, journal en fichiers, noms, table de routage ; testé sur le relevé réel et sur la panne rejouée |
 | `MaillageCoeur/Scene/` | vue par pièces, sans interface : nœuds et liens, étages et pièces, cartes, disposition (déterministe, avec budget), places gardées, caméra et envol, placement des noms et zoom sémantique, projection vers le moteur `Canvas` ; optimisé même en Debug |
-| `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, balayage des routeurs muets), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats), journal des parents et des routeurs Thread, historique des tournées et courbes ; testé sur une capture anonymisée |
+| `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, annonces MLE entendues, résolution des parents, compteurs MAC des enfants), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats), journal des parents et des routeurs Thread, historique des tournées et courbes ; testé sur une capture anonymisée |
 | `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, accès par le réseau Thread (`Reseau/` : transport UDP et enveloppe H1 du pont Halo, clé dans le trousseau, rid et renvois), `SondeUSB` (requêtes appariées par id et par cible, chacune avec son échéance), modèle de l'app (sonde retenue par son numéro de série USB, liaison USB ou réseau, une tournée toutes les 5 minutes) |
 | `MaillageThread/Noms/` | noms de Maison : lancement de Passeur Noms, réception de son relevé par la boucle locale (écoute TCP sur 127.0.0.1, jeton à usage unique), derniers noms valides gardés dans le conteneur de l'app |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
@@ -417,7 +417,9 @@ le firmware 1.0.2) : elle écoute en permanence mais ne relaie rien, donc elle
 n'est le parent de personne. Elle envoie pour l'app les requêtes de
 diagnostic Thread (`DIAG_GET`) et lui rend les réponses brutes, par l'USB ou,
 une fois l'accès autorisé, par le réseau Thread ; l'app les décode et
-reconstruit le maillage.
+reconstruit le maillage. Depuis le firmware 1.1.0, elle entend aussi les
+annonces MLE des routeurs qui l'entourent et résout le parent de chaque
+appareil (voir plus bas).
 
 Le **pont Halo** est l'autre projet ESP32-C6 de l'auteur, un pont Matter sur
 Thread pour une lampe ScreenBar Halo, dans un autre dépôt. L'accès de la sonde
@@ -470,7 +472,7 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   s'il y en a déjà une) et Passeur Noms ; son aide dit lesquels il lancera
   vraiment. Pendant une tournée, une ligne en haut à gauche, sous les capsules
   (au-dessus du bandeau d'un réseau scindé), montre son étape, un compteur de
-  requêtes et sa durée (« Balayage des routeurs muets · 24/48 · 0:42 »). Elle
+  requêtes et sa durée (« Résolution des parents · 12/26 · 0:42 »). Elle
   n'est là que pendant la tournée : le bandeau et le fil remontent quand elle
   disparaît, et redescendent quand elle paraît. La vue, elle, ne bouge pas :
   sa marge du haut garde la place de la ligne tant qu'une sonde est retenue,
@@ -486,17 +488,63 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   les Network Data, et demande à chaque enfant listé dans la table d'un
   routeur son identité (ExtMac, adresses), au plus une fois par demi-heure,
   endormis compris (l'ExtMac d'un appareil Matter est son nom d'hôte).
-- **Les routeurs de bordure d'Apple ne répondent jamais au diagnostic.** Le
-  balayage des RLOC16 d'enfant possibles vise les routeurs qui n'ont jamais
-  répondu (ceux d'Apple) ou qui se sont tus deux tournées de suite (un refus
-  de la sonde, ou une réponse illisible, n'est pas un silence), toutes les 30
-  minutes ou quand cet ensemble change ; la qualité de ces liens reste
-  inconnue, et un lien entre deux routeurs Apple n'est jamais dessiné.
+- **Les routeurs de bordure d'Apple ne répondent jamais au diagnostic.**
+  Depuis le firmware 1.1.0, la sonde y supplée de trois façons, ci-dessous :
+  l'écoute, la résolution des parents et les compteurs MAC des enfants. Elles
+  remplacent le balayage des RLOC16 d'enfant possibles, qui manquait les
+  enfants muets au diagnostic.
+- **L'écoute.** La sonde entend les annonces MLE des routeurs à portée de sa
+  radio et les déchiffre sur la carte : elle tire la clé MLE de la clé
+  réseau, qui ne quitte jamais la carte et s'efface aussitôt. Chaque annonce
+  porte la table de routage du routeur (Route64), donc ses liens dans les
+  deux sens avec chacun des autres routeurs, ceux d'Apple compris. Après
+  l'état de la sonde, sa table des routeurs et ses voisins, la tournée les
+  demande (`annonces` ; sans réponse, elle continue sans) et garde les
+  routeurs de sa partition : ceux d'une autre partition (celle d'un hub
+  Aqara, par exemple) sont écartés. Pour une paire de routeurs, chaque sens
+  garde la mesure la plus récente, diagnostic ou écoute, datée de l'âge que
+  donne la sonde ; un lien connu d'un seul côté est affiché. Chaque annonce
+  relie aussi un RLOC16 à une ExtMac, comme le parent de la sonde.
+- **La résolution des parents**, toutes les 30 minutes et quand un appareil
+  paraît : pour chaque appareil Matter ou HomeKit sur Thread que l'app
+  connaît avec une adresse sur le préfixe OMR de sa partition, la sonde fait
+  résoudre cette adresse par OpenThread (`resoudre`, 8 en vol). Le parent
+  répond pour son enfant endormi, et le cache d'adresses de la sonde donne le
+  RLOC16 trouvé : sans ses 10 bits de poids faible, c'est celui du parent.
+  Les routeurs Apple répondent avec leur propre RLOC16, les routeurs tiers
+  avec celui de l'enfant. L'enfant est rattaché à son parent, daté (sous un
+  routeur qui répond au diagnostic, sa table des enfants l'emporte) ; un
+  appareil non résolu reste en pointillés (« rattachement supposé »), comme
+  avant.
+- **La qualité des enfants des routeurs Apple.** À chaque résolution, l'app
+  demande à chaque enfant d'un routeur muet (ceux d'Apple) ses compteurs MAC
+  (TLV 9, à son ML-EID, que donne le cache d'adresses : le diagnostic n'est
+  accepté que sur les adresses internes du réseau). Entre deux relevés, les
+  échecs d'envoi rapportés aux envois donnent la qualité : moins de 1 %, 3 ;
+  de 1 à 5 %, 2 ; au-delà, 1. Sous 50 trames envoyées entre les deux
+  relevés, la qualité est inconnue ; un compteur qui baisse (l'appareil a
+  redémarré) fait repartir les relevés. Un enfant qui ne répond pas garde une
+  qualité inconnue ; sous un routeur tiers, la qualité vient de sa table des
+  enfants, comme avant.
+- **Ce que l'écoute apporte, et ses limites.** La sonde n'entend que les
+  routeurs à portée de sa radio ; un seul routeur entendu donne tous ses
+  liens, et un lien paraît dès que l'un de ses deux bouts est entendu. Une
+  sonde mal placée n'apporte jamais moins qu'avant : le diagnostic, la
+  résolution et les compteurs ne dépendent pas de sa position. Réglages ›
+  Sonde montre la couverture, « routeurs entendus : 5 sur 7 » (sur les
+  routeurs de sa partition) ; déplacer la sonde la fait varier. La qualité
+  vue par un parent Apple reste inconnue : seule celle de l'enfant, s'il
+  répond au diagnostic, est mesurée. La résolution ne traverse pas les
+  partitions : les enfants d'une autre partition restent inconnus. Le
+  maillage est une photo datée : liens et parents changent, et la fiche
+  donne l'âge de chaque information. Avec un firmware antérieur à 1.1.0, la
+  tournée s'en tient au diagnostic.
 - **Identité des routeurs de bordure.** Muet, un routeur d'Apple ne donne pas
   son ExtMac, donc pas le nom de son annonce. La sonde (firmware 1.0.2)
   apprend celle des routeurs qu'elle entend : chaque tournée lit sa table des
-  routeurs (`routeurs`) et retient chaque paire RLOC16 ↔ ExtMac, comme celle
-  de son parent, même quand la tournée n'aboutit pas. Ces identités sont
+  routeurs (`routeurs`) et, depuis le firmware 1.1.0, leurs annonces MLE, et
+  retient chaque paire RLOC16 ↔ ExtMac, comme celle de son parent, même
+  quand la tournée n'aboutit pas. Ces identités sont
   gardées d'un lancement à l'autre avec leur partition
   (`identites-routeurs.json` dans le dossier de l'app ; une autre partition
   les efface, et la paire d'un routeur sorti de la liste des routeurs est
@@ -512,15 +560,20 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   annonce. Sans sonde, toutes les annonces restent dessinées.
 - Dans la vue par pièces, les traits pleins entre routeurs sont les liens
   radio (2 points, colorés par la qualité : vert 3, jaune 2, orange 1, gris
-  inconnue) ; le trait d'un enfant vers son parent reste fin. Les pointillés
-  restent pour ce que la sonde ne voit pas. Le chef du maillage porte la
-  couronne. La fiche donne le parent et la qualité, ou le nombre de voisins et
-  d'enfants d'un routeur. Si la sonde ne répond plus, le dernier maillage est
-  marqué ancien 6 minutes après sa réception (jamais pendant une tournée) ;
-  après 15 minutes, la vue revient aux pointillés. La vue se redessine chaque
-  minute : ces deux changements y paraissent avec une minute de retard au
-  plus, sans autre événement, comme le « vu il y a … » et les courbes de la
-  fiche ouverte.
+  inconnue) ; le trait d'un enfant vers son parent reste fin. Un lien est un
+  lien : même trait et même couleur, quelle que soit sa source. Les
+  pointillés restent pour ce que la sonde ne voit pas. Le chef du maillage
+  porte la couronne. La fiche donne le parent et la qualité, ou le nombre de
+  voisins et d'enfants d'un routeur, et la source et l'âge de chaque lien
+  (« diagnostic », « entendu il y a 3 minutes », « résolu il y a 12
+  minutes », « compteurs de l'enfant : 0,7 % d'échecs ») ; pour un routeur
+  que la sonde n'a jamais entendu, « jamais entendu par la sonde ; liens vus
+  seulement par ses voisins ». Si la sonde ne répond plus, le dernier
+  maillage est marqué ancien 6 minutes après sa réception (jamais pendant
+  une tournée) ; après 15 minutes, la vue revient aux pointillés. La vue se
+  redessine chaque minute : ces deux changements y paraissent avec une
+  minute de retard au plus, sans autre événement, comme le « vu il y a … »
+  et les courbes de la fiche ouverte.
 - Éteindre « Sonde maillage » dans Maison suspend la sonde : pas de tournée,
   même après un redémarrage de la sonde. Sa LED donne alors un bref éclair
   orange toutes les 5 s (firmware 1.0.3). Après un `oubli`, la commande USB
@@ -529,20 +582,22 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
 - **Journal et historique** (plan 3b). Chaque tournée compare son maillage à
   celui de la précédente et note au journal (famille « Maillage ») : « X a
   changé de parent : A → B », « X n'a plus de parent » (absent de deux
-  tournées où son absence est sûre ; pour un enfant connu seulement par le
-  balayage d'un routeur muet, comme un routeur de bordure d'Apple, absent de
-  deux balayages distincts, en général à 30 à 60 min d'écart) et
-  l'apparition ou la disparition d'un
-  routeur Thread hors routeurs de bordure ; les changements de parent d'un
-  même nœud dans l'heure tiennent sur une ligne (« X a changé 4 fois de parent
-  en 1 h »). Seuls les enfants identifiés (ExtMac) sont suivis. Pas de
-  notification par défaut (« Autres changements »). Chaque tournée ajoute
-  aussi une ligne à `maillage-AAAA-MM.jsonl`, dans le dossier de l'app (gardé
-  90 jours, environ 8 Mo par mois pour 7 routeurs et 20 enfants) : la qualité
-  de chaque lien, et le signal de chaque routeur que la sonde entend
-  (`voisins`) et de son parent (`etat`). La fiche d'un nœud en tire ses
-  courbes sur 24 h, 7 j ou 30 j : la qualité de ses liens, changements de
-  parent marqués, et pour un routeur le « Signal vu par la sonde », où les
+  tournées où son absence est sûre ; pour un enfant connu seulement par la
+  résolution, sous un routeur de bordure d'Apple, absent de deux résolutions
+  distinctes, en général à 30 à 60 min d'écart) et l'apparition ou la
+  disparition d'un routeur Thread hors routeurs de bordure ; les changements
+  de parent d'un même nœud dans l'heure tiennent sur une ligne (« X a changé
+  4 fois de parent en 1 h »). Seuls les enfants identifiés (ExtMac) sont
+  suivis. Pas de notification par défaut (« Autres changements »). Chaque
+  tournée ajoute aussi une ligne à `maillage-AAAA-MM.jsonl`, dans le dossier
+  de l'app (gardé 90 jours, environ 8 Mo par mois pour 7 routeurs et 20
+  enfants, jusqu'à 12 Mo avec les liens entendus et leurs sources) : la
+  qualité de chaque lien et, depuis la 1.1.0, sa source (diagnostic ou
+  écoute) et la qualité que les compteurs donnent aux enfants (les fichiers
+  d'avant se lisent comme avant), et le signal de chaque routeur que la sonde
+  entend (`voisins`) et de son parent (`etat`). La fiche d'un nœud en tire
+  ses courbes sur 24 h, 7 j ou 30 j : la qualité de ses liens, changements
+  de parent marqués, et pour un routeur le « Signal vu par la sonde », où les
   changements de parent de la sonde sont marqués (le signal dépend d'abord de
   l'endroit où elle est posée) ; son échelle, en dizaines de dBm, a toujours
   ses graduations, même pour un seul relevé, et le survol donne la valeur et
@@ -553,12 +608,14 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   d'hôte SRP, préfixes, adresses, MAC, nom et empreinte de la clé de la sonde
   (plan 3b). Il connaît les messages du firmware 1.0.3 et ceux de cette
   capture, la forme de chaque champ et les TLV de diagnostic que la tournée
-  demande, jusque dans la Network Data ; il échoue devant tout le reste, sans
-  rien écrire. Une capture déjà anonymisée ressort telle quelle. Les textes
-  libres (fabricant, modèle, versions, messages de la sonde) sont refusés au
-  moindre motif d'identifiant, adresse ou chiffres hexa même coupés par des
-  séparateurs : une date ISO peut l'être aussi. Un identifiant déguisé exprès
-  dans une chaîne d'un firmware (hexa coupé par d'autres lettres) passerait.
+  demande, jusque dans la Network Data ; il échoue devant tout le reste, les
+  messages nouveaux du firmware 1.1.0 compris (`annonces`, `resoudre`, les
+  compteurs de l'écoute, la TLV 9), sans rien écrire. Une capture déjà
+  anonymisée ressort telle quelle. Les textes libres (fabricant, modèle,
+  versions, messages de la sonde) sont refusés au moindre motif
+  d'identifiant, adresse ou chiffres hexa même coupés par des séparateurs :
+  une date ISO peut l'être aussi. Un identifiant déguisé exprès dans une
+  chaîne d'un firmware (hexa coupé par d'autres lettres) passerait.
 
 ### Route vers le réseau Thread
 

@@ -6,6 +6,41 @@ the notes of the GitHub release and those of the update window.
 Maillage Thread : une section par version publiée, en anglais puis en français. `outils/publier.sh` en tire les
 notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour.
 
+## 1.1.0
+
+**English**
+
+- The probe listens (firmware 1.1.0, to flash without erasing: the probe stays in Home): it hears the MLE
+  advertisements of the routers within its radio range and decrypts them on the board, and the app draws their
+  links, between Apple border routers too, which never answer diagnostics. For each direction of a link, the most
+  recent measure wins, diagnostics or listening.
+- Parent resolution replaces the scan of silent routers: every 30 minutes, and when a device appears, the probe
+  resolves the Thread address of each Matter or HomeKit device, and the answer gives its parent, under an Apple
+  router too.
+- The children of Apple routers get a quality, from their MAC counters (failed sends between two readings).
+- The node card gives the source and age of each link ("heard 3 minutes ago", "diagnostics", "child's counters:
+  0.7% failed"); Settings, Probe, gives the coverage of the listening ("routers heard: 5 of 7").
+- The history keeps the source of each link and the quality computed for the children; older files read as before.
+- With a firmware older than 1.1.0, the app keeps to diagnostics.
+
+**Français**
+
+- La sonde écoute (firmware 1.1.0, à flasher sans effacement : la sonde reste dans Maison) : elle entend les
+  annonces MLE des routeurs à portée de sa radio et les déchiffre sur la carte, et l'app dessine leurs liens, entre
+  routeurs de bordure d'Apple aussi, qui ne répondent jamais au diagnostic. Pour chaque sens d'un lien, la mesure la
+  plus récente l'emporte, diagnostic ou écoute.
+- La résolution des parents remplace le balayage des routeurs muets : toutes les 30 minutes, et quand un appareil
+  paraît, la sonde résout l'adresse Thread de chaque appareil Matter ou HomeKit, et la réponse donne son parent, sous
+  un routeur d'Apple aussi.
+- Les enfants des routeurs d'Apple ont une qualité, d'après leurs compteurs MAC (les échecs d'envoi entre deux
+  relevés).
+- La fiche d'un nœud donne la source et l'âge de chaque lien (« entendu il y a 3 minutes », « diagnostic »,
+  « compteurs de l'enfant : 0,7 % d'échecs ») ; Réglages, Sonde, donne la couverture de l'écoute (« routeurs
+  entendus : 5 sur 7 »).
+- L'historique garde la source de chaque lien et la qualité calculée des enfants ; les fichiers d'avant se lisent
+  comme avant.
+- Avec un firmware antérieur à 1.1.0, l'app s'en tient au diagnostic.
+
 ## 1.0.0
 
 **English**
