@@ -17,9 +17,9 @@
 //    dernieres reponses d'une session reseau du pont Halo, benq
 //    src/json_out.h, ReplyCache). Au-dela (routeurs d'une quarantaine de
 //    routeurs), un rid repete relance la commande : une lecture, sans effet.
-//    Une reponse emise en plusieurs tours (annonces, 1.1.0) est reprise
-//    (reprendre) a chaque tour et ramenee en fin de tampon : ses lignes
-//    restent ensemble ; chassee entre-temps, elle n'est pas gardee du tout.
+//    Annonces (1.1.0) n'est jamais gardee : sa reponse part au fil des places
+//    libres de la file d'emission (main.cpp), un rid repete apres la fin
+//    relance la lecture (sans effet).
 //  - Lignes : 1100 octets de charge au plus. routeurs se coupe en lignes
 //    "suite" ; une ligne perdue en route donne une table partielle, ou
 //    aucune si la derniere (suite:false) se perd ; l'app en tient compte.
@@ -76,14 +76,9 @@ class Gardees {
   // reponse commencee (ou apres terminer), ignoree.
   void ajouter(const uint8_t *ligne, size_t n);
   void terminer();
-  // Reponse en plusieurs tours (annonces : ses lignes partent au fil des places
-  // libres de la file d'emission, d'autres reponses sont gardees entre-temps) :
-  // rouvre la reponse rid deja commencee, et la ramene en fin de tampon pour
-  // que ses lignes restent ensemble ; les lignes qui suivent (ajouter) sont sa
-  // suite, jusqu'a terminer. false : elle n'est plus gardee (chassee pour la
-  // place, trop grande) ; les lignes qui suivent sont alors ignorees, et
-  // jamais une reponse sans son debut ne revient.
-  bool reprendre(uint32_t rid);
+  // Oublie la reponse rid (une erreur qu'un rid repete ne doit pas rejouer) ;
+  // si elle est la reponse commencee, ses lignes suivantes sont ignorees.
+  void oublier(uint32_t rid);
   // Lignes gardees sous rid, dans l'ordre, passees a f. false : rien de garde.
   typedef void (*Rendu)(void *contexte, const uint8_t *ligne, size_t n);
   bool rendre(uint32_t rid, Rendu f, void *contexte) const;
@@ -100,7 +95,6 @@ class Gardees {
   void retirer(size_t debut, size_t fin);
   void retirerPremiere();
   void retirerRid(uint32_t rid);
-  void inverser(size_t debut, size_t fin);
   bool gardee(uint32_t rid) const;
 
   uint8_t o_[kOctets] = {};

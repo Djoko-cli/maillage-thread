@@ -882,9 +882,14 @@ static void ligneAnnoncesVide() {
 // alors que la table peut garder 32 routeurs. La commande en fait donc un
 // travail, repris a chaque tour de loop() (annoncesTour) : une ligne par place
 // libre, dans l'ordre, la derniere avec "suite":false, comme une reponse de
-// diag ou de resolution qui attend sa place. Un seul a la fois, sur une copie
-// de la table prise a la commande (la table change entre deux tours : la
-// reponse est un instantane, et sa fin ne peut pas disparaitre).
+// diag ou de resolution qui attend sa place, en laissant une place libre pour
+// les reponses des autres commandes et les DEFI des nouvelles connexions. Un
+// seul a la fois, sur une copie de la table prise a la commande (la table
+// change entre deux tours : la reponse est un instantane, et sa fin ne peut
+// pas disparaitre). Cette reponse n'est jamais gardee (Gardees) : un rid
+// repete pendant l'envoi est ignore, apres la fin il relance la lecture, sans
+// effet (rejouee d'un coup, une reponse de plus de 6 lignes buterait sur la
+// file) ; l'app fusionne par ext ou rloc16.
 struct AnnoncesEnVol {
   bool actif = false;
   Sortie sortie;         // session reseau et rid qui attendent la reponse
@@ -892,8 +897,9 @@ struct AnnoncesEnVol {
   uint8_t total = 0;     // lignes a envoyer (au moins une : "vide")
   uint8_t emises = 0;
   uint8_t routeurs = 0;  // entrees copiees dans sInstantane
-  bool gardee = true;    // la reponse est encore gardee pour un rid repete
 };
+// Places de la file d'emission laissees libres pendant l'envoi.
+static constexpr uint8_t kPlacesReserveAnnonces = 1;
 static AnnoncesEnVol sAnnonces;
 static mle::Entendu sInstantane[mle::TableEntendus::kPlaces];
 
@@ -901,7 +907,12 @@ static void cmdAnnonces() {
   const mle::TableEntendus &t = ecoute::entendus();
   const uint32_t maintenant = millis();
   if (sSortie.reseau) {
-    if (sAnnonces.actif) return repondreErreur("occupee");
+    if (sAnnonces.actif) {
+      repondreErreur("occupee");
+      // Pas gardee : le rid repete apres la fin relance la commande.
+      sGardees[sSortie.place].oublier(sSortie.rid);
+      return;
+    }
     AnnoncesEnVol a;
     a.actif = true;
     a.sortie = sSortie;
@@ -922,12 +933,10 @@ static void cmdAnnonces() {
   }
 }
 
-// Tour de loop() : les lignes d'annonces que la file d'emission peut prendre.
-// Session partie entre-temps : le travail tombe (reseauSessionPartie a deja
-// vide les reponses gardees de la place). Sinon la reponse est gardee ligne
-// apres ligne pour un rid repete, reprise a chaque tour ; si elle a ete chassee
-// du tampon entre-temps, ou ne tient pas, le reste part sans etre garde, et un
-// rid repete apres la fin relance la commande (une lecture, sans effet).
+// Tour de loop() : les lignes d'annonces que la file d'emission peut prendre
+// (hors la place de reserve). Session partie entre-temps : le travail tombe.
+// Rien n'est garde pour un rid repete (voir plus haut) : sortieReseau ne trouve
+// aucune reponse ouverte, et ses lignes ne sont pas gardees.
 static void annoncesTour() {
   AnnoncesEnVol &a = sAnnonces;
   if (!a.actif) return;
@@ -935,18 +944,14 @@ static void annoncesTour() {
     a = AnnoncesEnVol();
     return;
   }
-  if (!reseauPlacesLibres()) return;
-  distant::Gardees &g = sGardees[a.sortie.place];
-  if (a.emises == 0) g.commencer(a.sortie.rid);
-  else if (a.gardee) a.gardee = g.reprendre(a.sortie.rid);
+  if (reseauPlacesLibres() <= kPlacesReserveAnnonces) return;
   sSortie = a.sortie;
-  while (a.emises < a.total && reseauPlacesLibres()) {
+  while (a.emises < a.total && reseauPlacesLibres() > kPlacesReserveAnnonces) {
     if (a.routeurs) ligneAnnonces(sInstantane[a.emises], a.debutMs, a.emises + 1 < a.total);
     else ligneAnnoncesVide();
     a.emises++;
   }
   sSortie = Sortie();
-  g.terminer();
   if (a.emises >= a.total) a = AnnoncesEnVol();
 }
 
@@ -1280,8 +1285,9 @@ static void executer(char *c);
 
 // "<rid> <commande>" d'une session etablie. Sans rid lisible, aucune reponse
 // possible : ignoree. Un rid deja servi ne relance rien : la reponse gardee
-// repart, ou rien si un diag, une resolution ou des annonces de ce rid sont encore en vol. Puis la cadence,
-// comme Halo apres l'id (benq cli.cpp) : plus de 20 commandes dans la seconde,
+// repart, ou rien si un diag, une resolution ou des annonces de ce rid sont
+// encore en vol (les annonces ne sont pas gardees : apres leur fin, le rid
+// relance la lecture). Puis la cadence, comme Halo apres l'id (benq cli.cpp) : plus de 20 commandes dans la seconde,
 // rien, sans reponse (l'app renvoie), mais le refus est compte
 // (sRefusCadence). Hors liste blanche : erreur « refuse ».
 void reseauRecu(uint8_t place, char *charge) {

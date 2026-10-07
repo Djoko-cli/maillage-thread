@@ -108,7 +108,7 @@ le C6, il faut mettre DTR et RTS à 0 dans un seul appel (voir benq).
 | `voisins` | routeurs voisins à lien établi (le parent n'y est pas : voir `etat`) |
 | `routeurs` | table des routeurs d'OpenThread : `{"v":1,"t":"routeurs","liste":[{"id":…,"rloc16":"XXXX","ext":"<16 hexa>"\|null,"lqIn":…,"lqOut":…,"age":…,"lien":…}],"suite":…}`, plusieurs lignes si besoin (`"suite":true` sur toutes sauf la dernière) |
 | `diag <cible> <t,t,…> <id> [<délai ms>]` | TLV de la réponse en hexa, ou l'erreur : `delai`, `suspendue`, `occupee` (8 requêtes en vol), `envoi…` |
-| `annonces` | (1.1.0) une ligne par routeur entendu : `{"v":1,"t":"annonces","rloc16":"XXXX","ext":"<16 hexa>","partition":"<8 hexa>"\|null,"route64":"<hexa>"\|null,"seq":…,"rssi":…,"rssi_min":…,"rssi_max":…,"nb":…,"age_s":…,"suite":…}` (`"suite":true` sur toutes sauf la dernière) ; sans routeur entendu, une seule ligne `{"v":1,"t":"annonces","vide":true}` ; par le réseau, les lignes partent au fil des places libres de la file d'émission (6 places), en quelques secondes pour 32 routeurs, et la réponse est un instantané de la table à la commande ; un autre `annonces` pendant ce temps répond `{"v":1,"t":"erreur","erreur":"occupee"}` |
+| `annonces` | (1.1.0) une ligne par routeur entendu : `{"v":1,"t":"annonces","rloc16":"XXXX","ext":"<16 hexa>","partition":"<8 hexa>"\|null,"route64":"<hexa>"\|null,"seq":…,"rssi":…,"rssi_min":…,"rssi_max":…,"nb":…,"age_s":…,"suite":…}` (`"suite":true` sur toutes sauf la dernière) ; sans routeur entendu, une seule ligne `{"v":1,"t":"annonces","vide":true}` ; par le réseau, les lignes partent au fil des places libres de la file d'émission (6 places), en quelques secondes pour 32 routeurs, et la réponse est un instantané de la table à la commande ; un autre `annonces` pendant ce temps répond `{"v":1,"t":"erreur","erreur":"occupee"}` ; cette réponse n'est pas gardée (un rid répété après la fin relance la lecture : l'app fusionne par `ext` ou `rloc16`) ; l'envoi laisse une place libre dans la file |
 | `resoudre <ipv6> <id>` | (1.1.0) `{"v":1,"t":"resoudre","id":…,"cible":"<ipv6>","ok":true,"ms":…,"rloc16":"XXXX","mleid":"<32 hexa>"\|null}`, ou l'erreur : `introuvable` (rien en 15 s), `syntaxe` (adresse mal formée), `suspendue`, `occupee` (8 résolutions en vol), `envoi…` |
 | `cle` | `{"v":1,"t":"cle","empreinte":"<8 hexa>"\|null,…}`, avec `effacement_en_echec`, le nom d'hôte, les compteurs du transport (`udp`, dont `lignes_perdues` et `refus_cadence`) et le tas (`tas`) |
 | `cle efface` | efface la clé (plus d'accès réseau) ; la réponse de `cle`, ou l'erreur `ecriture` |
@@ -222,7 +222,8 @@ et promenée dans la maison, l'app la joint par le réseau.
   la réponse gardée (les 8 dernières réponses, dans la limite de 4096 octets
   par session ; au-delà, un rid répété relance la commande, une lecture), ou
   ne dit rien si un `diag`, un `resoudre` ou un `annonces` de ce rid est
-  encore en vol.
+  encore en vol. `annonces` n'est jamais gardée : après la fin de son envoi,
+  un rid répété relance la lecture (sans effet).
   Prendre un rid neuf par requête.
 - **Cadence** : 20 commandes par seconde glissante et par session au plus
   (comme Halo) ; au-delà, rien n'est exécuté ni répondu, l'app renvoie.

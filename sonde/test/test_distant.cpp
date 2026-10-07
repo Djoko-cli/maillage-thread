@@ -194,110 +194,41 @@ int main() {
   ajoute(g, "");
   g.terminer();
   CHECK(rendre(g, 5) == std::vector<std::string>{""}, "ligne vide gardee");
-  // Reponse en plusieurs tours (annonces, 1.1.0) : reprendre(rid) rouvre une
-  // reponse deja commencee, meme si d'autres reponses ont ete gardees depuis ;
-  // ses lignes restent ensemble, dans l'ordre, et les autres reponses intactes.
+  // oublier(rid) : une reponse qu'on ne veut pas voir rejouee (l'erreur
+  // « occupee » d'annonces, 1.1.0) ; les autres restent, et le rid peut revenir.
   g.vider();
   g.commencer(50);
   ajoute(g, "A1");
   ajoute(g, "A2");
   g.terminer();
-  g.commencer(51);  // une autre commande, entre deux tours de la premiere
+  g.commencer(51);
   ajoute(g, "B1");
-  ajoute(g, "B2");
   g.terminer();
   g.commencer(52);
   ajoute(g, "C1");
-  g.terminer();
-  CHECK(g.reprendre(50), "reprendre : reponse presente, au milieu du tampon");
-  ajoute(g, "A3");
-  ajoute(g, "A4");
-  g.terminer();
-  CHECK((rendre(g, 50) == std::vector<std::string>{"A1", "A2", "A3", "A4"}), "reprise : lignes ensemble, dans l'ordre");
-  CHECK((rendre(g, 51) == std::vector<std::string>{"B1", "B2"}) && rendre(g, 52) == std::vector<std::string>{"C1"},
-        "reprise : les autres reponses intactes");
-  CHECK(g.reponses() == 3, "reprise : toujours 3 reponses (%zu)", g.reponses());
-  CHECK(g.reprendre(52), "reprendre : reponse deja la derniere");
   ajoute(g, "C2");
   g.terminer();
-  CHECK((rendre(g, 52) == std::vector<std::string>{"C1", "C2"}), "reprise de la derniere");
-  CHECK(g.reprendre(51), "reprendre : deuxieme reprise");
-  ajoute(g, "B3");
-  g.terminer();
-  CHECK((rendre(g, 51) == std::vector<std::string>{"B1", "B2", "B3"}) &&
-            (rendre(g, 50) == std::vector<std::string>{"A1", "A2", "A3", "A4"}) &&
+  g.oublier(51);
+  CHECK(!(rendre(g, 51, &trouve), trouve) && g.reponses() == 2, "oublier : la reponse part");
+  CHECK((rendre(g, 50) == std::vector<std::string>{"A1", "A2"}) &&
             (rendre(g, 52) == std::vector<std::string>{"C1", "C2"}),
-        "reprises successives : tout reste en ordre");
-  // Reponse absente (jamais gardee, ou chassee entre-temps) : false, et les
-  // lignes qui suivent sont ignorees (jamais une reponse sans son debut).
-  CHECK(!g.reprendre(99), "reprendre : rid inconnu");
-  ajoute(g, "orpheline");
+        "oublier : les autres intactes, dans l'ordre");
+  g.oublier(50);
+  g.oublier(52);
+  CHECK(g.reponses() == 0 && g.octets() == 0, "oublier : tout part (%zu octets)", g.octets());
+  g.oublier(77);  // inconnue : rien
+  CHECK(g.reponses() == 0, "oublier : rid inconnu sans effet");
+  g.commencer(51);
+  ajoute(g, "B2");
   g.terminer();
-  CHECK(!(rendre(g, 99, &trouve), trouve) && g.reponses() == 3, "reprendre absent : lignes ignorees");
-  g.vider();
-  g.commencer(60);
-  ajoute(g, mille);
+  CHECK(rendre(g, 51) == std::vector<std::string>{"B2"}, "oublier : le rid peut revenir");
+  // Reponse en cours : oubliee, ses lignes suivantes sont ignorees.
+  g.commencer(53);
+  ajoute(g, "D1");
+  g.oublier(53);
+  ajoute(g, "D2");
   g.terminer();
-  for (uint32_t i = 61; i < 64; i++) {
-    g.commencer(i);
-    ajoute(g, mille);
-    g.terminer();
-  }
-  g.commencer(64);  // chasse la plus ancienne (60), la reponse en cours d'un autre tour
-  ajoute(g, mille);
-  g.terminer();
-  CHECK(!g.reprendre(60), "reprendre : reponse chassee pour la place");
-  ajoute(g, "suite");
-  g.terminer();
-  CHECK(!(rendre(g, 60, &trouve), trouve) && g.reponses() == 4, "reponse chassee : rien ne revient");
-  // Une reprise qui grandit trop : la reponse entiere part (jamais une partie).
-  g.vider();
-  g.commencer(70);
-  ajoute(g, mille);
-  g.terminer();
-  g.commencer(71);
-  ajoute(g, "autre");
-  g.terminer();
-  for (int tour = 0; tour < 5; tour++) {  // 6 x 1006 octets > kOctets
-    g.reprendre(70);
-    ajoute(g, mille);
-    g.terminer();
-  }
-  CHECK(!(rendre(g, 70, &trouve), trouve), "reprise trop grande : pas gardee du tout");
-  CHECK(g.octets() <= Gardees::kOctets, "reprise trop grande : octets bornes (%zu)", g.octets());
-  // Reprise a la limite des 8 reponses : ne chasse personne.
-  g.vider();
-  for (uint32_t i = 80; i < 88; i++) {
-    g.commencer(i);
-    ajoute(g, "x" + std::to_string(i));
-    g.terminer();
-  }
-  CHECK(g.reprendre(80), "reprendre avec 8 reponses gardees");
-  ajoute(g, "suite80");
-  g.terminer();
-  CHECK(g.reponses() == 8 && (rendre(g, 80) == std::vector<std::string>{"x80", "suite80"}) &&
-            (rendre(g, 87) == std::vector<std::string>{"x87"}),
-        "reprise : personne n'est chasse (%zu)", g.reponses());
-  // Un long defile : 30 lignes de 100 octets en 10 tours, entre-coupes d'autres
-  // commandes ; la reponse rendue est entiere, dans l'ordre, sans doublon.
-  g.vider();
-  std::vector<std::string> attendues;
-  for (int tour = 0; tour < 10; tour++) {
-    if (tour == 0) g.commencer(90);
-    else CHECK(g.reprendre(90), "defile : tour %d", tour);
-    for (int k = 0; k < 3; k++) {
-      std::string l = "L" + std::to_string(tour * 3 + k);
-      l.resize(100, '.');
-      attendues.push_back(l);
-      ajoute(g, l);
-    }
-    g.terminer();
-    g.commencer(100 + (uint32_t)(tour % 3));  // une autre commande ce tour-la
-    ajoute(g, "etat" + std::to_string(tour));
-    g.terminer();
-  }
-  CHECK(rendre(g, 90) == attendues, "defile : 30 lignes entieres, dans l'ordre");
-  CHECK(g.octets() <= Gardees::kOctets, "defile : octets bornes (%zu)", g.octets());
+  CHECK(!(rendre(g, 53, &trouve), trouve), "oublier une reponse en cours : rien ne revient");
   // Cadence (copie de Halo) : 20 lignes par seconde glissante.
   Cadence k;
   for (uint32_t i = 0; i < 20; i++) CHECK(k.allow(1000 + i), "ligne %u acceptee", (unsigned)i);
