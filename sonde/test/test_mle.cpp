@@ -249,7 +249,7 @@ static void testHasard() {
       const uint8_t debut[] = {0x41, 0xC8};
       memcpy(t, debut, sizeof(debut));
       t[15] = 0x7F;
-      t[16] = 0x3B;
+      t[16] = 0x33;
       t[17] = 0xF0;
       t[20] = (uint8_t)(kPortMle >> 8);
       t[21] = (uint8_t)kPortMle;
