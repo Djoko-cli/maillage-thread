@@ -171,6 +171,13 @@ struct AffichageSondeTests {
                 == String(localized: "parent \("[\(parent)]"), \(FicheNoeud.texteQualite(nil))") + " · "
                     + String(localized: "résolu \(FicheNoeud.relatif(t - 720, t))") + " · " + FicheNoeud.texteAccesCanal(0.012),
                 "sans RLOC16 : il est invente")
+        // Un enfant sans parent connu : son RLOC16, s'il est vrai ; jamais un RLOC16 invente.
+        let sansParent = NoeudSonde(id: "rloc:0C01", rloc16: 0x0C01, genre: .enfant, reconnu: false, bordure: false)
+        #expect(FicheNoeud.ligneSonde(sansParent, maillage: m, nom: { $0 }, instant: t) == String(localized: "RLOC16 \("0C01")"))
+        let inventeSansParent = NoeudSonde(id: "absent", rloc16: 0x0C00 | EnfantMaillage.bitInvente | 1, genre: .enfant,
+                                           reconnu: false, bordure: false)
+        #expect(FicheNoeud.ligneSonde(inventeSansParent, maillage: m, nom: { $0 }, instant: t)
+                == String(localized: "Non identifié"), "RLOC16 invente, sans parent : jamais affiche")
         // Maillage de demo : aucune source, aucune ligne de lien.
         let demo = try #require(s.maillageAffiche(pour: r))
         let chef = try #require(demo.routeurs[1])

@@ -318,7 +318,11 @@ struct FicheNoeud: View {
         let rloc = String(format: "%04X", n.rloc16)
         switch n.genre {
         case .enfant:
-            guard let p = m.parent(de: n.id) else { return String(localized: "RLOC16 \(rloc)") }
+            guard let p = m.parent(de: n.id) else {
+                // Le RLOC16 invente d'un enfant resolu n'est jamais affiche.
+                return n.rloc16 & EnfantMaillage.bitInvente == 0
+                    ? String(localized: "RLOC16 \(rloc)") : String(localized: "Non identifié")
+            }
             let lien = m.liens.first { $0.genre == .parent && $0.de == n.id }
             let q = lien?.qualite
             let ligne = n.rloc16 & EnfantMaillage.bitInvente == 0
