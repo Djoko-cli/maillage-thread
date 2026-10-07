@@ -448,6 +448,32 @@ struct SondeUSBTests {
         await #expect(throws: SondeUSB.Erreur.sansReponse("annonces")) { _ = try await s.annonces() }
     }
 
+    /// Lignes d'`annonces` etalees : la premiere ligne arrive apres le delai commun, mais avant le delai propre
+    /// d'`annonces` ; la derniere ligne complete la reponse et elle est bien reunite (firmware 1.1.0 : environ
+    /// 4 s pour 32 routeurs, avec marge pour le reseau).
+    @Test(.timeLimit(.minutes(1))) func annoncesLignesEtalees() async throws {
+        let delaiCommande = Duration.milliseconds(300)
+        let canal = CanalRejoue { l in
+            guard l == "annonces\n" else { return [] }
+            return []
+        }
+        let s = SondeUSB(canal: canal, delaiCommande: delaiCommande)
+        try await s.demarrer {}
+
+        // Emettre les lignes en arriere-plan avec delai : la premiere apres delaiCommande,
+        // mais avant le nouveau delai d'annonces
+        _ = Task {
+            try await Task.sleep(for: delaiCommande + .milliseconds(100))
+            canal.emettre([CanalRejoue.annonce("0400", route64: "01800000000000000000", suite: true)])
+            try await Task.sleep(for: .milliseconds(100))
+            canal.emettre([CanalRejoue.annonce("AC00", route64: nil, suite: false)])
+        }
+
+        let a = try await s.annonces()
+        #expect(a.count == 2)
+        #expect(a.map(\.rloc16) == ["0400", "AC00"])
+    }
+
     /// `resoudre` (firmware 1.1.0) : l'adresse part nue (sans zone) ; deux resolutions en vol, les reponses dans le
     /// desordre, chacune a son id et a sa cible ; une reponse d'un autre id, ou d'une autre cible au meme id, ignoree.
     @Test func resolutionsDansLeDesordre() async throws {

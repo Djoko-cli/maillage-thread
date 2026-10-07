@@ -98,6 +98,10 @@ actor SondeUSB: InterlocuteurSonde {
     /// USB, 6 s a distance).
     static let delaiCommandeUSB: Duration = .seconds(3)
     static let delaiCommandeReseau: Duration = .seconds(6)
+    /// Attente d'`annonces` : le delai commun plus 6 s, car le firmware 1.1.0 envoie les lignes
+    /// au fil des places libres de sa file (environ 4 s pour 32 routeurs), avec marge pour le reseau.
+    static let delaiAnnoncesUSB: Duration = .seconds(9)
+    static let delaiAnnoncesReseau: Duration = .seconds(12)
     /// Attente d'un `diag` au-dela de son delai : la sonde a du repondre (elle echoue elle-meme
     /// en `delai`). Par le reseau, le canal renvoie un diag sans reponse jusqu'a cette echeance.
     static let margeDiag: Duration = .seconds(5)
@@ -109,9 +113,10 @@ actor SondeUSB: InterlocuteurSonde {
     /// Au-dela du delai donne a la sonde, elle a du repondre (elle echoue elle-meme en `delai`).
     private let marge: Duration
     let delaiCommande: Duration
+    private let delaiAnnonces: Duration
     private let delaiResolution: Duration
     private var prochainId = 1
-    /// Jetons des attentes de `bonjour`, `etat`, `routeurs` et `voisins` (jamais envoyes a la sonde).
+    /// Jetons des attentes de `bonjour`, `etat`, `routeurs`, `voisins` et `annonces` (jamais envoyes a la sonde).
     private var prochainJeton = 1
     /// `diag` en vol, par id, avec leur cible telle que la commande l'ecrit (RLOC16 en 4 hexa, ou adresse IPv6).
     private var attenteDiag: [Int: (cible: String, suite: CheckedContinuation<ResultatDiag, Never>)] = [:]
@@ -134,10 +139,11 @@ actor SondeUSB: InterlocuteurSonde {
     private(set) var bonjourSpontane: Bonjour?
 
     init(canal: any CanalSonde, marge: Duration = SondeUSB.margeDiag, delaiCommande: Duration = SondeUSB.delaiCommandeUSB,
-         delaiResolution: Duration = SondeUSB.delaiResolution) {
+         delaiAnnonces: Duration? = nil, delaiResolution: Duration = SondeUSB.delaiResolution) {
         self.canal = canal
         self.marge = marge
         self.delaiCommande = delaiCommande
+        self.delaiAnnonces = delaiAnnonces ?? (delaiCommande == SondeUSB.delaiCommandeUSB ? SondeUSB.delaiAnnoncesUSB : SondeUSB.delaiAnnoncesReseau)
         self.delaiResolution = delaiResolution
     }
 
@@ -242,7 +248,7 @@ actor SondeUSB: InterlocuteurSonde {
             attenteAnnonces.ajouter(jeton, c)
             canal.envoyer(CommandeSonde.annonces.ligne)
             Task {
-                try? await Task.sleep(for: self.delaiCommande)
+                try? await Task.sleep(for: self.delaiAnnonces)
                 self.expirerAnnonces(jeton)
             }
         }
