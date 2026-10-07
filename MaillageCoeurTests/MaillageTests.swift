@@ -431,36 +431,34 @@ struct MaillageTests {
     }
 }
 
-@Suite("Qualite d'un enfant par ses compteurs MAC")
-struct QualiteCompteursTests {
+@Suite("Acces au canal refuses d'un enfant, par ses compteurs MAC")
+struct AccesCanalTests {
     static func releve(envois: UInt32, echecs: UInt32) -> CompteursMac {
         CompteursMac(protocolesInconnus: 0, erreursRecues: 0, erreursEmises: echecs, unicastRecus: 10, diffusionsRecues: 0,
                      rejetsRecus: 0, unicastEmis: envois, diffusionsEmises: 0, rejetsEmis: 0)
     }
 
-    /// Taux d'echec entre deux releves : Δ echecs / Δ envois. Moins de 1 % : 3 ; de 1 a 5 % : 2 ; au-dela : 1.
-    @Test func tauxEtQualite() throws {
+    /// Taux entre deux releves : Δ `ifOutErrors` (acces au canal refuses) / Δ `ifOutUcastPkts` (trames unicast).
+    @Test func taux() throws {
         let avant = Self.releve(envois: 5000, echecs: 40)
-        let m = try #require(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 6000, echecs: 47)))
-        #expect(m.qualite == 3 && abs(m.taux - 0.007) < 1e-12)
-        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 6000, echecs: 50))?.qualite == 2, "1 %")
-        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 6000, echecs: 90))?.qualite == 2, "5 %")
-        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 6000, echecs: 91))?.qualite == 1, "5,1 %")
-        #expect(QualiteCompteurs.qualite(taux: 0.0099) == 3 && QualiteCompteurs.qualite(taux: 0.5) == 1)
+        let t = try #require(AccesCanal.taux(avant: avant, apres: Self.releve(envois: 6000, echecs: 47)))
+        #expect(abs(t - 0.007) < 1e-12)
+        #expect(AccesCanal.taux(avant: avant, apres: Self.releve(envois: 6000, echecs: 91)).map { abs($0 - 0.051) < 1e-12 } == true)
+        #expect(AccesCanal.taux(avant: avant, apres: Self.releve(envois: 6000, echecs: 40)) == 0)
     }
 
-    /// Moins de 50 trames envoyees entre les deux releves : qualite inconnue ; 50 suffisent.
+    /// Moins de 50 trames envoyees entre les deux releves : pas de taux ; 50 suffisent.
     @Test func seuilDe50Trames() {
         let avant = Self.releve(envois: 100, echecs: 0)
-        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 149, echecs: 0)) == nil)
-        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 150, echecs: 0))?.qualite == 3)
-        #expect(QualiteCompteurs.tramesMin == 50)
+        #expect(AccesCanal.taux(avant: avant, apres: Self.releve(envois: 149, echecs: 0)) == nil)
+        #expect(AccesCanal.taux(avant: avant, apres: Self.releve(envois: 150, echecs: 0)) == 0)
+        #expect(AccesCanal.tramesMin == 50)
     }
 
-    /// Un compteur qui baisse (l'appareil a redemarre) : pas de mesure ; le releve repart de zero.
+    /// Un compteur qui baisse (l'appareil a redemarre) : pas de taux ; le releve repart de zero.
     @Test func compteurQuiBaisse() {
         let avant = Self.releve(envois: 9000, echecs: 30)
-        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 200, echecs: 31)) == nil, "envois")
-        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 9900, echecs: 2)) == nil, "echecs")
+        #expect(AccesCanal.taux(avant: avant, apres: Self.releve(envois: 200, echecs: 31)) == nil, "envois")
+        #expect(AccesCanal.taux(avant: avant, apres: Self.releve(envois: 9900, echecs: 2)) == nil, "echecs")
     }
 }

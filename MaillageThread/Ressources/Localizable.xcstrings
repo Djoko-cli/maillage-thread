@@ -4081,6 +4081,22 @@
         }
       }
     },
+    "accès au canal refusés : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "channel access refused: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "accès au canal refusés : %@"
+          }
+        }
+      }
+    },
     "accès au réseau local refusé" : {
       "localizations" : {
         "en" : {
@@ -4317,22 +4333,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "chemin %@ : /dev/cu.* attendu"
-          }
-        }
-      }
-    },
-    "compteurs de l'enfant : %@ d'échecs" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "child's counters: %@ failed"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "compteurs de l'enfant : %@ d'échecs"
           }
         }
       }

@@ -46,7 +46,7 @@ public struct OrigineLien: Hashable, Sendable {
     public var entendu: Date?
     /// Le parent trouve par la resolution d'adresse, a cette date.
     public var resolu: Date?
-    /// Le taux d'echec d'envoi de l'enfant, tire de ses compteurs MAC.
+    /// Le taux d'acces au canal refuses de l'enfant, tire de ses compteurs MAC, a titre d'information (`AccesCanal`).
     public var echecs: Double?
     /// Le parent de la sonde, qu'elle donne elle-meme (`etat`).
     public var sonde: Bool

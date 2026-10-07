@@ -449,10 +449,11 @@ struct TourneeTests {
         #expect(await sonde.registre.requetes.dropFirst(avant).filter { $0.hasSuffix("|resoudre") }.isEmpty)
     }
 
-    /// Qualite des enfants des routeurs Apple (spec de la sonde tout-en-un, section 2.3) : a chaque resolution, les
-    /// compteurs MAC (TLV 9) de chaque enfant resolu sous un routeur muet qui a un ML-EID, demandes a ce ML-EID. Le
-    /// taux d'echec entre deux releves donne sa qualite (0,7 % : 3) ; moins de 50 trames entre les deux, ou un
-    /// compteur qui baisse (l'appareil a redemarre) : inconnue, et le releve repart. Un enfant qui ne repond pas : rien.
+    /// Compteurs MAC des enfants des routeurs Apple (spec de la sonde tout-en-un, section 2.3) : a chaque resolution,
+    /// la TLV 9 de chaque enfant resolu sous un routeur muet qui a un ML-EID, demandee a ce ML-EID. Le taux d'acces au
+    /// canal refuses entre deux releves est garde a titre d'information (0,7 %) et ne donne aucune qualite : l'enfant
+    /// reste en qualite inconnue (decision du 07/10). Moins de 50 trames entre les deux, ou un compteur qui baisse
+    /// (l'appareil a redemarre) : pas de taux, et le releve repart. Un enfant qui ne repond pas : rien.
     @Test func compteursDesEnfants() async throws {
         func sonde(_ envois: UInt32, _ echecs: UInt32) throws -> SondeRejouee {
             try Self.sondeResolue(reponsesEnPlus: [Self.cleCompteurs(0x0A): Self.compteurs(envois: envois, echecs: echecs)])
@@ -469,17 +470,18 @@ struct TourneeTests {
         let (m2, mem2) = try #require(try await Tournee.complete(try sonde(2000, 10), memoire: mem1,
                                                                  maintenant: Self.t0 + 1800, appareils: Self.appareils))
         let e2 = try enfant(m2)
-        #expect(e2.qualite == 3 && e2.echecs.map { abs($0 - 0.007) < 1e-12 } == true, "7 echecs sur 1000 envois")
-        #expect(mem2.resolutions["E00000000000000A"]?.qualite == 3)
+        #expect(e2.qualite == nil && e2.echecs.map { abs($0 - 0.007) < 1e-12 } == true, "7 refus sur 1000 envois")
+        #expect(mem2.resolutions["E00000000000000A"]?.echecs.map { abs($0 - 0.007) < 1e-12 } == true)
         let (m3, mem3) = try #require(try await Tournee.complete(try sonde(2040, 15), memoire: mem2,
                                                                  maintenant: Self.t0 + 3600, appareils: Self.appareils))
-        #expect(try enfant(m3).qualite == nil && mem3.compteurs["E00000000000000A"]?.unicastEmis == 2040, "40 trames")
+        #expect(try enfant(m3).echecs == nil && mem3.compteurs["E00000000000000A"]?.unicastEmis == 2040, "40 trames")
         let (m4, mem4) = try #require(try await Tournee.complete(try sonde(100, 0), memoire: mem3,
                                                                  maintenant: Self.t0 + 5400, appareils: Self.appareils))
-        #expect(try enfant(m4).qualite == nil && mem4.compteurs["E00000000000000A"]?.unicastEmis == 100, "redemarre")
+        #expect(try enfant(m4).echecs == nil && mem4.compteurs["E00000000000000A"]?.unicastEmis == 100, "redemarre")
         let (m5, _) = try #require(try await Tournee.complete(try sonde(400, 20), memoire: mem4,
                                                               maintenant: Self.t0 + 7200, appareils: Self.appareils))
-        #expect(try enfant(m5).qualite == 1, "20 echecs sur 300 : 6,7 %")
+        let e5 = try enfant(m5)
+        #expect(e5.qualite == nil && e5.echecs.map { abs($0 - 20.0 / 300) < 1e-12 } == true, "20 refus sur 300 : 6,7 %")
     }
 
     /// Sans annonces (firmware 1.0.x, ou la sonde ne les rend pas) : ni ecoute, ni resolution, ni compteurs ; la

@@ -112,7 +112,7 @@ struct AffichageSondeTests {
     }
 
     /// Source et age d'un lien dans la fiche (spec de la sonde tout-en-un, section 2.4) : « diagnostic », « entendu il y
-    /// a 3 minutes », « resolu il y a 12 minutes », « compteurs de l'enfant : 0,7 % d'echecs », ou donne par la sonde ;
+    /// a 3 minutes », « resolu il y a 12 minutes », « acces au canal refuses : 0,7 % », ou donne par la sonde ;
     /// plusieurs a la suite.
     @Test func origineDUnLien() {
         let t = Date(timeIntervalSince1970: 1_790_000_000)
@@ -122,9 +122,9 @@ struct AffichageSondeTests {
         #expect(FicheNoeud.texteOrigine(OrigineLien(entendu: t - 180), t) == entendu)
         #expect(FicheNoeud.texteOrigine(OrigineLien(diagnostic: true, entendu: t - 180), t) == diagnostic + " · " + entendu)
         let pourcentage = 0.007.formatted(.percent.precision(.fractionLength(1)))
-        #expect(FicheNoeud.texteEchecs(0.007) == String(localized: "compteurs de l'enfant : \(pourcentage) d'échecs"))
+        #expect(FicheNoeud.texteAccesCanal(0.007) == String(localized: "accès au canal refusés : \(pourcentage)"))
         #expect(FicheNoeud.texteOrigine(OrigineLien(resolu: t - 720, echecs: 0.007), t)
-                == String(localized: "résolu \(FicheNoeud.relatif(t - 720, t))") + " · " + FicheNoeud.texteEchecs(0.007))
+                == String(localized: "résolu \(FicheNoeud.relatif(t - 720, t))") + " · " + FicheNoeud.texteAccesCanal(0.007))
         #expect(FicheNoeud.texteOrigine(OrigineLien(sonde: true), t) == String(localized: "donné par la sonde"))
         #expect(FenetreReglages.texteCouverture(CouvertureEcoute(entendus: 3, routeurs: 7))
                 == String(localized: "routeurs entendus : \(3) sur \(7)"))
@@ -153,7 +153,7 @@ struct AffichageSondeTests {
         c.muet(2)
         c.muet(3)
         c.annoncesRecues()
-        c.enfant(EnfantMaillage(rloc16: 0x0C00 | EnfantMaillage.bitInvente, extMac: enfant.id.uppercased(), qualite: 2,
+        c.enfant(EnfantMaillage(rloc16: 0x0C00 | EnfantMaillage.bitInvente, extMac: enfant.id.uppercased(),
                                 source: .resolution, resolu: t - 720, echecs: 0.012))
         let m = MaillageAffiche(maillage: c.maillage(), reseau: r, appareils: i.appareils)
         let n2 = try #require(m.noeud(routeur.id))
@@ -168,8 +168,8 @@ struct AffichageSondeTests {
         let ne = try #require(m.noeud(enfant.id))
         let parent = try #require(m.parent(de: ne.id))
         #expect(FicheNoeud.ligneSonde(ne, maillage: m, nom: { "[\($0)]" }, instant: t)
-                == String(localized: "parent \("[\(parent)]"), \(FicheNoeud.texteQualite(2))") + " · "
-                    + String(localized: "résolu \(FicheNoeud.relatif(t - 720, t))") + " · " + FicheNoeud.texteEchecs(0.012),
+                == String(localized: "parent \("[\(parent)]"), \(FicheNoeud.texteQualite(nil))") + " · "
+                    + String(localized: "résolu \(FicheNoeud.relatif(t - 720, t))") + " · " + FicheNoeud.texteAccesCanal(0.012),
                 "sans RLOC16 : il est invente")
         // Maillage de demo : aucune source, aucune ligne de lien.
         let demo = try #require(s.maillageAffiche(pour: r))

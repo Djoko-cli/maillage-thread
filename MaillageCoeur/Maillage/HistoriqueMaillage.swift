@@ -9,8 +9,9 @@ import Foundation
 ///   inconnue) ; un lien sans source n'en a pas ;
 /// - `enfants` : `[ExtMac, identifiant du parent, qualite ou null]`, les enfants identifies, la
 ///   sonde comprise, puis leur source (`t` table de son parent, `r` resolution, `s` la sonde) et, quand
-///   leur qualite vient de leurs compteurs MAC, le taux d'echec (au 1/10 000). Un enfant sans ExtMac n'a
-///   pas d'identite stable (son RLOC16 change avec son parent) : il n'est pas garde ;
+///   leurs compteurs MAC le donnent, le taux d'acces au canal refuses (au 1/10 000), a titre d'information :
+///   il ne donne pas de qualite (`AccesCanal`). Un enfant sans ExtMac n'a pas d'identite stable (son
+///   RLOC16 change avec son parent) : il n'est pas garde ;
 /// - `signaux` : `[identifiant, dBm]`, les routeurs que la sonde entend, son parent compris ;
 /// - `parentSonde` : identifiant du parent de la sonde (absent sans parent connu).
 /// Les champs facultatifs manquent aux lignes d'avant : elles se lisent comme avant, sources et taux
@@ -28,7 +29,7 @@ public struct ReleveMaillage: Hashable, Sendable {
     }
 
     /// Enfant identifie, son parent et la qualite de son lien (nil sous un routeur muet), sa source et le
-    /// taux d'echec de ses compteurs MAC quand sa qualite en vient (nil : ligne d'avant, ou inconnus).
+    /// taux d'acces au canal refuses de ses compteurs MAC, a titre d'information (nil : ligne d'avant, ou inconnus).
     public struct Enfant: Hashable, Sendable {
         public let extMac: String
         public let parent: Int
@@ -67,7 +68,7 @@ public struct ReleveMaillage: Hashable, Sendable {
     }
 
     /// Releve d'un maillage : ses enfants identifies (`Maillage.enfantsIdentifies`), avec leur source et leur taux
-    /// d'echec arrondi au 1/10 000 ; ses liens sans les dates de leurs mesures.
+    /// d'acces au canal refuses arrondi au 1/10 000 ; ses liens sans les dates de leurs mesures.
     public init(_ m: Maillage) {
         self.init(date: m.date, partition: m.partition,
                   routeurs: m.routeurs.map { Routeur(id: $0.id, extMac: $0.extMac) },

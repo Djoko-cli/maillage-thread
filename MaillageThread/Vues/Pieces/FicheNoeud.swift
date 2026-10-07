@@ -311,8 +311,8 @@ struct FicheNoeud: View {
     }
 
     /// « RLOC16 5004 · parent HomePod bureau, qualite 3 · diagnostic » ; un enfant resolu sous un routeur Apple, dont le
-    /// RLOC16 est invente (`EnfantMaillage.bitInvente`), sans lui : « parent HomePod bureau, qualite 3 · resolu il y a
-    /// 12 minutes · compteurs de l'enfant : 0,7 % d'echecs » ; « RLOC16 5000 · voisins : 4 · enfants : 2 ».
+    /// RLOC16 est invente (`EnfantMaillage.bitInvente`), sans lui : « parent HomePod bureau, qualite inconnue · resolu
+    /// il y a 12 minutes · acces au canal refuses : 0,7 % » ; « RLOC16 5000 · voisins : 4 · enfants : 2 ».
     static func ligneSonde(_ n: NoeudSonde, maillage m: MaillageAffiche, nom: (String) -> String,
                            instant: Date = .now) -> String {
         let rloc = String(format: "%04X", n.rloc16)
@@ -350,20 +350,21 @@ struct FicheNoeud: View {
     }
 
     /// Source et age d'un lien : « diagnostic », « entendu il y a 3 minutes », « resolu il y a 12 minutes »,
-    /// « compteurs de l'enfant : 0,7 % d'echecs », « donne par la sonde » ; plusieurs, separes par « · ».
+    /// « acces au canal refuses : 0,7 % », « donne par la sonde » ; plusieurs, separes par « · ».
     static func texteOrigine(_ o: OrigineLien, _ instant: Date) -> String {
         var parties: [String] = []
         if o.sonde { parties.append(String(localized: "donné par la sonde")) }
         if o.diagnostic { parties.append(String(localized: "diagnostic")) }
         if let d = o.entendu { parties.append(String(localized: "entendu \(relatif(d, instant))")) }
         if let d = o.resolu { parties.append(String(localized: "résolu \(relatif(d, instant))")) }
-        if let e = o.echecs { parties.append(texteEchecs(e)) }
+        if let e = o.echecs { parties.append(texteAccesCanal(e)) }
         return parties.joined(separator: " · ")
     }
 
-    /// « compteurs de l'enfant : 0,7 % d'echecs » : le taux d'echec d'envoi, au dixieme de pour cent.
-    static func texteEchecs(_ taux: Double) -> String {
-        String(localized: "compteurs de l'enfant : \(taux.formatted(.percent.precision(.fractionLength(1)))) d'échecs")
+    /// « acces au canal refuses : 0,7 % » : les acces au canal refuses a l'enfant rapportes a ses envois, au dixieme de
+    /// pour cent, a titre d'information (`AccesCanal` : ce n'est pas la qualite de son lien).
+    static func texteAccesCanal(_ taux: Double) -> String {
+        String(localized: "accès au canal refusés : \(taux.formatted(.percent.precision(.fractionLength(1))))")
     }
 
     /// Un routeur muet que la sonde n'entend pas (`MaillageAffiche.jamaisEntendu`).

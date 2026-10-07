@@ -84,7 +84,7 @@ public struct MemoireTournee: Hashable, Sendable {
     /// compte pas).
     public var derniereResolution: Date?
     /// Dernier releve des compteurs MAC de chaque enfant resolu sous un routeur muet, par appareil : le prochain
-    /// donnera son taux d'echec (`QualiteCompteurs`).
+    /// donnera son taux d'acces au canal refuses (`AccesCanal`).
     public var compteurs: [String: CompteursMac] = [:]
     /// Enfants des tables identifies (ExtMac, adresses), par RLOC16 : gardes jusqu'a une nouvelle
     /// reponse ; oublies quand leur parent sort de la liste des routeurs, ou qu'ils manquent a la
@@ -383,8 +383,9 @@ public enum Tournee {
         }
 
         // 6. Compteurs MAC (spec de la sonde tout-en-un, section 2.3) : a sa resolution, chaque enfant d'un routeur
-        // muet (Apple) dont la sonde connait le ML-EID ; le taux d'echec entre deux releves donne sa qualite. Sans
-        // reponse, la qualite reste inconnue et le releve d'avant reste.
+        // muet (Apple) dont la sonde connait le ML-EID ; le taux d'acces au canal refuses entre deux releves est garde
+        // a titre d'information, sans donner de qualite (`AccesCanal`) : l'enfant reste en qualite inconnue. Sans
+        // reponse, pas de taux, et le releve d'avant reste.
         let aMesurer = nouvelles.filter { muets.contains($0.value.parent) }.sorted { $0.key < $1.key }
             .compactMap { id, r in r.mleid.map { (id, $0) } }
         signaler(.compteurs, 0, aMesurer.count)
@@ -393,9 +394,8 @@ public enum Tournee {
         }, apresChacune: { n, _, _ in signaler(.compteurs, n, aMesurer.count) })
         for ((id, _), r) in mesures {
             guard let releve = r.reponse?.compteursMac else { continue }
-            if let avant = mem.compteurs[id], let q = QualiteCompteurs.mesure(avant: avant, apres: releve) {
-                mem.resolutions[id]?.qualite = q.qualite
-                mem.resolutions[id]?.echecs = q.taux
+            if let avant = mem.compteurs[id], let taux = AccesCanal.taux(avant: avant, apres: releve) {
+                mem.resolutions[id]?.echecs = taux
             }
             mem.compteurs[id] = releve
         }
@@ -451,8 +451,8 @@ public enum Tournee {
             } else if rloc == moi {
                 continue
             }
-            c.enfant(EnfantMaillage(rloc16: rloc, extMac: ext, qualite: r.qualite, adresses: [r.adresse],
-                                    source: .resolution, resolu: r.date, echecs: r.echecs))
+            c.enfant(EnfantMaillage(rloc16: rloc, extMac: ext, adresses: [r.adresse], source: .resolution, resolu: r.date,
+                                    echecs: r.echecs))
         }
         var maillage = c.maillage()
         // Date de la resolution complete dont viennent les enfants resolus (une resolution refusee ne la change pas).

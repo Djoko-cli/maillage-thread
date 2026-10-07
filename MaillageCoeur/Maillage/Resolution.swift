@@ -38,17 +38,15 @@ public struct ResolutionAppareil: Hashable, Sendable {
     /// L'adresse resolue (sur le prefixe OMR de la partition).
     public let adresse: AdresseIPv6
     public let date: Date
-    /// Qualite tiree des compteurs MAC a cette resolution (`QualiteCompteurs`), et le taux d'echec ; nil : inconnue.
-    public var qualite: Int?
+    /// Taux d'acces au canal refuses tire des compteurs MAC a cette resolution (`AccesCanal`), a titre d'information :
+    /// il ne donne pas de qualite ; nil : pas de taux.
     public var echecs: Double?
 
-    public init(rloc16: UInt16, mleid: AdresseIPv6?, adresse: AdresseIPv6, date: Date, qualite: Int? = nil,
-                echecs: Double? = nil) {
+    public init(rloc16: UInt16, mleid: AdresseIPv6?, adresse: AdresseIPv6, date: Date, echecs: Double? = nil) {
         self.rloc16 = rloc16
         self.mleid = mleid
         self.adresse = adresse
         self.date = date
-        self.qualite = qualite
         self.echecs = echecs
     }
 

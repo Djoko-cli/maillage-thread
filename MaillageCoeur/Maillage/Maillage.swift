@@ -96,8 +96,9 @@ public struct EnfantMaillage: Hashable, Sendable, Identifiable {
     public var source: SourceEnfant
     /// Date de la resolution d'adresse qui l'a rattache (source `.resolution`) ; nil sinon.
     public var resolu: Date?
-    /// Taux d'echec d'envoi de l'enfant entre deux releves de ses compteurs MAC, quand sa qualite en vient (enfant d'un
-    /// routeur qui ne repond pas, spec de la sonde tout-en-un, section 2.3) ; nil sinon.
+    /// Taux d'acces au canal refuses de l'enfant entre deux releves de ses compteurs MAC (enfant resolu sous un routeur
+    /// qui ne repond pas, spec de la sonde tout-en-un, section 2.3), a titre d'information : il ne donne pas sa qualite
+    /// (`AccesCanal`) ; nil sinon.
     public var echecs: Double?
 
     public init(rloc16: UInt16, extMac: String? = nil, qualite: Int? = nil, delai: Int? = nil, endormi: Bool? = nil,

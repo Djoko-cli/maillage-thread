@@ -251,8 +251,10 @@ struct HistoriqueTests {
     }
 
     /// Champs facultatifs de la sonde tout-en-un (spec, section 2.5) : la source de chaque sens d'un lien
-    /// (`d` diagnostic, `e` ecoute), la source d'un enfant (`t` table, `r` resolution, `s` sonde) et le taux
-    /// d'echec que donnent ses compteurs MAC, arrondi a 1/10 000. Pas les dates des mesures. Relue a l'identique.
+    /// (`d` diagnostic, `e` ecoute), la source d'un enfant (`t` table, `r` resolution, `s` sonde) et le taux d'acces
+    /// au canal refuses que donnent ses compteurs MAC, arrondi a 1/10 000, a titre d'information : il ne donne pas de
+    /// qualite (un enfant resolu sous un routeur Apple reste en qualite inconnue). Pas les dates des mesures. Relue a
+    /// l'identique.
     @Test func champsFacultatifs() throws {
         let t0 = Self.date("2026-10-07T10:00:00Z")
         var c = ConstructionMaillage(date: t0, partition: "0000000A")
@@ -262,12 +264,12 @@ struct HistoriqueTests {
         c.lien(0, 1, sortante: 3, entrante: 2, source: .diagnostic, date: t0)
         c.ecoute(Route64(sequence: 1, routes: [RouteRouteur(idRouteur: 1, qualiteSortante: 1, qualiteEntrante: 2, cout: 1)]),
                  routeur: 2, date: t0 - 120)
-        c.enfant(EnfantMaillage(rloc16: 0x0A00, extMac: "E0000000000000C1", qualite: 3, source: .resolution, resolu: t0,
+        c.enfant(EnfantMaillage(rloc16: 0x0A00, extMac: "E0000000000000C1", source: .resolution, resolu: t0,
                                 echecs: 0.0071428))
         c.enfant(EnfantMaillage(rloc16: 0x0A01, extMac: "E0000000000000C2", source: .resolution, resolu: t0))
         let r = ReleveMaillage(c.maillage())
         let json = String(decoding: try CodageJSON.encodeur().encode(r), as: UTF8.self)
-        #expect(json == #"{"date":"2026-10-07T10:00:00.000Z","enfants":[["E0000000000000C1",2,3,"r",0.0071],["E0000000000000C2",2,null,"r"]],"liens":[[0,1,3,2,"d","d"],[1,2,2,1,"e","e"]],"partition":"0000000A","routeurs":[[0,null],[1,null],[2,null]],"signaux":[]}"#)
+        #expect(json == #"{"date":"2026-10-07T10:00:00.000Z","enfants":[["E0000000000000C1",2,null,"r",0.0071],["E0000000000000C2",2,null,"r"]],"liens":[[0,1,3,2,"d","d"],[1,2,2,1,"e","e"]],"partition":"0000000A","routeurs":[[0,null],[1,null],[2,null]],"signaux":[]}"#)
         #expect(try CodageJSON.decodeur().decode(ReleveMaillage.self, from: Data(json.utf8)) == r)
         #expect(r.liens.allSatisfy { $0.dateAB == nil && $0.dateBA == nil })
         #expect(r.enfants.first?.echecs == 0.0071 && r.enfants.first?.source == .resolution)

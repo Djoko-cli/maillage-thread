@@ -70,12 +70,13 @@ public struct DonneesChef: Hashable, Sendable, Codable {
 
 /// TLV 9, compteurs MAC d'un noeud depuis son demarrage : neuf compteurs de 32 bits, gros-boutistes, dans l'ordre de
 /// la spec Thread (`ifInUnknownProtos`, `ifInErrors`, `ifOutErrors`, `ifInUcastPkts`, `ifInBroadcastPkts`,
-/// `ifInDiscards`, `ifOutUcastPkts`, `ifOutBroadcastPkts`, `ifOutDiscards`). Le rapport entre les echecs d'envoi et
-/// les envois, entre deux releves, mesure le lien d'un enfant vers son parent (`QualiteCompteurs`).
+/// `ifInDiscards`, `ifOutUcastPkts`, `ifOutBroadcastPkts`, `ifOutDiscards`). Le rapport entre les acces au canal
+/// refuses et les envois, entre deux releves, dit l'occupation du canal autour d'un enfant, pas son lien (`AccesCanal`).
 public struct CompteursMac: Hashable, Sendable {
     public let protocolesInconnus: UInt32
     public let erreursRecues: UInt32
-    /// `ifOutErrors` : trames que l'appareil n'a pas reussi a envoyer.
+    /// `ifOutErrors` : dans OpenThread, les echecs d'acces au canal (CCA), comptes a chaque tentative d'envoi ; ni les
+    /// accuses manquants, ni les reprises.
     public let erreursEmises: UInt32
     public let unicastRecus: UInt32
     public let diffusionsRecues: UInt32
