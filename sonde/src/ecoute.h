@@ -13,9 +13,11 @@
 //  - Tout le reste dans la tache loop (tour) : le dechiffrement (mle.h), la
 //    table des routeurs entendus, l'oubli de ceux qui se taisent depuis 10 min.
 //  - La cle reseau n'est lue, sous le verrou OpenThread et par main.cpp, que
-//    pour deriver les cles MLE quand la sequence de la pile change, puis
-//    effacee ; seules deux cles MLE sont gardees (mle::ClesMle). Aucune
-//    commande ne rend ni la cle reseau ni une cle derivee.
+//    pour deriver les cles MLE quand la sequence de la pile change, une fois
+//    par sequence meme si la derivation echoue, puis effacee ; seules deux
+//    cles MLE sont gardees (mle::ClesMle). Une trame ne fait consulter la pile
+//    qu'une fois par tour au plus (mle::SourceCles). Aucune commande ne rend
+//    ni la cle reseau ni une cle derivee.
 // ===========================================================================
 #include <openthread/instance.h>
 #include <stdint.h>
@@ -26,11 +28,9 @@ namespace ecoute {
 
 // Fournis par main.cpp, sous le verrou OpenThread : la sequence de cle courante
 // de la pile, et la cle reseau (que l'appelant efface apres usage). false :
-// verrou non pris.
-struct Acces {
-  bool (*sequence)(uint32_t *courante);
-  bool (*cleReseau)(uint8_t cle[mle::kCle]);
-};
+// verrou non pris. La pile est consultee au plus une fois par tour, et la cle
+// reseau au plus une fois par sequence de la pile (mle::SourceCles).
+using Acces = mle::AccesPile;
 
 // Pose le rappel des trames ; verrou OpenThread pris par l'appelant.
 void demarrer(otInstance *ot, const Acces &acces);

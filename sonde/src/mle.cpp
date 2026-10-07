@@ -407,6 +407,29 @@ void ClesMle::effacer() {
   courante_ = 0;
 }
 
+bool SourceCles::fournir(uint32_t sequence, uint8_t cle[kCle]) {
+  if (cles_.trouver(sequence, cle)) return true;
+  if (consultee_) return false;
+  consultee_ = true;
+  uint32_t courante = 0;
+  if (acces_.sequence == nullptr || !acces_.sequence(&courante)) return false;
+  if (tentee_ && courante == sequenceTentee_) return false;
+  uint8_t reseau[kCle];
+  if (acces_.cleReseau == nullptr || !acces_.cleReseau(reseau)) {
+    mle::effacer(reseau, sizeof(reseau));
+    return false;
+  }
+  tentee_ = true;
+  sequenceTentee_ = courante;
+  const bool preparees = cles_.preparer(courante, reseau);
+  mle::effacer(reseau, sizeof(reseau));
+  return preparees && cles_.trouver(sequence, cle);
+}
+
+bool SourceCles::rappel(void *contexte, uint32_t sequence, uint8_t cle[kCle]) {
+  return static_cast<SourceCles *>(contexte)->fournir(sequence, cle);
+}
+
 // ===========================================================================
 //  Routeurs entendus
 // ===========================================================================

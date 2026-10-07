@@ -164,6 +164,11 @@ les autres au fil des minutes. L'entrée du parent n'a jamais d'ExtMac (voir
   pile change, puis effacée. Deux clés MLE sont gardées : la séquence courante
   et la suivante (rotation). Aucune commande ne rend ni la clé réseau ni une
   clé dérivée ; une séquence étrangère ne fait jamais relire la clé réseau.
+  Une trame à clé inconnue fait lire la séquence de la pile au plus une fois
+  par tour de `loop()` ; la clé réseau n'est lue qu'une fois par séquence de
+  la pile, même si la dérivation échoue (tas épuisé) : elle n'est relue qu'à
+  la rotation suivante. Seul un verrou refusé la fait retenter, au tour
+  suivant.
 - **La table des routeurs entendus**, par ExtMac, 32 entrées : RLOC16 (TLV
   Source Address), partition (TLV Leader Data), dernière Route64 brute (au
   plus 72 octets), signal (dernier, minimum et maximum depuis l'entrée),
@@ -274,7 +279,8 @@ de `voyant.h` (`test_distant.cpp` : rid, liste blanche, réponses gardées,
 cadence ; depuis la 1.0.3, lecture des entiers, reprises CoAP d'un `diag` et
 séquence de la LED) ; depuis la 1.1.0, l'écoute (`test_mle.cpp` : dérivation
 de la clé MLE, AES-CCM et refus d'un MIC faux, trames 802.15.4 de 2006 et de
-2015, IE, PAN, IPHC, UDP compressé ou non, TLV, clés gardées, table des
+2015, IE, PAN, IPHC, UDP compressé ou non, TLV, clés gardées et leur
+lecture sur la pile (une fois par séquence, même après un échec), table des
 routeurs entendus, trames tronquées, abîmées ou tirées au hasard). Ses
 vecteurs (`test/vecteurs_mle.h`) viennent de `test/vecteurs_mle.py`, à clé et
 adresses inventées, calculés à part (bibliothèque `cryptography`, présente

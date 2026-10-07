@@ -16,9 +16,13 @@
 
 using namespace mle;
 
+// Echec de la plateforme simule (tas epuise sur la carte) : testFournisseur.
+static bool gHmacEchoue = false;
+
 namespace mle {
 
 bool hmacSha256(const uint8_t *cle, size_t nCle, const uint8_t *message, size_t n, uint8_t sortie[32]) {
+  if (gHmacEchoue) return false;
   CCHmac(kCCHmacAlgSHA256, cle, nCle, message, n, sortie);
   return true;
 }
@@ -131,6 +135,89 @@ static void testDerivation() {
   CHECK(!cles.trouver(kSequence, cle), "les anciennes ne restent pas");
   cles.effacer();
   CHECK(!cles.preparees() && !cles.trouver(0, cle), "effacees");
+}
+
+// La pile des tests de SourceCles : sa sequence, son verrou (refuse ou non), et le nombre de lectures.
+static uint32_t gSequencePile = 0;
+static bool gVerrouSequence = true, gVerrouCle = true;
+static int gLecturesSequence = 0, gLecturesCle = 0;
+
+static bool lireSequencePile(uint32_t *courante) {
+  gLecturesSequence++;
+  if (!gVerrouSequence) return false;
+  *courante = gSequencePile;
+  return true;
+}
+
+static bool lireClePile(uint8_t cle[kCle]) {
+  gLecturesCle++;
+  if (!gVerrouCle) return false;
+  memcpy(cle, kCleReseau, kCle);
+  return true;
+}
+
+// SourceCles : des trames recues ne font pas relire la cle reseau en boucle : la sequence de la pile au plus une fois par tour,
+// la cle reseau au plus une fois par sequence de la pile, que la derivation reussisse ou non ; un verrou refuse ne
+// retient rien.
+static void testFournisseur() {
+  uint8_t cle[kCle];
+  SourceCles f;
+  f.nouveauTour();
+  CHECK(!f.fournir(kSequence, cle) && gLecturesSequence == 0, "non branche : rien, sans lecture");
+  f.brancher({lireSequencePile, lireClePile});
+  gSequencePile = kSequence;
+  // Premiere trame : la sequence et la cle lues, une fois.
+  f.nouveauTour();
+  CHECK(f.fournir(kSequence, cle) && !memcmp(cle, kDerivations[1].cle, kCle), "la courante");
+  CHECK(gLecturesSequence == 1 && gLecturesCle == 1, "une lecture de chaque");
+  CHECK(f.fournir(kSequence + 1, cle) && !memcmp(cle, kDerivations[2].cle, kCle), "la suivante, gardee");
+  // Sequences etrangeres (trames forgees) : au plus une lecture de la sequence par tour, jamais la cle.
+  for (int k = 0; k < 16; k++) CHECK(!f.fournir(kSequence + 9, cle), "etrangere");
+  CHECK(gLecturesSequence == 1 && gLecturesCle == 1, "etrangeres, meme tour : la pile deja lue a ce tour");
+  for (int tour = 0; tour < 5; tour++) {
+    f.nouveauTour();
+    for (int k = 0; k < 16; k++) f.fournir(kSequence - 1, cle);
+  }
+  CHECK(gLecturesSequence == 6 && gLecturesCle == 1, "cinq tours : cinq lectures de la sequence, aucune de la cle");
+  // Rotation de cle : la sequence de la pile change, la cle est relue une fois.
+  gSequencePile = kSequence + 1;
+  f.nouveauTour();
+  CHECK(f.fournir(kSequence + 2, cle) && gLecturesCle == 2, "rotation : la cle relue");
+  CHECK(f.fournir(kSequence + 1, cle) && !memcmp(cle, kDerivations[2].cle, kCle), "la nouvelle courante");
+  // Derivation en echec : la sequence est retenue, la cle n'est plus relue tant que la pile n'a pas change ; les cles
+  // d'avant restent.
+  gHmacEchoue = true;
+  gSequencePile = kSequence + 7;
+  f.nouveauTour();
+  CHECK(!f.fournir(kSequence + 7, cle) && gLecturesCle == 3, "echec de derivation");
+  CHECK(f.fournir(kSequence + 2, cle), "les cles d'avant restent");
+  for (int tour = 0; tour < 5; tour++) {
+    f.nouveauTour();
+    for (int k = 0; k < 16; k++) CHECK(!f.fournir(kSequence + 7, cle), "toujours pas de cle");
+  }
+  CHECK(gLecturesCle == 3, "apres un echec de derivation, la cle n'est pas relue");
+  gHmacEchoue = false;
+  f.nouveauTour();
+  CHECK(!f.fournir(kSequence + 7, cle) && gLecturesCle == 3, "ni quand la plateforme revient, meme sequence");
+  gSequencePile = kSequence + 8;
+  f.nouveauTour();
+  CHECK(f.fournir(kSequence + 8, cle) && gLecturesCle == 4, "la sequence de la pile change : relue, derivee");
+  // Verrou refuse a la lecture de la cle : rien n'est retenu ; une seule tentative par tour, puis au tour suivant.
+  gVerrouCle = false;
+  gSequencePile = kSequence + 20;
+  f.nouveauTour();
+  CHECK(!f.fournir(kSequence + 20, cle) && gLecturesCle == 5, "verrou refuse");
+  CHECK(!f.fournir(kSequence + 20, cle) && gLecturesCle == 5, "pas d'autre tentative a ce tour");
+  gVerrouCle = true;
+  f.nouveauTour();
+  CHECK(f.fournir(kSequence + 20, cle) && gLecturesCle == 6, "au tour suivant : lue, derivee");
+  // Verrou refuse a la lecture de la sequence : une seule tentative par tour.
+  gVerrouSequence = false;
+  const int avant = gLecturesSequence;
+  f.nouveauTour();
+  CHECK(!f.fournir(kSequence + 30, cle) && !f.fournir(kSequence + 31, cle), "sequence illisible");
+  CHECK(gLecturesSequence == avant + 1 && gLecturesCle == 6, "une tentative");
+  gVerrouSequence = true;
 }
 
 static void testCcm() {
@@ -399,6 +486,7 @@ static void testTable() {
 
 int main() {
   testDerivation();
+  testFournisseur();
   testCcm();
   testSecurite();
   testTlv();

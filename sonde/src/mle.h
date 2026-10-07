@@ -23,9 +23,10 @@
 //    cle) ;
 //  - les TLV du message : Source Address (0), Route64 (9), Leader Data (11).
 //
-//  Aussi : la table des routeurs entendus (TableEntendus) et les deux cles MLE
-//  gardees (ClesMle). La cle reseau n'est jamais gardee ici : ClesMle::preparer
-//  la recoit le temps d'une derivation ; l'appelant l'efface.
+//  Aussi : la table des routeurs entendus (TableEntendus), les deux cles MLE
+//  gardees (ClesMle) et leur source (SourceCles), qui ne lit la cle reseau
+//  qu'une fois par sequence de la pile. La cle reseau n'est jamais gardee ici :
+//  ClesMle::preparer la recoit le temps d'une derivation, puis elle est effacee.
 //
 //  Pur et sans Arduino : teste sur l'hote par sonde/test/test_mle.cpp, sur des
 //  vecteurs produits par sonde/test/vecteurs_mle.py (cle et adresses
@@ -193,6 +194,41 @@ class ClesMle {
   Place places_[2];
   bool prepare_ = false;
   uint32_t courante_ = 0;
+};
+
+// Acces a la pile : sa sequence de cle courante, et la cle reseau (que
+// l'appelant efface apres usage). Sur la carte, main.cpp, sous le verrou
+// OpenThread. false : verrou non pris.
+struct AccesPile {
+  bool (*sequence)(uint32_t *courante);
+  bool (*cleReseau)(uint8_t cle[kCle]);
+};
+
+// Les cles MLE du decodage (le FournisseurCle de decoder, avec `rappel`), tirees
+// de la pile sans que des trames recues puissent faire relire la cle reseau en
+// boucle ni prendre le verrou a chaque trame :
+// - une sequence gardee (ClesMle) sert sans rien lire ;
+// - sinon la pile est consultee au plus une fois par tour (nouveauTour) ;
+// - la cle reseau est lue au plus une fois par sequence de la pile, que la
+//   derivation reussisse ou non : elle n'est relue que quand cette sequence
+//   change (rotation) ; une sequence etrangere ne la fait jamais relire ;
+// - une lecture refusee (verrou) ne retient rien : retentee au tour suivant.
+// La cle reseau ne passe que par la pile de `fournir`, effacee avant le retour.
+class SourceCles {
+ public:
+  void brancher(const AccesPile &acces) { acces_ = acces; }
+  // Au debut de chaque tour de l'ecoute : la pile peut etre consultee une fois.
+  void nouveauTour() { consultee_ = false; }
+  bool fournir(uint32_t sequence, uint8_t cle[kCle]);
+  // Pour decoder : `contexte` est la SourceCles.
+  static bool rappel(void *contexte, uint32_t sequence, uint8_t cle[kCle]);
+
+ private:
+  AccesPile acces_ = {nullptr, nullptr};
+  ClesMle cles_;
+  bool consultee_ = false;   // la pile, a ce tour
+  bool tentee_ = false;      // une cle reseau a ete lue pour sequenceTentee_
+  uint32_t sequenceTentee_ = 0;
 };
 
 // --- Routeurs entendus --------------------------------------------------------

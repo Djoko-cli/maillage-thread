@@ -30,8 +30,7 @@ std::atomic<uint32_t> sFilePleine{0};
 // Tache loop seulement.
 uint32_t sMle = 0, sEchecs = 0;
 mle::TableEntendus sEntendus;
-mle::ClesMle sCles;
-Acces sAcces = {nullptr, nullptr};
+mle::SourceCles sCles;
 
 // Tache OpenThread, verrou OpenThread tenu : le tri et la copie, rien d'autre.
 // Les messages MLE ne sont pas chiffres au niveau MAC : seules les trames de
@@ -49,34 +48,20 @@ void surTrame(const otRadioFrame *f, bool emise, void *) {
     sFilePleine.fetch_add(1, std::memory_order_relaxed);
 }
 
-// Cle MLE d'une sequence : gardee, ou derivee quand la sequence de la pile a
-// change depuis la derniere derivation (rotation de cle). Une sequence
-// etrangere (ni la courante ni la suivante) ne fait jamais relire la cle
-// reseau. La cle reseau ne passe que par la pile de cette fonction, effacee.
-bool fournir(void *, uint32_t sequence, uint8_t cle[mle::kCle]) {
-  if (sCles.trouver(sequence, cle)) return true;
-  uint32_t courante = 0;
-  if (sAcces.sequence == nullptr || !sAcces.sequence(&courante)) return false;
-  if (sCles.preparees() && courante == sCles.courante()) return false;
-  uint8_t reseau[mle::kCle];
-  const bool lue = sAcces.cleReseau != nullptr && sAcces.cleReseau(reseau);
-  const bool preparees = lue && sCles.preparer(courante, reseau);
-  mle::effacer(reseau, sizeof(reseau));
-  return preparees && sCles.trouver(sequence, cle);
-}
-
 }  // namespace
 
 void demarrer(otInstance *ot, const Acces &acces) {
-  sAcces = acces;
+  sCles.brancher(acces);
   if (sFile == nullptr) sFile = xQueueCreate(kFile, sizeof(Trame));
   otLinkSetPcapCallback(ot, surTrame, nullptr);
 }
 
 void tour(uint32_t maintenant) {
+  // La pile n'est consultee qu'une fois par tour, quelles que soient les trames (mle::SourceCles).
+  sCles.nouveauTour();
   for (uint8_t k = 0; k < kFile && sFile != nullptr && xQueueReceive(sFile, &sTrameLoop, 0) == pdTRUE; k++) {
     mle::Message m;
-    switch (mle::decoder(sTrameLoop.psdu, sTrameLoop.n, fournir, nullptr, &m)) {
+    switch (mle::decoder(sTrameLoop.psdu, sTrameLoop.n, mle::SourceCles::rappel, &sCles, &m)) {
       case mle::Issue::Dechiffree:
         sMle++;
         sEntendus.noter(m, sTrameLoop.rssi, maintenant);
