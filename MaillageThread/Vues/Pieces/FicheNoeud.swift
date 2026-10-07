@@ -229,11 +229,19 @@ struct FicheNoeud: View {
     /// Maillage de la sonde pour le reseau affiche : celui de la scene.
     private var sonde: MaillageAffiche? { entree?.maillage }
 
-    /// Ce que la sonde sait du noeud : son parent (enfant), ses voisins et ses enfants (routeur).
+    /// Ce que la sonde sait du noeud : son parent (enfant), ses voisins et ses enfants (routeur) ; puis, pour un routeur,
+    /// chaque lien avec sa source et son age, et s'il n'a jamais ete entendu par la sonde (spec de la sonde tout-en-un,
+    /// section 2.4).
     @ViewBuilder
     private func lignesSonde(_ id: String) -> some View {
         if let m = sonde, let n = m.noeud(id) {
-            Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud)).foregroundStyle(.secondary)
+            Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud, instant: instant)).foregroundStyle(.secondary)
+            ForEach(Self.lignesLiens(n, maillage: m, nom: nomNoeud, instant: instant), id: \.self) { ligne in
+                Text(ligne).font(.caption).foregroundStyle(.secondary)
+            }
+            if m.jamaisEntendu(id) {
+                Text(Self.texteJamaisEntendu).font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -246,7 +254,7 @@ struct FicheNoeud: View {
             if Self.couronne(n.id, entree: entree) {
                 PastilleChef()
             }
-            Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud)).foregroundStyle(.secondary)
+            lignesSonde(n.id)
             if !n.candidats.isEmpty {
                 // Chaque candidat ouvre la fiche de son annonce, pas dessinee a part.
                 HStack(spacing: 8) {
@@ -302,14 +310,21 @@ struct FicheNoeud: View {
         surveillance.nomNoeud(id, maillage: sonde) ?? id
     }
 
-    /// « RLOC16 5004 · parent HomePod bureau, qualite 3 » ; « RLOC16 5000 · voisins : 4 · enfants : 2 ».
-    static func ligneSonde(_ n: NoeudSonde, maillage m: MaillageAffiche, nom: (String) -> String) -> String {
+    /// « RLOC16 5004 · parent HomePod bureau, qualite 3 · diagnostic » ; un enfant resolu sous un routeur Apple, dont le
+    /// RLOC16 est invente (`EnfantMaillage.bitInvente`), sans lui : « parent HomePod bureau, qualite 3 · resolu il y a
+    /// 12 minutes · compteurs de l'enfant : 0,7 % d'echecs » ; « RLOC16 5000 · voisins : 4 · enfants : 2 ».
+    static func ligneSonde(_ n: NoeudSonde, maillage m: MaillageAffiche, nom: (String) -> String,
+                           instant: Date = .now) -> String {
         let rloc = String(format: "%04X", n.rloc16)
         switch n.genre {
         case .enfant:
             guard let p = m.parent(de: n.id) else { return String(localized: "RLOC16 \(rloc)") }
-            let q = m.liens.first { $0.genre == .parent && $0.de == n.id }?.qualite
-            return String(localized: "RLOC16 \(rloc) · parent \(nom(p)), \(texteQualite(q))")
+            let lien = m.liens.first { $0.genre == .parent && $0.de == n.id }
+            let q = lien?.qualite
+            let ligne = n.rloc16 & EnfantMaillage.bitInvente == 0
+                ? String(localized: "RLOC16 \(rloc) · parent \(nom(p)), \(texteQualite(q))")
+                : String(localized: "parent \(nom(p)), \(texteQualite(q))")
+            return ([ligne] + (lien?.origine.map { [texteOrigine($0, instant)] } ?? [])).joined(separator: " · ")
         case .routeur:
             let voisins = m.liens.filter { $0.genre == .radio && ($0.de == n.id || $0.vers == n.id) }.count
             let enfants = m.liens.filter { $0.genre == .parent && $0.vers == n.id }.count
@@ -320,6 +335,40 @@ struct FicheNoeud: View {
     /// « qualite 3 » ; « qualite inconnue » sous un routeur muet.
     static func texteQualite(_ q: Int?) -> String {
         q.map { String(localized: "qualité \($0)") } ?? String(localized: "qualité inconnue")
+    }
+
+    /// Liens radio d'un routeur, chacun avec sa source et son age : « HomePod salon : qualite 3 · entendu il y a 3
+    /// minutes » ; un lien sans source (maillage de demo) n'a pas de ligne.
+    static func lignesLiens(_ n: NoeudSonde, maillage m: MaillageAffiche, nom: (String) -> String,
+                            instant: Date) -> [String] {
+        guard n.genre == .routeur else { return [] }
+        return m.liens.filter { $0.genre == .radio && ($0.de == n.id || $0.vers == n.id) }.compactMap { l in
+            guard let o = l.origine else { return nil }
+            let voisin = l.de == n.id ? l.vers : l.de
+            return String(localized: "\(nom(voisin)) : \(texteQualite(l.qualite)) · \(texteOrigine(o, instant))")
+        }.sorted()
+    }
+
+    /// Source et age d'un lien : « diagnostic », « entendu il y a 3 minutes », « resolu il y a 12 minutes »,
+    /// « compteurs de l'enfant : 0,7 % d'echecs », « donne par la sonde » ; plusieurs, separes par « · ».
+    static func texteOrigine(_ o: OrigineLien, _ instant: Date) -> String {
+        var parties: [String] = []
+        if o.sonde { parties.append(String(localized: "donné par la sonde")) }
+        if o.diagnostic { parties.append(String(localized: "diagnostic")) }
+        if let d = o.entendu { parties.append(String(localized: "entendu \(relatif(d, instant))")) }
+        if let d = o.resolu { parties.append(String(localized: "résolu \(relatif(d, instant))")) }
+        if let e = o.echecs { parties.append(texteEchecs(e)) }
+        return parties.joined(separator: " · ")
+    }
+
+    /// « compteurs de l'enfant : 0,7 % d'echecs » : le taux d'echec d'envoi, au dixieme de pour cent.
+    static func texteEchecs(_ taux: Double) -> String {
+        String(localized: "compteurs de l'enfant : \(taux.formatted(.percent.precision(.fractionLength(1)))) d'échecs")
+    }
+
+    /// Un routeur muet que la sonde n'entend pas (`MaillageAffiche.jamaisEntendu`).
+    static var texteJamaisEntendu: String {
+        String(localized: "jamais entendu par la sonde ; liens vus seulement par ses voisins")
     }
 
     // MARK: Routeur

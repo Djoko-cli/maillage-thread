@@ -33,6 +33,22 @@
         }
       }
     },
+    "%@ : %@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: %2$@ · %3$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ : %2$@ · %3$@"
+          }
+        }
+      }
+    },
     "%@ : %@…" : {
       "localizations" : {
         "en" : {
@@ -1293,6 +1309,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Coupée par « Réduire les animations »"
+          }
+        }
+      }
+    },
+    "Couverture" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coverage"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couverture"
           }
         }
       }
@@ -4273,6 +4305,22 @@
         }
       }
     },
+    "compteurs de l'enfant : %@ d'échecs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "child's counters: %@ failed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "compteurs de l'enfant : %@ d'échecs"
+          }
+        }
+      }
+    },
     "connectée" : {
       "localizations" : {
         "en" : {
@@ -4305,6 +4353,22 @@
         }
       }
     },
+    "diagnostic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "diagnostics"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "diagnostic"
+          }
+        }
+      }
+    },
     "disparu" : {
       "localizations" : {
         "en" : {
@@ -4317,6 +4381,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "disparu"
+          }
+        }
+      }
+    },
+    "donné par la sonde" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "given by the probe"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "donné par la sonde"
           }
         }
       }
@@ -4429,6 +4509,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "enfant"
+          }
+        }
+      }
+    },
+    "entendu %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "heard %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "entendu %@"
           }
         }
       }
@@ -4573,6 +4669,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "isolé (partition coupée)"
+          }
+        }
+      }
+    },
+    "jamais entendu par la sonde ; liens vus seulement par ses voisins" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "never heard by the probe; links seen only by its neighbors"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jamais entendu par la sonde ; liens vus seulement par ses voisins"
           }
         }
       }
@@ -4849,6 +4961,22 @@
         }
       }
     },
+    "parent %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "parent %1$@, %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "parent %1$@, %2$@"
+          }
+        }
+      }
+    },
     "parent dans une autre pièce" : {
       "localizations" : {
         "en" : {
@@ -5041,6 +5169,22 @@
         }
       }
     },
+    "routeurs entendus : %lld sur %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "routers heard: %1$lld of %2$lld"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "routeurs entendus : %1$lld sur %2$lld"
+          }
+        }
+      }
+    },
     "réglages (tcsetattr)" : {
       "localizations" : {
         "en" : {
@@ -5053,6 +5197,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "réglages (tcsetattr)"
+          }
+        }
+      }
+    },
+    "résolu %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "resolved %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "résolu %@"
           }
         }
       }

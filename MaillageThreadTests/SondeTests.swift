@@ -1234,6 +1234,40 @@ struct SondeMaillageTests {
 
     /// « Oublier la sonde » efface son releve : etat de la sonde (partition, suspension), dernier
     /// releve et erreur de tournee ne restent pas apres elle.
+    /// Firmware 1.1.0 : chaque tournee demande a l'app ses appareils a resoudre, et les passe a la sonde ; la couverture
+    /// de l'ecoute (routeurs entendus sur ceux de la partition) est retenue avec le releve, et oubliee avec lui (valeurs
+    /// inventees : le chef 0, entendu et muet ; l'appareil resolu sous lui, avec son propre RLOC16).
+    @Test(.timeLimit(.minutes(1))) func couvertureEtResolution() async throws {
+        let (p, domaine) = try Self.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let canal = CanalRejoue { l in
+            if l == "annonces\n" { return [CanalRejoue.annonce("0000", route64: "01800000000000000000", suite: false)] }
+            let mots = l.trimmingCharacters(in: .newlines).split(separator: " ").map(String.init)
+            if mots.count == 3, mots[0] == "resoudre", let id = Int(mots[2]) {
+                return [CanalRejoue.resolution(id, mots[1], rloc16: "0002")]
+            }
+            return CanalRejoue.reseauMinimal(l)
+        }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal })
+        let adresse = try #require(AdresseIPv6("fd00:aaaa:bbbb:1::17"))
+        var demandes = 0
+        s.appareilsAResoudre = {
+            demandes += 1
+            return [AppareilAResoudre(id: "E0000000000000C1", partition: "0000000A", adresse: adresse)]
+        }
+        var recu: Maillage?
+        s.surMaillage = { m, _ in recu = m }
+        await s.connecter(Self.port, choisi: true)
+        await Self.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        #expect(demandes == 1)
+        #expect(s.couverture == CouvertureEcoute(entendus: 1, routeurs: 1))
+        #expect(canal.envoyes.contains { $0.hasPrefix("resoudre fd00:aaaa:bbbb:1::17 ") })
+        let e = try #require(recu?.enfants.first { $0.extMac == "E0000000000000C1" })
+        #expect(e.rloc16 == 0x0002 && e.source == .resolution, "sous le chef, muet")
+        await s.oublier()
+        #expect(s.couverture == nil)
+    }
+
     @Test(.timeLimit(.minutes(1))) func oublierEffaceLeReleve() async throws {
         let (p, domaine) = try Self.preferences()
         defer { p.removePersistentDomain(forName: domaine) }

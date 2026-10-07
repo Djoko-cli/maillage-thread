@@ -329,4 +329,22 @@ struct RapprochementTests {
         let ancien = MaillageAffiche(maillage: sans.maillage(), reseau: r, appareils: i.appareils)
         #expect(!ancien.jamaisEntendu(try #require(ancien.routeurs[3]?.id)), "sans annonces (1.0.3), on ne sait pas")
     }
+
+    /// Appareils a resoudre (spec de la sonde tout-en-un, section 2.2) : les appareils Thread de l'instantane qui ont
+    /// une partition et une adresse sur son prefixe OMR, par identifiant, chacun avec cette adresse, sans zone ; pas un
+    /// appareil du reseau local, ni un appareil sans adresse.
+    @Test func appareilsAResoudre() throws {
+        var b = Banc()
+        b.routeur("Apple TV", partition: "46CBEBCD", primaire: true, lien: "fe80::1", omr: Self.omr, xa: "E0000000000000A1")
+        b.appareil("E000000000000004", noeud: 1, adresses: ["fd00:5555:6666:0:b00::4%en0", "fe80::4"])
+        b.appareil("Eve-HAP", noeud: 2, adresses: ["fd00:5555:6666:0:a00::9"])
+        b.appareil("Prise-Wifi", noeud: 3, adresses: ["192.168.1.30"])
+        b.appareil("Sans-Adresse", noeud: 4, adresses: [])
+        let a = AppareilAResoudre.depuis(Instantane(annonces: b.annonces))
+        #expect(a == [AppareilAResoudre(id: "E000000000000004", partition: "46CBEBCD",
+                                        adresse: try #require(AdresseIPv6("fd00:5555:6666:0:b00::4"))),
+                      AppareilAResoudre(id: "Eve-HAP", partition: "46CBEBCD",
+                                        adresse: try #require(AdresseIPv6("fd00:5555:6666:0:a00::9")))])
+        #expect(a.first?.adresse.description == "fd00:5555:6666:0:b00::4", "l'adresse nue, sans zone")
+    }
 }

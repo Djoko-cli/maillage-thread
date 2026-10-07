@@ -100,6 +100,72 @@ struct AffichageSondeTests {
         #expect(FicheNoeud.texteQualite(3) == String(localized: "qualité \(3)"))
     }
 
+    /// Source et age d'un lien dans la fiche (spec de la sonde tout-en-un, section 2.4) : « diagnostic », « entendu il y
+    /// a 3 minutes », « resolu il y a 12 minutes », « compteurs de l'enfant : 0,7 % d'echecs », ou donne par la sonde ;
+    /// plusieurs a la suite.
+    @Test func origineDUnLien() {
+        let t = Date(timeIntervalSince1970: 1_790_000_000)
+        let diagnostic = String(localized: "diagnostic")
+        let entendu = String(localized: "entendu \(FicheNoeud.relatif(t - 180, t))")
+        #expect(FicheNoeud.texteOrigine(OrigineLien(diagnostic: true), t) == diagnostic)
+        #expect(FicheNoeud.texteOrigine(OrigineLien(entendu: t - 180), t) == entendu)
+        #expect(FicheNoeud.texteOrigine(OrigineLien(diagnostic: true, entendu: t - 180), t) == diagnostic + " · " + entendu)
+        let pourcentage = 0.007.formatted(.percent.precision(.fractionLength(1)))
+        #expect(FicheNoeud.texteEchecs(0.007) == String(localized: "compteurs de l'enfant : \(pourcentage) d'échecs"))
+        #expect(FicheNoeud.texteOrigine(OrigineLien(resolu: t - 720, echecs: 0.007), t)
+                == String(localized: "résolu \(FicheNoeud.relatif(t - 720, t))") + " · " + FicheNoeud.texteEchecs(0.007))
+        #expect(FicheNoeud.texteOrigine(OrigineLien(sonde: true), t) == String(localized: "donné par la sonde"))
+        #expect(FenetreReglages.texteCouverture(CouvertureEcoute(entendus: 3, routeurs: 7))
+                == String(localized: "routeurs entendus : \(3) sur \(7)"))
+    }
+
+    /// Fiche d'un routeur et de ses enfants avec la sonde 1.1.0 : chaque lien radio sur sa ligne, avec sa source et son
+    /// age (un lien sans source, du maillage de demo, n'en a pas) ; « jamais entendu par la sonde » pour un routeur muet
+    /// que la sonde n'entend pas ; un enfant resolu sous un routeur Apple, sans RLOC16 connu (appareils de la demo,
+    /// maillage invente).
+    @Test func ficheAvecLesSources() throws {
+        let s = Surveillance(mode: .demo, dossier: nil)
+        s.demarrer()
+        let r = try #require(s.reseau), i = try #require(s.instantane), p = try #require(r.principale)
+        let appareils = i.appareils.filter { $0.partition == p.id && $0.etat == .joignable }.sorted { $0.id < $1.id }
+        let routeur = try #require(appareils.first), enfant = try #require(appareils.last)
+        let t = Date(timeIntervalSince1970: 1_790_000_000)
+        // Route64 (hexa) : sequence 1, masque des routeurs 1, 2 et 3 (ou du seul 1), un octet par routeur.
+        func route64(_ hexa: String) throws -> Route64 { try #require(ReponseDiagnostic(hexa: hexa)?.route64) }
+        var c = ConstructionMaillage(date: t, partition: p.id)
+        c.routeurs(try route64("050C" + "01" + "7000000000000000" + "000000"), chef: 1)
+        c.identite(routeur.id.uppercased(), routeur: 2)
+        // Le chef 1 repond : sa Route64 des routeurs 1, 2 et 3, voisin du 2 (qualites 3 et 3).
+        c.reponse(try #require(ReponseDiagnostic(hexa: "050C" + "01" + "7000000000000000" + "00F100")), routeur: 1)
+        // Le 2 entendu il y a 3 min : voisin du 1 (qualites 2 et 2), plus ancien que le diagnostic.
+        c.ecoute(try route64("050A" + "01" + "4000000000000000" + "A1"), routeur: 2, date: t - 180)
+        c.muet(2)
+        c.muet(3)
+        c.annoncesRecues()
+        c.enfant(EnfantMaillage(rloc16: 0x0C00 | EnfantMaillage.bitInvente, extMac: enfant.id.uppercased(), qualite: 2,
+                                source: .resolution, resolu: t - 720, echecs: 0.012))
+        let m = MaillageAffiche(maillage: c.maillage(), reseau: r, appareils: i.appareils)
+        let n2 = try #require(m.noeud(routeur.id))
+        let lignes = FicheNoeud.lignesLiens(n2, maillage: m, nom: { "[\($0)]" }, instant: t)
+        #expect(lignes.count == 1)
+        let l = try #require(m.liens.first { $0.genre == .radio })
+        let o = try #require(l.origine)
+        #expect(lignes.first == String(localized: "\("[\(l.de == n2.id ? l.vers : l.de)]") : \(FicheNoeud.texteQualite(l.qualite)) · \(FicheNoeud.texteOrigine(o, t))"))
+        #expect(!m.jamaisEntendu(n2.id), "entendu")
+        #expect(m.jamaisEntendu(try #require(m.routeurs[3]?.id)), "muet, pas entendu")
+        #expect(FicheNoeud.texteJamaisEntendu == String(localized: "jamais entendu par la sonde ; liens vus seulement par ses voisins"))
+        let ne = try #require(m.noeud(enfant.id))
+        let parent = try #require(m.parent(de: ne.id))
+        #expect(FicheNoeud.ligneSonde(ne, maillage: m, nom: { "[\($0)]" }, instant: t)
+                == String(localized: "parent \("[\(parent)]"), \(FicheNoeud.texteQualite(2))") + " · "
+                    + String(localized: "résolu \(FicheNoeud.relatif(t - 720, t))") + " · " + FicheNoeud.texteEchecs(0.012),
+                "sans RLOC16 : il est invente")
+        // Maillage de demo : aucune source, aucune ligne de lien.
+        let demo = try #require(s.maillageAffiche(pour: r))
+        let chef = try #require(demo.routeurs[1])
+        #expect(FicheNoeud.lignesLiens(chef, maillage: demo, nom: { $0 }, instant: t).isEmpty)
+    }
+
     /// « Renommer… » : pour un routeur de l'instantane, un appareil connu ou un appareil disparu
     /// (plus dans l'instantane, mais le suivi le garde, avec sa fiche), pas pour un noeud que la
     /// sonde seule connait (son RLOC16 est volatil : rien ne lirait le surnom).

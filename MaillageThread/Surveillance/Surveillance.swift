@@ -286,6 +286,12 @@ final class Surveillance {
         return s
     }
 
+    /// Appareils que la sonde doit resoudre (spec de la sonde tout-en-un, section 2.2) : ceux de l'instantane qui ont
+    /// une adresse sur le prefixe OMR de leur partition, l'adresse nue ; aucun sans instantane.
+    func appareilsAResoudre() -> [AppareilAResoudre] {
+        instantane.map(AppareilAResoudre.depuis) ?? []
+    }
+
     /// Sonde oubliee (`SondeMaillage.surOubli`) : son maillage part tout de suite, sans attendre
     /// qu'il soit perime ; le graphe revient aux pointilles. Son suivi aussi : le maillage suivant
     /// (une autre sonde, plus tard) est un point de depart, sans evenement. L'historique reste : il

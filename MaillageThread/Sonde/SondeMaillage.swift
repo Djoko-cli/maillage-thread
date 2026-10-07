@@ -73,6 +73,9 @@ final class SondeMaillage {
     private(set) var debutTournee: Date?
     /// Derniere erreur d'une tournee (la liaison reste ouverte).
     private(set) var erreurTournee: String?
+    /// Couverture de l'ecoute au dernier maillage (firmware 1.1.0, spec de la sonde tout-en-un, section 2.4) : les
+    /// routeurs que la sonde entend, sur ceux de la partition ; nil sans (firmware plus ancien, sans releve).
+    private(set) var couverture: CouvertureEcoute?
     private(set) var liaison: Liaison = .usb
     /// Nom d'hote SRP de la sonde retenue (sans `.local`) : l'acces reseau vise `<hote>.local`.
     private(set) var hote: String?
@@ -95,6 +98,9 @@ final class SondeMaillage {
     @ObservationIgnored var surTournee: ((Bool) -> Void)?
     /// Appele quand la sonde est oubliee : son maillage part du graphe.
     @ObservationIgnored var surOubli: (() -> Void)?
+    /// Appareils de l'app a resoudre (l'instantane : spec de la sonde tout-en-un, section 2.2), demandes au debut de
+    /// chaque tournee ; nil : aucun.
+    @ObservationIgnored var appareilsAResoudre: (@MainActor () -> [AppareilAResoudre])?
 
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let actif: Bool
@@ -267,6 +273,7 @@ final class SondeMaillage {
         etatSonde = nil
         derniereTournee = nil
         erreurTournee = nil
+        couverture = nil
         surOubli?()
         deconnecter(.sansSonde)
         guard let h = hote else { return }
@@ -381,6 +388,7 @@ final class SondeMaillage {
                     etatSonde = nil
                     derniereTournee = nil
                     erreurTournee = nil
+                    couverture = nil
                 }
             }
             // Le nom va avec la sonde retenue (un port sans numero de serie ne l'est pas).
@@ -657,7 +665,9 @@ final class SondeMaillage {
             let e = try await sonde.etat()
             guard sonde === self.sonde else { return }
             etatSonde = e
-            let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge(), avancement: suivi)
+            let appareils = appareilsAResoudre?() ?? []
+            let r = try await Tournee.executer(sonde, memoire: memoire, maintenant: horloge(), appareils: appareils,
+                                               avancement: suivi)
             guard sonde === self.sonde else { return }
             // Meme sans maillage (pas de liste des routeurs), les identites apprises sont gardees.
             memoire = r.memoire
@@ -665,6 +675,7 @@ final class SondeMaillage {
             if let m = r.maillage {
                 let recu = horloge()
                 derniereTournee = recu
+                couverture = m.couverture
                 surMaillage?(m, recu)
             }
             erreurTournee = nil

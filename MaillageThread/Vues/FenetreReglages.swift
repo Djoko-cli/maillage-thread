@@ -335,6 +335,12 @@ struct FenetreReglages: View {
         hote.map { "\($0).local" } ?? "—"
     }
 
+    /// Couverture de l'ecoute (spec de la sonde tout-en-un, section 2.4) : « routeurs entendus : 3 sur 7 », les routeurs
+    /// de la partition que la sonde entend ; elle varie quand on deplace la sonde.
+    static func texteCouverture(_ c: CouvertureEcoute) -> String {
+        String(localized: "routeurs entendus : \(c.entendus) sur \(c.routeurs)")
+    }
+
     /// « Dernier releve » de la sonde : la date et l'heure (la sonde peut rester des jours sans
     /// relever), comme le dernier releve du reseau local (section Diagnostic).
     static func texteDernierReleve(_ d: Date) -> String {
@@ -449,6 +455,9 @@ struct ReleveSonde: View {
         if case .connectee = sonde.etat {
             if let e = sonde.etatSonde {
                 LabeledContent("Partition", value: e.partition ?? "—")
+                if let c = sonde.couverture {
+                    LabeledContent("Couverture", value: FenetreReglages.texteCouverture(c))
+                }
                 if e.suspendue {
                     Text("Sonde suspendue dans Maison (interrupteur « Sonde maillage » éteint) : pas de relevé.")
                         .font(.caption)
