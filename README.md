@@ -477,7 +477,8 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   Each advertisement carries the router's routing table (Route64), so its
   links in both directions with every other router, Apple's included. After
   the probe's state, its router table and its neighbors, the tour asks for
-  them (`annonces`; without an answer, it goes on without them) and keeps
+  them (`annonces`; without an answer, it skips parent resolution and the
+  children's counters too, and goes on) and keeps
   the routers of its partition: those heard from another partition (an Aqara
   hub's, for example) are set aside. For each pair of routers, each
   direction keeps the most recent measure, diagnostics or listening, dated

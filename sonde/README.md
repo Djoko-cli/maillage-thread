@@ -40,7 +40,7 @@ effacement (`-t upload` seul) : l'appairage Maison, le réseau Thread, le nom
 et la clé d'accès réseau sont gardés. De la 1.0.1 à la 1.0.2, la sonde passe
 de MED (`rn`) à FED (`rdn`) au démarrage et se rattache. De la 1.0.3 à la
 1.1.0, rien ne change de ce qui est gardé ; place à la compilation : 76,5 % de
-la flash et 53,1 % de la RAM.
+la flash et 54,1 % de la RAM.
 
 **Toujours désigner le port de la sonde.** Le pont Halo de benq est lui
 aussi un C6 : le flasher par erreur le remplacerait. Le numéro de série USB

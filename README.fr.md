@@ -499,7 +499,8 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   porte la table de routage du routeur (Route64), donc ses liens dans les
   deux sens avec chacun des autres routeurs, ceux d'Apple compris. Après
   l'état de la sonde, sa table des routeurs et ses voisins, la tournée les
-  demande (`annonces` ; sans réponse, elle continue sans) et garde les
+  demande (`annonces` ; sans réponse, elle saute la résolution et les
+  compteurs, et continue) et garde les
   routeurs de sa partition : ceux d'une autre partition (celle d'un hub
   Aqara, par exemple) sont écartés. Pour une paire de routeurs, chaque sens
   garde la mesure la plus récente, diagnostic ou écoute, datée de l'âge que
