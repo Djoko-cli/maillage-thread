@@ -266,6 +266,8 @@ struct LegendePiecesTests {
                                                                                     couleur: .appareil(.joignable),
                                                                                     cercle: true),
                                                               rayon: LegendePieces.rayonAppareil))
+        // Un appareil disparu ne route plus : son anneau, sans cercle.
+        #expect(DessinNoeud.apparenceAppareil(.disparu, routeur: true) == DessinNoeud.apparenceAppareil(.disparu))
         for (entree, etat) in [(Entree.partitionCoupee, EtatAffiche.partitionCoupee)] {
             #expect(LegendePieces.signe(entree) == .noeud(DessinNoeud.apparenceAppareil(etat), rayon: LegendePieces.rayonAppareil))
         }

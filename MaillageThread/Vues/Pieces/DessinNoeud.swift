@@ -48,10 +48,11 @@ enum DessinNoeud {
     }
 
     /// Un appareil : pastille de la couleur de son etat (inconnu sans etat), anneau s'il a disparu ; entoure du cercle
-    /// bleu s'il route.
+    /// bleu s'il route, sauf disparu (il ne route plus).
     static func apparenceAppareil(_ etat: EtatAffiche?, routeur: Bool = false) -> Apparence {
         let e = etat ?? .inconnu
-        return Apparence(forme: e == .disparu ? .anneau : .pastille, couleur: .appareil(e), cercle: routeur)
+        return Apparence(forme: e == .disparu ? .anneau : .pastille, couleur: .appareil(e),
+                         cercle: routeur && e != .disparu)
     }
 
     /// Le cercle d'un routeur : 1,5 point, a 2 points de sa pastille ; il s'etend de `ecartCercle` au-dela d'elle.

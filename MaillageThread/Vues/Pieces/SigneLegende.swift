@@ -71,7 +71,7 @@ extension LegendePieces {
 }
 
 /// Le signe d'une entree de la legende, dessine dans un `Canvas` par les fonctions du rendu de la scene (`dessiner`).
-/// Sa place est celle du signe : un noeud, son disque ; un lien, 22 pt de long ; un nom, une pastille ou un repere,
+/// Sa place est celle du signe : un noeud, son disque (entoure du cercle d'un routeur, la place d'un routeur) ; un lien, 22 pt de long ; un nom, une pastille ou un repere,
 /// leur taille dans la scene (`MesureNoms`) ; un glyphe, la largeur d'un noeud de son groupe (`largeurGlyphe`) et la
 /// hauteur de son nom. Le halo d'une sphere ou d'une pastille, et un glyphe plus large que sa place, debordent autour,
 /// sans prendre de place.

@@ -191,8 +191,8 @@ extension LegendePieces {
         var entrees: [Entree]
     }
 
-    /// Ce que la legende lit de la scene affichee : la couleur de chaque noeud, ceux que la sonde seule
-    /// connait, les chefs, les endormis, les piles, les noeuds montres avec leurs candidats, les liens, et
+    /// Ce que la legende lit de la scene affichee : la couleur de chaque noeud, les routeurs qui ne sont pas de
+    /// bordure, ceux que la sonde seule connait, les chefs, les endormis, les piles, les noeuds montres avec leurs candidats, les liens, et
     /// si des reperes « ailleurs » sont poses (piece isolee).
     struct Lecture {
         var couleurs: [String: DessinNoeud.Couleur] = [:]
@@ -207,7 +207,8 @@ extension LegendePieces {
         var ailleurs = false
     }
 
-    /// Les entrees que la scene contient (spec du polissage B, section 2) : chaque couleur de noeud ; un
+    /// Les entrees que la scene contient (spec du polissage B, section 2) : chaque couleur de noeud ; un routeur qui
+    /// n'est pas de bordure (son cercle) ; un
     /// noeud que la sonde seule connait, routeur ou enfant, en gris (« non identifie ») ; un chef, un
     /// endormi, une pile ; chaque qualite d'un lien radio trace ; un lien vers un parent, un rattachement
     /// suppose ; un repere « ailleurs » ; un routeur montre avec ses candidats. Un appareil d'etat
