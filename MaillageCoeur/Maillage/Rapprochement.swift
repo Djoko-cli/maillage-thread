@@ -119,6 +119,8 @@ public struct MaillageAffiche: Hashable, Sendable {
     public let entendus: [Int: Date]
     /// La sonde a rendu ses annonces (firmware 1.1.0) : un routeur absent d'`entendus` n'a pas ete entendu.
     public let annoncesLues: Bool
+    /// Id du noeud de la sonde elle-meme (l'enfant qu'elle donne dans `etat`) ; nil si elle ne s'est pas donnee.
+    public let sonde: String?
 
     /// Rapproche le maillage des routeurs de bordure de sa partition et des appareils :
     /// - routeur de bordure : son ExtMac est le `xa` de son annonce ;
@@ -246,6 +248,7 @@ public struct MaillageAffiche: Hashable, Sendable {
         routeursMuets = Set(maillage.routeurs.filter(\.muet).map(\.id))
         entendus = Dictionary(uniqueKeysWithValues: maillage.routeurs.compactMap { r in r.entendu.map { (r.id, $0) } })
         annoncesLues = maillage.annoncesLues
+        sonde = maillage.enfants.first { $0.source == .sonde }.flatMap { enfants[$0.rloc16]?.id }
     }
 
     /// Un routeur que la sonde n'a jamais entendu, muet au diagnostic (un routeur Apple hors de portee) : ses liens ne

@@ -22,6 +22,7 @@ struct LegendePiecesTests {
         let cas: [(Lecture, Set<Entree>)] = [
             (Lecture(couleurs: ["Apple TV 4K": .routeur(principale: true)]), [.routeur]),
             (Lecture(routeursSimples: ["E000000000000008"]), [.routeurSimple]),
+            (Lecture(sondes: ["E000000000000009"]), [.sonde]),
             (Lecture(couleurs: ["rloc:5000": .routeurInconnu], inconnus: ["rloc:5000"]), [.nonIdentifie]),
             (Lecture(couleurs: ["rloc:041F": .appareil(.inconnu)], inconnus: ["rloc:041F"]), [.nonIdentifie]),
             (Lecture(couleurs: ["Aqara": .routeur(principale: false)]), [.autrePartition]),
@@ -56,7 +57,7 @@ struct LegendePiecesTests {
         let tout = Lecture(couleurs: ["a": .routeur(principale: true), "b": .routeur(principale: false),
                                       "c": .appareil(.joignable), "d": .appareil(.partitionCoupee),
                                       "e": .appareil(.sansAdresse), "f": .appareil(.disparu)],
-                           routeursSimples: ["c"], inconnus: ["g"], chefs: ["a"], endormis: ["c"], piles: ["c"], candidats: ["g"],
+                           routeursSimples: ["c"], sondes: ["c"], inconnus: ["g"], chefs: ["a"], endormis: ["c"], piles: ["c"], candidats: ["g"],
                            liens: [Self.radio(3), Self.radio(2), Self.radio(1), Self.radio(nil),
                                    ScenePieces.Lien(de: "c", vers: "a", genre: .parent),
                                    ScenePieces.Lien(de: "d", vers: "a")],
@@ -80,7 +81,7 @@ struct LegendePiecesTests {
         let (s, _, e) = try NomsSceneTests.demo()
         let avec = LegendePieces.entrees(Lecture(e, ailleurs: false))
         #expect(avec == [.routeur, .routeurSimple, .nonIdentifie, .autrePartition, .chef, .joignable, .sansAdresse, .disparu, .endormi,
-                         .pile, .bonne, .moyenne, .faible, .versParent, .rattachement])
+                         .pile, .sonde, .bonne, .moyenne, .faible, .versParent, .rattachement])
         #expect(LegendePieces.entrees(Lecture(e, ailleurs: true)).contains(.ailleurs))
         s.oublierMaillage()
         let sans = try #require(FenetrePiecesTests.entree(s))
@@ -240,6 +241,14 @@ struct LegendePiecesTests {
                     vues.insert(.routeurSimple)
                     a.cercle = false
                 }
+                // La sonde : ses ondes ont leur entree, sa pastille celle de son etat.
+                if a.sonde {
+                    vues.insert(.sonde)
+                    #expect(LegendePieces.signe(.sonde) == .noeud(DessinNoeud.Apparence(forme: a.forme, couleur: a.couleur,
+                                                                                       sonde: true),
+                                                                  rayon: LegendePieces.rayonAppareil))
+                    a.sonde = false
+                }
                 let entree: Entree? = switch a.couleur {
                 case .routeur(principale: true): .routeur
                 case .routeur(principale: false): .autrePartition
@@ -261,7 +270,7 @@ struct LegendePiecesTests {
                         "\(n.id) : la meme apparence que dans la scene")
             }
         }
-        #expect(vues == [.routeur, .routeurSimple, .nonIdentifie, .autrePartition, .joignable, .sansAdresse, .disparu])
+        #expect(vues == [.routeur, .routeurSimple, .nonIdentifie, .autrePartition, .joignable, .sansAdresse, .disparu, .sonde])
         #expect(LegendePieces.signe(.routeurSimple) == .noeud(DessinNoeud.Apparence(forme: .pastille,
                                                                                     couleur: .appareil(.joignable),
                                                                                     cercle: true),
@@ -465,9 +474,10 @@ struct LegendePiecesTests {
             let reference = SigneLegende.taille(LegendePieces.signe(noeud))
             #expect(place.width == reference.width, "\(glyphe) : la largeur d'un noeud (\(place.width) au lieu de \(reference.width))")
         }
-        // Les groupes de la couronne et de la lune : une colonne de signes commune, la pile mise a part.
+        // Les groupes de la couronne et de la lune : une colonne de signes commune, la pile et la sonde (ses ondes) mises a
+        // part.
         for groupe in [LegendePieces.Groupe.routeurs, .appareils] {
-            let largeurs = Set(groupe.entrees.filter { $0 != .pile }.map { SigneLegende.taille(LegendePieces.signe($0)).width })
+            let largeurs = Set(groupe.entrees.filter { $0 != .pile && $0 != .sonde }.map { SigneLegende.taille(LegendePieces.signe($0)).width })
             #expect(largeurs.count == 1, "\(groupe) : une colonne de signes commune (\(largeurs))")
         }
         // Le glyphe est centre sur sa place, comme un noeud : le milieu de son encre, a un pixel pres.

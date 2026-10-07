@@ -133,7 +133,7 @@ extension LegendePieces {
     enum Entree: Hashable, CaseIterable {
         /// `routeur` : un routeur de bordure ; `routeurSimple` : un routeur qui ne l'est pas.
         case routeur, routeurSimple, nonIdentifie, autrePartition, chef
-        case joignable, partitionCoupee, sansAdresse, disparu, endormi, pile
+        case joignable, partitionCoupee, sansAdresse, disparu, endormi, pile, sonde
         case bonne, moyenne, faible, inconnue
         case versParent, rattachement, ailleurs, candidats
 
@@ -150,6 +150,7 @@ extension LegendePieces {
             case .disparu: String(localized: "disparu")
             case .endormi: String(localized: "endormi")
             case .pile: String(localized: "pile")
+            case .sonde: String(localized: "sonde")
             case .bonne: String(localized: "bonne")
             case .moyenne: String(localized: "moyenne")
             case .faible: String(localized: "faible")
@@ -169,7 +170,7 @@ extension LegendePieces {
         var entrees: [Entree] {
             switch self {
             case .routeurs: [.routeur, .routeurSimple, .nonIdentifie, .autrePartition, .chef]
-            case .appareils: [.joignable, .partitionCoupee, .sansAdresse, .disparu, .endormi, .pile]
+            case .appareils: [.joignable, .partitionCoupee, .sansAdresse, .disparu, .endormi, .pile, .sonde]
             case .liens: [.bonne, .moyenne, .faible, .inconnue]
             case .autres: [.versParent, .rattachement, .ailleurs, .candidats]
             }
@@ -192,12 +193,14 @@ extension LegendePieces {
     }
 
     /// Ce que la legende lit de la scene affichee : la couleur de chaque noeud, les routeurs qui ne sont pas de
-    /// bordure, ceux que la sonde seule connait, les chefs, les endormis, les piles, les noeuds montres avec leurs candidats, les liens, et
+    /// bordure, la sonde, ceux que la sonde seule connait, les chefs, les endormis, les piles, les noeuds montres avec leurs candidats, les liens, et
     /// si des reperes « ailleurs » sont poses (piece isolee).
     struct Lecture {
         var couleurs: [String: DessinNoeud.Couleur] = [:]
         /// Les routeurs qui ne sont pas de bordure (leur cercle).
         var routeursSimples: Set<String> = []
+        /// La sonde elle-meme (ses ondes).
+        var sondes: Set<String> = []
         var inconnus: Set<String> = []
         var chefs: Set<String> = []
         var endormis: Set<String> = []
@@ -208,7 +211,7 @@ extension LegendePieces {
     }
 
     /// Les entrees que la scene contient (spec du polissage B, section 2) : chaque couleur de noeud ; un routeur qui
-    /// n'est pas de bordure (son cercle) ; un
+    /// n'est pas de bordure (son cercle) ; la sonde (ses ondes) ; un
     /// noeud que la sonde seule connait, routeur ou enfant, en gris (« non identifie ») ; un chef, un
     /// endormi, une pile ; chaque qualite d'un lien radio trace ; un lien vers un parent, un rattachement
     /// suppose ; un repere « ailleurs » ; un routeur montre avec ses candidats. Un appareil d'etat
@@ -227,6 +230,7 @@ extension LegendePieces {
             }
         }
         if !l.routeursSimples.isEmpty { r.insert(.routeurSimple) }
+        if !l.sondes.isEmpty { r.insert(.sonde) }
         if !l.inconnus.isEmpty { r.insert(.nonIdentifie) }
         if !l.chefs.isEmpty { r.insert(.chef) }
         if !l.endormis.isEmpty { r.insert(.endormi) }
@@ -268,6 +272,7 @@ extension LegendePieces.Lecture {
         couleurs = Dictionary(ids.compactMap { id in e.apparences[id].map { (id, $0.couleur) } },
                               uniquingKeysWith: { a, _ in a })
         routeursSimples = Set(ids.filter { e.apparences[$0]?.cercle == true })
+        sondes = Set(ids.filter { e.apparences[$0]?.sonde == true })
         inconnus = Set(e.scene.noeuds.filter(\.inconnu).map(\.id))
         chefs = Set(e.scene.noeuds.filter(\.chef).map(\.id))
         endormis = Set(e.scene.noeuds.filter { LibellesNoeuds.endormi(e.appareils[$0.id], routeur: $0.routeur) }

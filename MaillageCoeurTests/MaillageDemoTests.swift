@@ -20,6 +20,10 @@ struct MaillageDemoTests {
         let affiche = MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils)
         #expect(affiche.inconnus.map(\.id) == ["rloc:041F"], "tous les routeurs reconnus ; un enfant inconnu")
         #expect(affiche.routeurs.values.filter { $0.bordure }.allSatisfy { $0.reconnu })
+        // La sonde : le premier enfant, un appareil reconnu.
+        let sonde = try #require(m.enfants.first { $0.source == .sonde })
+        #expect(m.enfants.filter { $0.source == .sonde }.count == 1)
+        #expect(affiche.sonde == affiche.enfants[sonde.rloc16]?.id && affiche.enfants[sonde.rloc16]?.reconnu == true)
         let muet = try #require(m.routeurs.first { $0.muet })
         #expect(m.enfants(de: muet.id).allSatisfy { $0.qualite == nil && $0.source == .resolution })
     }

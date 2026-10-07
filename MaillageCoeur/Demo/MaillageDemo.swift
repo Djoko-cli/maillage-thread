@@ -4,7 +4,7 @@ import Foundation
 /// du 28/09 (partition principale), pour voir les vrais liens sans sonde.
 /// Les routeurs de bordure (par leur `xa`), dont le dernier muet ; deux
 /// appareils qui routent ; les autres appareils joignables en enfants, repartis
-/// entre eux ; un enfant que l'instantane ne connait pas.
+/// entre eux, le premier etant la sonde ; un enfant que l'instantane ne connait pas.
 public enum MaillageDemo {
     public static func maillage(_ i: Instantane, date: Date) -> Maillage? {
         maillage(i, date: date, sansIdentite: [])
@@ -45,7 +45,7 @@ public enum MaillageDemo {
             let parent = ids[k % ids.count]
             c.enfant(EnfantMaillage(rloc16: UInt16(parent) << 10 | UInt16(1 + k / ids.count), extMac: a.id,
                                     qualite: parent == muet ? nil : qualites[k % 4], endormi: a.endormi,
-                                    source: parent == muet ? .resolution : .tableEnfants))
+                                    source: k == 0 ? .sonde : parent == muet ? .resolution : .tableEnfants))
         }
         c.enfant(EnfantMaillage(rloc16: UInt16(chef) << 10 | 0x1F, extMac: "E0000000000000FF", qualite: 1, endormi: true,
                                 source: .tableEnfants))

@@ -53,6 +53,7 @@ extension LegendePieces {
         case .autrePartition: .noeud(DessinNoeud.apparenceRouteur(inconnu: false, principale: false), rayon: rayonRouteur)
         case .chef: .glyphe(LibellesNoeuds.couronne, routeur: true)
         case .joignable: .noeud(DessinNoeud.apparenceAppareil(.joignable), rayon: rayonAppareil)
+        case .sonde: .noeud(DessinNoeud.apparenceSonde, rayon: rayonAppareil)
         case .partitionCoupee: .noeud(DessinNoeud.apparenceAppareil(.partitionCoupee), rayon: rayonAppareil)
         case .sansAdresse: .noeud(DessinNoeud.apparenceAppareil(.sansAdresse), rayon: rayonAppareil)
         case .disparu: .noeud(DessinNoeud.apparenceAppareil(.disparu), rayon: rayonAppareil)
@@ -107,12 +108,13 @@ struct SigneLegende: View {
     }
 
     /// La place du signe ; un noeud entoure du cercle d'un routeur, celle d'un routeur de son groupe (son cercle deborde
-    /// d'un tiers de point, comme un halo).
+    /// d'un tiers de point, comme un halo) ; la sonde, ses ondes en largeur (comme la pile, elle garde sa place).
     static func taille(_ s: LegendePieces.Signe) -> CGSize {
         switch s {
         case .noeud(let apparence, let rayon):
-            apparence.cercle ? CGSize(width: largeurGlyphe(routeur: true), height: largeurGlyphe(routeur: true))
-                             : CGSize(width: 2 * rayon, height: 2 * rayon)
+            apparence.sonde ? CGSize(width: 2 * (rayon + DessinNoeud.ecartOndes), height: 2 * rayon)
+            : apparence.cercle ? CGSize(width: largeurGlyphe(routeur: true), height: largeurGlyphe(routeur: true))
+            : CGSize(width: 2 * rayon, height: 2 * rayon)
         case .lienRadio, .lienEnfant: CGSize(width: longueurLien, height: 2)
         case .nom(let texte, let routeur): mesure.noeud(LibellesNoeuds.Libelle(texte: texte), routeur: routeur)
         case .glyphe(let texte, let routeur):
