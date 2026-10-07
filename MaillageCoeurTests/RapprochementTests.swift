@@ -71,9 +71,14 @@ struct RapprochementTests {
         #expect(m.enfants[0xAC09]?.id == "rloc:AC09", "la sonde, sans ExtMac (firmware d'essai)")
         #expect(m.inconnus.filter { $0.genre == .routeur }.map(\.id) == ["rloc:0400", "rloc:CC00", "rloc:E400"])
         #expect(m.inconnus.count == 7, "3 routeurs ; 6002, 6005 et 6006, sans identite ; la sonde")
-        #expect(m.liens.contains(LienAffiche(de: "E000000000000002", vers: "E000000000000003", genre: .radio, qualite: 3)))
-        #expect(m.liens.contains(LienAffiche(de: "E000000000000004", vers: "E000000000000002", genre: .parent, qualite: 2)))
-        #expect(m.liens.contains(LienAffiche(de: "E00000000000000A", vers: "HomePod bureau", genre: .parent, qualite: nil)))
+        let diagnostic = OrigineLien(diagnostic: true)
+        #expect(m.liens.contains(LienAffiche(de: "E000000000000002", vers: "E000000000000003", genre: .radio, qualite: 3,
+                                             origine: diagnostic)))
+        #expect(m.liens.contains(LienAffiche(de: "E000000000000004", vers: "E000000000000002", genre: .parent, qualite: 2,
+                                             origine: diagnostic)))
+        let resolu = try #require(m.liens.first { $0.de == "E00000000000000A" })
+        #expect(resolu.vers == "HomePod bureau" && resolu.genre == .parent && resolu.qualite == nil)
+        #expect(resolu.origine?.resolu != nil && resolu.origine?.diagnostic == false, "resolu sous un routeur Apple")
         #expect(m.parent(de: "E000000000000005") == "E000000000000002")
         #expect(m.noeud("Apple TV")?.rloc16 == 0xB400)
     }
@@ -275,5 +280,53 @@ struct RapprochementTests {
         b.routeur("HomePod avant", partition: "46CBEBCD", role: nil, lien: "fe80::2", xa: "E0000000000000D1")
         let m = try Self.deuxRouteurs(Instantane(annonces: b.annonces))
         #expect(m.routeurs[1]?.candidats == ["Alpha", "HomePod avant"] && m.routeurs[2]?.candidats == ["Alpha", "HomePod avant"])
+    }
+
+    /// Origine de chaque lien, pour la fiche (spec de la sonde tout-en-un, section 2.4) : la source et l'age. Un lien
+    /// radio entendu puis mesure par le diagnostic, plus recent, n'a plus que lui ; un lien sans source (maillage de
+    /// demo) n'en a pas. Un enfant : la table de son parent, la resolution et le taux de ses compteurs,
+    /// ou la sonde. Les routeurs muets, entendus ou non, et si la sonde a rendu ses annonces.
+    @Test func origineDesLiens() throws {
+        let i = Self.instantane()
+        let r = try #require(i.reseaux.first)
+        let t0 = Date(timeIntervalSince1970: 1_790_000_000)
+        var c = ConstructionMaillage(date: t0, partition: "46CBEBCD")
+        c.routeurs(Route64(sequence: 1, routes: [1, 2, 3, 4].map {
+            RouteRouteur(idRouteur: $0, qualiteSortante: 0, qualiteEntrante: 0, cout: 1)
+        }), chef: 1)
+        c.lien(1, 2, sortante: 3, entrante: 3, source: .diagnostic, date: t0)
+        c.ecoute(Route64(sequence: 1, routes: [RouteRouteur(idRouteur: 3, qualiteSortante: 2, qualiteEntrante: 1, cout: 1)]),
+                 routeur: 2, date: t0 - 180)
+        c.lien(1, 3, sortante: 3, entrante: 3)
+        c.ecoute(Route64(sequence: 1, routes: [RouteRouteur(idRouteur: 1, qualiteSortante: 2, qualiteEntrante: 0, cout: 1)]),
+                 routeur: 4, date: t0 - 60)
+        c.lien(1, 4, sortante: 3, entrante: 0, source: .diagnostic, date: t0)
+        for id in [2, 3, 4] { c.muet(id) }
+        c.annoncesRecues()
+        c.enfant(EnfantMaillage(rloc16: 0x0401, extMac: "E000000000000004", qualite: 2, source: .tableEnfants))
+        c.enfant(EnfantMaillage(rloc16: 0x0E00, extMac: "E000000000000005", qualite: 3, source: .resolution, resolu: t0,
+                                echecs: 0.004))
+        c.enfant(EnfantMaillage(rloc16: 0x0402, source: .sonde))
+        let m = MaillageAffiche(maillage: c.maillage(), reseau: r, appareils: i.appareils)
+        func lien(_ a: Int, _ b: Int) -> LienAffiche? {
+            m.liens.first { $0.genre == .radio && Set([$0.de, $0.vers]) == Set([m.routeurs[a]?.id, m.routeurs[b]?.id]) }
+        }
+        #expect(lien(1, 2)?.origine == OrigineLien(diagnostic: true))
+        #expect(lien(2, 3)?.origine == OrigineLien(entendu: t0 - 180), "entendu seulement")
+        #expect(lien(1, 3)?.origine == nil, "sans source")
+        #expect(lien(1, 4)?.origine == OrigineLien(diagnostic: true), "le diagnostic, plus recent, dans les deux sens")
+        #expect(m.liens.first { $0.de == "E000000000000004" }?.origine == OrigineLien(diagnostic: true))
+        #expect(m.liens.first { $0.de == "E000000000000005" }?.origine == OrigineLien(resolu: t0, echecs: 0.004))
+        #expect(m.liens.first { $0.de == "rloc:0402" }?.origine == OrigineLien(sonde: true))
+        #expect(m.routeursMuets == [2, 3, 4] && m.entendus == [2: t0 - 180, 4: t0 - 60] && m.annoncesLues)
+        #expect(m.jamaisEntendu(try #require(m.routeurs[3]?.id)), "muet, jamais entendu")
+        #expect(!m.jamaisEntendu(try #require(m.routeurs[2]?.id)), "entendu")
+        #expect(!m.jamaisEntendu(try #require(m.routeurs[1]?.id)), "repond au diagnostic")
+        var sans = ConstructionMaillage(date: t0, partition: "46CBEBCD")
+        sans.routeurs(Route64(sequence: 1, routes: [RouteRouteur(idRouteur: 3, qualiteSortante: 0, qualiteEntrante: 0, cout: 1)]),
+                      chef: 3)
+        sans.muet(3)
+        let ancien = MaillageAffiche(maillage: sans.maillage(), reseau: r, appareils: i.appareils)
+        #expect(!ancien.jamaisEntendu(try #require(ancien.routeurs[3]?.id)), "sans annonces (1.0.3), on ne sait pas")
     }
 }

@@ -4,12 +4,17 @@ import Foundation
 /// lien, entre routeurs et d'enfant a parent, et le signal des routeurs que la sonde entend.
 /// Une ligne JSON de `maillage-AAAA-MM.jsonl`, en tableaux pour rester courte :
 /// - `routeurs` : `[identifiant, ExtMac ou null]`, chaque routeur de la liste ;
-/// - `liens` : `[a, b, qualite de a vers b, qualite de b vers a]` (null : inconnue) ;
+/// - `liens` : `[a, b, qualite de a vers b, qualite de b vers a]` (null : inconnue), puis, depuis la
+///   sonde tout-en-un (spec, section 2.5), la source de chaque sens : `d` diagnostic, `e` ecoute (null :
+///   inconnue) ; un lien sans source n'en a pas ;
 /// - `enfants` : `[ExtMac, identifiant du parent, qualite ou null]`, les enfants identifies, la
-///   sonde comprise. Un enfant sans ExtMac n'a pas d'identite stable (son RLOC16 change avec son
-///   parent) : il n'est pas garde ;
+///   sonde comprise, puis leur source (`t` table de son parent, `r` resolution, `s` la sonde) et, quand
+///   leur qualite vient de leurs compteurs MAC, le taux d'echec (au 1/10 000). Un enfant sans ExtMac n'a
+///   pas d'identite stable (son RLOC16 change avec son parent) : il n'est pas garde ;
 /// - `signaux` : `[identifiant, dBm]`, les routeurs que la sonde entend, son parent compris ;
 /// - `parentSonde` : identifiant du parent de la sonde (absent sans parent connu).
+/// Les champs facultatifs manquent aux lignes d'avant : elles se lisent comme avant, sources et taux
+/// inconnus ; une source inconnue (version plus recente) aussi.
 public struct ReleveMaillage: Hashable, Sendable {
     /// Routeur de la liste et son ExtMac (nil : inconnue).
     public struct Routeur: Hashable, Sendable {
@@ -22,16 +27,21 @@ public struct ReleveMaillage: Hashable, Sendable {
         }
     }
 
-    /// Enfant identifie, son parent et la qualite de son lien (nil sous un routeur muet).
+    /// Enfant identifie, son parent et la qualite de son lien (nil sous un routeur muet), sa source et le
+    /// taux d'echec de ses compteurs MAC quand sa qualite en vient (nil : ligne d'avant, ou inconnus).
     public struct Enfant: Hashable, Sendable {
         public let extMac: String
         public let parent: Int
         public let qualite: Int?
+        public let source: SourceEnfant?
+        public let echecs: Double?
 
-        public init(extMac: String, parent: Int, qualite: Int?) {
+        public init(extMac: String, parent: Int, qualite: Int?, source: SourceEnfant? = nil, echecs: Double? = nil) {
             self.extMac = extMac
             self.parent = parent
             self.qualite = qualite
+            self.source = source
+            self.echecs = echecs
         }
     }
 
@@ -56,13 +66,15 @@ public struct ReleveMaillage: Hashable, Sendable {
         self.parentSonde = parentSonde
     }
 
-    /// Releve d'un maillage : ses enfants identifies (`Maillage.enfantsIdentifies`).
+    /// Releve d'un maillage : ses enfants identifies (`Maillage.enfantsIdentifies`), avec leur source et leur taux
+    /// d'echec arrondi au 1/10 000 ; ses liens sans les dates de leurs mesures.
     public init(_ m: Maillage) {
         self.init(date: m.date, partition: m.partition,
                   routeurs: m.routeurs.map { Routeur(id: $0.id, extMac: $0.extMac) },
-                  liens: m.liens,
+                  liens: m.liens.map(\.sansDates),
                   enfants: m.enfantsIdentifies.sorted { $0.key < $1.key }
-                      .map { Enfant(extMac: $0.key, parent: $0.value.parent, qualite: $0.value.qualite) },
+                      .map { Enfant(extMac: $0.key, parent: $0.value.parent, qualite: $0.value.qualite, source: $0.value.source,
+                                    echecs: $0.value.echecs.map { ($0 * 10_000).rounded() / 10_000 }) },
                   signaux: m.signaux, parentSonde: m.parentSonde)
     }
 
@@ -81,6 +93,18 @@ public struct ReleveMaillage: Hashable, Sendable {
 extension ReleveMaillage: Codable {
     private enum CodingKeys: String, CodingKey {
         case date, partition, routeurs, liens, enfants, signaux, parentSonde
+    }
+
+    /// Codes courts des sources dans l'historique.
+    private static let codesLiens: [SourceLien: String] = [.diagnostic: "d", .ecoute: "e"]
+    private static let codesEnfants: [SourceEnfant: String] = [.tableEnfants: "t", .resolution: "r", .sonde: "s"]
+
+    private static func sourceLien(_ code: String?) -> SourceLien? {
+        code.flatMap { c in codesLiens.first { $0.value == c }?.key }
+    }
+
+    private static func sourceEnfant(_ code: String?) -> SourceEnfant? {
+        code.flatMap { c in codesEnfants.first { $0.value == c }?.key }
     }
 
     /// Decode un identifiant de routeur ; hors de 0...62, la ligne entiere est refusee.
@@ -105,14 +129,18 @@ extension ReleveMaillage: Codable {
         while !li.isAtEnd {
             var l = try li.nestedUnkeyedContainer()
             liens.append(LienRadio(a: try Self.identifiant(&l), b: try Self.identifiant(&l),
-                                   qualiteAB: try l.decodeIfPresent(Int.self), qualiteBA: try l.decodeIfPresent(Int.self)))
+                                   qualiteAB: try l.decodeIfPresent(Int.self), qualiteBA: try l.decodeIfPresent(Int.self),
+                                   sourceAB: Self.sourceLien(try l.decodeIfPresent(String.self)),
+                                   sourceBA: Self.sourceLien(try l.decodeIfPresent(String.self))))
         }
         var enfants: [Enfant] = []
         var e = try c.nestedUnkeyedContainer(forKey: .enfants)
         while !e.isAtEnd {
             var l = try e.nestedUnkeyedContainer()
             enfants.append(Enfant(extMac: try l.decode(String.self), parent: try Self.identifiant(&l),
-                                  qualite: try l.decodeIfPresent(Int.self)))
+                                  qualite: try l.decodeIfPresent(Int.self),
+                                  source: Self.sourceEnfant(try l.decodeIfPresent(String.self)),
+                                  echecs: try l.decodeIfPresent(Double.self)))
         }
         var signaux: [SignalSonde] = []
         var s = try c.nestedUnkeyedContainer(forKey: .signaux)
@@ -150,6 +178,10 @@ extension ReleveMaillage: Codable {
             try l.encode(x.b)
             try l.encodeOuNul(x.qualiteAB)
             try l.encodeOuNul(x.qualiteBA)
+            if x.sourceAB != nil || x.sourceBA != nil {
+                try l.encodeOuNul(x.sourceAB.flatMap { Self.codesLiens[$0] })
+                try l.encodeOuNul(x.sourceBA.flatMap { Self.codesLiens[$0] })
+            }
         }
         var e = c.nestedUnkeyedContainer(forKey: .enfants)
         for x in enfants where ids.contains(x.parent) {
@@ -157,6 +189,10 @@ extension ReleveMaillage: Codable {
             try l.encode(x.extMac)
             try l.encode(x.parent)
             try l.encodeOuNul(x.qualite)
+            if x.source != nil || x.echecs != nil {
+                try l.encodeOuNul(x.source.flatMap { Self.codesEnfants[$0] })
+                if let echecs = x.echecs { try l.encode(echecs) }
+            }
         }
         var s = c.nestedUnkeyedContainer(forKey: .signaux)
         for x in signaux where ids.contains(x.routeur) {

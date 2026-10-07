@@ -37,6 +37,47 @@ public struct NoeudSonde: Hashable, Sendable, Identifiable {
     }
 }
 
+/// D'ou viennent les mesures d'un lien de la sonde, pour la fiche (spec de la sonde tout-en-un, section 2.4) : un lien
+/// est dessine pareil quelle que soit sa source ; la fiche dit la source et l'age.
+public struct OrigineLien: Hashable, Sendable {
+    /// Le diagnostic : la Route64 d'un routeur qui repond, ou la table des enfants de son parent.
+    public var diagnostic: Bool
+    /// Une annonce entendue par la sonde : la date de la plus recente des mesures qui en viennent.
+    public var entendu: Date?
+    /// Le parent trouve par la resolution d'adresse, a cette date.
+    public var resolu: Date?
+    /// Le taux d'echec d'envoi de l'enfant, tire de ses compteurs MAC.
+    public var echecs: Double?
+    /// Le parent de la sonde, qu'elle donne elle-meme (`etat`).
+    public var sonde: Bool
+
+    public init(diagnostic: Bool = false, entendu: Date? = nil, resolu: Date? = nil, echecs: Double? = nil,
+                sonde: Bool = false) {
+        self.diagnostic = diagnostic
+        self.entendu = entendu
+        self.resolu = resolu
+        self.echecs = echecs
+        self.sonde = sonde
+    }
+
+    /// D'un lien entre routeurs, ses deux sens reunis ; nil si aucun n'a de source (maillage de demo).
+    init?(_ l: LienRadio) {
+        let sens = [(l.sourceAB, l.dateAB), (l.sourceBA, l.dateBA)]
+        guard sens.contains(where: { $0.0 != nil }) else { return nil }
+        self.init(diagnostic: sens.contains { $0.0 == .diagnostic },
+                  entendu: sens.filter { $0.0 == .ecoute }.compactMap(\.1).max())
+    }
+
+    /// Du lien d'un enfant vers son parent.
+    init(_ e: EnfantMaillage) {
+        switch e.source {
+        case .tableEnfants: self.init(diagnostic: true)
+        case .resolution: self.init(resolu: e.resolu, echecs: e.echecs)
+        case .sonde: self.init(sonde: true)
+        }
+    }
+}
+
 /// Lien de la sonde entre deux noeuds du graphe.
 public struct LienAffiche: Hashable, Sendable {
     public enum Genre: String, Hashable, Sendable {
@@ -51,6 +92,8 @@ public struct LienAffiche: Hashable, Sendable {
     public let genre: Genre
     /// De 0 a 3 ; nil : inconnue (parent muet).
     public let qualite: Int?
+    /// D'ou viennent ses mesures ; nil : inconnu (maillage de demo).
+    public var origine: OrigineLien?
 }
 
 /// Maillage de la sonde rapproche de l'instantane (spec de la sonde, section 4) :
@@ -70,6 +113,12 @@ public struct MaillageAffiche: Hashable, Sendable {
     /// et enfants retenus, reconnus ou non. C'est la cle du choix de piece d'un noeud que Maison ne
     /// place pas (precision 27, spec de la vue par pieces, section 2.3).
     public let extMacs: [String: String]
+    /// Routeurs sans reponse au diagnostic a cette tournee, par identifiant.
+    public let routeursMuets: Set<Int>
+    /// Routeurs que la sonde a entendus, et leur dernier message, par identifiant.
+    public let entendus: [Int: Date]
+    /// La sonde a rendu ses annonces (firmware 1.1.0) : un routeur absent d'`entendus` n'a pas ete entendu.
+    public let annoncesLues: Bool
 
     /// Rapproche le maillage des routeurs de bordure de sa partition et des appareils :
     /// - routeur de bordure : son ExtMac est le `xa` de son annonce ;
@@ -175,11 +224,12 @@ public struct MaillageAffiche: Hashable, Sendable {
 
         var liens = maillage.liens.compactMap { l -> LienAffiche? in
             guard let a = routeurs[l.a], let b = routeurs[l.b] else { return nil }
-            return LienAffiche(de: a.id, vers: b.id, genre: .radio, qualite: l.qualite)
+            return LienAffiche(de: a.id, vers: b.id, genre: .radio, qualite: l.qualite, origine: OrigineLien(l))
         }
         for e in maillage.enfants {
             guard let enfant = enfants[e.rloc16], let parent = routeurs[e.parent] else { continue }
-            liens.append(LienAffiche(de: enfant.id, vers: parent.id, genre: .parent, qualite: e.qualite))
+            liens.append(LienAffiche(de: enfant.id, vers: parent.id, genre: .parent, qualite: e.qualite,
+                                     origine: OrigineLien(e)))
         }
         self.routeurs = routeurs
         self.enfants = enfants
@@ -193,6 +243,16 @@ public struct MaillageAffiche: Hashable, Sendable {
             if let x = e.extMac, let n = enfants[e.rloc16] { connues[n.id] = x.uppercased() }
         }
         self.extMacs = connues
+        routeursMuets = Set(maillage.routeurs.filter(\.muet).map(\.id))
+        entendus = Dictionary(uniqueKeysWithValues: maillage.routeurs.compactMap { r in r.entendu.map { (r.id, $0) } })
+        annoncesLues = maillage.annoncesLues
+    }
+
+    /// Un routeur que la sonde n'a jamais entendu, muet au diagnostic (un routeur Apple hors de portee) : ses liens ne
+    /// viennent que de ses voisins. Faux si la sonde n'a pas rendu ses annonces (on ne sait pas).
+    public func jamaisEntendu(_ id: String) -> Bool {
+        guard annoncesLues, let r = routeurs.first(where: { $0.value.id == id })?.key else { return false }
+        return routeursMuets.contains(r) && entendus[r] == nil
     }
 
     /// Noeud du graphe, routeur ou enfant.

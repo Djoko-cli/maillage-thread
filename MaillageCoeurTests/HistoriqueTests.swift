@@ -31,11 +31,11 @@ struct HistoriqueTests {
     }
 
     /// Une ligne par tournee, en tableaux : routeurs, liens, enfants identifies (pas celui sans
-    /// ExtMac), signaux, parent de la sonde. Relue a l'identique.
+    /// ExtMac) avec leur source, signaux, parent de la sonde. Relue a l'identique.
     @Test func ligneDUnReleve() throws {
         let r = ReleveMaillage(Self.maillage(Self.date("2026-09-30T10:00:00Z")))
         let json = String(decoding: try CodageJSON.encodeur().encode(r), as: UTF8.self)
-        #expect(json == #"{"date":"2026-09-30T10:00:00.000Z","enfants":[["E0000000000000B1",0,3],["E0000000000000B2",1,null]],"liens":[[0,1,3,2]],"parentSonde":0,"partition":"0000000A","routeurs":[[0,"E0000000000000A0"],[1,null]],"signaux":[[0,-60],[1,-75]]}"#)
+        #expect(json == #"{"date":"2026-09-30T10:00:00.000Z","enfants":[["E0000000000000B1",0,3,"s"],["E0000000000000B2",1,null,"r"]],"liens":[[0,1,3,2]],"parentSonde":0,"partition":"0000000A","routeurs":[[0,"E0000000000000A0"],[1,null]],"signaux":[[0,-60],[1,-75]]}"#)
         #expect(try CodageJSON.decodeur().decode(ReleveMaillage.self, from: Data(json.utf8)) == r)
         #expect(r.cle(routeur: 0) == "E0000000000000A0")
         #expect(r.cle(routeur: 1) == "rloc:0400", "sans ExtMac : son RLOC16")
@@ -196,8 +196,8 @@ struct HistoriqueTests {
         #expect(r.cle(routeur: 62) == "rloc:F800")
     }
 
-    /// Tournee de la capture, avec des voisins : 7 routeurs et 3 enfants identifies tiennent en
-    /// moins de 700 octets ; avec 20 enfants (26 octets chacun), en moins de 1 Ko.
+    /// Tournee de la capture, avec des voisins : 7 routeurs, leurs liens avec leurs sources et 3 enfants
+    /// identifies tiennent en moins de 700 octets ; avec 20 enfants (30 octets chacun), en moins de 1 Ko.
     @Test func tailleDUneLigne() async throws {
         let voisins = [VoisinSonde(rloc16: "E400", ext: "E0000000000000E4", rssi: -72, lqi: 3, routeur: true),
                        VoisinSonde(rloc16: "CC00", ext: "E0000000000000CC", rssi: -80, lqi: 3, routeur: true)]
@@ -209,7 +209,10 @@ struct HistoriqueTests {
         let octets = try CodageJSON.encodeur().encode(r).count
         #expect(octets < 700, "\(octets) octets")
         var vingt = r.enfants
-        for n in 0..<17 { vingt.append(ReleveMaillage.Enfant(extMac: String(format: "E0000000000001%02X", n), parent: 24, qualite: 3)) }
+        for n in 0..<17 {
+            vingt.append(ReleveMaillage.Enfant(extMac: String(format: "E0000000000001%02X", n), parent: 24, qualite: 3,
+                                               source: .tableEnfants))
+        }
         let grand = ReleveMaillage(date: r.date, partition: r.partition, routeurs: r.routeurs, liens: r.liens, enfants: vingt,
                                    signaux: r.signaux, parentSonde: r.parentSonde)
         #expect(try CodageJSON.encodeur().encode(grand).count < 1024)
@@ -245,5 +248,41 @@ struct HistoriqueTests {
         #expect(try h.lire(depuis: .distantPast) == [fin, octobre])
         let restants = try FileManager.default.contentsOfDirectory(atPath: d.path).sorted()
         #expect(restants == ["identites-routeurs.json", "journal-2026-09.jsonl", "maillage-2026-10.jsonl"])
+    }
+
+    /// Champs facultatifs de la sonde tout-en-un (spec, section 2.5) : la source de chaque sens d'un lien
+    /// (`d` diagnostic, `e` ecoute), la source d'un enfant (`t` table, `r` resolution, `s` sonde) et le taux
+    /// d'echec que donnent ses compteurs MAC, arrondi a 1/10 000. Pas les dates des mesures. Relue a l'identique.
+    @Test func champsFacultatifs() throws {
+        let t0 = Self.date("2026-10-07T10:00:00Z")
+        var c = ConstructionMaillage(date: t0, partition: "0000000A")
+        c.routeurs(Route64(sequence: 1, routes: [0, 1, 2].map {
+            RouteRouteur(idRouteur: $0, qualiteSortante: 0, qualiteEntrante: 0, cout: 1)
+        }), chef: 0)
+        c.lien(0, 1, sortante: 3, entrante: 2, source: .diagnostic, date: t0)
+        c.ecoute(Route64(sequence: 1, routes: [RouteRouteur(idRouteur: 1, qualiteSortante: 1, qualiteEntrante: 2, cout: 1)]),
+                 routeur: 2, date: t0 - 120)
+        c.enfant(EnfantMaillage(rloc16: 0x0A00, extMac: "E0000000000000C1", qualite: 3, source: .resolution, resolu: t0,
+                                echecs: 0.0071428))
+        c.enfant(EnfantMaillage(rloc16: 0x0A01, extMac: "E0000000000000C2", source: .resolution, resolu: t0))
+        let r = ReleveMaillage(c.maillage())
+        let json = String(decoding: try CodageJSON.encodeur().encode(r), as: UTF8.self)
+        #expect(json == #"{"date":"2026-10-07T10:00:00.000Z","enfants":[["E0000000000000C1",2,3,"r",0.0071],["E0000000000000C2",2,null,"r"]],"liens":[[0,1,3,2,"d","d"],[1,2,2,1,"e","e"]],"partition":"0000000A","routeurs":[[0,null],[1,null],[2,null]],"signaux":[]}"#)
+        #expect(try CodageJSON.decodeur().decode(ReleveMaillage.self, from: Data(json.utf8)) == r)
+        #expect(r.liens.allSatisfy { $0.dateAB == nil && $0.dateBA == nil })
+        #expect(r.enfants.first?.echecs == 0.0071 && r.enfants.first?.source == .resolution)
+    }
+
+    /// Lecture de l'ancien historique (avant la sonde tout-en-un) : les lignes sans les champs facultatifs se lisent
+    /// comme avant, sources et taux inconnus ; une source inconnue (version plus recente) aussi.
+    @Test func ancienHistorique() throws {
+        let ancienne = #"{"date":"2026-09-30T10:00:00.000Z","enfants":[["E0000000000000B1",0,3],["E0000000000000B2",1,null]],"liens":[[0,1,3,2]],"parentSonde":0,"partition":"0000000A","routeurs":[[0,"E0000000000000A0"],[1,null]],"signaux":[[0,-60],[1,-75]]}"#
+        let r = try CodageJSON.decodeur().decode(ReleveMaillage.self, from: Data(ancienne.utf8))
+        #expect(r.liens == [LienRadio(a: 0, b: 1, qualiteAB: 3, qualiteBA: 2)])
+        #expect(r.enfants.map(\.source) == [nil, nil] && r.enfants.map(\.echecs) == [nil, nil])
+        #expect(r.enfants.map(\.qualite) == [3, nil] && r.parentSonde == 0)
+        let future = #"{"date":"2026-09-30T10:00:00.000Z","enfants":[["E0000000000000B1",0,3,"x",0.5]],"liens":[[0,1,3,2,"z",null]],"partition":"0000000A","routeurs":[],"signaux":[]}"#
+        let f = try CodageJSON.decodeur().decode(ReleveMaillage.self, from: Data(future.utf8))
+        #expect(f.liens.first?.sourceAB == nil && f.enfants.first?.source == nil && f.enfants.first?.echecs == 0.5)
     }
 }
