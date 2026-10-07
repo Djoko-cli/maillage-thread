@@ -248,7 +248,11 @@ public enum Tournee {
         mem.muetInterroge = mem.muetInterroge.filter { liste.contains($0.key) }
         mem.piles = mem.piles.filter { liste.contains($0.key) }
         mem.repondants = mem.repondants.filter { liste.contains($0) }
+        // Un appareil dont la resolution est oubliee est de nouveau demande a cette tournee (comme un appareil nouveau),
+        // sans attendre la resolution complete suivante : sinon il resterait sans parent jusque-la.
+        let orphelins = mem.resolutions.filter { !liste.contains($0.value.parent) }.keys
         mem.resolutions = mem.resolutions.filter { liste.contains($0.value.parent) }
+        mem.demandes.subtract(orphelins)
 
         // 2. Chaque routeur, en parallele, sauf un muet deja interroge dans l'heure.
         let aInterroger = route64.routeurs.filter { id in

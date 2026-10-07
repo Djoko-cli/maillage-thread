@@ -546,6 +546,24 @@ struct TourneeTests {
         #expect(await sonde.registre.requetes.dropFirst(avant3).filter { $0.hasSuffix("|resoudre") }.isEmpty)
     }
 
+    /// Le parent d'un appareil resolu sort de la liste des routeurs : sa resolution est oubliee, et l'appareil est demande
+    /// de nouveau aussitot, sans attendre la resolution complete suivante (30 min), comme un appareil nouveau. Sinon la
+    /// tournee le compterait sans parent, et le suivi emettrait un faux « n'a plus de parent ».
+    @Test func appareilResoluDeNouveauQuandSonParentSortDeLaListe() async throws {
+        let sonde = try Self.sondeResolue()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: Self.appareils))
+        #expect(mem1.resolutions["E00000000000000A"]?.parent == 43 && mem1.demandes.contains("E00000000000000A"))
+        let sans43 = try Self.sondeResolue(reponsesEnPlus: ["6000|5,6": Self.route64([1, 20, 24, 45, 51, 57])])
+        let (_, mem2) = try #require(try await Tournee.complete(sans43, memoire: mem1, maintenant: Self.t0 + 300,
+                                                               appareils: Self.appareils))
+        let demandees = await sans43.registre.requetes.filter { $0.hasSuffix("|resoudre") }
+        #expect(demandees.sorted() == [0x07, 0x0A, 0x0B, 0x50].map { "\(Self.omr($0))|resoudre" }.sorted(),
+                "les appareils d'en dessous, demandes aussitot ; les autres gardent leur resolution")
+        #expect(mem2.derniereResolution == Self.t0, "pas une resolution complete")
+        #expect(mem2.demandes.contains("E00000000000000A") && mem2.demandes.contains("E00000000000000B"))
+    }
+
     /// Chef muet : Route64 d'un routeur qui a repondu a la tournee precedente.
     @Test func chefMuet() async throws {
         let sonde = try SondeRejouee.capture(chef: 45, reponsesEnPlus: ["5000|5,6": try CaptureSonde.tlv(104)])
