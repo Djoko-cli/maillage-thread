@@ -178,7 +178,8 @@ Issue decoder(const uint8_t *psdu, size_t n, FournisseurCle cle, void *contexte,
 class ClesMle {
  public:
   // Derive les cles de `courante` et de `courante + 1` ; l'appelant efface
-  // ensuite `cleReseau`. false : echec de la plateforme (rien n'est garde).
+  // ensuite `cleReseau`. false : echec de la plateforme ; rien de la nouvelle
+  // derivation n'est garde, et les cles d'avant restent.
   bool preparer(uint32_t courante, const uint8_t cleReseau[kCle]);
   // Cle gardee de cette sequence.
   bool trouver(uint32_t sequence, uint8_t cle[kCle]) const;
