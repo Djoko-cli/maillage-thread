@@ -1,6 +1,6 @@
-# Sonde tout-en-un : écoute des annonces MLE, résolution des parents, qualité des enfants
+# Sonde tout-en-un : écoute des annonces MLE, résolution des parents, compteurs des enfants
 
-Spec du 07/10/2026. Djoko a validé la conception le même jour, partie par partie.
+Spec du 07/10/2026. Djoko a validé la conception le même jour, partie par partie. Révisée le même jour après la relecture finale : les compteurs MAC des enfants ne donnent plus de qualité (section 2.3).
 
 ## 0. Contexte et décisions
 
@@ -13,14 +13,15 @@ Aujourd'hui, Maillage Thread connaît le maillage par le diagnostic Thread (`DIA
 **L'essai du 07/10**, sur une seconde carte C6 avec un firmware jetable (branche `essai-ecoute`, jamais fusionnée), a établi :
 - **L'écoute.** Une sonde en FED reçoit les annonces MLE de ses voisins à un saut, sans mode promiscuité : `otLinkSetPcapCallback`, présent dans la bibliothèque OpenThread précompilée d'Arduino, donne les trames brutes. La carte dérive la clé MLE de la clé réseau (`otThreadGetNetworkKey`, sans référence de clé dans cette bibliothèque) et déchiffre (AES-CCM, MIC de 4 octets) : des centaines de messages déchiffrés, aucun échec. Les annonces des routeurs Apple portent leur Route64 : leurs liens réels, dans les deux sens. Deux points d'écoute ont suffi pour entendre tous les routeurs Apple d'une maison à deux niveaux.
 - **La résolution d'adresse.** Une requête vers l'adresse Thread d'un appareil fait résoudre cette adresse par OpenThread. Le parent répond à la place de son enfant endormi, et le cache d'adresses (`otThreadGetNextCacheEntry`) donne le RLOC16 trouvé : 20 appareils sur 26, tous muets au diagnostic, ont obtenu leur parent. Les routeurs Apple répondent avec leur propre RLOC16 ; les routeurs tiers, avec celui de l'enfant.
-- **Les compteurs MAC.** Un enfant qui répond au diagnostic rend sa TLV 9 (compteurs MAC). Le rapport entre ses échecs d'envoi et ses envois, entre deux relevés, mesure son lien avec son parent vu de son côté. La TLV 4 (Connectivity) n'est pas rendue par un appareil endormi.
+- **Les compteurs MAC.** Un enfant qui répond au diagnostic rend sa TLV 9 (compteurs MAC). L'essai a établi qu'elle est rendue, pas ce qu'elle mesure : la relecture finale a montré dans les sources d'OpenThread que son `ifOutErrors` compte les échecs d'accès au canal, pas les accusés manquants (section 2.3). La TLV 4 (Connectivity) n'est pas rendue par un appareil endormi.
 - **Le diagnostic n'est accepté que sur les adresses internes du réseau** (RLOC, ML-EID), pas sur les adresses publiques (OMR).
 
 **Décisions de Djoko (07/10) :**
 
 | Sujet | Décision |
 |---|---|
-| Périmètre | écoute, résolution, noms des routeurs Apple **et** qualité des enfants par leurs compteurs MAC |
+| Périmètre | écoute, résolution, noms des routeurs Apple **et** compteurs MAC des enfants (d'abord pour leur qualité ; à titre d'information seulement depuis la décision qui suit) |
+| Compteurs MAC (après la relecture finale) | **ils ne donnent plus de qualité** : les enfants des routeurs Apple restent en qualité inconnue ; la fiche montre seulement « accès au canal refusés : x % », à titre d'information (section 2.3) |
 | Balayage des enfants | **remplacé** par la résolution d'adresse |
 | Qui décode les annonces | **la sonde déchiffre, l'app décode** la Route64 avec son décodeur existant |
 | Affichage | **un lien est un lien** : même trait, même couleur de qualité quelle que soit la source ; la fiche dit la source et l'âge |
@@ -65,25 +66,29 @@ FED non éligible routeur, clé d'accès réseau H1, LED, appairage Matter, cade
 - Le parent est le RLOC16 rendu, sans ses 10 bits de poids faible. L'enfant lui est rattaché, source « résolution », daté. Le ML-EID est gardé en mémoire (pas dans l'historique).
 - Un appareil non résolu reste en « rattachement supposé », comme aujourd'hui.
 
-### 2.3 Qualité des enfants de routeurs Apple
+### 2.3 Compteurs MAC des enfants de routeurs Apple, à titre d'information
 
 - À chaque résolution, pour chaque enfant d'un routeur Apple qui a un ML-EID : `diag <ML-EID> 9`.
-- L'app garde le dernier relevé de chaque enfant, par ExtMac, en mémoire, et calcule le taux d'échec : Δ `out_errors` / Δ `out_ucast` entre deux relevés.
-  - moins de 1 % : bonne (3) ; de 1 à 5 % : moyenne (2) ; au-delà : faible (1) ;
-  - moins de 50 trames envoyées entre les deux relevés : qualité inconnue ;
-  - un compteur qui baisse (l'appareil a redémarré) : le relevé repart de zéro.
-- Un enfant qui ne répond pas garde une qualité inconnue. Sous un routeur tiers, la qualité vient de sa table des enfants, comme aujourd'hui.
+- L'app garde le dernier relevé de chaque enfant, par appareil, en mémoire, et calcule entre deux relevés le taux Δ `ifOutErrors` / Δ `ifOutUcastPkts` :
+  - moins de 50 trames envoyées entre les deux relevés : pas de valeur ;
+  - un compteur qui baisse (l'appareil a redémarré) : pas de valeur, et le relevé repart de zéro.
+- **Ce que ce taux mesure.** Dans OpenThread (`network_diagnostic.cpp`), `ifOutErrors` vaut `mTxErrCca` : les échecs d'accès au canal (CCA), comptés à chaque tentative d'envoi ; `ifOutUcastPkts` compte les trames unicast, une fois chacune. Les accusés manquants, les reprises et les trames acquittées ne figurent pas dans la TLV 9. Le taux dit donc l'occupation du canal autour de l'enfant (Wi-Fi voisin, trafic), pas la qualité de son lien avec son parent : un enfant qui perd ses accusés dans un canal calme garde un taux proche de 0. La première version de cette section en tirait une qualité (moins de 1 % : 3 ; de 1 à 5 % : 2 ; au-delà : 1) ; la relecture finale l'a relevé.
+- **Décision de Djoko (07/10) :**
+  - le taux ne donne plus de qualité : l'enfant d'un routeur Apple reste en qualité inconnue (gris) ;
+  - la fiche le montre seulement, à titre d'information, sur la ligne du parent de l'enfant : « accès au canal refusés : 0,7 % » (en anglais, « channel access refused: 0.7% ») ;
+  - l'historique garde le taux dans son champ, au même encodage (la 1.0.0 le lit), sans qualité.
+- Un enfant qui ne répond pas : pas de valeur. Sous un routeur tiers, la qualité vient de sa table des enfants, comme aujourd'hui. Une vraie mesure du lien reste à chercher (par exemple la TLV 34 de Thread 1.4, compteurs MLE : changements de parent, tentatives de rattachement).
 
 ### 2.4 Affichage
 
 - **Vue par pièces :** même trait et même couleur de qualité pour tous les liens. Un lien trop vieux pâlit, comme aujourd'hui. Légende inchangée.
-- **Fiche du nœud** (`FicheNoeud.swift`) : pour chaque lien, sa source et son âge (« entendu il y a 3 min », « diagnostic », « compteurs de l'enfant : 0,7 % d'échecs »). Un routeur jamais entendu par la sonde : « jamais entendu par la sonde ; liens vus seulement par ses voisins ».
+- **Fiche du nœud** (`FicheNoeud.swift`) : pour chaque lien, sa source et son âge (« entendu il y a 3 min », « diagnostic », « accès au canal refusés : 0,7 % »). Un routeur jamais entendu par la sonde : « jamais entendu par la sonde ; liens vus seulement par ses voisins ».
 - **Réglages › Sonde :** couverture, « routeurs entendus : n sur m » (m : les routeurs de la partition).
 - Textes en français et en anglais, par le catalogue.
 
 ### 2.5 Historique
 
-`maillage-AAAA-MM.jsonl` gagne des champs facultatifs : la source de chaque lien et la qualité calculée des enfants. Les fichiers existants se lisent comme avant.
+`maillage-AAAA-MM.jsonl` gagne des champs facultatifs : la source de chaque lien et de chaque enfant, et le taux d'accès au canal refusés des enfants, à titre d'information (il ne donne pas de qualité, section 2.3). Les fichiers existants se lisent comme avant.
 
 ### 2.6 Ce qui ne change pas
 
@@ -98,13 +103,13 @@ Le mode démo, la partition Aqara (montrée comme aujourd'hui ; ses annonces ent
 ## 4. Tests
 
 - **Firmware (tests hôte, `sonde/test/lancer.sh`) :** décodage 802.15.4 (2006 et 2015, IE d'en-tête, PAN), IPHC (sources et destinations courantes), UDP compressé ou non, déchiffrement AES-CCM et refus d'un MIC faux, dérivation de la clé MLE, lecture des TLV. Vecteurs produits par un script avec une clé inventée.
-- **App (cœur) :** fusion des liens (deux sources, âges, un seul côté connu, partition étrangère écartée), parent tiré du RLOC16 (réponse Apple et réponse tierce), `introuvable`, taux d'échec (deux relevés, seuil de 50 trames, compteur qui baisse, enfant muet), lecture de l'ancien historique, couverture.
+- **App (cœur) :** fusion des liens (deux sources, âges, un seul côté connu, partition étrangère écartée), parent tiré du RLOC16 (réponse Apple et réponse tierce), `introuvable`, taux d'accès au canal refusés (deux relevés, seuil de 50 trames, compteur qui baisse, enfant muet ; aucune qualité), lecture de l'ancien historique, couverture.
 - Les suites existantes restent vertes, en français et en anglais.
 
 ## 5. Au banc, avec Djoko
 
 1. Flash de la sonde en 1.1.0, sans effacement, sur le port que Djoko désigne, MAC vérifiée.
-2. La sonde à sa place habituelle ; après une tournée et une résolution, la vue de l'app comparée aux relevés de l'essai : liens entre routeurs Apple, parents résolus, qualité d'un enfant qui répond.
+2. La sonde à sa place habituelle ; après une tournée et une résolution, la vue de l'app comparée aux relevés de l'essai : liens entre routeurs Apple, parents résolus, taux d'accès au canal refusés d'un enfant qui répond (une information, pas une qualité).
 3. Couverture affichée vérifiée, et le déplacement de la sonde qui la fait varier.
 
 ## 6. Fin de l'essai
@@ -120,6 +125,6 @@ Version 1.1.0 de Maillage Thread, notes de version en anglais puis en français.
 ## 8. Limites
 
 - L'écoute n'entend que les routeurs à portée radio de la sonde ; un seul routeur entendu donne tous ses liens, et un lien apparaît dès que l'un de ses deux bouts est entendu. Une sonde mal placée n'apporte jamais moins qu'avant ce chantier : le diagnostic, la résolution et les compteurs ne dépendent pas de sa position.
-- La qualité vue par un parent Apple reste inconnue ; seule celle de l'enfant, s'il répond au diagnostic, est mesurée.
+- La qualité du lien entre un enfant et son parent Apple reste inconnue : le parent ne la donne pas, et les compteurs MAC de l'enfant ne la mesurent pas (section 2.3).
 - La résolution ne traverse pas les partitions : les enfants de la partition Aqara restent inconnus.
 - Le maillage est une photo datée : les liens et les parents changent, l'âge de chaque information est affiché.

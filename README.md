@@ -467,10 +467,10 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   its identity (ExtMac, addresses) at most once every half hour, sleepy ones
   included (a Matter device's ExtMac is its host name).
 - **Apple's border routers never answer diagnostics.** Since firmware 1.1.0,
-  the probe makes up for it in three ways, below: listening, parent
-  resolution and the children's MAC counters. They replace the scan of
-  possible child RLOC16s, which missed the children that don't answer
-  diagnostics.
+  the probe makes up for it in two ways, below: listening and parent
+  resolution. They replace the scan of possible child RLOC16s, which missed
+  the children that don't answer diagnostics. The children's MAC counters
+  are only shown for information.
 - **Listening.** The probe hears the MLE advertisements of the routers within
   its radio range and decrypts them on the board: it derives the MLE key from
   the network key, which never leaves the board and is wiped right after.
@@ -493,24 +493,28 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   routers with the child's. The child is attached to its parent, dated
   (under a router that answers diagnostics, its child table prevails); a
   device that isn't resolved stays dotted ("assumed attachment"), as before.
-- **Quality of the children of Apple routers.** At each resolution, the app
-  asks each child of a silent router (Apple's) for its MAC counters (TLV 9,
-  at its ML-EID, which the address cache gives: diagnostics are only
-  accepted on the network's internal addresses). Between two readings,
-  failed sends over unicast sends give the quality: under 1 %, 3; from 1 to
-  5 %, 2; above, 1. Under 50 frames sent between the two readings, the
-  quality is unknown; a counter that goes down (the device restarted) starts
-  the readings over. A child that doesn't answer keeps an unknown quality;
-  under a third-party router, the quality comes from its child table, as
-  before.
+- **MAC counters of the children of Apple routers, for information.** At
+  each resolution, the app asks each child of a silent router (Apple's) for
+  its MAC counters (TLV 9, at its ML-EID, which the address cache gives:
+  diagnostics are only accepted on the network's internal addresses). In
+  OpenThread, their `ifOutErrors` counts channel access failures (CCA, at
+  each attempt), not missed acknowledgements: over the unicast frames sent,
+  between two readings, they tell how busy the channel is around the child,
+  not the quality of its link with its parent. So they give no quality: a
+  child of an Apple router keeps an unknown quality (grey), and its card
+  only shows "channel access refused: 0.7%" on its parent's line. Under 50
+  frames sent between the two readings, there is no value; a counter that
+  goes down (the device restarted) starts the readings over. Under a
+  third-party router, the quality comes from its child table, as before.
 - **What listening brings, and its limits.** The probe only hears the
   routers within its radio range; a single router heard gives all its
   links, and a link shows as soon as one of its two ends is heard. A badly
   placed probe never brings less than before: diagnostics, resolution and
   counters don't depend on where it sits. Settings › Probe shows the
   coverage, "routers heard: 5 of 7" (out of the routers of its partition);
-  moving the probe changes it. The quality seen by an Apple parent stays
-  unknown: only the child's, if it answers diagnostics, is measured.
+  moving the probe changes it. The quality of the link between a child and
+  its Apple parent stays unknown: the parent doesn't give it, and the
+  child's MAC counters don't measure it.
   Resolution doesn't cross partitions: the children of another partition
   stay unknown. The mesh is a dated photo: links and parents change, and the
   card gives the age of each piece of information. With a firmware older
@@ -541,7 +545,7 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   mesh leader wears the crown. The card gives the parent and the quality, or
   a router's number of neighbors and children, and the source and age of
   each link ("diagnostics", "heard 3 minutes ago", "resolved 12 minutes
-  ago", "child's counters: 0.7% failed"); for a router the probe has never
+  ago", "channel access refused: 0.7%"); for a router the probe has never
   heard, "never heard by the probe; links seen only by its neighbors". If
   the probe stops answering, the last mesh is marked old 6 minutes after it
   was received (never during a tour); after 15 minutes the view goes back to
@@ -565,8 +569,9 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   adds a line to `maillage-AAAA-MM.jsonl` in the app folder (kept 90 days,
   about 8 MB a month for 7 routers and 20 children, up to 12 MB with the
   links heard and their sources): the quality of every link and, since
-  1.1.0, its source (diagnostics or listening) and the quality the counters
-  give the children (older files read as before), and the signal of every
+  1.1.0, its source (diagnostics or listening) and the children's channel
+  access refused rate, for information (it gives no quality; older files
+  read as before), and the signal of every
   router the probe hears (`voisins`) and of its parent (`etat`). A node's
   card draws its curves over 24 h, 7 d or 30 d: the quality of its links,
   parent changes marked, and for a router the "Signal seen by the probe",

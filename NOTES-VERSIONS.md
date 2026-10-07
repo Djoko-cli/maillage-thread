@@ -17,10 +17,13 @@ notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour
 - Parent resolution replaces the scan of silent routers: every 30 minutes, and when a device appears, the probe
   resolves the Thread address of each Matter or HomeKit device, and the answer gives its parent, under an Apple
   router too.
-- The children of Apple routers get a quality, from their MAC counters (failed sends between two readings).
-- The node card gives the source and age of each link ("heard 3 minutes ago", "diagnostics", "child's counters:
-  0.7% failed"); Settings, Probe, gives the coverage of the listening ("routers heard: 5 of 7").
-- The history keeps the source of each link and the quality computed for the children; older files read as before.
+- The children of Apple routers keep an unknown quality. Their MAC counters count channel access failures, not
+  missed acknowledgements: they don't measure the link with the parent, and are only shown for information.
+- The node card gives the source and age of each link ("heard 3 minutes ago", "diagnostics", "resolved 12 minutes
+  ago", and for a child of an Apple router "channel access refused: 0.7%"); Settings, Probe, gives the coverage of
+  the listening ("routers heard: 5 of 7").
+- The history keeps the source of each link and the children's channel access refused rate, for information; older
+  files read as before.
 - With a firmware older than 1.1.0, the app keeps to diagnostics.
 
 **Français**
@@ -32,13 +35,14 @@ notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour
 - La résolution des parents remplace le balayage des routeurs muets : toutes les 30 minutes, et quand un appareil
   paraît, la sonde résout l'adresse Thread de chaque appareil Matter ou HomeKit, et la réponse donne son parent, sous
   un routeur d'Apple aussi.
-- Les enfants des routeurs d'Apple ont une qualité, d'après leurs compteurs MAC (les échecs d'envoi entre deux
-  relevés).
-- La fiche d'un nœud donne la source et l'âge de chaque lien (« entendu il y a 3 minutes », « diagnostic »,
-  « compteurs de l'enfant : 0,7 % d'échecs ») ; Réglages, Sonde, donne la couverture de l'écoute (« routeurs
-  entendus : 5 sur 7 »).
-- L'historique garde la source de chaque lien et la qualité calculée des enfants ; les fichiers d'avant se lisent
-  comme avant.
+- Les enfants des routeurs d'Apple restent en qualité inconnue. Leurs compteurs MAC comptent les échecs d'accès au
+  canal, pas les accusés manquants : ils ne mesurent pas le lien avec le parent, et ne sont montrés qu'à titre
+  d'information.
+- La fiche d'un nœud donne la source et l'âge de chaque lien (« entendu il y a 3 minutes », « diagnostic », « résolu
+  il y a 12 minutes », et pour un enfant d'un routeur d'Apple « accès au canal refusés : 0,7 % ») ; Réglages, Sonde,
+  donne la couverture de l'écoute (« routeurs entendus : 5 sur 7 »).
+- L'historique garde la source de chaque lien et le taux d'accès au canal refusés des enfants, à titre
+  d'information ; les fichiers d'avant se lisent comme avant.
 - Avec un firmware antérieur à 1.1.0, l'app s'en tient au diagnostic.
 
 ## 1.0.0

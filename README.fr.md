@@ -489,10 +489,10 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   routeur son identité (ExtMac, adresses), au plus une fois par demi-heure,
   endormis compris (l'ExtMac d'un appareil Matter est son nom d'hôte).
 - **Les routeurs de bordure d'Apple ne répondent jamais au diagnostic.**
-  Depuis le firmware 1.1.0, la sonde y supplée de trois façons, ci-dessous :
-  l'écoute, la résolution des parents et les compteurs MAC des enfants. Elles
-  remplacent le balayage des RLOC16 d'enfant possibles, qui manquait les
-  enfants muets au diagnostic.
+  Depuis le firmware 1.1.0, la sonde y supplée de deux façons, ci-dessous :
+  l'écoute et la résolution des parents. Elles remplacent le balayage des
+  RLOC16 d'enfant possibles, qui manquait les enfants muets au diagnostic.
+  Les compteurs MAC des enfants ne sont montrés qu'à titre d'information.
 - **L'écoute.** La sonde entend les annonces MLE des routeurs à portée de sa
   radio et les déchiffre sur la carte : elle tire la clé MLE de la clé
   réseau, qui ne quitte jamais la carte et s'efface aussitôt. Chaque annonce
@@ -517,16 +517,21 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   routeur qui répond au diagnostic, sa table des enfants l'emporte) ; un
   appareil non résolu reste en pointillés (« rattachement supposé »), comme
   avant.
-- **La qualité des enfants des routeurs Apple.** À chaque résolution, l'app
-  demande à chaque enfant d'un routeur muet (ceux d'Apple) ses compteurs MAC
-  (TLV 9, à son ML-EID, que donne le cache d'adresses : le diagnostic n'est
-  accepté que sur les adresses internes du réseau). Entre deux relevés, les
-  échecs d'envoi rapportés aux envois donnent la qualité : moins de 1 %, 3 ;
-  de 1 à 5 %, 2 ; au-delà, 1. Sous 50 trames envoyées entre les deux
-  relevés, la qualité est inconnue ; un compteur qui baisse (l'appareil a
-  redémarré) fait repartir les relevés. Un enfant qui ne répond pas garde une
-  qualité inconnue ; sous un routeur tiers, la qualité vient de sa table des
-  enfants, comme avant.
+- **Les compteurs MAC des enfants des routeurs Apple, à titre
+  d'information.** À chaque résolution, l'app demande à chaque enfant d'un
+  routeur muet (ceux d'Apple) ses compteurs MAC (TLV 9, à son ML-EID, que
+  donne le cache d'adresses : le diagnostic n'est accepté que sur les
+  adresses internes du réseau). Dans OpenThread, leur `ifOutErrors` compte
+  les échecs d'accès au canal (CCA, à chaque tentative), pas les accusés
+  manquants : rapportés aux trames unicast envoyées, entre deux relevés, ils
+  disent l'occupation du canal autour de l'enfant, pas la qualité de son
+  lien avec son parent. Ils ne donnent donc aucune qualité : un enfant d'un
+  routeur Apple reste en qualité inconnue (gris), et sa fiche montre
+  seulement « accès au canal refusés : 0,7 % » sur la ligne de son parent.
+  Sous 50 trames envoyées entre les deux relevés, pas de valeur ; un
+  compteur qui baisse (l'appareil a redémarré) fait repartir les relevés.
+  Sous un routeur tiers, la qualité vient de sa table des enfants, comme
+  avant.
 - **Ce que l'écoute apporte, et ses limites.** La sonde n'entend que les
   routeurs à portée de sa radio ; un seul routeur entendu donne tous ses
   liens, et un lien paraît dès que l'un de ses deux bouts est entendu. Une
@@ -534,9 +539,10 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   résolution et les compteurs ne dépendent pas de sa position. Réglages ›
   Sonde montre la couverture, « routeurs entendus : 5 sur 7 » (sur les
   routeurs de sa partition) ; déplacer la sonde la fait varier. La qualité
-  vue par un parent Apple reste inconnue : seule celle de l'enfant, s'il
-  répond au diagnostic, est mesurée. La résolution ne traverse pas les
-  partitions : les enfants d'une autre partition restent inconnus. Le
+  du lien entre un enfant et son parent Apple reste inconnue : le parent ne
+  la donne pas, et les compteurs MAC de l'enfant ne la mesurent pas.
+  La résolution ne traverse pas les partitions : les enfants d'une autre
+  partition restent inconnus. Le
   maillage est une photo datée : liens et parents changent, et la fiche
   donne l'âge de chaque information. Avec un firmware antérieur à 1.1.0, la
   tournée s'en tient au diagnostic.
@@ -567,7 +573,7 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   porte la couronne. La fiche donne le parent et la qualité, ou le nombre de
   voisins et d'enfants d'un routeur, et la source et l'âge de chaque lien
   (« diagnostic », « entendu il y a 3 minutes », « résolu il y a 12
-  minutes », « compteurs de l'enfant : 0,7 % d'échecs ») ; pour un routeur
+  minutes », « accès au canal refusés : 0,7 % ») ; pour un routeur
   que la sonde n'a jamais entendu, « jamais entendu par la sonde ; liens vus
   seulement par ses voisins ». Si la sonde ne répond plus, le dernier
   maillage est marqué ancien 6 minutes après sa réception (jamais pendant
@@ -594,8 +600,9 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   de l'app (gardé 90 jours, environ 8 Mo par mois pour 7 routeurs et 20
   enfants, jusqu'à 12 Mo avec les liens entendus et leurs sources) : la
   qualité de chaque lien et, depuis la 1.1.0, sa source (diagnostic ou
-  écoute) et la qualité que les compteurs donnent aux enfants (les fichiers
-  d'avant se lisent comme avant), et le signal de chaque routeur que la sonde
+  écoute) et le taux d'accès au canal refusés des enfants, à titre
+  d'information (il ne donne aucune qualité ; les fichiers d'avant se lisent
+  comme avant), et le signal de chaque routeur que la sonde
   entend (`voisins`) et de son parent (`etat`). La fiche d'un nœud en tire
   ses courbes sur 24 h, 7 j ou 30 j : la qualité de ses liens, changements
   de parent marqués, et pour un routeur le « Signal vu par la sonde », où les
