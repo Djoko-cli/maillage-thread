@@ -318,4 +318,148 @@ struct MaillageTests {
         c.reseau(d)
         #expect(c.maillage().routeurs.filter(\.bbrPrincipal).map(\.id) == [45])
     }
+
+    // MARK: Sonde tout-en-un (spec du 07/10, sections 2.1 a 2.3)
+
+    static let debut = Date(timeIntervalSince1970: 1_790_000_000)
+
+    /// Route64 d'une annonce entendue : pour chaque voisin, les qualites sortante et entrante (valeurs inventees).
+    static func route64(_ voisins: (id: Int, sortante: Int, entrante: Int)...) -> Route64 {
+        Route64(sequence: 1, routes: voisins.map {
+            RouteRouteur(idRouteur: $0.id, qualiteSortante: $0.sortante, qualiteEntrante: $0.entrante, cout: 1)
+        })
+    }
+
+    /// Construction aux routeurs 1, 2, 3 et 5 (le chef : 1).
+    static func quatreRouteurs() -> ConstructionMaillage {
+        var c = ConstructionMaillage(date: Self.debut, partition: "1234ABCD")
+        c.routeurs(Self.route64((1, 0, 0), (2, 0, 0), (3, 0, 0), (5, 0, 0)), chef: 1)
+        return c
+    }
+
+    /// Fusion du diagnostic et de l'ecoute : chaque sens prend la mesure la plus recente. Le diagnostic est date du
+    /// debut de la tournee, l'ecoute de l'age de l'annonce : a date egale, le diagnostic l'emporte. Un lien connu
+    /// d'un seul cote (la Route64 d'une annonce) a ses deux sens.
+    @Test func fusionDiagnosticEtEcoute() throws {
+        var c = Self.quatreRouteurs()
+        // 2 repond au diagnostic : 2 -> 3 en 3, 3 -> 2 en 2.
+        c.reponse(try Self.reponseVoisins((id: 3, sortante: 3, entrante: 2)), routeur: 2)
+        // 3 entendu il y a 2 min : 3 -> 2 en 1, 2 -> 3 en 1 ; et 3 -> 5 en 2, 5 -> 3 en 3 (5 ne repond pas).
+        c.ecoute(Self.route64((2, 1, 1), (3, 0, 0), (5, 2, 3)), routeur: 3, date: Self.debut - 120)
+        // 1 entendu a l'instant (age 0) : 1 -> 2 en 2, 2 -> 1 en 1 ; 2 repond aussi pour ce lien plus bas.
+        c.ecoute(Self.route64((2, 2, 1)), routeur: 1, date: Self.debut)
+        c.reponse(try Self.reponseVoisins((id: 1, sortante: 3, entrante: 3), (id: 3, sortante: 3, entrante: 2)), routeur: 2)
+        let m = c.maillage()
+        let l23 = try #require(m.liens.first { $0.a == 2 && $0.b == 3 })
+        #expect(l23.qualiteAB == 3 && l23.qualiteBA == 2, "le diagnostic, plus recent, dans les deux sens")
+        #expect(l23.sourceAB == .diagnostic && l23.sourceBA == .diagnostic)
+        #expect(l23.dateAB == Self.debut && l23.dateBA == Self.debut)
+        let l35 = try #require(m.liens.first { $0.a == 3 && $0.b == 5 })
+        #expect(l35.qualiteAB == 2 && l35.qualiteBA == 3, "connu de 3 seul : les deux sens, de l'annonce")
+        #expect(l35.sourceAB == .ecoute && l35.sourceBA == .ecoute && l35.dateAB == Self.debut - 120)
+        let l12 = try #require(m.liens.first { $0.a == 1 && $0.b == 2 })
+        #expect(l12.qualiteAB == 3 && l12.qualiteBA == 3 && l12.sourceAB == .diagnostic, "a date egale, le diagnostic")
+        #expect(m.routeur(3)?.entendu == Self.debut - 120 && m.routeur(1)?.entendu == Self.debut)
+        #expect(m.routeur(2)?.entendu == nil && m.routeur(5)?.entendu == nil)
+        #expect(l35.sansDates.dateAB == nil && l35.sansDates.sourceAB == .ecoute, "l'historique garde la source, pas la date")
+    }
+
+    /// Deux annonces pour la meme paire : chaque sens prend la plus recente ; une annonce plus ancienne arrivee
+    /// ensuite ne change rien. Une entree sans qualite (pas voisins) ne remplace rien.
+    @Test func ecouteLaPlusRecente() throws {
+        var c = Self.quatreRouteurs()
+        c.ecoute(Self.route64((5, 3, 2)), routeur: 3, date: Self.debut - 60)
+        c.ecoute(Self.route64((3, 1, 1)), routeur: 5, date: Self.debut - 30)
+        c.ecoute(Self.route64((5, 2, 2)), routeur: 3, date: Self.debut - 600)
+        c.ecoute(Self.route64((5, 0, 0)), routeur: 2, date: Self.debut)
+        let m = c.maillage()
+        #expect(m.liens.count == 1)
+        let l = try #require(m.liens.first)
+        #expect((l.a, l.b) == (3, 5) && l.qualiteAB == 1 && l.qualiteBA == 1, "celle de 5, il y a 30 s")
+        #expect(l.dateAB == Self.debut - 30 && l.dateBA == Self.debut - 30)
+        #expect(m.routeur(3)?.entendu == Self.debut - 60, "l'annonce la plus recente de 3")
+        #expect(m.routeur(2)?.entendu == Self.debut, "entendu, meme sans lien")
+    }
+
+    /// L'ecoute ne cree ni routeur ni lien hors de la liste des routeurs : une annonce d'un routeur absent est
+    /// ecartee, un voisin absent aussi. Une annonce sans Route64 rend le routeur entendu, sans lien.
+    @Test func ecouteDansLaListeSeulement() throws {
+        var c = Self.quatreRouteurs()
+        c.ecoute(Self.route64((1, 3, 3)), routeur: 9, date: Self.debut)
+        c.ecoute(Self.route64((9, 3, 3), (1, 2, 2)), routeur: 2, date: Self.debut)
+        c.ecoute(nil, routeur: 5, date: Self.debut - 5)
+        let m = c.maillage()
+        #expect(m.routeurs.map(\.id) == [1, 2, 3, 5])
+        #expect(m.liens.map { [$0.a, $0.b] } == [[1, 2]])
+        #expect(m.routeur(5)?.entendu == Self.debut - 5)
+    }
+
+    /// Couverture de l'ecoute (Reglages › Sonde) : routeurs entendus sur les routeurs de la partition, si la sonde
+    /// a rendu ses annonces ; sinon (firmware 1.0.3, sonde muette) inconnue.
+    @Test func couverture() {
+        var c = Self.quatreRouteurs()
+        c.ecoute(nil, routeur: 2, date: Self.debut)
+        c.ecoute(Self.route64((1, 3, 3)), routeur: 3, date: Self.debut)
+        #expect(c.maillage().couverture == nil, "annonces non lues")
+        c.annoncesRecues()
+        #expect(c.maillage().couverture == CouvertureEcoute(entendus: 2, routeurs: 4))
+        #expect(c.maillage().annoncesLues)
+        var vide = Self.quatreRouteurs()
+        vide.annoncesRecues()
+        #expect(vide.maillage().couverture == CouvertureEcoute(entendus: 0, routeurs: 4))
+    }
+
+    /// Enfant resolu sous un routeur qui repond par son propre RLOC16 (Apple) : un numero invente, bit 9 a 1, jamais
+    /// un vrai RLOC16 ; son parent reste juste. Comme une entree de balayage, une entree resolue dont l'ExtMac est
+    /// celle d'un routeur est ecartee des enfants identifies, et passe apres la sonde et une table.
+    @Test func enfantResolu() {
+        let e = EnfantMaillage(rloc16: 0xAC00 | EnfantMaillage.bitInvente | 2, extMac: "E0000000000000C1",
+                               adresses: [], source: .resolution, resolu: Self.debut, echecs: 0.007)
+        #expect(!e.rloc16Connu && e.parent == 43)
+        #expect(EnfantMaillage(rloc16: 0xAC05, source: .tableEnfants).rloc16Connu)
+        var c = Self.quatreRouteurs()
+        c.identite("E0000000000000C2", routeur: 5)
+        c.enfant(e)
+        c.enfant(EnfantMaillage(rloc16: 0x1600, extMac: "E0000000000000C2", source: .resolution))
+        c.enfant(EnfantMaillage(rloc16: 0x0805, extMac: "E0000000000000C1", qualite: 2, source: .tableEnfants))
+        let m = c.maillage()
+        #expect(m.enfantsIdentifies["E0000000000000C2"] == nil, "devenu routeur")
+        #expect(m.enfantsIdentifies["E0000000000000C1"]?.source == .tableEnfants, "la table passe avant")
+        let resolu = m.enfants.first { $0.rloc16 == e.rloc16 }
+        #expect(resolu?.resolu == Self.debut && resolu?.echecs == 0.007)
+    }
+}
+
+@Suite("Qualite d'un enfant par ses compteurs MAC")
+struct QualiteCompteursTests {
+    static func releve(envois: UInt32, echecs: UInt32) -> CompteursMac {
+        CompteursMac(protocolesInconnus: 0, erreursRecues: 0, erreursEmises: echecs, unicastRecus: 10, diffusionsRecues: 0,
+                     rejetsRecus: 0, unicastEmis: envois, diffusionsEmises: 0, rejetsEmis: 0)
+    }
+
+    /// Taux d'echec entre deux releves : Δ echecs / Δ envois. Moins de 1 % : 3 ; de 1 a 5 % : 2 ; au-dela : 1.
+    @Test func tauxEtQualite() throws {
+        let avant = Self.releve(envois: 5000, echecs: 40)
+        let m = try #require(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 6000, echecs: 47)))
+        #expect(m.qualite == 3 && abs(m.taux - 0.007) < 1e-12)
+        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 6000, echecs: 50))?.qualite == 2, "1 %")
+        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 6000, echecs: 90))?.qualite == 2, "5 %")
+        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 6000, echecs: 91))?.qualite == 1, "5,1 %")
+        #expect(QualiteCompteurs.qualite(taux: 0.0099) == 3 && QualiteCompteurs.qualite(taux: 0.5) == 1)
+    }
+
+    /// Moins de 50 trames envoyees entre les deux releves : qualite inconnue ; 50 suffisent.
+    @Test func seuilDe50Trames() {
+        let avant = Self.releve(envois: 100, echecs: 0)
+        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 149, echecs: 0)) == nil)
+        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 150, echecs: 0))?.qualite == 3)
+        #expect(QualiteCompteurs.tramesMin == 50)
+    }
+
+    /// Un compteur qui baisse (l'appareil a redemarre) : pas de mesure ; le releve repart de zero.
+    @Test func compteurQuiBaisse() {
+        let avant = Self.releve(envois: 9000, echecs: 30)
+        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 200, echecs: 31)) == nil, "envois")
+        #expect(QualiteCompteurs.mesure(avant: avant, apres: Self.releve(envois: 9900, echecs: 2)) == nil, "echecs")
+    }
 }

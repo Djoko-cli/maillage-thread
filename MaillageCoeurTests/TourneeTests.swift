@@ -603,7 +603,8 @@ struct TourneeTests {
         sonde.retards = ["2800|0,1,5,16,8,24": .milliseconds(100)]
         let (m, _) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0))
         #expect(m.routeurs.map(\.id) == [10, 12] && !m.routeurs.contains(where: \.muet), "les deux repondent")
-        #expect(m.liens == [LienRadio(a: 10, b: 12, qualiteAB: 3, qualiteBA: 1)], "le rapport du 12")
+        #expect(m.liens == [LienRadio(a: 10, b: 12, qualiteAB: 3, qualiteBA: 1, sourceAB: .diagnostic, sourceBA: .diagnostic,
+                                      dateAB: Self.t0, dateBA: Self.t0)], "le rapport du 12")
     }
 
     /// TLV Child Table (hexa) des enfants `numeros` : qualite 3, delai 2^8 s, endormis (mode 04).
