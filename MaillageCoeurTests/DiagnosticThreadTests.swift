@@ -216,4 +216,20 @@ struct DiagnosticThreadTests {
         #expect(ReponseDiagnostic(hexa: Self.hexa(Self.tlv(TypeTLV.extMac, [0xE0, 0, 0, 0, 0, 0, 0, 0x02]),
                                                   Array(complete.dropLast()))) == nil, "coupee apres une TLV entiere")
     }
+
+    /// TLV 9, compteurs MAC (spec de la sonde tout-en-un, section 2.3) : neuf compteurs de 32 bits,
+    /// gros-boutistes, dans l'ordre de la spec Thread. Un appareil endormi la rend (pas la TLV 4). Une autre
+    /// longueur : ignoree (valeurs inventees).
+    @Test func compteursMac() throws {
+        let valeurs: [UInt32] = [1, 2, 37, 0x01020304, 5, 6, 4321, 8, 0xFFFFFFFF]
+        let octets = valeurs.flatMap { v in (0..<4).map { UInt8(truncatingIfNeeded: v >> (24 - 8 * $0)) } }
+        let r = try #require(ReponseDiagnostic(hexa: Self.hexa(Self.tlv(TypeTLV.compteursMac, octets))))
+        let c = try #require(r.compteursMac)
+        #expect(c == CompteursMac(protocolesInconnus: 1, erreursRecues: 2, erreursEmises: 37,
+                                  unicastRecus: 0x01020304, diffusionsRecues: 5, rejetsRecus: 6, unicastEmis: 4321,
+                                  diffusionsEmises: 8, rejetsEmis: 0xFFFFFFFF))
+        let courte = try #require(ReponseDiagnostic(hexa: Self.hexa(Self.tlv(TypeTLV.compteursMac, Array(octets.dropLast())))))
+        #expect(courte.compteursMac == nil, "35 octets")
+        #expect(TypeTLV.compteursMac == 9)
+    }
 }

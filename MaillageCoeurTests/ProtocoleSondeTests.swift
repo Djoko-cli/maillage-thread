@@ -241,6 +241,88 @@ struct ProtocoleSondeTests {
         #expect(MessageSonde.lire(Data(#"{"v":1,"t":"routeurs","suite":false}"#.utf8)) == nil, "ni liste ni erreur")
     }
 
+    /// `etat` du firmware 1.1.0 : les compteurs de l'ecoute (`ecoute`) ; un firmware plus ancien n'en a pas.
+    @Test func etatEcoute() throws {
+        let base = #""v":1,"t":"etat","role":"child","rloc16":"AC09","ext":"E0000000000000FF","mode":"rdn","eligible":false,"parent":null,"partition":"1234ABCD","chef":20,"canal":25,"prefixeMaille":"FD00111122220C87","xp":"A0A1A2A3A4A5A6A7","suspendue":false"#
+        guard case .etat(let e)? = MessageSonde.lire(Data(("{" + base + #","ecoute":{"trames":1200,"mle":340,"echecs":2,"file_pleine":1}}"#).utf8)),
+              case .etat(let ancien)? = MessageSonde.lire(Data(("{" + base + "}").utf8)) else {
+            Issue.record("etat 1.1.0 illisible")
+            return
+        }
+        #expect(e.ecoute == CompteursEcoute(trames: 1200, mle: 340, echecs: 2, filePleine: 1))
+        #expect(ancien.ecoute == nil, "firmware 1.0.3")
+    }
+
+    /// `annonces` (firmware 1.1.0) : une ligne par routeur entendu, `suite` sur chaque ligne sauf la derniere ;
+    /// sans routeur entendu, une ligne `vide`. La Route64 brute se decode comme celle du diagnostic (valeurs
+    /// inventees : la Route64 des routeurs 1, 20 et 43).
+    @Test func annonces() throws {
+        let route = "7A" + "4000080000100000" + "F10092"
+        let ligne = #"{"v":1,"t":"annonces","rloc16":"5000","ext":"E000000000000A01","partition":"1234ABCD","route64":"\#(route)","seq":122,"rssi":-61,"rssi_min":-70,"rssi_max":-55,"nb":12,"age_s":7,"suite":true}"#
+        guard case .annonces(let p)? = MessageSonde.lire(Data(ligne.utf8)) else {
+            Issue.record("annonces illisible")
+            return
+        }
+        #expect(p.suite)
+        let a = try #require(p.liste.first)
+        #expect(p.liste.count == 1)
+        #expect(a == AnnonceSonde(rloc16: "5000", ext: "E000000000000A01", partition: "1234ABCD", route64: route, seq: 122,
+                                  rssi: -61, rssiMin: -70, rssiMax: -55, nb: 12, ageS: 7))
+        #expect(a.rloc16Valeur == 0x5000)
+        let r64 = try #require(a.route64Decodee)
+        #expect(r64.sequence == 0x7A && r64.routeurs == [1, 20, 43])
+        #expect(r64.route(vers: 43) == RouteRouteur(idRouteur: 43, qualiteSortante: 2, qualiteEntrante: 1, cout: 2))
+        let derniere = #"{"v":1,"t":"annonces","rloc16":"AC00","ext":"E000000000000C03","partition":null,"route64":null,"seq":null,"rssi":-80,"rssi_min":-80,"rssi_max":-80,"nb":1,"age_s":0,"suite":false}"#
+        guard case .annonces(let fin)? = MessageSonde.lire(Data(derniere.utf8)) else {
+            Issue.record("derniere annonce illisible")
+            return
+        }
+        #expect(!fin.suite && fin.liste.first?.partition == nil && fin.liste.first?.route64Decodee == nil)
+        #expect(MessageSonde.lire(Data(#"{"v":1,"t":"annonces","vide":true}"#.utf8))
+                == .annonces(PartieAnnonces(liste: [], suite: false)))
+        #expect(MessageSonde.lire(Data(#"{"v":1,"t":"annonces","rloc16":"5000"}"#.utf8)) == nil, "ni annonce lisible, ni vide")
+        let abimee = AnnonceSonde(rloc16: "5000", ext: "E000000000000A01", partition: nil, route64: "7A40", seq: nil,
+                                  rssi: -61, rssiMin: -61, rssiMax: -61, nb: 1, ageS: 0)
+        #expect(abimee.route64Decodee == nil, "Route64 trop courte")
+    }
+
+    /// `resoudre` (firmware 1.1.0) : le RLOC16 trouve et le ML-EID (32 hexa) si le cache le donne ; ou
+    /// `introuvable`, ou un refus (valeurs inventees).
+    @Test func resoudre() throws {
+        let ok = #"{"v":1,"t":"resoudre","id":7,"cible":"fd00:aaaa:bbbb:1::17","ok":true,"ms":340,"rloc16":"AC00","mleid":"FD00111122220C870000000000000017"}"#
+        guard case .resoudre(let r)? = MessageSonde.lire(Data(ok.utf8)) else {
+            Issue.record("resoudre illisible")
+            return
+        }
+        #expect(r.ok && r.id == 7 && r.cible == "fd00:aaaa:bbbb:1::17" && r.ms == 340)
+        #expect(r.rloc16Valeur == 0xAC00)
+        #expect(r.adresseMleid == AdresseIPv6("fd00:1111:2222:c87::17"))
+        #expect(!r.introuvable)
+        let sansMleid = #"{"v":1,"t":"resoudre","id":8,"cible":"fd00:aaaa:bbbb:1::18","ok":true,"ms":90,"rloc16":"5003","mleid":null}"#
+        guard case .resoudre(let s)? = MessageSonde.lire(Data(sansMleid.utf8)) else {
+            Issue.record("resoudre sans ML-EID illisible")
+            return
+        }
+        #expect(s.rloc16Valeur == 0x5003 && s.adresseMleid == nil)
+        let introuvable = #"{"v":1,"t":"resoudre","id":9,"cible":"fd00:aaaa:bbbb:1::19","ok":false,"erreur":"introuvable"}"#
+        guard case .resoudre(let i)? = MessageSonde.lire(Data(introuvable.utf8)) else {
+            Issue.record("resoudre introuvable illisible")
+            return
+        }
+        #expect(i.introuvable && i.rloc16Valeur == nil)
+        #expect(ResultatResolution(id: 1, cible: "fd00::1", ok: false, erreur: "occupee").introuvable == false)
+    }
+
+    /// Commandes du firmware 1.1.0 : l'adresse IPv6 part sans zone, sous la forme courte (`AdresseIPv6`).
+    @Test func commandesToutEnUn() throws {
+        let a = try #require(AdresseIPv6("fd00:aaaa:bbbb:1::17%en0"))
+        #expect(CommandeSonde.annonces.ligne == "annonces\n")
+        #expect(CommandeSonde.resoudre(adresse: a, id: 7).ligne == "resoudre fd00:aaaa:bbbb:1::17 7\n")
+        let mleid = try #require(AdresseIPv6("fd00:1111:2222:c87::17"))
+        #expect(CommandeSonde.diagAdresse(cible: mleid, tlv: [9], id: 8, delaiMs: 8000).ligne
+                == "diag fd00:1111:2222:c87::17 9 8 8000\n")
+    }
+
     @Test func commandes() {
         #expect(CommandeSonde.bonjour.ligne == "bonjour\n")
         #expect(CommandeSonde.etat.ligne == "etat\n")

@@ -74,6 +74,30 @@ public struct ParentSonde: Hashable, Sendable, Codable {
     public let rssi: Int
 }
 
+/// Compteurs de l'ecoute des messages MLE (`etat.ecoute`, firmware 1.1.0), depuis le demarrage de la sonde.
+public struct CompteursEcoute: Hashable, Sendable, Codable {
+    /// Trames recues.
+    public let trames: Int
+    /// Messages MLE dechiffres.
+    public let mle: Int
+    /// Messages MLE chiffres non dechiffres : en-tete illisible, cle indisponible, MIC faux.
+    public let echecs: Int
+    /// Trames perdues, la file de la sonde pleine.
+    public let filePleine: Int
+
+    public init(trames: Int, mle: Int, echecs: Int, filePleine: Int) {
+        self.trames = trames
+        self.mle = mle
+        self.echecs = echecs
+        self.filePleine = filePleine
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case trames, mle, echecs
+        case filePleine = "file_pleine"
+    }
+}
+
 /// Reponse a `etat`.
 public struct EtatSonde: Hashable, Sendable, Codable {
     public let role: String
@@ -90,6 +114,8 @@ public struct EtatSonde: Hashable, Sendable, Codable {
     public let prefixeMaille: String?
     public let xp: String?
     public let suspendue: Bool
+    /// Compteurs de l'ecoute (firmware 1.1.0) ; nil pour un firmware plus ancien.
+    public let ecoute: CompteursEcoute?
 
     /// Attachee au reseau : enfant, routeur ou chef.
     public var estAttachee: Bool { ["child", "router", "leader"].contains(role) && partition != nil && chef != nil }
@@ -134,6 +160,87 @@ public struct PartieRouteurs: Hashable, Sendable {
     public let erreur: String?
 }
 
+/// Routeur entendu par la sonde (`annonces`, firmware 1.1.0) : une ligne par routeur. La sonde dechiffre ses messages
+/// MLE et garde sa derniere Route64, brute : l'app la decode (`route64Decodee`).
+public struct AnnonceSonde: Hashable, Sendable, Codable {
+    public let rloc16: String
+    /// ExtMac de l'emetteur, 16 hexa.
+    public let ext: String
+    /// Partition de sa TLV Leader Data, 8 hexa ; nil sans elle.
+    public let partition: String?
+    /// Derniere Route64 brute (valeur de la TLV 9 du message MLE, en hexa) ; nil sans elle.
+    public let route64: String?
+    public let seq: Int?
+    /// Signal du dernier message, et le plus faible et le plus fort depuis son entree dans la table, en dBm.
+    public let rssi: Int
+    public let rssiMin: Int
+    public let rssiMax: Int
+    /// Messages dechiffres.
+    public let nb: Int
+    /// Secondes depuis le dernier.
+    public let ageS: Int
+
+    enum CodingKeys: String, CodingKey {
+        case rloc16, ext, partition, route64, seq, rssi, nb
+        case rssiMin = "rssi_min"
+        case rssiMax = "rssi_max"
+        case ageS = "age_s"
+    }
+
+    public var rloc16Valeur: UInt16? { UInt16(rloc16, radix: 16) }
+
+    /// La Route64 decodee comme celle du diagnostic (`ReponseDiagnostic.route64`) ; nil sans elle, ou illisible.
+    public var route64Decodee: Route64? {
+        route64.flatMap { Data(hexa: $0) }.flatMap { ReponseDiagnostic.route64([UInt8]($0)) }
+    }
+}
+
+/// Une ligne d'`annonces` : un routeur entendu (`suite` : d'autres lignes suivent, la derniere a `suite` faux), ou
+/// aucun (la ligne `vide`).
+public struct PartieAnnonces: Hashable, Sendable {
+    public let liste: [AnnonceSonde]
+    public let suite: Bool
+
+    public init(liste: [AnnonceSonde], suite: Bool) {
+        self.liste = liste
+        self.suite = suite
+    }
+}
+
+/// Reponse a `resoudre` (firmware 1.1.0) : le RLOC16 que le cache d'adresses de la sonde donne pour l'adresse (celui
+/// du parent pour un routeur Apple, celui de l'enfant pour un routeur tiers), et le ML-EID de la cible quand la reponse
+/// l'a porte ; ou l'erreur (`introuvable`, `syntaxe`, `suspendue`, `occupee`, `envoi`...).
+public struct ResultatResolution: Hashable, Sendable, Codable {
+    public let id: Int
+    public let cible: String
+    public let ok: Bool
+    public let ms: Int?
+    public let rloc16: String?
+    /// ML-EID, 32 hexa ; nil si le cache ne le donne pas.
+    public let mleid: String?
+    public let erreur: String?
+
+    public init(id: Int, cible: String, ok: Bool, ms: Int? = nil, rloc16: String? = nil, mleid: String? = nil,
+                erreur: String? = nil) {
+        self.id = id
+        self.cible = cible
+        self.ok = ok
+        self.ms = ms
+        self.rloc16 = rloc16
+        self.mleid = mleid
+        self.erreur = erreur
+    }
+
+    public var rloc16Valeur: UInt16? { ok ? rloc16.flatMap { UInt16($0, radix: 16) } : nil }
+
+    public var adresseMleid: AdresseIPv6? {
+        mleid.flatMap { Data(hexa: $0) }.flatMap { AdresseIPv6(octets: [UInt8]($0)) }
+    }
+
+    /// Aucun routeur n'a repondu pour l'adresse en 15 s : l'appareil reste en rattachement suppose.
+    public var introuvable: Bool { !ok && erreur == "introuvable" }
+}
+
 /// Reponse a `diag` : les TLV en hexa, ou l'erreur (`delai`, `suspendue`, `occupee`, `envoi`...).
 public struct ResultatDiag: Hashable, Sendable, Codable {
     public let id: Int
@@ -171,6 +278,9 @@ public enum MessageSonde: Hashable, Sendable {
     /// Une ligne de la table des routeurs (`SondeUSB` reunit les lignes d'une meme reponse).
     case routeurs(PartieRouteurs)
     case diag(ResultatDiag)
+    /// Une ligne d'`annonces` (firmware 1.1.0 ; `SondeUSB` reunit les lignes d'une meme reponse).
+    case annonces(PartieAnnonces)
+    case resoudre(ResultatResolution)
     case cle(ReponseCle)
     /// Commande sans id (`etat`, `voisins`) que la sonde n'a pas servie : son nom et l'erreur de la
     /// ligne (`occupee` : verrou d'OpenThread refuse). `routeurs` porte la sienne dans `PartieRouteurs`.
@@ -204,6 +314,11 @@ public enum MessageSonde: Hashable, Sendable {
         let erreur: String
     }
 
+    private struct Annonces: Decodable {
+        let vide: Bool?
+        let suite: Bool?
+    }
+
     /// JSON d'une ligne machine, sans RS ni LF ; nil si illisible ou d'une autre version.
     public static func lire(_ json: Data) -> MessageSonde? {
         let d = JSONDecoder()
@@ -218,6 +333,13 @@ public enum MessageSonde: Hashable, Sendable {
             return (try? d.decode(Erreur.self, from: json)).map { .refusee(commande: "voisins", erreur: $0.erreur) }
         case "routeurs": return (try? d.decode(Routeurs.self, from: json))?.partie.map { .routeurs($0) }
         case "diag": return (try? d.decode(ResultatDiag.self, from: json)).map { .diag($0) }
+        case "annonces":
+            if let a = try? d.decode(AnnonceSonde.self, from: json) {
+                return .annonces(PartieAnnonces(liste: [a], suite: (try? d.decode(Annonces.self, from: json))?.suite ?? false))
+            }
+            guard (try? d.decode(Annonces.self, from: json))?.vide == true else { return nil }
+            return .annonces(PartieAnnonces(liste: [], suite: false))
+        case "resoudre": return (try? d.decode(ResultatResolution.self, from: json)).map { .resoudre($0) }
         case "cle": return (try? d.decode(ReponseCle.self, from: json)).map { .cle($0) }
         case "erreur": return (try? d.decode(Erreur.self, from: json)).map { .erreur($0.erreur) }
         default: return .inconnu(e.t)
@@ -234,6 +356,12 @@ public enum CommandeSonde: Hashable, Sendable {
     case routeurs
     /// `diag <RLOC16> <t,t,...> <id> [<delai ms>]`
     case diag(cible: UInt16, tlv: [UInt8], id: Int, delaiMs: Int?)
+    /// `diag <ipv6> <t,t,...> <id> [<delai ms>]` : vers une adresse du reseau maille (le ML-EID d'un enfant).
+    case diagAdresse(cible: AdresseIPv6, tlv: [UInt8], id: Int, delaiMs: Int?)
+    /// Routeurs entendus par la sonde (firmware 1.1.0).
+    case annonces
+    /// `resoudre <ipv6> <id>` (firmware 1.1.0) : l'adresse sans zone.
+    case resoudre(adresse: AdresseIPv6, id: Int)
     /// `cle nouvelle <alea en 64 HEXA> <id>` (USB seulement) : la carte en tire la cle de
     /// l'acces reseau et la rend une seule fois (`cle`).
     case cleNouvelle(alea: Data, id: Int)
@@ -249,6 +377,12 @@ public enum CommandeSonde: Hashable, Sendable {
             var l = String(format: "diag %04X ", cible) + tlv.map(String.init).joined(separator: ",") + " \(id)"
             if let delai { l += " \(delai)" }
             return l + "\n"
+        case .diagAdresse(let cible, let tlv, let id, let delai):
+            var l = "diag \(cible) " + tlv.map(String.init).joined(separator: ",") + " \(id)"
+            if let delai { l += " \(delai)" }
+            return l + "\n"
+        case .annonces: return "annonces\n"
+        case .resoudre(let adresse, let id): return "resoudre \(adresse) \(id)\n"
         case .cleNouvelle(let alea, let id):
             return "cle nouvelle " + alea.map { String(format: "%02X", $0) }.joined() + " \(id)\n"
         }
