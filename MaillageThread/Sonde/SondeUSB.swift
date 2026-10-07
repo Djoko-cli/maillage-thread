@@ -33,7 +33,7 @@ struct CanalSerie: CanalSonde {
     func fermer() { liaison.fermer() }
 }
 
-/// Attentes d'une commande sans id (`bonjour`, `etat`, `routeurs`, `voisins`) : les reponses les servent
+/// Attentes d'une commande sans id (`bonjour`, `etat`, `routeurs`, `voisins`, `annonces`) : les reponses les servent
 /// dans l'ordre. Chaque attente a son jeton : son echeance n'expire qu'elle, et plus rien une
 /// fois qu'elle est servie (par le reseau, une reponse lente ne fait plus echouer la requete
 /// suivante).
@@ -69,8 +69,8 @@ private struct FileAttentes<Valeur: Sendable> {
 }
 
 /// Sonde branchee en USB : envoie les commandes et apparie les reponses, par
-/// ordre pour `bonjour`, `etat`, `routeurs` et `voisins`, par id et cible pour `diag` (8 en vol,
-/// dans le desordre). Chaque requete a sa propre echeance.
+/// ordre pour `bonjour`, `etat`, `routeurs`, `voisins` et `annonces`, par id et cible pour `diag` et `resoudre`
+/// (8 en vol chacun, dans le desordre). Chaque requete a sa propre echeance.
 actor SondeUSB: InterlocuteurSonde {
     enum Erreur: Error, LocalizedError, Equatable {
         case fermee
@@ -93,7 +93,7 @@ actor SondeUSB: InterlocuteurSonde {
         }
     }
 
-    /// Attente de `bonjour`, `etat`, `routeurs`, `voisins` et `cle nouvelle` : 3 s en USB, qui ne perd rien ;
+    /// Attente de `bonjour`, `etat`, `routeurs`, `voisins`, `annonces` et `cle nouvelle` : 3 s en USB, qui ne perd rien ;
     /// 6 s par le reseau, au-dela du renvoi de 4 s du canal (comme les delais de Halo : 3 s en
     /// USB, 6 s a distance).
     static let delaiCommandeUSB: Duration = .seconds(3)
@@ -101,32 +101,44 @@ actor SondeUSB: InterlocuteurSonde {
     /// Attente d'un `diag` au-dela de son delai : la sonde a du repondre (elle echoue elle-meme
     /// en `delai`). Par le reseau, le canal renvoie un diag sans reponse jusqu'a cette echeance.
     static let margeDiag: Duration = .seconds(5)
+    /// Duree d'une resolution sur la sonde (firmware 1.1.0) : elle lit son cache d'adresses 15 s au plus, puis repond
+    /// `introuvable`. L'app attend la marge en plus.
+    static let delaiResolution: Duration = .seconds(15)
 
     private let canal: any CanalSonde
     /// Au-dela du delai donne a la sonde, elle a du repondre (elle echoue elle-meme en `delai`).
     private let marge: Duration
     let delaiCommande: Duration
+    private let delaiResolution: Duration
     private var prochainId = 1
     /// Jetons des attentes de `bonjour`, `etat`, `routeurs` et `voisins` (jamais envoyes a la sonde).
     private var prochainJeton = 1
-    private var attenteDiag: [Int: (cible: UInt16, suite: CheckedContinuation<ResultatDiag, Never>)] = [:]
+    /// `diag` en vol, par id, avec leur cible telle que la commande l'ecrit (RLOC16 en 4 hexa, ou adresse IPv6).
+    private var attenteDiag: [Int: (cible: String, suite: CheckedContinuation<ResultatDiag, Never>)] = [:]
+    /// `resoudre` en vol, par id, avec leur cible telle que la commande l'ecrit.
+    private var attenteResolution: [Int: (cible: String, suite: CheckedContinuation<ResultatResolution, Never>)] = [:]
     /// `etat`, `routeurs` et `voisins` : la reponse, ou le refus de la sonde (`occupee`).
     private var attenteEtat = FileAttentes<Result<EtatSonde, Erreur>>()
     private var attenteBonjour = FileAttentes<Bonjour>()
     private var attenteRouteurs = FileAttentes<Result<[RouteurSonde], Erreur>>()
     private var attenteVoisins = FileAttentes<Result<[VoisinSonde], Erreur>>()
+    private var attenteAnnonces = FileAttentes<[AnnonceSonde]>()
     /// Parties de la table des routeurs deja recues (lignes `suite`), en attendant la derniere.
     private var routeursRecus: [RouteurSonde] = []
+    /// Routeurs entendus deja recus (lignes `suite` d'`annonces`), en attendant la derniere.
+    private var annoncesRecues: [AnnonceSonde] = []
     private var attenteCle: [(id: Int, suite: CheckedContinuation<Result<ReponseCle, Erreur>?, Never>)] = []
     private var lecture: Task<Void, Never>?
     private(set) var fermee = false
     /// Dernier `bonjour` recu sans l'avoir demande : la sonde vient de (re)demarrer.
     private(set) var bonjourSpontane: Bonjour?
 
-    init(canal: any CanalSonde, marge: Duration = SondeUSB.margeDiag, delaiCommande: Duration = SondeUSB.delaiCommandeUSB) {
+    init(canal: any CanalSonde, marge: Duration = SondeUSB.margeDiag, delaiCommande: Duration = SondeUSB.delaiCommandeUSB,
+         delaiResolution: Duration = SondeUSB.delaiResolution) {
         self.canal = canal
         self.marge = marge
         self.delaiCommande = delaiCommande
+        self.delaiResolution = delaiResolution
     }
 
     /// Ouvre le canal et lit ses lignes ; `surFermeture` quand il se ferme.
@@ -221,21 +233,72 @@ actor SondeUSB: InterlocuteurSonde {
         return try v.get()
     }
 
+    /// Routeurs que la sonde entend (firmware 1.1.0), ses lignes `suite` reunies ; vide sur la ligne `vide`.
+    /// `sansReponse` sans la derniere ligne dans le delai (un firmware 1.0.x repond `commande inconnue`).
+    func annonces() async throws -> [AnnonceSonde] {
+        guard !fermee else { throw Erreur.fermee }
+        let jeton = nouveauJeton()
+        let a = await withCheckedContinuation { c in
+            attenteAnnonces.ajouter(jeton, c)
+            canal.envoyer(CommandeSonde.annonces.ligne)
+            Task {
+                try? await Task.sleep(for: self.delaiCommande)
+                self.expirerAnnonces(jeton)
+            }
+        }
+        guard let a else { throw fermee ? Erreur.fermee : Erreur.sansReponse("annonces") }
+        return a
+    }
+
     private func nouveauJeton() -> Int {
         defer { prochainJeton += 1 }
         return prochainJeton
     }
 
     func diag(_ cible: UInt16, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
+        try await diag(String(format: "%04X", cible), delaiMs: delaiMs) {
+            CommandeSonde.diag(cible: cible, tlv: tlv, id: $0, delaiMs: delaiMs)
+        }
+    }
+
+    /// `diag` vers une adresse du reseau maille (le ML-EID d'un enfant).
+    func diag(adresse: AdresseIPv6, _ tlv: [UInt8], delaiMs: Int) async throws -> ResultatDiag {
+        try await diag(adresse.description, delaiMs: delaiMs) {
+            CommandeSonde.diagAdresse(cible: adresse, tlv: tlv, id: $0, delaiMs: delaiMs)
+        }
+    }
+
+    /// Envoie la commande de l'id suivant, et attend sa reponse, appariee par l'id et la cible (`cible`, telle que
+    /// la commande l'ecrit).
+    private func diag(_ cible: String, delaiMs: Int, commande: (Int) -> CommandeSonde) async throws -> ResultatDiag {
+        guard !fermee else { throw Erreur.fermee }
+        let id = prochainId
+        prochainId += 1
+        let ligne = commande(id).ligne
+        let r = await withCheckedContinuation { c in
+            attenteDiag[id] = (cible, c)
+            canal.envoyer(ligne)
+            Task {
+                try? await Task.sleep(for: .milliseconds(delaiMs) + self.marge)
+                self.expirerDiag(id)
+            }
+        }
+        if r.erreur == "fermee" { throw Erreur.fermee }
+        return r
+    }
+
+    /// `resoudre <adresse> <id>` (firmware 1.1.0) : la reponse de meme id et de meme cible, ou `delai` apres les 15 s
+    /// de la sonde et la marge (firmware sans resolution, ligne perdue).
+    func resoudre(_ adresse: AdresseIPv6) async throws -> ResultatResolution {
         guard !fermee else { throw Erreur.fermee }
         let id = prochainId
         prochainId += 1
         let r = await withCheckedContinuation { c in
-            attenteDiag[id] = (cible, c)
-            canal.envoyer(CommandeSonde.diag(cible: cible, tlv: tlv, id: id, delaiMs: delaiMs).ligne)
+            attenteResolution[id] = (adresse.description, c)
+            canal.envoyer(CommandeSonde.resoudre(adresse: adresse, id: id).ligne)
             Task {
-                try? await Task.sleep(for: .milliseconds(delaiMs) + self.marge)
-                self.expirerDiag(id)
+                try? await Task.sleep(for: self.delaiResolution + self.marge)
+                self.expirerResolution(id)
             }
         }
         if r.erreur == "fermee" { throw Erreur.fermee }
@@ -276,6 +339,21 @@ actor SondeUSB: InterlocuteurSonde {
         if attenteRouteurs.expirer(jeton) == 0 { routeursRecus = [] }
     }
 
+    /// De meme pour `annonces`.
+    private func expirerAnnonces(_ jeton: Int) {
+        if attenteAnnonces.expirer(jeton) == 0 { annoncesRecues = [] }
+    }
+
+    /// Ligne d'`annonces` : gardee jusqu'a la derniere (`suite` faux), qui rend la liste entiere a la premiere attente.
+    /// Sans attente (reponse apres le delai), la liste est oubliee.
+    private func recevoirAnnonces(_ p: PartieAnnonces) {
+        annoncesRecues += p.liste
+        guard !p.suite else { return }
+        let liste = annoncesRecues
+        annoncesRecues = []
+        attenteAnnonces.servir(liste)
+    }
+
     /// Partie de la table : gardee jusqu'a la derniere (`suite` faux), qui rend la table entiere
     /// a la premiere attente ; l'erreur (`occupee`) la termine tout de suite, sans table. Sans
     /// attente (reponse apres le delai), la table est oubliee.
@@ -297,7 +375,12 @@ actor SondeUSB: InterlocuteurSonde {
 
     private func expirerDiag(_ id: Int) {
         guard let a = attenteDiag.removeValue(forKey: id) else { return }
-        a.suite.resume(returning: ResultatDiag(id: id, cible: String(format: "%04X", a.cible), ok: false, erreur: "delai"))
+        a.suite.resume(returning: ResultatDiag(id: id, cible: a.cible, ok: false, erreur: "delai"))
+    }
+
+    private func expirerResolution(_ id: Int) {
+        guard let a = attenteResolution.removeValue(forKey: id) else { return }
+        a.suite.resume(returning: ResultatResolution(id: id, cible: a.cible, ok: false, erreur: "delai"))
     }
 
     private func recevoir(_ ligne: Data) {
@@ -305,10 +388,17 @@ actor SondeUSB: InterlocuteurSonde {
         case .diag(let r)?:
             // Par l'id et la cible : une reponse tardive d'une connexion precedente (meme id,
             // autre cible) ne sert pas cette requete, qui attend la sienne.
-            if let a = attenteDiag[r.id], UInt16(r.cible, radix: 16) == a.cible {
+            if let a = attenteDiag[r.id], r.cible == a.cible {
                 attenteDiag[r.id] = nil
                 a.suite.resume(returning: r)
             }
+        case .resoudre(let r)?:
+            if let a = attenteResolution[r.id], r.cible == a.cible {
+                attenteResolution[r.id] = nil
+                a.suite.resume(returning: r)
+            }
+        case .annonces(let p)?:
+            recevoirAnnonces(p)
         case .etat(let e)?:
             attenteEtat.servir(.success(e))
         case .routeurs(let p)?:
@@ -339,9 +429,15 @@ actor SondeUSB: InterlocuteurSonde {
     private func clore() {
         fermee = true
         for (id, a) in attenteDiag {
-            a.suite.resume(returning: ResultatDiag(id: id, cible: String(format: "%04X", a.cible), ok: false, erreur: "fermee"))
+            a.suite.resume(returning: ResultatDiag(id: id, cible: a.cible, ok: false, erreur: "fermee"))
         }
         attenteDiag = [:]
+        for (id, a) in attenteResolution {
+            a.suite.resume(returning: ResultatResolution(id: id, cible: a.cible, ok: false, erreur: "fermee"))
+        }
+        attenteResolution = [:]
+        attenteAnnonces.liberer()
+        annoncesRecues = []
         attenteEtat.liberer()
         attenteBonjour.liberer()
         attenteRouteurs.liberer()

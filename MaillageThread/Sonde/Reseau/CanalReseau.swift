@@ -5,9 +5,10 @@ import Synchronization
 /// pont Halo : un `CanalSonde` de plus, `SondeUSB` et la tournee ne changent pas.
 /// - Chaque commande part en `<rid> <commande>` (rid decimal, croissant) ; sans aucune
 ///   reponse, elle repart avec le meme rid a 2 s puis a 4 s : la carte ne relance rien, elle
-///   renvoie la reponse gardee (ou se tait, `diag` encore en vol). Un `diag` repart ensuite
-///   1 s apres la fin de son vol, puis tous les 3 s, jusqu'a 1 s avant l'echeance de
-///   `SondeUSB` : sa reponse perdue apres le vol se redemande.
+///   renvoie la reponse gardee (ou se tait, `diag` ou `resoudre` encore en vol). Un `diag` repart
+///   ensuite 1 s apres la fin de son vol, puis tous les 3 s, jusqu'a 1 s avant l'echeance de
+///   `SondeUSB` : sa reponse perdue apres le vol se redemande ; un `resoudre` de meme, son vol
+///   etant de 15 s.
 /// - Au plus 18 nouvelles commandes par seconde glissante (la carte en accepte 20 par session,
 ///   au-dela elle se tait) : les suivantes attendent, dans l'ordre ; les renvois ne comptent
 ///   pas et partent a l'heure.
@@ -34,6 +35,8 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         var pasDiag: Duration = .seconds(3)
         var margeDiag: Duration = SondeUSB.margeDiag
         var avanceDiag: Duration = .seconds(1)
+        /// Vol d'un `resoudre` (firmware 1.1.0) : 15 s au plus sur la carte, muette pendant ce temps.
+        var volResolution: Duration = SondeUSB.delaiResolution
         /// Silence (aucune ligne recue) avant une veille : 10 s, comme le ping de Halo. La carte
         /// donne a un nouveau client la place d'une session muette depuis 30 s : la veille garde
         /// celle de l'app.
@@ -54,12 +57,12 @@ final class CanalReseau: CanalSonde, CauseFermeture {
         var pasGarde: Duration { min(.seconds(1), veille / 4, attenteVeille / 4) }
 
         /// Renvois d'une commande (sans fin de ligne), comptes depuis son premier envoi :
-        /// `renvois`, puis pour un `diag` ceux d'apres son vol, au-dela du dernier de `renvois`
-        /// (2, 4, 7 et 10 s pour un diag de 6000 ms ; 2, 4, 9 et 12 s pour 8000 ms).
+        /// `renvois`, puis pour un `diag` ou un `resoudre` ceux d'apres son vol, au-dela du dernier de
+        /// `renvois` (2, 4, 7 et 10 s pour un diag de 6000 ms ; 2, 4, 9 et 12 s pour 8000 ms ; 2, 4, 16
+        /// et 19 s pour un resoudre).
         func renvois(pour commande: String) -> [Duration] {
-            guard let ms = Self.delaiDiag(commande), let fixe = renvois.last else { return renvois }
+            guard let vol = volEnCours(commande), let fixe = renvois.last else { return renvois }
             var r = renvois
-            let vol = Duration.milliseconds(ms)
             let dernier = vol + margeDiag - avanceDiag
             var t = vol + apresVolDiag
             while t <= dernier {
@@ -67,6 +70,14 @@ final class CanalReseau: CanalSonde, CauseFermeture {
                 t += pasDiag
             }
             return r
+        }
+
+        /// Duree pendant laquelle la carte se tait sur la commande : le delai d'un `diag`, ou le vol d'un
+        /// `resoudre <adresse> <id>` ; nil pour une autre commande.
+        func volEnCours(_ commande: String) -> Duration? {
+            if let ms = Self.delaiDiag(commande) { return .milliseconds(ms) }
+            let mots = commande.split(separator: " ")
+            return mots.count == 3 && mots[0] == "resoudre" ? volResolution : nil
         }
 
         /// Delai d'un `diag <cible> <tlv> <id> <ms>`, en ms ; nil pour une autre commande, ou

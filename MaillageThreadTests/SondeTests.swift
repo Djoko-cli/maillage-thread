@@ -66,6 +66,19 @@ final class CanalRejoue: CanalSonde {
         #"{"v":1,"t":"diag","id":\#(id),"cible":"\#(cible)","ms":40,"ok":true,"code":"2.04","tlv":"\#(tlv)"}"#
     }
 
+    /// Ligne `annonces` (firmware 1.1.0) : un routeur entendu, sa Route64 brute (ExtMac inventee) ; `suite` :
+    /// d'autres lignes suivent.
+    static func annonce(_ rloc16: String, route64: String?, age: Int = 5, suite: Bool) -> String {
+        #"{"v":1,"t":"annonces","rloc16":"\#(rloc16)","ext":"E0000000000000\#(rloc16.prefix(2))","partition":"0000000A","route64":\#(route64.map { "\"\($0)\"" } ?? "null"),"seq":null,"rssi":-70,"rssi_min":-75,"rssi_max":-65,"nb":3,"age_s":\#(age),"suite":\#(suite)}"#
+    }
+
+    static let annoncesVides = #"{"v":1,"t":"annonces","vide":true}"#
+
+    /// Reponse a `resoudre` (firmware 1.1.0) : le RLOC16 trouve et, s'il est donne, le ML-EID (32 hexa).
+    static func resolution(_ id: Int, _ cible: String, rloc16: String, mleid: String? = nil) -> String {
+        #"{"v":1,"t":"resoudre","id":\#(id),"cible":"\#(cible)","ok":true,"ms":120,"rloc16":"\#(rloc16)","mleid":\#(mleid.map { "\"\($0)\"" } ?? "null")}"#
+    }
+
     /// Ligne `routeurs` (firmware 1.0.2) : chaque routeur par son RLOC16, avec son ExtMac s'il
     /// est entendu (lien etabli, qualites 3) ; `suite` : d'autres lignes suivent.
     static func routeurs(_ table: [(rloc16: String, ext: String?)], suite: Bool) -> String {
@@ -390,6 +403,103 @@ struct SondeUSBTests {
         try await Task.sleep(for: .milliseconds(50))
         canal.fermer()
         await #expect(throws: SondeUSB.Erreur.fermee) { _ = try await requete.value }
+    }
+
+    /// `annonces` (firmware 1.1.0) sur deux lignes (`suite`) : les deux routeurs entendus, dans l'ordre ; puis la ligne
+    /// `vide` : aucun.
+    @Test func annoncesSurPlusieursLignes() async throws {
+        let appels = Mutex(0)
+        let canal = CanalRejoue { l in
+            guard l == "annonces\n" else { return [] }
+            let n = appels.withLock { a in
+                a += 1
+                return a
+            }
+            return n == 1 ? [CanalRejoue.annonce("0400", route64: "01800000000000000000", suite: true),
+                             CanalRejoue.annonce("AC00", route64: nil, age: 40, suite: false)]
+                          : [CanalRejoue.annoncesVides]
+        }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        let a = try await s.annonces()
+        #expect(a.map(\.rloc16) == ["0400", "AC00"])
+        #expect(a.map(\.ageS) == [5, 40])
+        #expect(a.first?.route64Decodee?.routeurs == [0])
+        #expect(try await s.annonces().isEmpty, "aucun routeur entendu")
+        #expect(canal.envoyes == ["annonces\n", "annonces\n"])
+    }
+
+    /// Pas de fin d'`annonces` dans le delai (firmware 1.0.3 : `commande inconnue`, ou une ligne `suite` sans la
+    /// derniere) : `sansReponse`, et la partie recue est abandonnee.
+    @Test(.timeLimit(.minutes(1))) func annoncesSansReponse() async throws {
+        let appels = Mutex(0)
+        let canal = CanalRejoue { l in
+            guard l == "annonces\n" else { return [] }
+            let n = appels.withLock { a in
+                a += 1
+                return a
+            }
+            return n == 1 ? [CanalRejoue.annonce("0400", route64: nil, suite: true)]
+                          : [#"{"v":1,"t":"erreur","erreur":"commande inconnue"}"#]
+        }
+        let s = SondeUSB(canal: canal, delaiCommande: .milliseconds(200))
+        try await s.demarrer {}
+        await #expect(throws: SondeUSB.Erreur.sansReponse("annonces")) { _ = try await s.annonces() }
+        await #expect(throws: SondeUSB.Erreur.sansReponse("annonces")) { _ = try await s.annonces() }
+    }
+
+    /// `resoudre` (firmware 1.1.0) : l'adresse part nue (sans zone) ; deux resolutions en vol, les reponses dans le
+    /// desordre, chacune a son id et a sa cible ; une reponse d'un autre id, ou d'une autre cible au meme id, ignoree.
+    @Test func resolutionsDansLeDesordre() async throws {
+        let a1 = try #require(AdresseIPv6("fd00:aaaa:bbbb:1::17%en0"))
+        let a2 = try #require(AdresseIPv6("fd00:aaaa:bbbb:1::18"))
+        let canal = CanalRejoue { l in
+            guard l.hasPrefix("resoudre fd00:aaaa:bbbb:1::18") else { return [] }
+            return [CanalRejoue.resolution(2, "fd00:aaaa:bbbb:1::18", rloc16: "5003"),
+                    CanalRejoue.resolution(1, "fd00:aaaa:bbbb:1::99", rloc16: "0400"),
+                    CanalRejoue.resolution(1, "fd00:aaaa:bbbb:1::17", rloc16: "AC00", mleid: "FD00111122220C870000000000000017")]
+        }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        async let r1 = s.resoudre(a1)
+        try await Task.sleep(for: .milliseconds(50))
+        async let r2 = s.resoudre(a2)
+        let (p, q) = try await (r1, r2)
+        #expect(p.rloc16Valeur == 0xAC00 && p.adresseMleid == AdresseIPv6("fd00:1111:2222:c87::17"))
+        #expect(q.rloc16Valeur == 0x5003 && q.adresseMleid == nil)
+        #expect(canal.envoyes == ["resoudre fd00:aaaa:bbbb:1::17 1\n", "resoudre fd00:aaaa:bbbb:1::18 2\n"])
+    }
+
+    /// Sans reponse a `resoudre` (firmware sans resolution) : `delai`, apres les 15 s de la sonde et la marge ; liaison
+    /// fermee pendant l'attente : `fermee`.
+    @Test(.timeLimit(.minutes(1))) func resolutionSansReponse() async throws {
+        let a = try #require(AdresseIPv6("fd00:aaaa:bbbb:1::17"))
+        let canal = CanalRejoue { _ in [] }
+        let s = SondeUSB(canal: canal, marge: .milliseconds(50), delaiResolution: .milliseconds(100))
+        try await s.demarrer {}
+        let r = try await s.resoudre(a)
+        #expect(!r.ok && r.erreur == "delai" && r.cible == "fd00:aaaa:bbbb:1::17" && !r.introuvable)
+        let lente = SondeUSB(canal: canal, delaiResolution: .seconds(30))
+        try await lente.demarrer {}
+        let requete = Task { try await lente.resoudre(a) }
+        try await Task.sleep(for: .milliseconds(50))
+        canal.fermer()
+        await #expect(throws: SondeUSB.Erreur.fermee) { _ = try await requete.value }
+    }
+
+    /// `diag` vers une adresse (le ML-EID d'un enfant, pour ses compteurs MAC) : la reponse a sa cible, ecrite comme
+    /// la commande l'a envoyee.
+    @Test func diagParAdresse() async throws {
+        let mleid = try #require(AdresseIPv6("fd00:1111:2222:c87::17"))
+        let compteurs = "0924" + String(repeating: "00000001", count: 9)
+        let canal = CanalRejoue { l in
+            l.hasPrefix("diag fd00:1111:2222:c87::17 9 ") ? [CanalRejoue.diag(1, "fd00:1111:2222:c87::17", tlv: compteurs)] : []
+        }
+        let s = SondeUSB(canal: canal)
+        try await s.demarrer {}
+        let r = try await s.diag(adresse: mleid, [9], delaiMs: 8000)
+        #expect(r.reponse?.compteursMac?.unicastEmis == 1)
+        #expect(canal.envoyes == ["diag fd00:1111:2222:c87::17 9 1 8000\n"])
     }
 
     /// `voisins` : les routeurs que la sonde entend, avec leur signal (valeurs inventees).

@@ -272,10 +272,14 @@ struct CanalReseauTests {
         #expect(r.renvois(pour: "diag 5000 1 1 10000") == [s(2), s(4), s(11), s(14)])
         #expect(r.renvois(pour: "diag 5000 1 1 0") == [s(2), s(4)])
         #expect(r.renvois(pour: "diag 5000 1 1") == [s(2), s(4)], "sans delai lisible : comme les autres")
-        for commande in ["bonjour", "etat", "voisins", "routeurs"] {
+        for commande in ["bonjour", "etat", "voisins", "routeurs", "annonces"] {
             #expect(r.renvois(pour: commande) == [s(2), s(4)])
         }
         #expect(SondeUSB.margeDiag == r.margeDiag, "echeance de SondeUSB")
+        // Une resolution (firmware 1.1.0) reste en vol 15 s au plus : renvois a 2 et 4 s, puis 16 et 19 s.
+        #expect(r.renvois(pour: "resoudre fd00:aaaa:bbbb:1::17 7") == [s(2), s(4), s(16), s(19)])
+        #expect(r.renvois(pour: "resoudre fd00:aaaa:bbbb:1::17") == [s(2), s(4)], "sans id : comme les autres")
+        #expect(r.volResolution == SondeUSB.delaiResolution)
     }
 
     /// Reponse d'un `diag` perdue une fois apres le vol (la carte, muette pendant le vol, la garde
