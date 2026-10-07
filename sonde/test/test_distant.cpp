@@ -1,6 +1,7 @@
 // Tests hote de sonde/src/distant.{h,cpp} (rid, liste blanche, reponses
 // gardees, cadence ; depuis la 1.0.3, entiers des commandes et reprises CoAP
-// d'un diag) et de sonde/src/voyant.h (LED de la carte, 1.0.3).
+// d'un diag ; depuis la 1.1.0, annonces et resoudre dans la liste blanche) et
+// de sonde/src/voyant.h (LED de la carte, 1.0.3).
 // Lancer : sh sonde/test/lancer.sh
 #include <stdio.h>
 #include <string.h>
@@ -93,9 +94,11 @@ int main() {
   CHECK(texteRid(4294967295u, t) == 10 && !strcmp(t, "4294967295"), "texte max");
   CHECK(texteRid(1000, t) == 4 && !strcmp(t, "1000"), "texte 1000");
   // liste blanche
-  const char *oui[] = {"bonjour", "etat", "voisins", "routeurs", "diag 0400 0 1", "diag ", "  etat", " diag x"};
+  const char *oui[] = {"bonjour", "etat", "voisins", "routeurs", "diag 0400 0 1", "diag ", "  etat", " diag x",
+                       "annonces", "resoudre fd00::1 7", "resoudre ", " annonces"};
   const char *non[] = {"", "cle", "cle nouvelle", "cle efface", "nom x", "oubli", "Bonjour", "etat ", "etatx",
-                       "diag", "routeur", "voisins x", "bonjour\t", "diagx 1", "routeurs;oubli"};
+                       "diag", "routeur", "voisins x", "bonjour\t", "diagx 1", "routeurs;oubli", "annonces x",
+                       "annonce", "resoudre", "resoudrex 1", "Annonces"};
   for (const char *x : oui) CHECK(permise(x), "permise : %s", x);
   for (const char *x : non) CHECK(!permise(x), "refusee : %s", x);
 

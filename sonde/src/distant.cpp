@@ -41,7 +41,8 @@ size_t texteRid(uint32_t rid, char out[kRidMax + 1]) {
 bool permise(const char *commande) {
   while (*commande == ' ') commande++;
   return !strcmp(commande, "bonjour") || !strcmp(commande, "etat") || !strcmp(commande, "voisins") ||
-         !strcmp(commande, "routeurs") || !strncmp(commande, "diag ", 5);
+         !strcmp(commande, "routeurs") || !strcmp(commande, "annonces") || !strncmp(commande, "diag ", 5) ||
+         !strncmp(commande, "resoudre ", 9);
 }
 
 // ===========================================================================

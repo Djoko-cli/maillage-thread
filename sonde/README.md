@@ -13,7 +13,15 @@ En FED (depuis la 1.0.2 ; MED jusqu'à la 1.0.1), OpenThread tient la table
 des routeurs de la partition et apprend l'ExtMac de ceux qu'il entend :
 commande `routeurs`.
 
-Spec : `docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design.md`.
+Depuis la 1.1.0, la sonde **écoute aussi les messages MLE** de ses voisins à
+un saut (voir « Écoute des messages MLE ») : les annonces des routeurs portent
+leur Route64, leurs liens dans les deux sens, même pour les routeurs de
+bordure d'Apple, qui ne répondent pas au diagnostic. Et elle **résout
+l'adresse** d'un appareil (`resoudre`) : OpenThread demande au réseau qui la
+porte, et le parent d'un enfant endormi répond à sa place.
+
+Spec : `docs/superpowers/specs/2026-09-28-maillage-thread-sonde-design.md` ;
+pour la 1.1.0, `docs/superpowers/specs/2026-10-07-sonde-tout-en-un-design.md`.
 
 ## Compiler et flasher
 
@@ -30,7 +38,9 @@ pio run -t upload --upload-port /dev/cu.usbmodemXXXX
 Pour passer une sonde déjà appairée à une nouvelle version, flasher **sans**
 effacement (`-t upload` seul) : l'appairage Maison, le réseau Thread, le nom
 et la clé d'accès réseau sont gardés. De la 1.0.1 à la 1.0.2, la sonde passe
-de MED (`rn`) à FED (`rdn`) au démarrage et se rattache.
+de MED (`rn`) à FED (`rdn`) au démarrage et se rattache. De la 1.0.3 à la
+1.1.0, rien ne change de ce qui est gardé ; place à la compilation : 76,5 % de
+la flash et 53,1 % de la RAM.
 
 **Toujours désigner le port de la sonde.** Le pont Halo de benq est lui
 aussi un C6 : le flasher par erreur le remplacerait. Le numéro de série USB
@@ -98,13 +108,19 @@ le C6, il faut mettre DTR et RTS à 0 dans un seul appel (voir benq).
 | `voisins` | routeurs voisins à lien établi (le parent n'y est pas : voir `etat`) |
 | `routeurs` | table des routeurs d'OpenThread : `{"v":1,"t":"routeurs","liste":[{"id":…,"rloc16":"XXXX","ext":"<16 hexa>"\|null,"lqIn":…,"lqOut":…,"age":…,"lien":…}],"suite":…}`, plusieurs lignes si besoin (`"suite":true` sur toutes sauf la dernière) |
 | `diag <cible> <t,t,…> <id> [<délai ms>]` | TLV de la réponse en hexa, ou l'erreur : `delai`, `suspendue`, `occupee` (8 requêtes en vol), `envoi…` |
+| `annonces` | (1.1.0) une ligne par routeur entendu : `{"v":1,"t":"annonces","rloc16":"XXXX","ext":"<16 hexa>","partition":"<8 hexa>"\|null,"route64":"<hexa>"\|null,"seq":…,"rssi":…,"rssi_min":…,"rssi_max":…,"nb":…,"age_s":…,"suite":…}` (`"suite":true` sur toutes sauf la dernière) ; sans routeur entendu, une seule ligne `{"v":1,"t":"annonces","vide":true}` |
+| `resoudre <ipv6> <id>` | (1.1.0) `{"v":1,"t":"resoudre","id":…,"cible":"<ipv6>","ok":true,"ms":…,"rloc16":"XXXX","mleid":"<32 hexa>"\|null}`, ou l'erreur : `introuvable` (rien en 15 s), `syntaxe` (adresse mal formée), `suspendue`, `occupee` (8 résolutions en vol), `envoi…` |
 | `cle` | `{"v":1,"t":"cle","empreinte":"<8 hexa>"\|null,…}`, avec `effacement_en_echec`, le nom d'hôte, les compteurs du transport (`udp`, dont `lignes_perdues` et `refus_cadence`) et le tas (`tas`) |
 | `cle efface` | efface la clé (plus d'accès réseau) ; la réponse de `cle`, ou l'erreur `ecriture` |
 | `cle nouvelle <64 HEXA> <id>` | nouvelle clé (réservé à l'app) : `{"v":1,"t":"cle","id":<id>,"cle":"<64 HEXA>","empreinte":"<8 hexa>","hote":…}`, **une seule fois** ; sans `id` : erreur `syntaxe` ; clé écrite mais pas chargée : un `msg` en plus |
 | `oubli` | efface la clé, désappaire et redémarre : `{"v":1,"t":"oubli","cle_effacee":true\|false}` |
 
 `etat`, `voisins` et `routeurs` répondent `{"v":1,"t":"<commande>","erreur":"occupee"}`
-si le verrou d'OpenThread n'a pas pu être pris (200 ms).
+si le verrou d'OpenThread n'a pas pu être pris (200 ms). Depuis la 1.1.0,
+`etat` porte aussi `ecoute` : `{"trames":…,"mle":…,"echecs":…,"file_pleine":…}`,
+les trames reçues, les messages MLE déchiffrés, ceux qui ne l'ont pas été
+(en-tête illisible, clé indisponible, MIC faux) et les trames perdues file
+pleine, depuis le démarrage.
 
 `<cible>` est un RLOC16 en 4 hexa, ou une adresse IPv6 du réseau maillé :
 chiffres hexa, `:` et `.` seulement, sinon `syntaxe`. `<id>` et
@@ -123,6 +139,51 @@ En FED, `routeurs` donne tous les routeurs de la partition (leur RLOC16),
 l'ExtMac de ceux que la sonde entend : trois viennent en quelques secondes,
 les autres au fil des minutes. L'entrée du parent n'a jamais d'ExtMac (voir
 `etat`). `age` n'a de sens que pour un routeur entendu.
+
+## Écoute des messages MLE (1.1.0)
+
+- **Les trames.** Au démarrage de la pile Thread, la sonde pose
+  `otLinkSetPcapCallback` : OpenThread lui donne chaque trame reçue, sans mode
+  promiscuité. Le rappel, dans la tâche OpenThread, ne fait qu'un tri (trames
+  de données sans sécurité MAC) et une copie dans une file de 16 trames ; une
+  file pleine est comptée, jamais bloquante ; ni verrou, ni Matter, ni CHIP.
+  Le reste se fait dans `loop()`.
+- **Le décodage** (`src/mle.h`, sans Arduino, testé sur le Mac) : en-tête
+  802.15.4 aux formats 2003/2006 et 2015 (numéro de séquence supprimé, PAN
+  selon le tableau 7-2, IE d'en-tête jusqu'à HT1 ou HT2), 6LoWPAN IPHC sans
+  contexte, UDP vers le port MLE 19788, source lien-local.
+- **Le déchiffrement** : suite de sécurité 0, contrôle `0x15` (niveau 5, clé
+  en mode 2), compteur de trame petit-boutiste, séquence de clé gros-boutiste.
+  La clé MLE est les 128 premiers bits de HMAC-SHA256(clé réseau, séquence ‖
+  « Thread ») ; AES-CCM, MIC de 4 octets ; nonce : l'ExtMac de l'émetteur
+  (tirée de son adresse lien-local), le compteur, le niveau ; données
+  associées : les adresses IPv6 source et destination, puis les 10 octets de
+  l'en-tête de sécurité. mbedTLS sur la carte (`src/mle_crypto.cpp`).
+- **La clé réseau** ne quitte jamais la carte : lue sous le verrou
+  d'OpenThread seulement pour dériver les clés MLE, quand la séquence de la
+  pile change, puis effacée. Deux clés MLE sont gardées : la séquence courante
+  et la suivante (rotation). Aucune commande ne rend ni la clé réseau ni une
+  clé dérivée ; une séquence étrangère ne fait jamais relire la clé réseau.
+- **La table des routeurs entendus**, par ExtMac, 32 entrées : RLOC16 (TLV
+  Source Address), partition (TLV Leader Data), dernière Route64 brute (au
+  plus 72 octets), signal (dernier, minimum et maximum depuis l'entrée),
+  nombre de messages, âge du dernier. Seuls les émetteurs dont le RLOC16 est
+  celui d'un routeur y entrent ; un routeur muet depuis 10 minutes en sort ;
+  table pleine, le plus ancien laisse sa place. `annonces` la rend : c'est
+  l'app qui décode les Route64.
+
+## Résolution d'adresse (1.1.0)
+
+`resoudre <ipv6> <id>` envoie une demande d'écho ICMPv6
+(`otIcmp6SendEchoRequest`) : OpenThread résout l'adresse (Address Query). Un
+routeur répond pour lui-même ; le parent d'un enfant, endormi ou non, répond à
+sa place : les routeurs Apple avec leur propre RLOC16, les routeurs tiers avec
+celui de l'enfant. La sonde lit ensuite son cache d'adresses
+(`otThreadGetNextCacheEntry`) toutes les 250 ms, 15 s au plus : `rloc16`, et
+`mleid` (le ML-EID de l'appareil) quand la réponse l'a porté. Au plus 8 en
+vol, comme `diag`. Le diagnostic (`diag`) n'est accepté que sur les adresses
+internes du réseau (RLOC, ML-EID) : c'est au ML-EID que l'app demande la TLV 9
+(compteurs MAC) d'un enfant.
 
 ## Accès par le réseau Thread
 
@@ -153,13 +214,15 @@ et promenée dans la maison, l'app la joint par le réseau.
   `voisins` au-delà de 1100 octets répond
   `{"v":1,"t":"erreur","erreur":"ligne trop longue"}` (entier sur l'USB).
 - **Permis à distance** : `bonjour` (sans code d'appairage ni QR code :
-  `null`), `etat`, `voisins`, `routeurs`, `diag`. Tout le reste répond
-  `{"v":1,"t":"erreur","erreur":"refuse"}`.
+  `null`), `etat`, `voisins`, `routeurs`, `diag`, et depuis la 1.1.0
+  `annonces` et `resoudre`. Tout le reste répond
+  `{"v":1,"t":"erreur","erreur":"refuse"}`. Une ligne d'`annonces` fait moins
+  de 400 octets.
 - **Un rid répété** dans la même session ne relance rien : la sonde renvoie
   la réponse gardée (les 8 dernières réponses, dans la limite de 4096 octets
   par session ; au-delà, un rid répété relance la commande, une lecture), ou
-  ne dit rien si un `diag` de ce rid est encore en vol. Prendre un rid neuf
-  par requête.
+  ne dit rien si un `diag` ou un `resoudre` de ce rid est encore en vol.
+  Prendre un rid neuf par requête.
 - **Cadence** : 20 commandes par seconde glissante et par session au plus
   (comme Halo) ; au-delà, rien n'est exécuté ni répondu, l'app renvoie.
   L'app, elle, envoie au plus 18 nouvelles commandes par seconde glissante ;
@@ -176,7 +239,9 @@ et promenée dans la maison, l'app la joint par le réseau.
 ## Outils d'essai
 
 - `sonde_essai.py <port> <capture.jsonl> <commande>…` : envoie des commandes
-  par l'USB, garde les réponses, décode les TLV et la table des routeurs.
+  par l'USB, garde les réponses, décode les TLV et la table des routeurs ;
+  depuis la 1.1.0, les annonces (les liens de chaque Route64) et les
+  résolutions (`resoudre`, 20 s d'attente au plus).
   `"cle nouvelle"` : l'outil tire l'aléa et range la clé dans le fichier
   `SONDE_CLE` (0600) ; il ne lit alors rien à l'écran de ce qui arrive. La
   clé n'est jamais affichée ni capturée : toute ligne reçue affichée telle
@@ -205,7 +270,16 @@ UBSan ; ce ne sont pas des tests `pio test`) : l'enveloppe H1
 (`test_h1.cpp`, repris de benq) et les briques pures de `distant.cpp` et
 de `voyant.h` (`test_distant.cpp` : rid, liste blanche, réponses gardées,
 cadence ; depuis la 1.0.3, lecture des entiers, reprises CoAP d'un `diag` et
-séquence de la LED).
+séquence de la LED) ; depuis la 1.1.0, l'écoute (`test_mle.cpp` : dérivation
+de la clé MLE, AES-CCM et refus d'un MIC faux, trames 802.15.4 de 2006 et de
+2015, IE, PAN, IPHC, UDP compressé ou non, TLV, clés gardées, table des
+routeurs entendus, trames tronquées, abîmées ou tirées au hasard). Ses
+vecteurs (`test/vecteurs_mle.h`) viennent de `test/vecteurs_mle.py`, à clé et
+adresses inventées, calculés à part (bibliothèque `cryptography`, présente
+dans le Python de PlatformIO) :
+`~/.platformio/penv/bin/python sonde/test/vecteurs_mle.py` les récrit,
+`--verifier` les compare au fichier commité. Sur le Mac, CommonCrypto n'a pas
+d'AES-CCM : le test le bâtit sur son AES-ECB.
 
 `python3 -m unittest discover -s sonde/test` : les tests Python, sans carte ni
 réseau : le masquage de la clé par `sonde_essai.py` (à l'écran et dans la

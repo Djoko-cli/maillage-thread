@@ -5,10 +5,11 @@
   python3 sonde_essai.py udp:<hote> <capture.jsonl> <commande> [<commande> ...]
 
 Commandes : bonjour, etat, voisins, routeurs, "diag <cible> <t,t,...> <id>",
-cle, "cle efface", "cle nouvelle", ecoute:<s> (lit <s> secondes sans rien
-envoyer). Chaque ligne machine est ajoutee a la capture avec l'heure ; les
-reponses diag et routeurs sont mises en forme a l'ecran. La cle n'est jamais
-affichee ni capturee.
+annonces et "resoudre <ipv6> <id>" (firmware 1.1.0), cle, "cle efface",
+"cle nouvelle", ecoute:<s> (lit <s> secondes sans rien envoyer). Chaque ligne
+machine est ajoutee a la capture avec l'heure ; les reponses diag, routeurs,
+annonces (avec les liens de chaque Route64) et resoudre sont mises en forme a
+l'ecran. La cle n'est jamais affichee ni capturee.
 
 USB (<port> : celui que Djoko designe) : ouverture sure du C6 (comme benq
 tools/halo_udp.py) : DTR = RTS = 0 en un seul appel, jamais RTS=1 DTR=0 qui
@@ -53,7 +54,7 @@ def ouvrir(chemin):
 MASQUE = "********"
 HEXA_16 = re.compile(r"[0-9A-Fa-f]{16,}")
 CHAMP_CLE = re.compile(r'("cle"\s*:\s*")[0-9A-Fa-f]+')
-TYPES_DONNEES = frozenset({"bonjour", "etat", "voisins", "routeurs", "diag", "erreur", "oubli"})
+TYPES_DONNEES = frozenset({"bonjour", "etat", "voisins", "routeurs", "diag", "erreur", "oubli", "annonces", "resoudre"})
 
 
 def masquer_strict(texte):
@@ -233,9 +234,35 @@ def decoder(hexa):
     return res
 
 
+def liens_route64(hexa):
+    """Liens d'une Route64 brute (annonces, 1.1.0) : (identifiant, qualite sortante, entrante), voisins seulement."""
+    try:
+        v = bytes.fromhex(hexa)
+    except (TypeError, ValueError):
+        return []
+    if len(v) < 9:
+        return []
+    masque = int.from_bytes(v[1:9], "big")
+    ids = [r for r in range(64) if masque & (1 << (63 - r))]
+    return [(r, b >> 6, (b >> 4) & 3) for r, b in zip(ids, v[9:]) if b >> 4]
+
+
 def afficher(m):
     m = sans_cle(m)
-    if m.get("t") == "diag" and m.get("ok") and "tlv" in m:
+    if m.get("t") == "annonces" and m.get("vide"):
+        print("<< annonces : aucun routeur entendu")
+    elif m.get("t") == "annonces" and "rloc16" in m:
+        print(f"<< annonces {m['rloc16']} ext {m.get('ext')} partition {m.get('partition') or '-'} rssi {m.get('rssi')}"
+              f" ({m.get('rssi_min')}..{m.get('rssi_max')}) {m.get('nb')} msg il y a {m.get('age_s')} s")
+        liens = liens_route64(m.get("route64") or "")
+        print("      liens : " + (", ".join(f"{r << 10:04X} {so}/{en}" for r, so, en in liens) or "-"))
+    elif m.get("t") == "resoudre" and m.get("ok"):
+        rloc = int(m["rloc16"], 16)
+        mleid = str(ipaddress.IPv6Address(bytes.fromhex(m["mleid"]))) if m.get("mleid") else "inconnu"
+        print(f"<< resoudre {m['cible']} : {m['rloc16']} (parent {rloc & 0xFC00:04X}), {m.get('ms')} ms, ML-EID {mleid}")
+    elif m.get("t") == "resoudre":
+        print(f"<< resoudre {m.get('cible')} : {m.get('erreur')}")
+    elif m.get("t") == "diag" and m.get("ok") and "tlv" in m:
         print(f"<< diag {m['cible']} : {m['ms']} ms, code {m.get('code')}, {len(m['tlv']) // 2} octets")
         for ligne in decoder(m["tlv"]):
             print("     ", ligne)
@@ -249,20 +276,34 @@ def afficher(m):
 
 
 def attente(c):
-    """Type de la ligne qui termine la reponse a c, et l'id d'un diag."""
+    """Type de la ligne qui termine la reponse a c, et l'id d'un diag ou d'une resolution."""
     mots = c.split()
     attendu = mots[0] if mots else ""
-    diag_id = None
+    ident = None
     if attendu == "diag" and len(mots) >= 4 and mots[3].isdigit():
-        diag_id = int(mots[3])
-    return attendu, diag_id
+        ident = int(mots[3])
+    if attendu == "resoudre" and len(mots) >= 3 and mots[2].isdigit():
+        ident = int(mots[2])
+    return attendu, ident
 
 
-def fin_de_reponse(m, attendu, diag_id):
-    # routeurs : "suite":true sur chaque ligne sauf la derniere.
+def delai_reponse(c):
+    """Attente de la reponse a c, en secondes : un diag, son delai (45 s par defaut) plus 5 s ; une resolution, ses
+    15 s plus 5 s ; le reste, 6 s."""
+    mots = c.split()
+    if mots[:1] == ["diag"]:
+        return (int(mots[4]) / 1000 if len(mots) >= 5 and mots[4].isdigit() else 45) + 5
+    if mots[:1] == ["resoudre"]:
+        return 15 + 5
+    return 6
+
+
+def fin_de_reponse(m, attendu, ident):
+    # routeurs, annonces : "suite":true sur chaque ligne sauf la derniere.
     if m.get("t") == "erreur":
         return True
-    return m.get("t") == attendu and not m.get("suite") and (attendu != "diag" or m.get("id") == diag_id)
+    return (m.get("t") == attendu and not m.get("suite")
+            and (attendu not in ("diag", "resoudre") or m.get("id") == ident))
 
 
 # ---------------------------------------------------------------------------
@@ -402,8 +443,7 @@ def essai_usb(port, capture, commandes):
             print(f">> {c}")
             os.write(fd, (c + "\n").encode("ascii"))
             attendu, diag_id = attente(c)
-            delai = 50 if attendu == "diag" else 5
-            for m in lecteur.lignes(time.time() + delai):
+            for m in lecteur.lignes(time.time() + delai_reponse(c)):
                 afficher(m)
                 if fin_de_reponse(m, attendu, diag_id):
                     break
@@ -597,9 +637,7 @@ def essai_reseau(hote, capture, commandes):
                 continue
             rid += 1
             attendu, diag_id = attente(c)
-            mots = c.split()
-            delai_diag = int(mots[4]) / 1000 if attendu == "diag" and len(mots) >= 5 and mots[4].isdigit() else 45
-            limite = delai_diag + 5 if attendu == "diag" else 6
+            limite = delai_reponse(c)
             print(f">> {rid} {c}")
             session.envoyer(f"{rid} {c}".encode("ascii"))
             debut, renvois, vues, complete = time.time(), 0, set(), False

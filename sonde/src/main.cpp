@@ -1,7 +1,9 @@
 // ===========================================================================
-//  Sonde de maillage Thread, firmware 1.0.3 (spec de la sonde, sections 2 et
+//  Sonde de maillage Thread, firmware 1.1.0 (spec de la sonde, sections 2 et
 //  3 ; contrat de la 1.0.2 : FED, routeurs, acces reseau comme le pont Halo ;
-//  1.0.3 : LED, retour allume apres oubli, refus de la cadence comptes)
+//  1.0.3 : LED, retour allume apres oubli, refus de la cadence comptes ;
+//  1.1.0 : ecoute des messages MLE et resolution d'adresse, spec de la sonde
+//  tout-en-un, section 1)
 //
 //  Noeud Matter sur Thread, en FED non eligible routeur (Full End Device) :
 //  il recoit en permanence mais ne relaie rien, ne devient jamais routeur ni
@@ -15,6 +17,12 @@
 //  Type List) et l'envoie au port TMF 61631 du noeud vise. La reponse revient
 //  sur le port CoAP de la sonde ; ses TLV partent en hexa, sans decodage :
 //  c'est l'app qui decode. Jusqu'a 8 requetes en vol, reperees par leur id.
+//
+//  Depuis la 1.1.0, la sonde ecoute aussi les messages MLE de ses voisins a un
+//  saut (ecoute.h) : elle les dechiffre avec la cle MLE, derivee de la cle
+//  reseau, et garde, par routeur entendu, sa derniere Route64 brute (c'est
+//  l'app qui la decode), son signal et l'age du dernier message. La cle reseau
+//  ne sort jamais de la carte et n'est lue que le temps d'une derivation.
 //
 //  USB : une commande par ligne ; chaque reponse est une ligne machine,
 //  RS (0x1E) + JSON compact en ASCII + LF, 4096 octets au plus.
@@ -42,6 +50,13 @@
 //                                     ':' et '.' seulement) ; id et delai en
 //                                     decimal, sinon « syntaxe » ; delai de
 //                                     3 a 60 s, 45 s par defaut
+//    annonces                         routeurs entendus (1.1.0) : une ligne
+//                                     par routeur ("suite":true sauf sur la
+//                                     derniere), ou une ligne "vide":true
+//    resoudre <ipv6> <id>             resolution d'adresse (1.1.0) : demande
+//                                     d'echo ICMPv6, puis le cache d'adresses
+//                                     toutes les 250 ms, 15 s au plus ;
+//                                     rloc16 et mleid, ou « introuvable »
 //    cle                              empreinte de la cle d'acces reseau
 //                                     (null sans cle), effacement_en_echec,
 //                                     hote, compteurs udp (lignes_perdues et
@@ -59,7 +74,7 @@
 //  cle creee par l'USB. Charge d'un message : "<rid> <commande>" ; reponse :
 //  "<rid> <ligne JSON>" (la ligne de l'USB sans RS ni LF), 1100 octets au
 //  plus. Permis : bonjour (sans code ni QR code), etat, voisins, routeurs,
-//  diag ; le reste : erreur « refuse ». Un rid repete ne relance rien (les 8
+//  diag, annonces, resoudre ; le reste : erreur « refuse ». Un rid repete ne relance rien (les 8
 //  dernieres reponses, dans la limite de 4096 octets par session) ; 20
 //  commandes par seconde et par session au plus (au-dela, rien, et le refus
 //  est compte : udp.refus_cadence de cle). Sans cle : silence total.
@@ -85,6 +100,7 @@
 #include <esp_openthread_lock.h>
 #include <esp_system.h>
 #include <openthread/coap.h>
+#include <openthread/icmp6.h>
 #include <openthread/ip6.h>
 #include <openthread/link.h>
 #include <openthread/message.h>
@@ -95,11 +111,12 @@
 #include <atomic>
 
 #include "distant.h"
+#include "ecoute.h"
 #include "h1_proto.h"
 #include "reseau.h"
 #include "voyant.h"
 
-static const char *const kVersion = "1.0.3";
+static const char *const kVersion = "1.1.0";
 
 // ---------------------------------------------------------------------------
 //  FED des la creation de la pile Thread, jamais eligible routeur (repris de
@@ -221,6 +238,27 @@ static void libereOt() { esp_openthread_lock_release(); }
 // Pour reseau.cpp : verrou pris SANS attente (emission, socket, nom d'hote).
 bool reseauVerrouEssai() { return verrouOt(0); }
 void reseauVerrouLibere() { libereOt(); }
+
+// Pour ecoute.cpp (1.1.0) : la sequence de cle courante de la pile, et la cle
+// reseau, le temps d'en deriver les cles MLE. La copie d'OpenThread est
+// effacee ici ; l'appelant efface la sienne. Jamais imprimee, jamais rendue
+// par une commande.
+static bool lireSequenceCle(uint32_t *courante) {
+  if (!verrouOt(50)) return false;
+  *courante = otThreadGetKeySequenceCounter(esp_openthread_get_instance());
+  libereOt();
+  return true;
+}
+
+static bool lireCleReseau(uint8_t cle[mle::kCle]) {
+  if (!verrouOt(50)) return false;
+  otNetworkKey k;
+  otThreadGetNetworkKey(esp_openthread_get_instance(), &k);
+  libereOt();
+  memcpy(cle, k.m8, mle::kCle);
+  h1::wipe(&k, sizeof(k));
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 //  Ligne machine : RS + JSON + LF, 4096 octets au plus sur l'USB
@@ -367,6 +405,13 @@ static void demarrerMatter() {
   Matter.begin();
   sThreadPret = chip::DeviceLayer::ThreadStackMgrImpl().OTInstance() != nullptr;
   if (!sThreadPret) Serial.println("!! pile Thread absente");
+  // Ecoute des messages MLE (1.1.0) : le rappel des trames, des que la pile
+  // existe. Verrou OT sans limite, comme imposerFed ; aucun appel CHIP dessous.
+  if (sThreadPret) {
+    esp_openthread_lock_acquire(portMAX_DELAY);
+    ecoute::demarrer(esp_openthread_get_instance(), {lireSequenceCle, lireCleReseau});
+    esp_openthread_lock_release();
+  }
   // Comme l'exemple officiel : l'etat relu passe par le rappel une fois Matter demarre.
   sInterrupteur.updateAccessory();
 }
@@ -473,6 +518,10 @@ static void cmdEtat() {
   if (xp) hexa("xp", xp->m8, sizeof(xp->m8));
   libereOt();
   ajoute(",\"suspendue\":%s", sSuspendue ? "true" : "false");
+  // Ecoute des messages MLE (1.1.0), depuis le demarrage.
+  const ecoute::Compteurs c = ecoute::compteurs();
+  ajoute(",\"ecoute\":{\"trames\":%lu,\"mle\":%lu,\"echecs\":%lu,\"file_pleine\":%lu}", (unsigned long)c.trames,
+         (unsigned long)c.mle, (unsigned long)c.echecs, (unsigned long)c.filePleine);
   fin();
 }
 
@@ -793,6 +842,202 @@ static void diagsFinis() {
 }
 
 // ---------------------------------------------------------------------------
+//  annonces : routeurs entendus (1.1.0, ecoute.h)
+// ---------------------------------------------------------------------------
+
+// Une ligne par routeur entendu, "suite":true sur toutes sauf la derniere
+// ("suite":false) ; sans routeur, une seule ligne "vide":true. Champs : rloc16,
+// ext, partition (Leader Data ; null sans elle), route64 (derniere Route64
+// brute, en hexa ; null sans elle), seq (sa sequence), rssi (dernier message),
+// rssi_min et rssi_max (depuis l'entree dans la table), nb (messages
+// dechiffres), age_s (depuis le dernier). Une ligne fait moins de 400 octets :
+// elle passe par le reseau (1100 au plus). Ni la cle reseau ni une cle
+// derivee : seulement ce que les routeurs annoncent a leurs voisins.
+static void cmdAnnonces() {
+  const mle::TableEntendus &t = ecoute::entendus();
+  const uint32_t maintenant = millis();
+  size_t restants = t.nombre();
+  if (restants == 0) {
+    debut("annonces");
+    ajoute(",\"vide\":true");
+    fin();
+    return;
+  }
+  for (size_t k = 0; k < mle::TableEntendus::kPlaces; k++) {
+    const mle::Entendu &e = t.place(k);
+    if (!e.utilise) continue;
+    restants--;
+    debut("annonces");
+    ajoute(",\"rloc16\":\"%04X\"", e.rloc16);
+    hexa("ext", e.ext, sizeof(e.ext));
+    if (e.aPartition) ajoute(",\"partition\":\"%08lX\"", (unsigned long)e.partition);
+    else ajoute(",\"partition\":null");
+    if (e.nRoute64) {
+      hexa("route64", e.route64, e.nRoute64);
+      ajoute(",\"seq\":%u", e.route64[0]);
+    } else {
+      ajoute(",\"route64\":null,\"seq\":null");
+    }
+    ajoute(",\"rssi\":%d,\"rssi_min\":%d,\"rssi_max\":%d,\"nb\":%lu,\"age_s\":%lu", e.rssi, e.rssiMin, e.rssiMax,
+           (unsigned long)e.nb, (unsigned long)((maintenant - e.dernier) / 1000));
+    ajoute(",\"suite\":%s", restants ? "true" : "false");
+    fin();
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  resoudre : resolution d'adresse (1.1.0), 8 en vol
+// ---------------------------------------------------------------------------
+
+// Une demande d'echo ICMPv6 vers l'adresse fait resoudre celle-ci par
+// OpenThread (Address Query) : un routeur repond pour lui-meme, ou le parent
+// pour son enfant, endormi ou non. Le cache d'adresses donne ensuite le RLOC16
+// trouve (celui du parent, ou de l'enfant, selon le routeur), et le ML-EID de
+// la cible quand la reponse l'a porte. loop() lit le cache toutes les 250 ms,
+// 15 s au plus.
+static constexpr uint32_t kResolutionMs = 15000, kPasCacheMs = 250;
+
+// Un emplacement par resolution en vol, dans la tache loop seulement.
+struct Resolution {
+  bool enVol = false;
+  bool finie = false;    // trouvee ou echue : la reponse attend son depart
+  bool trouvee = false;
+  uint32_t id = 0;
+  char cible[48] = {};
+  otIp6Address adresse = {};
+  uint32_t debutMs = 0, prochainMs = 0, finMs = 0;
+  uint16_t rloc16 = 0;
+  bool mleidValide = false;
+  otIp6Address mleid = {};
+  Sortie sortie;  // qui attend la reponse : l'USB, ou une session reseau et son rid
+};
+static Resolution sResolutions[kEnVol];
+
+static void repondreResolutionErreur(uint32_t id, const char *cible, const char *erreur) {
+  debut("resoudre");
+  ajoute(",\"id\":%lu,\"cible\":\"%s\",\"ok\":false,\"erreur\":\"%s\"", (unsigned long)id, cible, erreur);
+  fin();
+}
+
+// resoudre <ipv6> <id>. id en decimal (distant::lireEntier) ; adresse mal
+// formee (pas une IPv6, ou un autre caractere que l'hexa, ':' et '.') :
+// « syntaxe », avec l'id s'il a pu etre lu (0 sinon). Puis « suspendue »,
+// « occupee » (8 en vol, ou verrou OT refuse) ou « envoi ... ».
+static void cmdResoudre(char *args) {
+  char *cible = strtok(args, " ");
+  char *idTexte = strtok(nullptr, " ");
+  char *reste = strtok(nullptr, " ");
+  uint32_t id = 0;
+  const bool idLu = idTexte && distant::lireEntier(idTexte, &id);
+  otIp6Address adresse;
+  if (!cible || !idLu || reste || strlen(cible) >= sizeof(sResolutions[0].cible) ||
+      strspn(cible, kCaracteresCible) != strlen(cible) || otIp6AddressFromString(cible, &adresse) != OT_ERROR_NONE)
+    return repondreResolutionErreur(id, "", "syntaxe");
+  if (sSuspendue) return repondreResolutionErreur(id, cible, "suspendue");
+  size_t libre = kEnVol;
+  for (size_t i = 0; i < kEnVol; i++)
+    if (!sResolutions[i].enVol) {
+      libre = i;
+      break;
+    }
+  if (libre == kEnVol || !verrouOt(500)) return repondreResolutionErreur(id, cible, "occupee");
+  otInstance *ot = esp_openthread_get_instance();
+  otMessage *msg = otIp6NewMessage(ot, nullptr);
+  otError e = msg ? OT_ERROR_NONE : OT_ERROR_NO_BUFS;
+  if (msg) {
+    otMessageInfo info;
+    memset(&info, 0, sizeof(info));
+    info.mPeerAddr = adresse;
+    e = otIcmp6SendEchoRequest(ot, msg, &info, (uint16_t)id);
+    if (e != OT_ERROR_NONE) otMessageFree(msg);  // refuse : il nous reste
+  }
+  libereOt();
+  if (e != OT_ERROR_NONE) {
+    char texte[24];
+    snprintf(texte, sizeof(texte), "envoi %s", otThreadErrorToString(e));
+    return repondreResolutionErreur(id, cible, texte);
+  }
+  Resolution &r = sResolutions[libre];
+  r = Resolution();
+  r.id = id;
+  snprintf(r.cible, sizeof(r.cible), "%s", cible);
+  r.adresse = adresse;
+  r.debutMs = millis();
+  r.prochainMs = r.debutMs + kPasCacheMs;
+  r.sortie = sSortie;
+  r.enVol = true;
+}
+
+// Le cache d'adresses, toutes les 250 ms, pour les resolutions en vol : une
+// entree resolue (ou vue passer) de leur adresse donne le RLOC16 et, s'il est
+// connu, le ML-EID. 15 s sans elle : introuvable. Verrou OT occupe : au tour
+// suivant.
+static void resolutionsTour(uint32_t maintenant) {
+  bool due = false;
+  for (const Resolution &r : sResolutions)
+    due = due || (r.enVol && !r.finie && (int32_t)(maintenant - r.prochainMs) >= 0);
+  if (!due || !verrouOt(50)) return;
+  otInstance *ot = esp_openthread_get_instance();
+  otCacheEntryIterator it;
+  memset(&it, 0, sizeof(it));
+  otCacheEntryInfo info;
+  while (otThreadGetNextCacheEntry(ot, &info, &it) == OT_ERROR_NONE) {
+    if (info.mState != OT_CACHE_ENTRY_STATE_CACHED && info.mState != OT_CACHE_ENTRY_STATE_SNOOPED) continue;
+    for (Resolution &r : sResolutions) {
+      if (!r.enVol || r.finie || r.trouvee || memcmp(&info.mTarget, &r.adresse, sizeof(r.adresse))) continue;
+      r.trouvee = true;
+      r.rloc16 = info.mRloc16;
+      r.mleidValide = info.mValidLastTrans;
+      if (r.mleidValide) r.mleid = info.mMeshLocalEid;
+      r.finMs = maintenant;
+    }
+  }
+  libereOt();
+  for (Resolution &r : sResolutions) {
+    if (!r.enVol || r.finie || (int32_t)(maintenant - r.prochainMs) < 0) continue;
+    if (r.trouvee || maintenant - r.debutMs >= kResolutionMs) r.finie = true;
+    else r.prochainMs = maintenant + kPasCacheMs;
+  }
+}
+
+// {"v":1,"t":"resoudre","id":7,"cible":"<ipv6>","ok":true,"ms":340,"rloc16":"AC00","mleid":"<32 HEXA>"|null}, ou
+// "ok":false et "erreur":"introuvable".
+static void imprimerResolution(const Resolution &r) {
+  debut("resoudre");
+  ajoute(",\"id\":%lu,\"cible\":\"%s\"", (unsigned long)r.id, r.cible);
+  if (r.trouvee) {
+    ajoute(",\"ok\":true,\"ms\":%lu,\"rloc16\":\"%04X\"", (unsigned long)(r.finMs - r.debutMs), r.rloc16);
+    if (r.mleidValide) hexa("mleid", r.mleid.mFields.m8, sizeof(r.mleid.mFields.m8));
+    else ajoute(",\"mleid\":null");
+  } else {
+    ajoute(",\"ok\":false,\"erreur\":\"introuvable\"");
+  }
+  fin();
+}
+
+// Reponses pretes, comme celles d'un diag : pour une session reseau partie
+// entre-temps, la reponse tombe ; sinon elle attend une place dans la file
+// d'emission, puis elle est gardee pour un rid repete.
+static void resolutionsFinies() {
+  for (Resolution &r : sResolutions) {
+    if (!r.enVol || !r.finie) continue;
+    if (r.sortie.reseau) {
+      if (!reseauSessionActive(r.sortie.place, r.sortie.generation)) {
+        r = Resolution();
+        continue;
+      }
+      if (!reseauPlacesLibres()) continue;
+      sGardees[r.sortie.place].commencer(r.sortie.rid);
+    }
+    sSortie = r.sortie;
+    imprimerResolution(r);
+    sSortie = Sortie();
+    if (r.sortie.reseau) sGardees[r.sortie.place].terminer();
+    r = Resolution();
+  }
+}
+
+// ---------------------------------------------------------------------------
 //  Cle d'acces reseau (USB seulement)
 // ---------------------------------------------------------------------------
 
@@ -967,7 +1212,7 @@ static void executer(char *c);
 
 // "<rid> <commande>" d'une session etablie. Sans rid lisible, aucune reponse
 // possible : ignoree. Un rid deja servi ne relance rien : la reponse gardee
-// repart, ou rien si un diag de ce rid est encore en vol. Puis la cadence,
+// repart, ou rien si un diag ou une resolution de ce rid est encore en vol. Puis la cadence,
 // comme Halo apres l'id (benq cli.cpp) : plus de 20 commandes dans la seconde,
 // rien, sans reponse (l'app renvoie), mais le refus est compte
 // (sRefusCadence). Hors liste blanche : erreur « refuse ».
@@ -977,6 +1222,10 @@ void reseauRecu(uint8_t place, char *charge) {
   if (place >= kPlacesReseau || !distant::lireRid(charge, &rid, &commande)) return;
   const uint32_t generation = reseauGeneration(place);
   for (const Requete &r : sRequetes)
+    if (r.enVol && r.sortie.reseau && r.sortie.place == place && r.sortie.generation == generation &&
+        r.sortie.rid == rid)
+      return;
+  for (const Resolution &r : sResolutions)
     if (r.enVol && r.sortie.reseau && r.sortie.place == place && r.sortie.generation == generation &&
         r.sortie.rid == rid)
       return;
@@ -1056,6 +1305,8 @@ static void executer(char *c) {
   if (!strcmp(c, "voisins")) return cmdVoisins();
   if (!strcmp(c, "routeurs")) return cmdRouteurs();
   if (!strncmp(c, "diag ", 5)) return cmdDiag(c + 5);
+  if (!strcmp(c, "annonces")) return cmdAnnonces();
+  if (!strncmp(c, "resoudre ", 9)) return cmdResoudre(c + 9);
   if (!strcmp(c, "cle") || !strncmp(c, "cle ", 4)) return cmdCle(c + 3);
   if (!strcmp(c, "oubli")) return cmdOubli();
   if (!*c) return;
@@ -1094,6 +1345,9 @@ void loop() {
     }
   }
   diagsFinis();
+  ecoute::tour(millis());
+  resolutionsTour(millis());
+  resolutionsFinies();
   reseauTour();
   surveillerAppairage(millis());
   voyantTour(millis());

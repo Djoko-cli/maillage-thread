@@ -1,15 +1,16 @@
 #pragma once
 // ===========================================================================
 //  Commandes de la sonde : briques pures (contrat de la 1.0.2, complete en
-//  1.0.3)
+//  1.0.3 et en 1.1.0)
 //
 //  Commandes recues par le reseau. Charge d'un message H1 de l'app :
 //  "<rid> <commande>". rid : entier decimal choisi par l'app
 //  (0..4294967295, sans zero de tete), commande : le meme texte que sur
 //  l'USB. Charge d'une reponse : "<rid> <ligne JSON>".
 //
-//  - Liste blanche : bonjour, etat, voisins, routeurs, diag. Tout le reste
-//    (cle..., nom, oubli, commande inconnue) : refuse a distance.
+//  - Liste blanche : bonjour, etat, voisins, routeurs, diag ; depuis la
+//    1.1.0, annonces et resoudre. Tout le reste (cle..., nom, oubli, commande
+//    inconnue) : refuse a distance.
 //  - Reponses gardees : un rid repete dans la meme session ne relance rien,
 //    la reponse gardee repart : les 8 dernieres reponses, dans la limite de
 //    4096 octets par session, lignes comprises (comme le cache des 8
@@ -51,8 +52,8 @@ bool lireRid(char *charge, uint32_t *rid, char **commande);
 size_t texteRid(uint32_t rid, char out[kRidMax + 1]);
 
 // Commande permise a distance (espaces de tete sautes, comme l'aiguillage) :
-// "bonjour", "etat", "voisins", "routeurs" exactement, ou "diag " suivi des
-// arguments.
+// "bonjour", "etat", "voisins", "routeurs", "annonces" exactement, ou "diag "
+// ou "resoudre " suivi des arguments.
 bool permise(const char *commande);
 
 // Reponses gardees d'une session reseau : les kReponses dernieres (par rid),

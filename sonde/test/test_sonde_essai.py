@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests de sonde/sonde_essai.py : masquage des secrets et decodage du TLV 7.
+"""Tests de sonde/sonde_essai.py : masquage des secrets, decodage du TLV 7, annonces et resolutions (1.1.0).
 
   python3 sonde/test/test_sonde_essai.py
   python3 -m unittest discover -s sonde/test        (tous les tests Python, depuis la racine du depot)
@@ -550,6 +550,53 @@ class DecodageTlv7(unittest.TestCase):
         for n in range(len(nd)):
             with self.subTest(coupe=n):
                 s.network_data(nd[:n])
+
+
+class AnnoncesEtResolution(unittest.TestCase):
+    """Firmware 1.1.0 : annonces (une ligne par routeur entendu, "suite" sauf sur la derniere) et resoudre (une
+    reponse par id, apres 15 s au plus). Valeurs inventees."""
+
+    ANNONCE = {"v": 1, "t": "annonces", "rloc16": "5000", "ext": "E000000000000A01", "partition": "1234ABCD",
+               "route64": "7A" + "4000080000100000" + "F10092", "seq": 122, "rssi": -61, "rssi_min": -70,
+               "rssi_max": -55, "nb": 12, "age_s": 7, "suite": True}
+
+    def test_attente_d_une_resolution_par_son_id(self):
+        self.assertEqual(s.attente("resoudre fd00::1 17"), ("resoudre", 17))
+        self.assertEqual(s.attente("annonces"), ("annonces", None))
+        self.assertEqual(s.delai_reponse("resoudre fd00::1 17"), 20)
+        self.assertEqual(s.delai_reponse("annonces"), 6)
+
+    def test_fin_d_une_reponse(self):
+        self.assertFalse(s.fin_de_reponse(self.ANNONCE, "annonces", None), "suite : d'autres lignes viennent")
+        self.assertTrue(s.fin_de_reponse(dict(self.ANNONCE, suite=False), "annonces", None))
+        self.assertTrue(s.fin_de_reponse({"v": 1, "t": "annonces", "vide": True}, "annonces", None))
+        r = {"v": 1, "t": "resoudre", "id": 17, "cible": "fd00::1", "ok": False, "erreur": "introuvable"}
+        self.assertTrue(s.fin_de_reponse(r, "resoudre", 17))
+        self.assertFalse(s.fin_de_reponse(dict(r, id=16), "resoudre", 17), "une autre resolution")
+
+    def test_liens_d_une_route64(self):
+        # Routeurs 1, 20 et 43 : 1 et 43 voisins (qualites sortante et entrante), 20 l'emetteur lui-meme.
+        self.assertEqual(s.liens_route64(self.ANNONCE["route64"]), [(1, 3, 3), (43, 2, 1)])
+        self.assertEqual(s.liens_route64("7A00"), [], "trop courte")
+
+    def test_affichage(self):
+        ecran = io.StringIO()
+        with contextlib.redirect_stdout(ecran):
+            s.afficher(self.ANNONCE)
+            s.afficher({"v": 1, "t": "annonces", "vide": True})
+            s.afficher({"v": 1, "t": "resoudre", "id": 17, "cible": "fd00::1", "ok": True, "ms": 340,
+                        "rloc16": "AC00", "mleid": "FD00111122220C87" + "0000000000000017"})
+        texte = ecran.getvalue()
+        self.assertIn("5000 ext E000000000000A01 partition 1234ABCD rssi -61 (-70..-55) 12 msg il y a 7 s", texte)
+        self.assertIn("liens : 0400 3/3, AC00 2/1", texte)
+        self.assertIn("aucun routeur entendu", texte)
+        self.assertIn("fd00::1 : AC00 (parent AC00), 340 ms, ML-EID fd00:1111:2222:c87::17", texte)
+
+    def test_donnees_entieres(self):
+        """Une Route64 et un ML-EID ont plus de 16 hexa : ce sont des donnees, jamais masquees."""
+        for t in ("annonces", "resoudre"):
+            self.assertIn(t, s.TYPES_DONNEES)
+        self.assertEqual(s.sans_cle(self.ANNONCE), self.ANNONCE)
 
 
 class Structure(unittest.TestCase):
