@@ -2273,6 +2273,22 @@
         }
       }
     },
+    "Non identifié" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unidentified"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non identifié"
+          }
+        }
+      }
+    },
     "Non identifié · %@" : {
       "localizations" : {
         "en" : {

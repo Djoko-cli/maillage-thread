@@ -30,7 +30,8 @@ enum LibellesNoeuds {
     }
 
     /// Nom d'un noeud que seule la sonde connait : « Routeur de bordure · B400 »,
-    /// « Routeur · 5000 », « Non identifie · AC05 ». Un routeur de bordure non identifie
+    /// « Routeur · 5000 », « Non identifie · AC05 » (« Non identifie » seul pour un enfant resolu, au RLOC16 invente).
+    /// Un routeur de bordure non identifie
     /// montre ses candidats, sous leur nom (`noms`, par instance ; l'instance a defaut) :
     /// « HomePod Avant ou HomePod Palier · 0400 » ; un seul, sans elimination possible :
     /// « HomePod salon ? · 0400 », car ce n'est peut-etre pas lui.
@@ -43,6 +44,8 @@ enum LibellesNoeuds {
             if let seul = candidats.first { return String(localized: "\(seul)\u{202F}? · \(rloc)") }
             return n.bordure ? String(localized: "Routeur de bordure · \(rloc)") : String(localized: "Routeur · \(rloc)")
         case .enfant:
+            // Le RLOC16 d'un enfant resolu est invente (`EnfantMaillage.bitInvente`) : on ne l'affiche jamais.
+            if n.rloc16 & EnfantMaillage.bitInvente != 0 { return String(localized: "Non identifié") }
             return String(localized: "Non identifié · \(rloc)")
         }
     }

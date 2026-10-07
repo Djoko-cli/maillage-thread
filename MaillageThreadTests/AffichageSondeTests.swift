@@ -20,6 +20,17 @@ struct AffichageSondeTests {
                                                        bordure: false)) == String(localized: "Non identifié · \("AC05")"))
     }
 
+    /// Le RLOC16 invente d'un enfant resolu (`EnfantMaillage.bitInvente`) n'est jamais affiche : « Non identifie » seul,
+    /// sans code ; un vrai RLOC16 garde « Non identifie · XXXX ».
+    @Test func libelleSansRloc16Invente() {
+        let invente = NoeudSonde(id: "rloc:0E00", rloc16: 0x0C00 | EnfantMaillage.bitInvente, genre: .enfant,
+                                 reconnu: false, bordure: false)
+        let reel = NoeudSonde(id: "rloc:0C05", rloc16: 0x0C05, genre: .enfant, reconnu: false, bordure: false)
+        #expect(LibellesNoeuds.inconnu(invente) == String(localized: "Non identifié"))
+        #expect(!LibellesNoeuds.inconnu(invente).contains("0E00"))
+        #expect(LibellesNoeuds.inconnu(reel) == String(localized: "Non identifié · \("0C05")"))
+    }
+
     /// Routeur de bordure non identifie : ses candidats sous leur nom (« HomePod Avant ou HomePod
     /// Gauche · 0400 »), l'instance a defaut ; un seul candidat, avec un point d'interrogation (sans
     /// elimination possible, ce n'est peut-etre pas lui).
