@@ -346,9 +346,10 @@ struct MaillageTests {
         c.reponse(try Self.reponseVoisins((id: 3, sortante: 3, entrante: 2)), routeur: 2)
         // 3 entendu il y a 2 min : 3 -> 2 en 1, 2 -> 3 en 1 ; et 3 -> 5 en 2, 5 -> 3 en 3 (5 ne repond pas).
         c.ecoute(Self.route64((2, 1, 1), (3, 0, 0), (5, 2, 3)), routeur: 3, date: Self.debut - 120)
-        // 1 entendu a l'instant (age 0) : 1 -> 2 en 2, 2 -> 1 en 1 ; 2 repond aussi pour ce lien plus bas.
-        c.ecoute(Self.route64((2, 2, 1)), routeur: 1, date: Self.debut)
+        // 2 repond aussi pour le lien 1-2.
         c.reponse(try Self.reponseVoisins((id: 1, sortante: 3, entrante: 3), (id: 3, sortante: 3, entrante: 2)), routeur: 2)
+        // 1 entendu a l'instant (age 0) : 1 -> 2 en 2, 2 -> 1 en 1 ; la reponse du diagnostic (3,3) est plus recente (meme date, mais diagnostic).
+        c.ecoute(Self.route64((2, 2, 1)), routeur: 1, date: Self.debut)
         let m = c.maillage()
         let l23 = try #require(m.liens.first { $0.a == 2 && $0.b == 3 })
         #expect(l23.qualiteAB == 3 && l23.qualiteBA == 2, "le diagnostic, plus recent, dans les deux sens")
