@@ -167,8 +167,12 @@ les autres au fil des minutes. L'entrée du parent n'a jamais d'ExtMac (voir
   Une trame à clé inconnue fait lire la séquence de la pile au plus une fois
   par tour de `loop()` ; la clé réseau n'est lue qu'une fois par séquence de
   la pile, même si la dérivation échoue (tas épuisé) : elle n'est relue qu'à
-  la rotation suivante. Seul un verrou refusé la fait retenter, au tour
-  suivant.
+  la rotation suivante. Un échec de dérivation arrête donc l'écoute jusqu'à la
+  rotation suivante de la clé (672 h par défaut, soit 4 semaines) ou jusqu'à un
+  redémarrage de la sonde ; ce cas, très improbable, demande un tas épuisé au
+  moment de la dérivation. Il se voit : `mle` ne progresse plus dans `ecoute`
+  de `etat`, et la couverture reste à 0 dans l'app ; un redémarrage le règle.
+  Seul un verrou refusé la fait retenter, au tour suivant.
 - **La table des routeurs entendus**, par ExtMac, 32 entrées : RLOC16 (TLV
   Source Address), partition (TLV Leader Data), dernière Route64 brute (au
   plus 72 octets), signal (dernier, minimum et maximum depuis l'entrée),

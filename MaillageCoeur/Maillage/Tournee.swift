@@ -121,7 +121,7 @@ public struct MemoireTournee: Hashable, Sendable {
 }
 
 /// Tournee de la sonde : liste des routeurs, routeurs qui repondent, roles, liens entendus par la
-/// sonde, puis resolution des parents des appareils et qualite des enfants des routeurs muets.
+/// sonde, puis resolution des parents des appareils et taux d'acces au canal refuses des enfants des routeurs muets.
 public enum Tournee {
     public static let tlvChef: [UInt8] = [TypeTLV.route64, TypeTLV.donneesChef]
     public static let tlvRouteur: [UInt8] = [TypeTLV.extMac, TypeTLV.address16, TypeTLV.route64, TypeTLV.tableEnfants,
@@ -154,7 +154,7 @@ public enum Tournee {
     /// pour l'historique (spec de la sonde, section 6) ; et, depuis le firmware 1.1.0 (spec de la sonde tout-en-un,
     /// section 2), les liens des routeurs dont la sonde entend les annonces, fusionnes avec ceux du diagnostic, et les
     /// enfants des routeurs muets rattaches par la resolution d'adresse de `appareils` (ceux de la partition de la
-    /// sonde, elle exceptee), avec la qualite que donnent leurs compteurs MAC.
+    /// sonde, elle exceptee), avec, a titre d'information, le taux d'acces au canal refuses que donnent leurs compteurs MAC, sans qualite.
     /// `avancement` est appele au debut de chaque etape atteinte, puis a chaque requete revenue (voir
     /// `AvancementTournee`), depuis la tache de la tournee.
     public static func executer(_ sonde: some InterlocuteurSonde, memoire: MemoireTournee, maintenant: Date,

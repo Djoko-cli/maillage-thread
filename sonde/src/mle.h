@@ -212,7 +212,8 @@ struct AccesPile {
 // - sinon la pile est consultee au plus une fois par tour (nouveauTour) ;
 // - la cle reseau est lue au plus une fois par sequence de la pile, que la
 //   derivation reussisse ou non : elle n'est relue que quand cette sequence
-//   change (rotation) ; une sequence etrangere ne la fait jamais relire ;
+//   change (rotation) ou au redemarrage ; un echec arrete l'ecoute jusqu'a
+//   la rotation ou le redemarrage ; une sequence etrangere ne la fait jamais relire ;
 // - une lecture refusee (verrou) ne retient rien : retentee au tour suivant.
 // La cle reseau ne passe que par la pile de `fournir`, effacee avant le retour.
 class SourceCles {

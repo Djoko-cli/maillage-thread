@@ -14,7 +14,8 @@
 //    table des routeurs entendus, l'oubli de ceux qui se taisent depuis 10 min.
 //  - La cle reseau n'est lue, sous le verrou OpenThread et par main.cpp, que
 //    pour deriver les cles MLE quand la sequence de la pile change, une fois
-//    par sequence meme si la derivation echoue, puis effacee ; seules deux
+//    par sequence meme si la derivation echoue (l'ecoute reste alors arretee
+//    jusqu'a la rotation ou un redemarrage), puis effacee ; seules deux
 //    cles MLE sont gardees (mle::ClesMle). Une trame ne fait consulter la pile
 //    qu'une fois par tour au plus (mle::SourceCles). Aucune commande ne rend
 //    ni la cle reseau ni une cle derivee.
