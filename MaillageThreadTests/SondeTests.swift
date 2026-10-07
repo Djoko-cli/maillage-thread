@@ -450,6 +450,27 @@ struct SondeUSBTests {
         await #expect(throws: SondeUSB.Erreur.sansReponse("annonces")) { _ = try await s.annonces() }
     }
 
+    /// Lignes d'`annonces` orphelines : arrivees sans attente en cours (apres l'echeance), sans leur derniere ligne,
+    /// elles ne sont pas gardees et ne se melent pas a la reponse suivante.
+    @Test(.timeLimit(.minutes(1))) func annoncesOrphelinesOubliees() async throws {
+        let appels = Mutex(0)
+        let canal = CanalRejoue { l in
+            guard l == "annonces\n" else { return [] }
+            let n = appels.withLock { a in
+                a += 1
+                return a
+            }
+            return n == 1 ? [] : [CanalRejoue.annonce("AC00", route64: nil, suite: false)]
+        }
+        let s = SondeUSB(canal: canal, delaiCommande: .milliseconds(200), delaiAnnonces: .milliseconds(200))
+        try await s.demarrer {}
+        await #expect(throws: SondeUSB.Erreur.sansReponse("annonces")) { _ = try await s.annonces() }
+        // La fin de la premiere reponse arrive en retard, sans sa derniere ligne.
+        canal.emettre([CanalRejoue.annonce("0400", route64: "01800000000000000000", suite: true)])
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(try await s.annonces().map(\.rloc16) == ["AC00"])
+    }
+
     /// Lignes d'`annonces` etalees : la premiere ligne arrive apres le delai commun, mais avant le delai propre
     /// d'`annonces` ; la derniere ligne complete la reponse et elle est bien reunite (firmware 1.1.0 : environ
     /// 4 s pour 32 routeurs, avec marge pour le reseau).

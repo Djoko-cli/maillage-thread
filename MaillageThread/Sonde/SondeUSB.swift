@@ -351,8 +351,13 @@ actor SondeUSB: InterlocuteurSonde {
     }
 
     /// Ligne d'`annonces` : gardee jusqu'a la derniere (`suite` faux), qui rend la liste entiere a la premiere attente.
-    /// Sans attente (reponse apres le delai), la liste est oubliee.
+    /// Sans attente (reponse apres le delai), la ligne est oubliee tout de suite : une queue sans sa derniere ligne ne
+    /// reste pas en memoire et ne se mele pas a la reponse suivante.
     private func recevoirAnnonces(_ p: PartieAnnonces) {
+        guard !attenteAnnonces.estVide else {
+            annoncesRecues = []
+            return
+        }
         annoncesRecues += p.liste
         guard !p.suite else { return }
         let liste = annoncesRecues
