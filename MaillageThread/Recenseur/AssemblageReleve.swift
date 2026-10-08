@@ -32,7 +32,7 @@ extension Recenseur {
             }.sorted { $0.instance < $1.instance }
         }
         return Annonces(date: date, routeurs: services("_meshcop._udp"), matter: services("_matter._tcp"),
-                        hap: services("_hap._udp"), adresses: adresses, routes: routes, prefixesLocaux: prefixesLocaux)
+                        hap: services("_hap._udp"), trel: services("_trel._udp"), adresses: adresses, routes: routes, prefixesLocaux: prefixesLocaux)
     }
 
     /// Cibles apres un releve : une resolution reussie remplace la cible de son

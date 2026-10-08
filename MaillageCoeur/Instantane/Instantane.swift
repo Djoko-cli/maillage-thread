@@ -94,6 +94,9 @@ public struct Instantane: Hashable, Sendable {
     public let appareilsIP: [Appareil]
     /// Prefixes OMR vus sans partition connue.
     public let prefixesSansPartition: [PrefixeIPv6]
+    /// Adresses etendues (16 hexa majuscules) des routeurs qui annoncent TREL (`_trel._udp`, champ `xa`) : ils peuvent
+    /// se parler par le reseau local, et leurs liens entre eux ne prouvent aucun lien radio.
+    public let trel: Set<String>
 
     public var routeurs: [RouteurBordure] { reseaux.flatMap(\.routeurs) }
     public var prefixes: [PrefixeIPv6] { (reseaux.flatMap(\.prefixes) + prefixesSansPartition).sorted() }

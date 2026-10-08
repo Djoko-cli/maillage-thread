@@ -286,6 +286,36 @@ struct RapprochementTests {
     /// radio entendu puis mesure par le diagnostic, plus recent, n'a plus que lui ; un lien sans source (maillage de
     /// demo) n'en a pas. Un enfant : la table de son parent, la resolution et le taux de ses compteurs,
     /// ou la sonde. Les routeurs muets, entendus ou non, et si la sonde a rendu ses annonces. Le noeud de la sonde.
+    /// Carte radio seulement (decision de Djoko du 08/10) : le lien entre deux routeurs qui annoncent TREL n'est pas
+    /// garde, ils peuvent se parler par le reseau local ; un lien dont un seul bout annonce TREL, et le lien d'un enfant
+    /// vers son parent, le sont. Sans TREL, tous les liens restent.
+    @Test func carteRadioSeulement() throws {
+        let i = Self.instantane()
+        let r = try #require(i.reseaux.first)
+        var c = ConstructionMaillage(date: Date(timeIntervalSince1970: 1_790_000_000), partition: "46CBEBCD")
+        c.routeurs(Route64(sequence: 1, routes: [1, 2, 3].map {
+            RouteRouteur(idRouteur: $0, qualiteSortante: 0, qualiteEntrante: 0, cout: 1)
+        }), chef: 1)
+        for (id, ext) in [(1, "E0000000000000A1"), (2, "E0000000000000A2"), (3, "E0000000000000A3")] {
+            c.identite(ext, routeur: id)
+        }
+        c.lien(1, 2, sortante: 3, entrante: 3)
+        c.lien(1, 3, sortante: 2, entrante: 2)
+        c.lien(2, 3, sortante: 1, entrante: 1)
+        c.enfant(EnfantMaillage(rloc16: 0x0401, extMac: "E000000000000004", qualite: 2, source: .tableEnfants))
+        let maillage = c.maillage()
+        func radio(_ m: MaillageAffiche) -> Set<Set<String>> {
+            Set(m.liens.filter { $0.genre == .radio }.map { Set([$0.de, $0.vers]) })
+        }
+        let tout = MaillageAffiche(maillage: maillage, reseau: r, appareils: i.appareils)
+        #expect(radio(tout).count == 3)
+        let m = MaillageAffiche(maillage: maillage, reseau: r, appareils: i.appareils,
+                                trel: ["E0000000000000A1", "E0000000000000A2"])
+        let (a, b, d) = (try #require(m.routeurs[1]?.id), try #require(m.routeurs[2]?.id), try #require(m.routeurs[3]?.id))
+        #expect(radio(m) == [Set([a, d]), Set([b, d])], "1-2 par le reseau local possible : retire")
+        #expect(m.liens.contains { $0.genre == .parent && $0.de == "E000000000000004" }, "le lien de l'enfant reste")
+    }
+
     @Test func origineDesLiens() throws {
         let i = Self.instantane()
         let r = try #require(i.reseaux.first)

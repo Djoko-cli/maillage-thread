@@ -507,7 +507,13 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   routeurs de sa partition : ceux d'une autre partition (celle d'un hub
   Aqara, par exemple) sont écartés. Pour une paire de routeurs, chaque sens
   garde la mesure la plus récente, diagnostic ou écoute, datée de l'âge que
-  donne la sonde ; un lien connu d'un seul côté est affiché. Chaque annonce
+  donne la sonde ; un lien connu d'un seul côté est affiché.
+  **Carte radio seulement.** Les routeurs qui annoncent TREL (`_trel._udp`,
+  Thread par le réseau local, comme ceux d'Apple) peuvent se parler par le
+  Wi-Fi ou l'Ethernet, et leur Route64 ne dit pas si un lien passe par la
+  radio : un lien entre deux routeurs TREL n'est pas dessiné. Restent les
+  liens d'un routeur sans TREL (Nanoleaf, Eve…) et ceux des enfants vers
+  leur parent, qui sont radio. Chaque annonce
   relie aussi un RLOC16 à une ExtMac, comme le parent de la sonde.
 - **La résolution des parents**, toutes les 30 minutes et quand un appareil
   paraît : pour chaque appareil Matter ou HomeKit sur Thread que l'app

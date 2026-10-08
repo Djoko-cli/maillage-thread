@@ -257,7 +257,7 @@ final class Surveillance {
               let r = i.reseaux.first(where: { r in r.partitions.contains { $0.id == m.partition } }) ?? reseau else {
             return nil
         }
-        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values))
+        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values), trel: i.trel)
     }
 
     /// Noeuds d'un maillage pour le journal : leur id dans le graphe et leur nom affiche,
@@ -544,7 +544,7 @@ final class Surveillance {
         guard let m = maillage, let i = instantane, fraicheurMaillage(a: maintenant) != .perime else {
             return nil
         }
-        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values))
+        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values), trel: i.trel)
     }
 
     /// Le maillage affiche a ete recu il y a plus de 6 min, et aucune tournee n'est

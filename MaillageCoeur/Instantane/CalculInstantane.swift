@@ -198,6 +198,7 @@ extension Instantane {
         appareils = threads.sorted { $0.id < $1.id }
         appareilsIP = ips.sorted { $0.id < $1.id }
         prefixesSansPartition = restants.sorted()
+        trel = Set(a.trel.compactMap { $0.txt["xa"].flatMap { $0.count == 8 ? $0.hexa : nil } })
     }
 
     /// Centre d'abord (chef, sinon BBR primaire, sinon le premier par nom), puis par nom.

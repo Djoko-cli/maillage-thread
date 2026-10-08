@@ -43,6 +43,8 @@ public struct Annonces: Codable, Equatable, Sendable {
     public var matter: [AnnonceService]
     /// `_hap._udp` : accessoires HomeKit.
     public var hap: [AnnonceService]
+    /// `_trel._udp` : routeurs Thread qui passent aussi par le reseau local (TREL) ; vide dans une capture d'avant.
+    public var trel: [AnnonceService]
     /// Adresses resolues de chaque hote (cle : `AnnonceService.hote`), en texte.
     public var adresses: [String: [String]]
     /// Routes IPv6 /64 du Mac par un routeur lien-local (vide si illisibles).
@@ -53,16 +55,35 @@ public struct Annonces: Codable, Equatable, Sendable {
     public var note: String?
 
     public init(date: Date, routeurs: [AnnonceService] = [], matter: [AnnonceService] = [],
-                hap: [AnnonceService] = [], adresses: [String: [String]] = [:],
+                hap: [AnnonceService] = [], trel: [AnnonceService] = [], adresses: [String: [String]] = [:],
                 routes: [RouteIPv6] = [], prefixesLocaux: [String] = [], note: String? = nil) {
         self.date = date
         self.routeurs = routeurs
         self.matter = matter
         self.hap = hap
+        self.trel = trel
         self.adresses = adresses
         self.routes = routes
         self.prefixesLocaux = prefixesLocaux
         self.note = note
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case date, routeurs, matter, hap, trel, adresses, routes, prefixesLocaux, note
+    }
+
+    /// Une capture d'avant TREL n'a pas `trel` : vide.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        date = try c.decode(Date.self, forKey: .date)
+        routeurs = try c.decode([AnnonceService].self, forKey: .routeurs)
+        matter = try c.decode([AnnonceService].self, forKey: .matter)
+        hap = try c.decode([AnnonceService].self, forKey: .hap)
+        trel = try c.decodeIfPresent([AnnonceService].self, forKey: .trel) ?? []
+        adresses = try c.decode([String: [String]].self, forKey: .adresses)
+        routes = try c.decode([RouteIPv6].self, forKey: .routes)
+        prefixesLocaux = try c.decode([String].self, forKey: .prefixesLocaux)
+        note = try c.decodeIfPresent(String.self, forKey: .note)
     }
 
     /// Adresses d'un hote (vide si inconnu).

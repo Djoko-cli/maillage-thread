@@ -114,6 +114,8 @@ Le mode démo, la partition Aqara (montrée comme aujourd'hui ; ses annonces ent
 
 **Vérifié le 08/10/2026 avec Djoko** (firmware 1.1.0 flashé sans effacement, app 1.1.0 de travail) : à sa place habituelle, la sonde entend 6 routeurs sur 7 ; les 10 liens possibles entre les 5 routeurs Apple sont dessinés ; 22 appareils sont rattachés à leur parent par la résolution, tous sous un routeur Apple. Le taux d'accès au canal refusés, qui demande deux résolutions à 30 minutes d'écart, et le déplacement de la sonde n'ont pas été vus au banc.
 
+**Correction du 08/10/2026 (test de Djoko) :** un HomePod mini enfermé dans de l'aluminium puis une casserole perd 8 à 15 dB à la sonde, mais tous ses liens avec les autres routeurs Apple restent à 3. Les 5 routeurs Apple annoncent TREL (`_trel._udp`) : ils peuvent se parler par le réseau local, et une entrée de leur Route64 ne prouve aucun lien radio. Les « 10 liens Apple ↔ Apple » du banc n'en sont donc pas la preuve. Décision de Djoko : carte exclusivement radio ; l'app ne dessine plus le lien entre deux routeurs qui annoncent TREL (leur `xa`). Découvrir leurs vrais liens radio (écoute 802.15.4 en promiscuité) est au backlog.
+
 ## 6. Fin de l'essai
 
 - Djoko retire « Sonde essai » de Maison.

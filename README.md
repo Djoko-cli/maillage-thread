@@ -485,7 +485,13 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   the routers of its partition: those heard from another partition (an Aqara
   hub's, for example) are set aside. For each pair of routers, each
   direction keeps the most recent measure, diagnostics or listening, dated
-  by the age the probe gives; a link known from one end only is shown. Each
+  by the age the probe gives; a link known from one end only is shown.
+  **Radio-only map.** Routers that advertise TREL (`_trel._udp`, Thread over
+  the local network, like Apple's) can talk over Wi-Fi or Ethernet, and their
+  Route64 does not say whether a link goes over the radio: a link between two
+  TREL routers is not drawn. What remains are the links of a router without
+  TREL (Nanoleaf, Eve…) and the children's links to their parent, which are
+  radio. Each
   advertisement also ties a RLOC16 to an ExtMac, like the probe's parent.
 - **Parent resolution**, every 30 minutes and when a device appears: for each
   Matter or HomeKit device on Thread that the app knows with an address on

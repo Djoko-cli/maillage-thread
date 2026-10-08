@@ -140,7 +140,10 @@ public struct MaillageAffiche: Hashable, Sendable {
     /// lien : ceux de l'entree que retient `Maillage.enfantsIdentifies` ; l'autre est ecartee. L'entree
     /// de la resolution d'un enfant devenu routeur (l'ExtMac d'un routeur du maillage) n'en donne aucun.
     /// Chaque noeud garde l'ExtMac que la sonde lui connait (`extMacs`).
-    public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil]) {
+    /// Carte radio seulement (decision de Djoko du 08/10) : un lien entre deux routeurs dont l'ExtMac est dans `trel`
+    /// (ils annoncent TREL, et peuvent se parler par le reseau local) n'est pas garde : leur Route64 ne dit pas s'il passe
+    /// par la radio.
+    public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil], trel: Set<String> = []) {
         partition = maillage.partition
         date = maillage.date
         let bordures = reseau.partitions.first { $0.id == maillage.partition }?.routeurs ?? []
@@ -224,7 +227,13 @@ public struct MaillageAffiche: Hashable, Sendable {
                                            bordure: false)
         }
 
-        var liens = maillage.liens.compactMap { l -> LienAffiche? in
+        let extMacs = Dictionary(maillage.routeurs.compactMap { r in r.extMac.map { (r.id, $0.uppercased()) } },
+                                 uniquingKeysWith: { a, _ in a })
+        func parReseauLocal(_ l: LienRadio) -> Bool {
+            guard let a = extMacs[l.a], let b = extMacs[l.b] else { return false }
+            return trel.contains(a) && trel.contains(b)
+        }
+        var liens = maillage.liens.filter { !parReseauLocal($0) }.compactMap { l -> LienAffiche? in
             guard let a = routeurs[l.a], let b = routeurs[l.b] else { return nil }
             return LienAffiche(de: a.id, vers: b.id, genre: .radio, qualite: l.qualite, origine: OrigineLien(l))
         }

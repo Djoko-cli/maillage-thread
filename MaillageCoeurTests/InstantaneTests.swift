@@ -46,6 +46,17 @@ struct InstantaneTests {
         #expect(i.prefixes.map(\.description) == ["fd03:54f0:5de:1::/64", "fd19:961f:2db3::/64"])
     }
 
+    /// Les routeurs qui annoncent TREL, par le `xa` de leur annonce `_trel._udp` ; un `xa` qui n'a pas 8 octets est
+    /// ignore. Sans annonce TREL (releve du 28/09), aucun.
+    @Test func routeursTrel() {
+        #expect(Instantane(annonces: Releve20260928.annonces).trel.isEmpty)
+        var a = Releve20260928.annonces
+        a.trel = [AnnonceService(instance: "un", txt: ChampsTXT(["xa": Data([0xE0, 0, 0, 0, 0, 0, 0, 0x07])])),
+                  AnnonceService(instance: "deux", txt: ChampsTXT(["xa": Data([0xE0, 0x07])])),
+                  AnnonceService(instance: "trois")]
+        #expect(Instantane(annonces: a).trel == ["E000000000000007"])
+    }
+
     @Test func sansTableDeRoutage() throws {
         // Bac a sable sans routes : fd19 par elimination (l'Aqara publie fd03 dans son TXT).
         var a = Releve20260928.annonces
