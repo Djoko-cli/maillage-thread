@@ -65,6 +65,9 @@ plus.
 L'app embarque [Sparkle](https://sparkle-project.org) 2.10.0 (les mises à jour automatiques), sous
 licence MIT ; le texte de la licence est livré dans le `.dmg`, à côté de l'app (`Sparkle-LICENSE.txt`).
 
+Le symbole de Thread de l'icône de la barre des menus est tracé d'après le logo du Thread Group
+(Wikimedia Commons, `Thread_Group_wordmark.svg`, domaine public) ; Thread est une marque du Thread Group.
+
 ## Ce que le Mac peut voir
 
 Le Mac n'a pas de radio Thread : l'app **écoute** seulement le réseau local.

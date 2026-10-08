@@ -62,6 +62,9 @@ open it, and drag **Maillage Thread** onto **Applications**. macOS 26 or later.
 The app embeds [Sparkle](https://sparkle-project.org) 2.10.0 (automatic updates), under the MIT
 license; the text of the license is shipped in the `.dmg`, next to the app (`Sparkle-LICENSE.txt`).
 
+The Thread symbol of the menu bar icon is traced from the Thread Group logo (Wikimedia Commons,
+`Thread_Group_wordmark.svg`, public domain); Thread is a trademark of the Thread Group.
+
 ## What the Mac can see
 
 The Mac has no Thread radio: the app only **listens** to the local network.

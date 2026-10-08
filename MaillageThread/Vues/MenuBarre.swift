@@ -3,8 +3,7 @@ import MaillageCoeur
 import SwiftUI
 
 /// Icone de la barre des menus : le maillage et, en bas a droite, le symbole de Thread ; orange quand il y a une
-/// alerte. Ouvre le
-/// graphe au lancement quand on le lui demande (mode demo, premier lancement).
+/// alerte. Ouvre le graphe au lancement quand on le lui demande (mode demo, premier lancement).
 struct IconeBarre: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(\.openWindow) private var openWindow
