@@ -40,6 +40,15 @@ struct CourbesNoeudTests {
                 "la sonde n'entend pas le routeur 1")
     }
 
+    /// Carte radio seulement : le lien entre deux routeurs qui annoncent TREL n'a pas de courbe ; un seul ne suffit pas.
+    @Test func liensTrelSansCourbe() {
+        let releves = [Self.releve(0), Self.releve(5)]
+        #expect(CourbesNoeud(cle: Self.a0, releves: releves, cles: ClesHistorique(releves: releves), periode: .jour,
+                             fin: Self.minutes(15), trel: [Self.a0, Self.a1]).liens.isEmpty)
+        #expect(CourbesNoeud(cle: Self.a0, releves: releves, cles: ClesHistorique(releves: releves), periode: .jour,
+                             fin: Self.minutes(15), trel: [Self.a0]).liens.count == 1)
+    }
+
     /// Enfant : la qualite du lien vers son parent, quel qu'il soit (inconnue sous un routeur muet :
     /// pas de point), et ses changements de parent, a la date du premier releve sous le nouveau.
     @Test func enfant() {

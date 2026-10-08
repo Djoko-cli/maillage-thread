@@ -16,7 +16,7 @@ final class Recenseur {
         case erreur(String)
     }
 
-    static let types = ["_meshcop._udp", "_matter._tcp", "_hap._udp", "_trel._udp"]
+    nonisolated static let types = ["_meshcop._udp", "_matter._tcp", "_hap._udp", "_trel._udp"]
     nonisolated static let miseEnRoute: Duration = .seconds(10)
     nonisolated static let attenteMax: Duration = .seconds(60)
     nonisolated static let calme: Duration = .seconds(2)

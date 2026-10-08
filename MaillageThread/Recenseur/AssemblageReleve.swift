@@ -26,6 +26,10 @@ extension Recenseur {
                                       prefixesLocaux: [String], date: Date) -> Annonces {
         func services(_ type: String) -> [AnnonceService] {
             vues.filter { $0.type == type }.compactMap { v in
+                // TREL : seul le TXT (`xa`) sert ; celui du navigateur suffit, sans attendre la cible.
+                if type == "_trel._udp", !v.txt.isEmpty, cibles[cle(type, v.instance)] == nil {
+                    return AnnonceService(instance: v.instance, txt: ChampsTXT(brut: v.txt))
+                }
                 guard let cible = cibles[cle(type, v.instance)] else { return nil }
                 let txt = v.txt.isEmpty ? cible.txt : v.txt
                 return AnnonceService(instance: v.instance, hote: cible.hote, port: cible.port, txt: ChampsTXT(brut: txt))

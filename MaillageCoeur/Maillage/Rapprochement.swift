@@ -227,8 +227,13 @@ public struct MaillageAffiche: Hashable, Sendable {
                                            bordure: false)
         }
 
-        let extMacs = Dictionary(maillage.routeurs.compactMap { r in r.extMac.map { (r.id, $0.uppercased()) } },
-                                 uniquingKeysWith: { a, _ in a })
+        // ExtMac d'un routeur : la sienne, sinon le `xa` de l'annonce qui lui est rapprochee (un routeur muet reconnu
+        // par son role ou par elimination). Un bout sans ExtMac connue garde le lien.
+        let xaAnnonces = Dictionary(bordures.compactMap { b in b.adresseEtendue.map { (b.instance, $0) } },
+                                    uniquingKeysWith: { a, _ in a })
+        let extMacs = Dictionary(maillage.routeurs.compactMap { r in
+            (r.extMac ?? reconnus[r.id].flatMap { xaAnnonces[$0] }).map { (r.id, $0.uppercased()) }
+        }, uniquingKeysWith: { a, _ in a })
         func parReseauLocal(_ l: LienRadio) -> Bool {
             guard let a = extMacs[l.a], let b = extMacs[l.b] else { return false }
             return trel.contains(a) && trel.contains(b)

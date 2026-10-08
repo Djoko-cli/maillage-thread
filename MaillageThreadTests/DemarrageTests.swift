@@ -8,6 +8,6 @@ struct DemarrageTests {
         #expect(Bundle.main.bundleIdentifier == "fr.djoko.maillage")
         #expect(Bundle.main.object(forInfoDictionaryKey: "LSUIElement") as? Bool == true, "app de la barre des menus")
         let services = Bundle.main.object(forInfoDictionaryKey: "NSBonjourServices") as? [String]
-        #expect(services == ["_meshcop._udp", "_matter._tcp", "_hap._udp"])
+        #expect(services == Recenseur.types, "chaque type ecoute est declare (sinon le reseau local peut etre refuse)")
     }
 }

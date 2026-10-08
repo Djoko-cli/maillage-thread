@@ -105,7 +105,10 @@ public struct CourbesNoeud: Hashable, Sendable {
 
     /// De meme, avec la resolution des cles deja faite (`cles`, construite sur ces memes `releves`) : la
     /// surveillance la garde d'un calcul de la fiche a l'autre, tant que l'historique ne change pas.
-    public init(cle: String, releves: [ReleveMaillage], cles: ClesHistorique, periode: PeriodeCourbes, fin: Date) {
+    /// `trel` : ExtMac des routeurs qui annoncent TREL ; le lien entre deux d'entre eux n'a pas de courbe, comme il n'est
+    /// pas dessine (carte radio seulement, `MaillageAffiche`).
+    public init(cle: String, releves: [ReleveMaillage], cles: ClesHistorique, periode: PeriodeCourbes, fin: Date,
+                trel: Set<String> = []) {
         let debut = fin.addingTimeInterval(-periode.duree)
         var liens: [String: [(Date, Double)]] = [:]
         var signal: [(Date, Double)] = []
@@ -115,8 +118,11 @@ public struct CourbesNoeud: Hashable, Sendable {
         var dernierParentSonde: String?
         for (i, r) in releves.enumerated() where r.date >= debut && r.date <= fin {
             if let id = r.routeurs.first(where: { cles.cle(releve: i, routeur: $0.id) == cle })?.id {
+                let extMacs = Dictionary(r.routeurs.compactMap { x in x.extMac.map { (x.id, $0.uppercased()) } },
+                                         uniquingKeysWith: { a, _ in a })
                 for l in r.liens where l.a == id || l.b == id {
                     guard let q = l.qualite else { continue }
+                    if let a = extMacs[l.a], let b = extMacs[l.b], trel.contains(a), trel.contains(b) { continue }
                     liens[cles.cle(releve: i, routeur: l.a == id ? l.b : l.a), default: []].append((r.date, Double(q)))
                 }
                 if let s = r.signaux.first(where: { $0.routeur == id }) { signal.append((r.date, Double(s.rssi))) }

@@ -33,6 +33,17 @@ struct AssemblageReleveTests {
         #expect(a.hap.isEmpty)
     }
 
+    /// TREL : seul le TXT (`xa`) sert ; une instance listee avec son TXT entre au releve sans cible, une instance sans TXT
+    /// attend sa cible.
+    @Test func trelSansCible() {
+        let xa = Data([11] + Array("xa=".utf8) + [0xE0, 0, 0, 0, 0, 0, 0, 0x07])
+        let vues = [Listee(type: "_trel._udp", instance: "E000000000000007", txt: xa),
+                    Listee(type: "_trel._udp", instance: "E000000000000008", txt: Data())]
+        let a = Self.releve(vues, [:])
+        #expect(a.trel.map(\.instance) == ["E000000000000007"])
+        #expect(a.trel.first?.hote == nil && a.trel.first?.txt["xa"] == Data([0xE0, 0, 0, 0, 0, 0, 0, 0x07]))
+    }
+
     @Test func instanceResolue() {
         let brut = Self.txt("nn=MyHome1482620090", "tv=1.4.0")
         let vues = [Listee(type: Self.routeur, instance: "Apple TV 4K", txt: brut),

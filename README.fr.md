@@ -77,6 +77,7 @@ Le Mac n'a pas de radio Thread : l'app **écoute** seulement le réseau local.
 | `_meshcop._udp` (TXT) | routeurs de bordure : nom et identifiant du réseau (`nn`, `xp`), partition (`pt`), rôle (Thread 1.4 et plus, bits 9-10 de `sb`), BBR, jeu actif, préfixe OMR publié |
 | `_matter._tcp` | une instance par appareil et par fabrique (`<fabrique>-<nœud>`), regroupées par hôte ; `ICD`, ou `SII` de plus de 2 s : appareil endormi |
 | `_hap._udp` | accessoires HomeKit (leur nom) |
+| `_trel._udp` (TXT) | routeurs qui passent aussi par le réseau local (TREL, `xa`) : leurs liens entre eux ne sont pas dessinés (carte radio seulement) |
 | adresses des hôtes | préfixe OMR → partition ; réseau local → appareil IP ; aucune → « sans adresse » |
 | table de routage du Mac | quel routeur de bordure route quel préfixe OMR |
 

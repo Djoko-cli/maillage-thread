@@ -98,6 +98,20 @@ struct RapprochementTests {
         #expect(m.routeurs.values.filter(\.deduit).count == 1)
         #expect(m.annoncesCandidates.isEmpty)
         #expect(m.inconnus.filter { $0.genre == .routeur }.isEmpty)
+        // Carte radio seulement : le routeur deduit, sans ExtMac a lui, prend le `xa` de son annonce (D2) ; son lien avec
+        // un voisin d'ExtMac connue, TREL aussi, est retire.
+        let un = try #require(m.routeurs[1]?.id)
+        #expect(m.extMacs[un] == nil, "deduit : la sonde ne lui connait pas d'ExtMac")
+        let lien = try #require(m.liens.first { l in
+            l.genre == .radio && (l.de == un || l.vers == un) && m.extMacs[l.de == un ? l.vers : l.de] != nil
+        })
+        let autre = lien.de == un ? lien.vers : lien.de
+        func relies(_ x: MaillageAffiche) -> Bool {
+            x.liens.contains { $0.genre == .radio && Set([$0.de, $0.vers]) == Set([un, autre]) }
+        }
+        let t = MaillageAffiche(maillage: maillage, reseau: r, appareils: i.appareils,
+                                trel: ["E0000000000000D2", try #require(m.extMacs[autre])])
+        #expect(relies(m) && !relies(t), "lien entre routeurs TREL, le deduit compris : retire")
     }
 
     /// Deux routeurs de bordure non identifies (0400, CC00), deux annonces non reprises : pas
