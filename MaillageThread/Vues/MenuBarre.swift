@@ -2,7 +2,8 @@ import AppKit
 import MaillageCoeur
 import SwiftUI
 
-/// Icone de la barre des menus : orange quand il y a une alerte. Ouvre le
+/// Icone de la barre des menus : le maillage et, en bas a droite, le symbole de Thread ; orange quand il y a une
+/// alerte. Ouvre le
 /// graphe au lancement quand on le lui demande (mode demo, premier lancement).
 struct IconeBarre: View {
     @Environment(Surveillance.self) private var surveillance
@@ -20,15 +21,29 @@ struct IconeBarre: View {
             }
     }
 
+    /// Le maillage (symbole du systeme), et le symbole de Thread en badge dans son coin vide, en bas a droite : 11 pt
+    /// pour un maillage de 15 pt de haut, le canevas agrandi d'un quart du badge vers le bas et de pres de la moitie de
+    /// sa largeur vers la droite, sa silhouette detouree de 1,5 pt (essais du 08/10, choix de Djoko). Image modele,
+    /// sauf en alerte : orange.
     static func image(alerte: Bool) -> NSImage {
-        let base = NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted",
-                           accessibilityDescription: "Maillage Thread") ?? NSImage()
-        guard alerte, let orange = base.withSymbolConfiguration(.init(paletteColors: [.systemOrange])) else {
-            base.isTemplate = true
-            return base
+        let symbole = NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted",
+                              accessibilityDescription: nil) ?? NSImage()
+        let couleur: NSColor = alerte ? .systemOrange : .black
+        let base = symbole.withSymbolConfiguration(.init(paletteColors: [couleur])) ?? symbole
+        let b = base.size
+        let badge = CGSize(width: 11 * b.height / 15 * MarqueThread.proportion, height: 11 * b.height / 15)
+        let taille = NSSize(width: b.width + badge.width * 0.45, height: b.height + badge.height * 0.25)
+        let image = NSImage(size: taille, flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            base.draw(in: NSRect(x: 0, y: taille.height - b.height, width: b.width, height: b.height))
+            MarqueThread.dessiner(ctx, dans: CGRect(x: taille.width - badge.width, y: 0, width: badge.width,
+                                                    height: badge.height),
+                                  couleur: couleur, detourage: 1.5)
+            return true
         }
-        orange.isTemplate = false
-        return orange
+        image.accessibilityDescription = "Maillage Thread"
+        image.isTemplate = !alerte
+        return image
     }
 }
 

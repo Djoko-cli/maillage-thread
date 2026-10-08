@@ -6,9 +6,17 @@ import Testing
 @MainActor
 @Suite("Barre des menus : icone")
 struct MenuTests {
-    @Test func icone() {
+    @Test func icone() throws {
         #expect(IconeBarre.image(alerte: false).isTemplate)
         #expect(!IconeBarre.image(alerte: true).isTemplate, "orange : pas une image modele")
+        // Le badge de Thread agrandit le canevas du maillage, a droite et en bas.
+        let maillage = try #require(NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted",
+                                           accessibilityDescription: nil))
+        let icone = IconeBarre.image(alerte: false)
+        #expect(icone.size.width > maillage.size.width && icone.size.height > maillage.size.height)
+        // Le symbole de Thread : 0,79 de large pour une hauteur de 1.
+        let boite = MarqueThread.trace.boundingBoxOfPath
+        #expect(abs(boite.height - 1) < 0.001 && abs(boite.width - MarqueThread.proportion) < 0.005, "\(boite)")
     }
 
     /// « Ouvrir le graphe » et « Journal… » ferment le menu, comme « Reglages… » (01b0a42) : l'app inactive, le menu
