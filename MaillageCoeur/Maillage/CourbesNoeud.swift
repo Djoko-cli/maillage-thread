@@ -68,9 +68,9 @@ public struct ChangementParent: Hashable, Sendable {
 }
 
 /// Courbes d'un noeud tirees de l'historique (spec de la sonde, section 6), sur une periode :
-/// - routeur : la qualite de chaque lien avec un routeur voisin, et le signal que la sonde en
-///   recoit (dBm), avec les changements de parent de la sonde, car ce signal depend d'abord de
-///   l'endroit ou elle est posee ;
+/// - routeur : la qualite de chaque lien avec un routeur voisin, celle du lien de chacun de ses enfants vers lui
+///   (reprise de Maillage Zigbee, 09/10), et le signal que la sonde en recoit (dBm), avec les changements de parent de
+///   la sonde, car ce signal depend d'abord de l'endroit ou elle est posee ;
 /// - enfant : la qualite du lien vers son parent (inconnue sous un routeur muet), avec ses
 ///   changements de parent.
 /// Un noeud se reconnait d'un releve a l'autre par sa cle : son ExtMac, ou "rloc:XXXX" pour un
@@ -94,6 +94,13 @@ public struct CourbesNoeud: Hashable, Sendable {
     public let parents: [ChangementParent]
     public let signal: [PointCourbe]
     public let parentsSonde: [ChangementParent]
+    /// Les courbes montrees d'abord (`ChoixCourbes`) : pour un enfant, celle vers son parent ; pour un routeur, ses liens
+    /// radio, puis ses enfants, chacun du plus faible au meilleur en moyenne sur la periode, puis par cle : ce qui merite
+    /// d'etre surveille passe dans les six.
+    public let prioritaires: [String]
+
+    /// La courbe de cle `cle` ; nil si elle n'existe pas.
+    public func courbe(_ cle: String) -> CourbeLien? { liens.first { $0.id == cle } }
 
     public var estVide: Bool { liens.allSatisfy { $0.points.isEmpty } && parents.isEmpty && signal.isEmpty }
 
@@ -116,6 +123,7 @@ public struct CourbesNoeud: Hashable, Sendable {
         var parentsSonde: [ChangementParent] = []
         var dernierParent: String?
         var dernierParentSonde: String?
+        var radio: Set<String> = [], enfants: Set<String> = []
         for (i, r) in releves.enumerated() where r.date >= debut && r.date <= fin {
             if let id = r.routeurs.first(where: { cles.cle(releve: i, routeur: $0.id) == cle })?.id {
                 let extMacs = Dictionary(r.routeurs.compactMap { x in x.extMac.map { (x.id, $0.uppercased()) } },
@@ -123,7 +131,15 @@ public struct CourbesNoeud: Hashable, Sendable {
                 for l in r.liens where l.a == id || l.b == id {
                     guard let q = l.qualite else { continue }
                     if let a = extMacs[l.a], let b = extMacs[l.b], trel.contains(a), trel.contains(b) { continue }
-                    liens[cles.cle(releve: i, routeur: l.a == id ? l.b : l.a), default: []].append((r.date, Double(q)))
+                    let autre = cles.cle(releve: i, routeur: l.a == id ? l.b : l.a)
+                    liens[autre, default: []].append((r.date, Double(q)))
+                    radio.insert(autre)
+                }
+                // Ses enfants : la qualite de leur lien vers lui (la courbe de leurs dependants).
+                for e in r.enfants where e.parent == id {
+                    guard let q = e.qualite else { continue }
+                    liens[e.extMac, default: []].append((r.date, Double(q)))
+                    enfants.insert(e.extMac)
                 }
                 if let s = r.signaux.first(where: { $0.routeur == id }) { signal.append((r.date, Double(s.rssi))) }
             }
@@ -145,6 +161,17 @@ public struct CourbesNoeud: Hashable, Sendable {
         self.parents = parents
         self.signal = Self.reduire(signal, pas: periode.pas)
         self.parentsSonde = parentsSonde
+        // Les prioritaires : le lien vers son parent (enfant) ; ses liens radio, puis ses enfants (routeur), du plus
+        // faible au meilleur en moyenne.
+        func faiblesDabord(_ k: Set<String>) -> [String] {
+            k.map { c in
+                let v = (liens[c] ?? []).map(\.1)
+                return (cle: c, moyenne: v.reduce(0, +) / Double(max(1, v.count)))
+            }
+            .sorted { ($0.moyenne, $0.cle) < ($1.moyenne, $1.cle) }.map(\.cle)
+        }
+        let parent = liens[Self.cleParent] == nil ? [] : [Self.cleParent]
+        prioritaires = parent + faiblesDabord(radio) + faiblesDabord(enfants.subtracting(radio))
     }
 
     /// Points d'une courbe : la moyenne de chaque pas (datee du debut du pas), ou chaque releve

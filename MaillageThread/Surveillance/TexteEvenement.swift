@@ -108,6 +108,43 @@ enum TexteEvenement {
         }
     }
 
+    /// Jour et mois d'une date, sous la forme courte de la langue (« 08/10 »).
+    static func jour(_ d: Date) -> String {
+        d.formatted(.dateTime.day(.twoDigits).month(.twoDigits))
+    }
+
+    /// Plage horaire d'une ligne de changements regroupes : « 08/10 20:58 – 21:45 », le jour repete de l'autre cote
+    /// quand elle passe minuit (reprise de Maillage Zigbee, 09/10).
+    static func plage(_ evenements: [Evenement]) -> String {
+        guard let debut = evenements.map(\.date).min(), let fin = evenements.map(\.date).max() else { return "" }
+        let deb = "\(jour(debut)) \(heure(debut))"
+        if Calendar.current.isDate(debut, inSameDayAs: fin) { return "\(deb) – \(heure(fin))" }
+        return "\(deb) – \(jour(fin)) \(heure(fin))"
+    }
+
+    /// Ce que fait une ligne de changements regroupes, sans le nom du noeud (la fiche est la sienne) : « a changé 4 fois
+    /// de parent ». Vide pour les autres lignes.
+    static func changements(_ l: LigneJournal) -> String {
+        switch l {
+        case .parents(let p): String(localized: "a changé \(p.count) fois de parent")
+        case .evenement, .pertes: ""
+        }
+    }
+
+    /// Les relais d'une ligne de changements regroupes : « A → B → C · finit sur C » ; pour deux relais qui alternent,
+    /// « A ⇄ B · finit sur A ».
+    static func resume(_ r: ResumeRelais) -> String {
+        guard let dernier = r.dernier else { return r.relais.joined(separator: " → ") }
+        let finit = String(localized: "finit sur \(dernier)")
+        guard r.relais.count >= 2 else { return finit }
+        return r.relais.joined(separator: r.alternent ? " ⇄ " : " → ") + " · " + finit
+    }
+
+    /// Un changement dans le detail d'une ligne regroupee : « 20:58 → HomePod salon ».
+    static func changement(_ e: Evenement) -> String {
+        "\(heure(e.date)) → \(e.apres ?? "?")"
+    }
+
     /// Routeurs des partitions a part (toutes sauf la plus grande), d'apres les details d'une scission.
     static func isoles(_ e: Evenement) -> String {
         let groupes = e.details.map { (partition: $0.key, routeurs: $0.value) }

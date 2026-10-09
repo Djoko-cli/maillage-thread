@@ -91,8 +91,8 @@ struct FenetreJournal: View {
     }
 }
 
-/// Une ligne : pastille de gravite, titre, quand ; le detail des pertes et des changements de
-/// parent regroupes.
+/// Une ligne : pastille de gravite, titre, quand ; le detail des pertes regroupees ; pour les changements de parent
+/// regroupes, les relais et, a deplier, leurs changements (comme dans la fiche).
 struct LigneJournalVue: View {
     let ligne: LigneJournal
 
@@ -100,7 +100,12 @@ struct LigneJournalVue: View {
         switch ligne {
         case .evenement(let e):
             contenu(TexteEvenement.titre(e), quand: TexteEvenement.quand(e), gravite: e.gravite)
-        case .pertes(let groupe), .parents(let groupe):
+        case .parents(let groupe):
+            // Les relais, et a deplier leurs changements, comme dans la fiche (repris de Maillage Zigbee, 09/10).
+            LigneChangements(groupe: groupe, police: .callout) {
+                contenu(TexteEvenement.titre(ligne), quand: TexteEvenement.quand(ligne), gravite: ligne.gravite)
+            }
+        case .pertes(let groupe):
             DisclosureGroup {
                 ForEach(groupe) { e in
                     Text("\(TexteEvenement.heure(e.date)) · \(TexteEvenement.titre(e))")

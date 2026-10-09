@@ -584,11 +584,23 @@ final class Surveillance {
     /// plus ancien, noeud sans ExtMac), l'id du sujet. Seuls les evenements d'un enfant portent une ExtMac : la cle
     /// d'un routeur n'a pas a etre resolue dans l'historique.
     func evenements(de id: String) -> [Evenement] {
+        Array(evenements.reversed().filter(concernant(id)).prefix(5))
+    }
+
+    /// Lignes du journal d'un noeud, de la plus recente a la plus ancienne, 5 au plus : ses evenements regroupes comme
+    /// ceux de la fenetre du journal (`Regroupement.lignes`), ses changements de parent d'une meme heure en une seule
+    /// ligne (reprise de Maillage Zigbee, 09/10).
+    func lignesJournal(de id: String) -> [LigneJournal] {
+        Array(Regroupement.lignes(evenements.filter(concernant(id))).prefix(5))
+    }
+
+    /// Un evenement concerne le noeud `id` : par son ExtMac s'il la porte (l'id du sujet d'un enfant sans appareil
+    /// change avec son parent), sinon par l'id de son sujet.
+    private func concernant(_ id: String) -> (Evenement) -> Bool {
         let ext = cleHistorique(noeud: id, resoudre: false)
-        func concerne(_ e: Evenement) -> Bool {
+        return { e in
             if let x = e.details["extMac"], let ext { return x == ext }
             return e.sujet?.id == id
         }
-        return Array(evenements.reversed().filter(concerne).prefix(5))
     }
 }

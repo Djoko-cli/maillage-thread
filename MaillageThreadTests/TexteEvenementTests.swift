@@ -62,6 +62,31 @@ struct TexteEvenementTests {
                 == String(localized: "\("Prise bureau") a changé \(n) fois de parent en 1 h"))
     }
 
+    /// La ligne repliee d'un journal regroupe (repris de Maillage Zigbee, 09/10) : la plage horaire (le jour repete s'il
+    /// passe minuit), ce qu'il fait, les relais (« A → B → C · finit sur C », « A ⇄ B · finit sur A »), et chaque
+    /// changement deplie (« 14:00 → B »).
+    @Test func journalRegroupe() {
+        let t = ScenarioPanne.date(4, 14)
+        func change(_ minutes: Double, _ avant: String, _ apres: String) -> Evenement {
+            Evenement(date: t.addingTimeInterval(minutes * 60), type: .parentChange, sujet: Sujet(id: "x", nom: "X"),
+                      avant: avant, apres: apres)
+        }
+        let groupe = [change(0, "A", "B"), change(20, "B", "C")]
+        #expect(TexteEvenement.plage(groupe)
+                == "\(TexteEvenement.jour(t)) \(TexteEvenement.heure(t)) – \(TexteEvenement.heure(t.addingTimeInterval(1200)))")
+        let nuit = [change(0, "A", "B"), change(24 * 60, "B", "A")]
+        #expect(TexteEvenement.plage(nuit).components(separatedBy: " – ").last?.hasPrefix(TexteEvenement.jour(t.addingTimeInterval(86400))) == true)
+        #expect(TexteEvenement.plage([]) == "")
+        let n = 2
+        #expect(TexteEvenement.changements(.parents(groupe)) == String(localized: "a changé \(n) fois de parent"))
+        #expect(TexteEvenement.changements(.evenement(groupe[0])).isEmpty)
+        #expect(TexteEvenement.resume(Regroupement.resumeRelais(groupe))
+                == "A → B → C · " + String(localized: "finit sur \("C")"))
+        #expect(TexteEvenement.resume(Regroupement.resumeRelais([change(0, "A", "B"), change(5, "B", "A")]))
+                == "A ⇄ B · " + String(localized: "finit sur \("A")"))
+        #expect(TexteEvenement.changement(groupe[1]) == "\(TexteEvenement.heure(t.addingTimeInterval(1200))) → C")
+    }
+
     /// Une ligne de changements de parent regroupes porte l'heure et le nom du dernier changement
     /// (celui qui la classe dans le journal), pas ceux du premier.
     @Test func parentsRegroupesDuDernierChangement() {

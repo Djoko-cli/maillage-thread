@@ -157,11 +157,13 @@ struct AffichageSondeTests {
                                 source: .resolution, resolu: t - 720, echecs: 0.012))
         let m = MaillageAffiche(maillage: c.maillage(), reseau: r, appareils: i.appareils)
         let n2 = try #require(m.noeud(routeur.id))
-        let lignes = FicheNoeud.lignesLiens(n2, maillage: m, nom: { "[\($0)]" }, instant: t)
-        #expect(lignes.count == 1)
         let l = try #require(m.liens.first { $0.genre == .radio })
         let o = try #require(l.origine)
-        #expect(lignes.first == String(localized: "\("[\(l.de == n2.id ? l.vers : l.de)]") : \(FicheNoeud.texteQualite(l.qualite)) · \(FicheNoeud.texteOrigine(o, t))"))
+        let voisin = l.de == n2.id ? l.vers : l.de
+        #expect(FicheThread.voisins(de: n2.id, maillage: m).map(\.id) == [voisin])
+        #expect(FicheNoeud.origineVoisin(voisin, de: n2.id, maillage: m, instant: t)
+                == FicheNoeud.texteQualite(l.qualite) + " · " + FicheNoeud.texteOrigine(o, t))
+        #expect(FicheNoeud.origineVoisin("absent", de: n2.id, maillage: m, instant: t) == nil)
         #expect(!m.jamaisEntendu(n2.id), "entendu")
         #expect(m.jamaisEntendu(try #require(m.routeurs[3]?.id)), "muet, pas entendu")
         #expect(FicheNoeud.texteJamaisEntendu == String(localized: "jamais entendu par la sonde ; liens vus seulement par ses voisins"))
@@ -178,10 +180,12 @@ struct AffichageSondeTests {
                                            reconnu: false, bordure: false)
         #expect(FicheNoeud.ligneSonde(inventeSansParent, maillage: m, nom: { $0 }, instant: t)
                 == String(localized: "Non identifié"), "RLOC16 invente, sans parent : jamais affiche")
-        // Maillage de demo : aucune source, aucune ligne de lien.
+        // Maillage de demo : aucune source, la qualite seule.
         let demo = try #require(s.maillageAffiche(pour: r))
         let chef = try #require(demo.routeurs[1])
-        #expect(FicheNoeud.lignesLiens(chef, maillage: demo, nom: { $0 }, instant: t).isEmpty)
+        let lienDemo = try #require(demo.liens.first { $0.genre == .radio && ($0.de == chef.id || $0.vers == chef.id) })
+        #expect(FicheNoeud.origineVoisin(lienDemo.de == chef.id ? lienDemo.vers : lienDemo.de, de: chef.id, maillage: demo,
+                                         instant: t) == FicheNoeud.texteQualite(lienDemo.qualite))
     }
 
     /// « Renommer… » : pour un routeur de l'instantane, un appareil connu ou un appareil disparu

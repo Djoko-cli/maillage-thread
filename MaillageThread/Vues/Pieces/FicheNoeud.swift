@@ -1,10 +1,22 @@
 import MaillageCoeur
 import SwiftUI
 
-/// Fiche du noeud choisi : carte de verre en bas de la fenetre.
+/// Fiche du noeud choisi : carte de verre en bas de la fenetre, sur toute sa largeur, en quatre colonnes cote a cote
+/// (`ColonnesFiche`, moins dans une fenetre etroite ; reprise de Maillage Zigbee, 09/10) :
+/// 1. identite : le nom, la description, la pastille du chef, l'etat, la pile, les adresses, et les boutons
+///    « Renommer… » et « Placer dans une pièce… » ;
+/// 2. role et parent : le role (routeur de bordure) ou le genre (appareil), ce que la sonde en sait (son parent et la
+///    qualite du lien, avec sa source et son age), la partition et le prefixe ; puis le journal du noeud ;
+/// 3. enfants : en pastilles, ceux dont il est le parent ;
+/// 4. voisins radio, resumes (nombre par qualite, barre de repartition) ; un clic deplie leur liste en grille, sous
+///    les colonnes. La carte est radio seulement : les liens entre routeurs TREL n'y sont pas, une ligne le dit.
+/// Dessous, sur toute la largeur, les courbes de l'historique (`CourbesFiche`). Le contenu des colonnes est propre a
+/// Thread ; les colonnes et leurs composants sont generiques (`ComposantsFiche`).
 struct FicheNoeud: View {
     @Environment(Surveillance.self) private var surveillance
     @Environment(\.colorScheme) private var apparence
+    /// Une capture ne rend pas un bouton en lien : elle dessine son texte.
+    @Environment(\.capturePieces) private var capture
     /// Pieces choisies pour les noeuds que Maison ne place pas : la vue par pieces seule les donne.
     @Environment(PiecesChoisies.self) private var piecesChoisies: PiecesChoisies?
     let id: String
@@ -15,49 +27,263 @@ struct FicheNoeud: View {
     /// les durees de la fiche (« vu il y a... ») suivent l'heure sans autre evenement.
     let instant: Date
     @Binding var aRenommer: NoeudChoisi?
-    /// Choisit un autre noeud (la fiche d'un candidat).
+    /// Choisit un autre noeud (la fiche d'un candidat, d'un enfant, d'un voisin).
     var choisir: (String) -> Void = { _ in }
     var fermer: () -> Void
+    /// La liste des voisins radio, depliee d'un clic ; repliee par defaut, et de nouveau a chaque autre noeud.
+    @State private var voisinsDeplies = false
+
+    private var deplies: Bool { voisinsDeplies }
+
+    /// Les couleurs des qualites, celles de la legende (la fenetre reste sombre).
+    private static let palette = Palette(sombre: true)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 28) {
-                if let r = surveillance.instantane?.routeur(id) {
-                    colonnesRouteur(r)
-                } else if let a = surveillance.appareil(id) {
-                    colonnesAppareil(a)
-                } else if let m = sonde, let n = m.noeud(id) {
-                    colonnesSonde(n, m)
-                } else {
-                    Text("Ce nœud n'est plus visible.").foregroundStyle(.secondary)
+            if Self.connu(id, dans: surveillance, maillage: sonde) {
+                ColonnesFiche {
+                    colonneIdentite()
+                    colonneRole()
+                    colonneEnfants()
+                    colonneVoisins()
                 }
-                Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 8) {
-                    Button {
-                        fermer()
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .boutonDeFiche()
-                    .help("Fermer")
-                    if Self.renommable(id, dans: surveillance) {
-                        Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
-                            .boutonDeFiche()
-                    }
-                    if let piecesChoisies, let entree,
-                       let placement = PiecesChoisies.placement(id, dans: surveillance, entree: entree) {
-                        MenuPlacer(placement: placement, domicile: surveillance.noms.maison?.domicile ?? "",
-                                   choisies: piecesChoisies)
-                    }
+                // La place du bouton de fermeture, en haut a droite.
+                .padding(.trailing, 30)
+                if deplies, let m = sonde {
+                    listeVoisins(m)
                 }
+            } else {
+                Text("Ce nœud n'est plus visible.").foregroundStyle(.secondary)
             }
             if Self.courbesVisibles(dans: surveillance) {
+                Divider().opacity(0.5)
                 CourbesFiche(id: id, instant: instant)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .topTrailing) {
+            Button {
+                fermer()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .boutonDeFiche()
+            .help("Fermer")
+            .padding(12)
+        }
         .modifier(FondDeFiche())
+        .onChange(of: id) { voisinsDeplies = false }
+    }
+
+    /// Le noeud a une fiche : un routeur de bordure de l'instantane, un appareil connu, ou un noeud que la sonde seule
+    /// connait.
+    static func connu(_ id: String, dans surveillance: Surveillance, maillage: MaillageAffiche?) -> Bool {
+        surveillance.instantane?.routeur(id) != nil || surveillance.appareil(id) != nil || maillage?.noeud(id) != nil
+    }
+
+    // MARK: Colonne 1 : identite
+
+    private func colonneIdentite() -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let r = surveillance.instantane?.routeur(id) {
+                identiteRouteur(r)
+            } else if let a = surveillance.appareil(id) {
+                identiteAppareil(a)
+            } else if let m = sonde, let n = m.noeud(id) {
+                identiteSonde(n)
+            }
+            boutonsIdentite
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// « Renommer… » et « Placer dans une pièce… », sous l'identite.
+    private var boutonsIdentite: some View {
+        RangeesFluides(espacement: 8, interligne: 6) {
+            if Self.renommable(id, dans: surveillance) {
+                Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
+                    .boutonDeFiche()
+            }
+            if let piecesChoisies, let entree,
+               let placement = PiecesChoisies.placement(id, dans: surveillance, entree: entree) {
+                MenuPlacer(placement: placement, domicile: surveillance.noms.maison?.domicile ?? "",
+                           choisies: piecesChoisies)
+            }
+        }
+    }
+
+    // MARK: Colonne 2 : role et parent
+
+    private func colonneRole() -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TitreColonne(titre: "Rôle et parent")
+            if let r = surveillance.instantane?.routeur(id) {
+                roleRouteur(r)
+                lignesPartition(partition: r.partition, prefixe: r.prefixeOMR)
+            } else if let a = surveillance.appareil(id) {
+                let genre = genre(a)
+                if !genre.isEmpty { Text(genre).foregroundStyle(.secondary) }
+                if !a.fabriques.isEmpty {
+                    Text("Fabriques : \(a.fabriques.count)").foregroundStyle(.secondary)
+                }
+                ligneSonde
+                lignesPartition(partition: a.partition ?? surveillance.suivi.dernieresPartitions[a.id], prefixe: a.prefixe,
+                                incertaine: surveillance.instantane?.partitionIncertaine(a) == true)
+            } else if let m = sonde, let n = m.noeud(id) {
+                ligneSonde
+                Text(Self.explication(n)).font(.caption).foregroundStyle(.secondary)
+            }
+            journal
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Colonne 3 : enfants
+
+    private func colonneEnfants() -> some View {
+        let enfants = sonde.map { DependantFiche.trier(FicheThread.enfants(de: id, maillage: $0), nom: nomNoeud) } ?? []
+        return VStack(alignment: .leading, spacing: 6) {
+            TitreColonne(titre: "Enfants")
+            if sonde == nil {
+                Text(Self.texteSansSonde).font(.caption).foregroundStyle(.secondary)
+            } else if sonde?.noeud(id) == nil {
+                Text(Self.textePasVuParLaSonde).font(.caption).foregroundStyle(.secondary)
+            } else if enfants.isEmpty {
+                Text("aucun").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(Self.ligneEnfants(enfants.count)).font(.caption).foregroundStyle(.secondary)
+                RangeesFluides {
+                    ForEach(enfants) { d in
+                        PastilleNoeud(nom: nomNoeud(d.id), couleur: Self.palette.lienSonde(d.qualite)) {
+                            choisir(d.id)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Colonne 4 : voisins radio
+
+    private func colonneVoisins() -> some View {
+        let voisins = sonde.map { FicheThread.voisins(de: id, maillage: $0) } ?? []
+        let resume = ResumeVoisins(voisins)
+        // Routeur ou enfant : ce que la sonde en sait ; un noeud qu'elle n'a pas (une autre partition, un reseau scinde)
+        // n'est ni l'un ni l'autre pour elle.
+        let routeur = sonde?.noeud(id)?.genre == .routeur
+        return VStack(alignment: .leading, spacing: 5) {
+            TitreColonne(titre: "Voisins radio")
+            if sonde == nil {
+                Text(Self.texteSansSonde).font(.caption).foregroundStyle(.secondary)
+            } else if sonde?.noeud(id) == nil {
+                Text(Self.textePasVuParLaSonde).font(.caption).foregroundStyle(.secondary)
+            } else if !routeur {
+                Text(Self.texteEnfantSeul).font(.caption).foregroundStyle(.secondary)
+            } else if voisins.isEmpty {
+                Text("aucun").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(Self.ligneResume(resume)).font(.caption)
+                BarreRepartition(parts: resume.parts.map { (Self.palette.couleur($0.niveau), $0.nombre) })
+                    .frame(maxWidth: 220)
+                if capture {
+                    etiquetteListe.foregroundStyle(.link)
+                } else {
+                    Button {
+                        voisinsDeplies.toggle()
+                    } label: {
+                        etiquetteListe
+                    }
+                    .buttonStyle(.link)
+                }
+            }
+            if routeur, Self.trel(id, maillage: sonde, graphe: entree?.graphe, dans: surveillance) {
+                Text(Self.texteTrel).font(.caption).foregroundStyle(.secondary)
+            }
+            if sonde?.jamaisEntendu(id) == true {
+                Text(Self.texteJamaisEntendu).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// « Afficher la liste » ou « Replier la liste », selon la liste des voisins.
+    @ViewBuilder
+    private var etiquetteListe: some View {
+        if deplies {
+            Label("Replier la liste", systemImage: "chevron.up").font(.caption)
+        } else {
+            Label("Afficher la liste", systemImage: "chevron.down").font(.caption)
+        }
+    }
+
+    /// La liste des voisins radio, depliee sous les colonnes, en grille sur plusieurs colonnes : de la meilleure qualite
+    /// a la plus faible, chacun avec son point de couleur et sa qualite ; la source et l'age de la mesure au survol ; un
+    /// clic le choisit.
+    private func listeVoisins(_ m: MaillageAffiche) -> some View {
+        let voisins = ResumeVoisins.trier(FicheThread.voisins(de: id, maillage: m), nom: nomNoeud)
+        return GrilleListe {
+            ForEach(voisins) { v in
+                Button {
+                    choisir(v.id)
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle().fill(Self.palette.lienSonde(v.qualite)).frame(width: 7, height: 7)
+                        Text(verbatim: nomNoeud(v.id)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(Self.texteQualite(v.qualite)).foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(Self.origineVoisin(v.id, de: id, maillage: m, instant: instant) ?? "")
+            }
+        }
+    }
+
+    /// Le noeud annonce TREL : son ExtMac (celle que la sonde lui connait, sinon celle du graphe) est dans l'instantane
+    /// (`Instantane.trel`) ; ses liens avec les autres routeurs TREL ne sont pas sur la carte.
+    static func trel(_ id: String, maillage: MaillageAffiche?, graphe: GrapheReseau?,
+                     dans surveillance: Surveillance) -> Bool {
+        guard let ext = maillage?.extMacs[id] ?? graphe?.noeud(id)?.extMac else { return false }
+        return surveillance.instantane?.trel.contains(ext.uppercased()) == true
+    }
+
+    /// « 4 enfants ».
+    static func ligneEnfants(_ n: Int) -> String {
+        n == 1 ? String(localized: "1 enfant") : String(localized: "\(n) enfants")
+    }
+
+    /// « 5 voisins · 2 bons · 2 moyens · 1 faible » (« · 2 inconnus ») : les niveaux absents n'y sont pas.
+    static func ligneResume(_ r: ResumeVoisins) -> String {
+        func compte(_ n: Int, un: String, plusieurs: String) -> String? {
+            n == 0 ? nil : n == 1 ? un : plusieurs
+        }
+        let b = r.nombre(.bonne), m = r.nombre(.moyenne), f = r.nombre(.faible), i = r.nombre(.inconnue)
+        return [r.total == 1 ? String(localized: "1 voisin") : String(localized: "\(r.total) voisins"),
+                compte(b, un: String(localized: "1 bon"), plusieurs: String(localized: "\(b) bons")),
+                compte(m, un: String(localized: "1 moyen"), plusieurs: String(localized: "\(m) moyens")),
+                compte(f, un: String(localized: "1 faible"), plusieurs: String(localized: "\(f) faibles")),
+                compte(i, un: String(localized: "1 inconnu"), plusieurs: String(localized: "\(i) inconnus"))]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// Sans maillage de la sonde, ni enfants ni voisins radio connus.
+    static var texteSansSonde: String { String(localized: "connu seulement avec la sonde") }
+
+    /// Un noeud que le maillage de la sonde n'a pas (une autre partition, un reseau scinde) : ni enfants ni voisins
+    /// connus.
+    static var textePasVuParLaSonde: String { String(localized: "pas vu par la sonde") }
+
+    /// Un enfant (appareil qui ne route pas) n'a pas de voisins radio.
+    static var texteEnfantSeul: String { String(localized: "un enfant ne parle qu'à son parent") }
+
+    /// Un routeur qui annonce TREL : ses liens avec les autres routeurs TREL ne sont pas montres.
+    static var texteTrel: String {
+        String(localized: "liens par le réseau local (TREL) non montrés : la carte est radio seulement")
     }
 
     /// Le noeud est couronne : un chef de la scene du meme rendu (`EntreeScene.chefs`), routeur de
@@ -82,51 +308,38 @@ struct FicheNoeud: View {
     // MARK: Appareil
 
     @ViewBuilder
-    private func colonnesAppareil(_ a: Appareil) -> some View {
+    private func identiteAppareil(_ a: Appareil) -> some View {
         let disparu = surveillance.suivi.disparus[a.id] != nil
         let maison = surveillance.accessoire(a)
-        VStack(alignment: .leading, spacing: 4) {
-            Text(surveillance.nom(a)).font(.title3.weight(.semibold))
-            let description = Self.ligneDescription(maison: maison, modeleHomeKit: a.hap?.modele)
-            if !description.isEmpty {
-                Text(description).foregroundStyle(.secondary)
+        Text(surveillance.nom(a)).font(.title3.weight(.semibold))
+        let description = Self.ligneDescription(maison: maison, modeleHomeKit: a.hap?.modele)
+        if !description.isEmpty {
+            Text(description).foregroundStyle(.secondary)
+        }
+        if Self.couronne(a.id, entree: entree) {
+            PastilleChef()
+        }
+        HStack(spacing: 6) {
+            PointEtat(couleur: couleur(a, disparu: disparu), pulse: !disparu && a.etat == .joignable)
+            Text(etat(a, disparu: disparu))
+            if let vu = vuLe(a, disparu: disparu) {
+                Text("· vu \(Self.relatif(vu, instant))").foregroundStyle(.secondary)
             }
-            if Self.couronne(a.id, entree: entree) {
-                PastilleChef()
-            }
+        }
+        if let b = maison?.batterie {
             HStack(spacing: 6) {
-                PointEtat(couleur: couleur(a, disparu: disparu), pulse: !disparu && a.etat == .joignable)
-                Text(etat(a, disparu: disparu))
-                if let vu = vuLe(a, disparu: disparu) {
-                    Text("· vu \(Self.relatif(vu, instant))").foregroundStyle(.secondary)
+                Image(systemName: Self.symboleBatterie(b))
+                    .foregroundStyle(b.faible ? orange : b.charge == .enCharge ? Color.green : Color.primary)
+                Text(Self.ligneBatterie(b)).foregroundStyle(b.faible ? orange : Color.primary)
+                if let releve = surveillance.noms.maison?.date {
+                    Text("· relevé \(Self.relatif(releve, instant))").foregroundStyle(.secondary)
                 }
             }
-            if let b = maison?.batterie {
-                HStack(spacing: 6) {
-                    Image(systemName: Self.symboleBatterie(b))
-                        .foregroundStyle(b.faible ? orange : b.charge == .enCharge ? Color.green : Color.primary)
-                    Text(Self.ligneBatterie(b)).foregroundStyle(b.faible ? orange : Color.primary)
-                    if let releve = surveillance.noms.maison?.date {
-                        Text("· relevé \(Self.relatif(releve, instant))").foregroundStyle(.secondary)
-                    }
-                }
-            }
-            lignesSonde(a.id)
         }
-        .frame(minWidth: 200, alignment: .leading)
-        .colonneDuChef(Self.couronne(a.id, entree: entree))
-        VStack(alignment: .leading, spacing: 4) {
-            Text(genre(a)).foregroundStyle(.secondary)
-            if !a.fabriques.isEmpty {
-                Text("Fabriques : \(a.fabriques.count)").foregroundStyle(.secondary)
-            }
-            ForEach(a.adresses.prefix(2), id: \.self) { ad in
-                Text(ad.description).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
-            }
-            Text(a.id).font(.caption.monospaced()).foregroundStyle(.tertiary).textSelection(.enabled)
+        ForEach(a.adresses.prefix(2), id: \.self) { ad in
+            Text(ad.description).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
         }
-        colonneJournal(partition: a.partition ?? surveillance.suivi.dernieresPartitions[a.id], prefixe: a.prefixe,
-                       incertaine: surveillance.instantane?.partitionIncertaine(a) == true)
+        Text(a.id).font(.caption.monospaced()).foregroundStyle(.tertiary).textSelection(.enabled)
     }
 
     /// Piece, fabricant (sinon modele HomeKit), modele, et firmware quand Maison le donne.
@@ -229,51 +442,36 @@ struct FicheNoeud: View {
     /// Maillage de la sonde pour le reseau affiche : celui de la scene.
     private var sonde: MaillageAffiche? { entree?.maillage }
 
-    /// Ce que la sonde sait du noeud : son parent (enfant), ses voisins et ses enfants (routeur) ; puis, pour un routeur,
-    /// chaque lien avec sa source et son age, et s'il n'a jamais ete entendu par la sonde (spec de la sonde tout-en-un,
-    /// section 2.4).
+    /// Ce que la sonde sait du noeud : son RLOC16, son parent et la qualite du lien avec sa source et son age (enfant),
+    /// ou ses nombres de voisins et d'enfants (routeur) (spec de la sonde tout-en-un, section 2.4).
     @ViewBuilder
-    private func lignesSonde(_ id: String) -> some View {
+    private var ligneSonde: some View {
         if let m = sonde, let n = m.noeud(id) {
             Text(Self.ligneSonde(n, maillage: m, nom: nomNoeud, instant: instant)).foregroundStyle(.secondary)
-            ForEach(Self.lignesLiens(n, maillage: m, nom: nomNoeud, instant: instant), id: \.self) { ligne in
-                Text(ligne).font(.caption).foregroundStyle(.secondary)
-            }
-            if m.jamaisEntendu(id) {
-                Text(Self.texteJamaisEntendu).font(.caption).foregroundStyle(.secondary)
-            }
         }
     }
 
-    /// Noeud que seule la sonde connait (routeur de bordure muet sans identite, avec ses
-    /// candidats ; enfant inconnu).
+    /// Noeud que seule la sonde connait (routeur de bordure muet sans identite, avec ses candidats ; enfant inconnu).
     @ViewBuilder
-    private func colonnesSonde(_ n: NoeudSonde, _ m: MaillageAffiche) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(LibellesNoeuds.inconnu(n, noms: nomsRouteurs)).font(.title3.weight(.semibold))
-            if Self.couronne(n.id, entree: entree) {
-                PastilleChef()
-            }
-            lignesSonde(n.id)
-            if !n.candidats.isEmpty {
-                // Chaque candidat ouvre la fiche de son annonce, pas dessinee a part.
-                HStack(spacing: 8) {
-                    Text("Candidats :")
-                    ForEach(n.candidats, id: \.self) { c in
-                        let choix = Self.selection(candidat: c, dans: surveillance)
-                        Button(nomsRouteurs[c] ?? c) {
-                            if let choix { choisir(choix) }
-                        }
-                        .buttonStyle(.link)
-                        .disabled(choix == nil)
+    private func identiteSonde(_ n: NoeudSonde) -> some View {
+        Text(LibellesNoeuds.inconnu(n, noms: nomsRouteurs)).font(.title3.weight(.semibold))
+        if Self.couronne(n.id, entree: entree) {
+            PastilleChef()
+        }
+        if !n.candidats.isEmpty {
+            // Chaque candidat ouvre la fiche de son annonce, pas dessinee a part.
+            HStack(spacing: 8) {
+                Text("Candidats :")
+                ForEach(n.candidats, id: \.self) { c in
+                    let choix = Self.selection(candidat: c, dans: surveillance)
+                    Button(nomsRouteurs[c] ?? c) {
+                        if let choix { choisir(choix) }
                     }
+                    .buttonStyle(.link)
+                    .disabled(choix == nil)
                 }
             }
-            Text(Self.explication(n))
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .frame(minWidth: 200, alignment: .leading)
     }
 
     /// Noeud a choisir pour un candidat : son annonce, si l'instantane la connait encore (sa
@@ -341,16 +539,13 @@ struct FicheNoeud: View {
         q.map { String(localized: "qualité \($0)") } ?? String(localized: "qualité inconnue")
     }
 
-    /// Liens radio d'un routeur, chacun avec sa source et son age : « HomePod salon : qualite 3 · entendu il y a 3
-    /// minutes » ; un lien sans source (maillage de demo) n'a pas de ligne.
-    static func lignesLiens(_ n: NoeudSonde, maillage m: MaillageAffiche, nom: (String) -> String,
-                            instant: Date) -> [String] {
-        guard n.genre == .routeur else { return [] }
-        return m.liens.filter { $0.genre == .radio && ($0.de == n.id || $0.vers == n.id) }.compactMap { l in
-            guard let o = l.origine else { return nil }
-            let voisin = l.de == n.id ? l.vers : l.de
-            return String(localized: "\(nom(voisin)) : \(texteQualite(l.qualite)) · \(texteOrigine(o, instant))")
-        }.sorted()
+    /// La qualite, la source et l'age du lien radio entre `id` et son voisin `voisin` : « qualite 3 · entendu il y a 3
+    /// minutes » ; la qualite seule pour un lien sans source (maillage de demo) ; nil sans lien.
+    static func origineVoisin(_ voisin: String, de id: String, maillage m: MaillageAffiche, instant: Date) -> String? {
+        guard let l = m.liens.first(where: { $0.genre == .radio && Set([$0.de, $0.vers]) == [id, voisin] }) else {
+            return nil
+        }
+        return ([texteQualite(l.qualite)] + (l.origine.map { [texteOrigine($0, instant)] } ?? [])).joined(separator: " · ")
     }
 
     /// Source et age d'un lien : « diagnostic », « entendu il y a 3 minutes », « resolu il y a 12 minutes »,
@@ -379,35 +574,34 @@ struct FicheNoeud: View {
     // MARK: Routeur
 
     @ViewBuilder
-    private func colonnesRouteur(_ r: RouteurBordure) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(surveillance.nom(r)).font(.title3.weight(.semibold))
-            let description = [r.fabricant, r.modele, r.versionThread.map { "Thread \($0)" }].compactMap { $0 }
-                .joined(separator: " · ")
+    private func identiteRouteur(_ r: RouteurBordure) -> some View {
+        Text(surveillance.nom(r)).font(.title3.weight(.semibold))
+        let description = [r.fabricant, r.modele, r.versionThread.map { "Thread \($0)" }].compactMap { $0 }
+            .joined(separator: " · ")
+        if !description.isEmpty {
             Text(description).foregroundStyle(.secondary)
-            if Self.couronne(r.instance, entree: entree) {
-                PastilleChef()
-            }
-            HStack(spacing: 6) {
-                Circle().fill(.blue).frame(width: 8, height: 8)
-                Text(role(r))
-                if let bbr = bbr(r) { Text("· \(bbr)").foregroundStyle(.secondary) }
-            }
         }
-        .frame(minWidth: 200, alignment: .leading)
-        .colonneDuChef(Self.couronne(r.instance, entree: entree))
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Routeur de bordure").foregroundStyle(.secondary)
-            lignesSonde(r.instance)
-            if sonde?.noeud(r.instance)?.deduit == true {
-                Text(Self.texteElimination).font(.caption).foregroundStyle(.secondary)
-            }
-            if let nn = r.nomReseau { Text("Réseau \(nn)").foregroundStyle(.secondary) }
-            ForEach(r.adressesLien, id: \.self) { ad in
-                Text(ad.description).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
-            }
+        if Self.couronne(r.instance, entree: entree) {
+            PastilleChef()
         }
-        colonneJournal(partition: r.partition, prefixe: r.prefixeOMR)
+        HStack(spacing: 6) {
+            Circle().fill(.blue).frame(width: 8, height: 8)
+            Text(role(r))
+            if let bbr = bbr(r) { Text("· \(bbr)").foregroundStyle(.secondary) }
+        }
+        ForEach(r.adressesLien, id: \.self) { ad in
+            Text(ad.description).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private func roleRouteur(_ r: RouteurBordure) -> some View {
+        Text("Routeur de bordure").foregroundStyle(.secondary)
+        ligneSonde
+        if sonde?.noeud(r.instance)?.deduit == true {
+            Text(Self.texteElimination).font(.caption).foregroundStyle(.secondary)
+        }
+        if let nn = r.nomReseau { Text("Réseau \(nn)").foregroundStyle(.secondary) }
     }
 
     private func role(_ r: RouteurBordure) -> String {
@@ -420,22 +614,49 @@ struct FicheNoeud: View {
         return e.bbrPrimaire ? String(localized: "BBR primaire") : String(localized: "BBR actif")
     }
 
-    // MARK: Journal du noeud
+    // MARK: Partition et journal du noeud
 
     /// `incertaine` : partition d'un appareil tiree d'un prefixe partage (voir `Instantane.partitionIncertaine`).
-    private func colonneJournal(partition: String?, prefixe: PrefixeIPv6?, incertaine: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let partition {
-                if incertaine {
-                    Text("Partition \(partition) (incertaine : préfixe partagé)").foregroundStyle(.secondary)
-                } else {
-                    Text("Partition \(partition)").foregroundStyle(.secondary)
-                }
+    @ViewBuilder
+    private func lignesPartition(partition: String?, prefixe: PrefixeIPv6?, incertaine: Bool = false) -> some View {
+        if let partition {
+            if incertaine {
+                Text("Partition \(partition) (incertaine : préfixe partagé)").foregroundStyle(.secondary)
+            } else {
+                Text("Partition \(partition)").foregroundStyle(.secondary)
             }
-            if let prefixe {
-                Text(prefixe.description).font(.caption.monospaced()).foregroundStyle(.secondary)
+        }
+        if let prefixe {
+            Text(prefixe.description).font(.caption.monospaced()).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Le journal du noeud, sous un titre « Journal » : ses dernieres lignes, ses changements de parent d'une meme heure
+    /// regroupes (`Surveillance.lignesJournal`).
+    @ViewBuilder
+    private var journal: some View {
+        let lignes = surveillance.lignesJournal(de: id)
+        if !lignes.isEmpty {
+            TitreColonne(titre: "Journal")
+                .padding(.top, 6)
+            ForEach(lignes) { ligne in ligneJournal(ligne) }
+        }
+    }
+
+    /// Une ligne du journal du noeud : un evenement isole sur une ligne ; les changements de parent d'une meme heure en
+    /// une seule, repliee (plage horaire, nombre de changements, relais), a deplier.
+    @ViewBuilder
+    private func ligneJournal(_ ligne: LigneJournal) -> some View {
+        switch ligne {
+        case .parents(let groupe):
+            LigneChangements(groupe: groupe) {
+                Text("\(TexteEvenement.plage(groupe)) · \(TexteEvenement.changements(ligne))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            ForEach(surveillance.evenements(de: id)) { e in
+        case .evenement, .pertes:
+            ForEach(ligne.evenements) { e in
                 Text("\(TexteEvenement.quand(e)) · \(TexteEvenement.titre(e))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -449,14 +670,6 @@ extension View {
     /// Bouton de verre de la fiche ; dans une capture, qui ne rend pas le verre, celui des capsules.
     func boutonDeFiche() -> some View {
         modifier(BoutonDeFiche())
-    }
-
-    /// Colonne de la fiche qui porte la pastille du chef : elle passe avant les autres. La pastille garde
-    /// sa ligne (`PastilleChef`), mais le `.frame(minWidth:)` de la colonne ne la fait pas plus large que la
-    /// place que la fiche lui propose : quand les colonnes se serrent, la pastille deborderait sur la
-    /// colonne voisine.
-    func colonneDuChef(_ couronne: Bool) -> some View {
-        layoutPriority(couronne ? 1 : 0)
     }
 }
 
@@ -493,14 +706,17 @@ private struct FondDeFiche: ViewModifier {
 }
 
 /// « 👑 Chef du reseau Thread, elu automatiquement », sous le nom d'un noeud couronne (polissage B,
-/// section 3 ; maquette de la fiche, `.chef`) : 10,5 pt, marges de 2 x 8 pt, en capsule, sur une ligne : les
-/// colonnes de la fiche, serrees dans une fenetre etroite, ne la font pas passer a la ligne.
+/// section 3 ; maquette de la fiche, `.chef`) : 10,5 pt, marges de 2 x 8 pt, en capsule, sur une ligne : une colonne
+/// de la fiche plus etroite que la pastille (233 pt a la largeur par defaut de la fenetre) ne la fait pas passer a la
+/// ligne, son texte se reduit pour y tenir, jusqu'a 70 % (la plus etroite des quatre colonnes fait 190 pt ; fiche en
+/// quatre colonnes, 09/10).
 struct PastilleChef: View {
     var body: some View {
         Text("👑 Chef du réseau Thread, élu automatiquement")
             .font(.system(size: 10.5))
             .foregroundStyle(Palette.texteChef)
-            .fixedSize(horizontal: true, vertical: false)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(Capsule().fill(Palette.jauneChef.opacity(0.16)))

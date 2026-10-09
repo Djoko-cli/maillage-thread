@@ -42,10 +42,16 @@ public enum EchelleSignal {
     public static func etiquette(_ p: PointCourbe, periode: PeriodeCourbes, locale: Locale, fuseau: TimeZone) -> String {
         let v = Int(p.valeur.rounded())
         let valeur = (v < 0 ? "\u{2212}" : "") + String(abs(v))
+        return valeur + " dBm · " + heure(p.date, periode: periode, locale: locale, fuseau: fuseau)
+    }
+
+    /// L'heure d'un releve, au format de `locale`, dans le fuseau `fuseau`, en calendrier gregorien : « 14:32 » ; en 7 j
+    /// et 30 j, le jour aussi (« 8 oct., 14:32 »).
+    public static func heure(_ d: Date, periode: PeriodeCourbes, locale: Locale, fuseau: TimeZone) -> String {
         let gregorien = Calendar(identifier: .gregorian)
         var style = Date.FormatStyle(locale: locale, calendar: gregorien, timeZone: fuseau).hour().minute()
         if periode != .jour { style = style.day().month(.abbreviated) }
-        return valeur + " dBm · " + p.date.formatted(style)
+        return d.formatted(style)
     }
 
     /// L'etiquette se pose a gauche du trait dans la moitie droite du graphe (`debut` a `fin`), a droite sinon : elle

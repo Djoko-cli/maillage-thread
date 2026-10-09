@@ -25,14 +25,18 @@ struct CourbesNoeudTests {
 
     static func minutes(_ m: Double) -> Date { t0.addingTimeInterval(m * 60) }
 
-    /// Routeur : la qualite de son lien avec chaque voisin (la moins bonne des deux sens) et le
-    /// signal que la sonde en recoit, a chaque releve de la periode.
+    /// Routeur : la qualite de son lien avec chaque voisin (la moins bonne des deux sens), celle du lien de chacun de ses
+    /// enfants vers lui, et le signal que la sonde en recoit, a chaque releve de la periode ; ses liens radio passent
+    /// avant ses enfants dans les prioritaires.
     @Test func routeur() {
         let releves = [Self.releve(0, q: 3, rssi: -60), Self.releve(5, q: 2, rssi: -65), Self.releve(10, q: 1, rssi: -70)]
         let c = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(15))
-        #expect(c.liens == [CourbeLien(id: Self.a1, points: [PointCourbe(date: Self.minutes(0), valeur: 3, troncon: 0),
-                                                             PointCourbe(date: Self.minutes(5), valeur: 2, troncon: 0),
-                                                             PointCourbe(date: Self.minutes(10), valeur: 1, troncon: 0)])])
+        #expect(c.courbe(Self.a1) == CourbeLien(id: Self.a1, points: [
+            PointCourbe(date: Self.minutes(0), valeur: 3, troncon: 0), PointCourbe(date: Self.minutes(5), valeur: 2, troncon: 0),
+            PointCourbe(date: Self.minutes(10), valeur: 1, troncon: 0)]))
+        #expect(c.courbe(Self.b1)?.points.map(\.valeur) == [3, 3, 3], "son enfant b1")
+        #expect(c.liens.map(\.id).sorted() == [Self.a1, Self.b1].sorted() && c.courbe("absent") == nil)
+        #expect(c.prioritaires == [Self.a1, Self.b1], "ses liens radio, puis ses enfants")
         #expect(c.signal.map(\.valeur) == [-60, -65, -70])
         #expect(c.parents.isEmpty)
         #expect(c.debut == Self.minutes(15).addingTimeInterval(-24 * 3600))
@@ -44,9 +48,9 @@ struct CourbesNoeudTests {
     @Test func liensTrelSansCourbe() {
         let releves = [Self.releve(0), Self.releve(5)]
         #expect(CourbesNoeud(cle: Self.a0, releves: releves, cles: ClesHistorique(releves: releves), periode: .jour,
-                             fin: Self.minutes(15), trel: [Self.a0, Self.a1]).liens.isEmpty)
+                             fin: Self.minutes(15), trel: [Self.a0, Self.a1]).courbe(Self.a1) == nil)
         #expect(CourbesNoeud(cle: Self.a0, releves: releves, cles: ClesHistorique(releves: releves), periode: .jour,
-                             fin: Self.minutes(15), trel: [Self.a0]).liens.count == 1)
+                             fin: Self.minutes(15), trel: [Self.a0]).courbe(Self.a1) != nil)
     }
 
     /// Enfant : la qualite du lien vers son parent, quel qu'il soit (inconnue sous un routeur muet :
@@ -55,7 +59,7 @@ struct CourbesNoeudTests {
         let releves = [Self.releve(0), Self.releve(5), Self.releve(10, parent: 1, qualiteEnfant: 2),
                        Self.releve(15, parent: 1, qualiteEnfant: nil)]
         let c = CourbesNoeud(cle: Self.b1, releves: releves, periode: .jour, fin: Self.minutes(20))
-        #expect(c.liens.map(\.id) == [CourbesNoeud.cleParent])
+        #expect(c.liens.map(\.id) == [CourbesNoeud.cleParent] && c.prioritaires == [CourbesNoeud.cleParent])
         #expect(c.liens.first?.points.map(\.valeur) == [3, 3, 2])
         #expect(c.parents == [ChangementParent(date: Self.minutes(10), parent: Self.a1)])
         #expect(c.signal.isEmpty)
@@ -70,7 +74,7 @@ struct CourbesNoeudTests {
                        Self.releve(10, parentSonde: 1, sansExt1: true)]
         let c = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(15))
         #expect(c.parentsSonde == [ChangementParent(date: Self.minutes(10), parent: "rloc:0400")])
-        #expect(c.liens.map(\.id) == ["rloc:0400"])
+        #expect(c.liens.map(\.id) == [Self.b1, "rloc:0400"], "son enfant b1, puis le routeur 1 par son RLOC16")
         let r1 = CourbesNoeud(cle: "rloc:0400", releves: releves, periode: .jour, fin: Self.minutes(15))
         #expect(r1.liens.map(\.id) == [Self.a0])
     }
@@ -85,16 +89,16 @@ struct CourbesNoeudTests {
                        Self.releve(10, q: 3, rssi: -60),
                        Self.releve(15, q: 2, sansExt1: true, partition: "0000000B")]
         let c = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(10))
-        #expect(c.liens.map(\.id) == [Self.a1])
+        #expect(c.liens.map(\.id) == [Self.a1, Self.b1], "son voisin, puis son enfant b1")
         #expect(c.liens.first?.points.map(\.valeur) == [1, 2, 3])
         #expect(c.signal.map(\.valeur) == [-70, -65, -60], "les points d'avant son identification")
         let avant = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(7))
-        #expect(avant.liens.map(\.id) == [Self.a1] && avant.signal.map(\.valeur) == [-70, -65],
+        #expect(avant.liens.map(\.id) == [Self.a1, Self.b1] && avant.signal.map(\.valeur) == [-70, -65],
                 "identifie apres la fin de la periode")
         #expect(CourbesNoeud(cle: Self.a1, releves: releves, periode: .jour, fin: Self.minutes(10)).liens.map(\.id) == [Self.a0])
         #expect(CourbesNoeud(cle: "rloc:0000", releves: releves, periode: .jour, fin: Self.minutes(10)).estVide)
         let b = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(15))
-        #expect(b.liens.map(\.id) == [Self.a1, "rloc:0400"], "l'identifiant 1 de l'autre partition")
+        #expect(b.liens.map(\.id) == [Self.a1, Self.b1, "rloc:0400"], "l'identifiant 1 de l'autre partition")
     }
 
     /// Un routeur identifie seulement avant : ses releves suivants, sans ExtMac, prennent celle du precedent le plus
@@ -102,7 +106,7 @@ struct CourbesNoeudTests {
     @Test func routeurIdentifieSeulementAvant() {
         let releves = [Self.releve(0, q: 3), Self.releve(5, q: 2, sansExt1: true), Self.releve(10, q: 1, sansExt1: true)]
         let c = CourbesNoeud(cle: Self.a0, releves: releves, periode: .jour, fin: Self.minutes(10))
-        #expect(c.liens.map(\.id) == [Self.a1])
+        #expect(c.liens.map(\.id) == [Self.a1, Self.b1])
         #expect(c.liens.first?.points.map(\.valeur) == [3, 2, 1])
     }
 
@@ -180,5 +184,33 @@ struct CourbesNoeudTests {
                              periode: .jour, fin: Self.minutes(10))
         #expect(e.liens.isEmpty, "qualite inconnue : pas de courbe")
         #expect(!e.estVide, "le changement de parent suffit")
+    }
+
+    /// Les prioritaires d'un routeur, chacun du plus faible au meilleur en moyenne : deux voisins, puis deux enfants.
+    @Test func prioritairesDuPlusFaible() {
+        let r = ReleveMaillage(date: Self.t0, partition: "0000000A",
+                               routeurs: [.init(id: 0, extMac: Self.a0), .init(id: 1, extMac: Self.a1),
+                                          .init(id: 2, extMac: "E0000000000000A2")],
+                               liens: [LienRadio(a: 0, b: 1, qualiteAB: 3, qualiteBA: 3),
+                                       LienRadio(a: 0, b: 2, qualiteAB: 1, qualiteBA: 1)],
+                               enfants: [.init(extMac: Self.b1, parent: 0, qualite: 3),
+                                         .init(extMac: "E0000000000000B2", parent: 0, qualite: 2)],
+                               signaux: [], parentSonde: nil)
+        let c = CourbesNoeud(cle: Self.a0, releves: [r], periode: .jour, fin: Self.minutes(5))
+        #expect(c.prioritaires == ["E0000000000000A2", Self.a1, "E0000000000000B2", Self.b1])
+    }
+
+    /// Les courbes montrees (generique) : au plus six, les prioritaires d'abord ; sans prioritaire, les six premieres ;
+    /// « tous les liens » : toutes, les prioritaires en tete ; la case n'ajoute que ce qui est cache ; la mise en avant
+    /// d'une pastille se bascule.
+    @Test func choixDesCourbes() {
+        let cles = (1...8).map { "k\($0)" }
+        #expect(ChoixCourbes.montrees(cles: cles, prioritaires: ["k8", "k3", "absente"], tous: false) == ["k8", "k3"])
+        #expect(ChoixCourbes.montrees(cles: cles, prioritaires: [], tous: false) == Array(cles.prefix(6)))
+        #expect(ChoixCourbes.montrees(cles: cles, prioritaires: ["k8"], tous: true) == ["k8"] + cles.dropLast())
+        #expect(ChoixCourbes.cachees(cles: cles, prioritaires: []) == 2)
+        #expect(ChoixCourbes.cachees(cles: ["k1"], prioritaires: ["k1"]) == 0)
+        #expect(ChoixCourbes.basculer(nil, "k1") == "k1" && ChoixCourbes.basculer("k1", "k1") == nil)
+        #expect(ChoixCourbes.basculer("k1", "k2") == "k2")
     }
 }

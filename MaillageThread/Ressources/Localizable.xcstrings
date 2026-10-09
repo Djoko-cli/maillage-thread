@@ -33,22 +33,6 @@
         }
       }
     },
-    "%@ : %@ · %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: %2$@ · %3$@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ : %2$@ · %3$@"
-          }
-        }
-      }
-    },
     "%@ : %@…" : {
       "localizations" : {
         "en" : {
@@ -529,6 +513,86 @@
         }
       }
     },
+    "%lld bons" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld good"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld bons"
+          }
+        }
+      }
+    },
+    "%lld enfants" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld children"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld enfants"
+          }
+        }
+      }
+    },
+    "%lld faibles" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld low"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld faibles"
+          }
+        }
+      }
+    },
+    "%lld inconnus" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld unknown"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld inconnus"
+          }
+        }
+      }
+    },
+    "%lld moyens" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld medium"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld moyens"
+          }
+        }
+      }
+    },
     "%lld noms masqués faute de place : rapprochez-vous (molette)" : {
       "localizations" : {
         "en" : {
@@ -541,6 +605,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld noms masqués faute de place : rapprochez-vous (molette)"
+          }
+        }
+      }
+    },
+    "%lld voisins" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld neighbors"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld voisins"
           }
         }
       }
@@ -577,6 +657,86 @@
         }
       }
     },
+    "1 bon" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 good"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 bon"
+          }
+        }
+      }
+    },
+    "1 enfant" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 child"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 enfant"
+          }
+        }
+      }
+    },
+    "1 faible" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 low"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 faible"
+          }
+        }
+      }
+    },
+    "1 inconnu" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 unknown"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 inconnu"
+          }
+        }
+      }
+    },
+    "1 moyen" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 medium"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 moyen"
+          }
+        }
+      }
+    },
     "1 nom masqué faute de place : rapprochez-vous (molette)" : {
       "localizations" : {
         "en" : {
@@ -589,6 +749,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 nom masqué faute de place : rapprochez-vous (molette)"
+          }
+        }
+      }
+    },
+    "1 voisin" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 neighbor"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 voisin"
           }
         }
       }
@@ -765,6 +941,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Actif"
+          }
+        }
+      }
+    },
+    "Afficher la liste" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show list"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher la liste"
           }
         }
       }
@@ -1505,6 +1697,22 @@
         }
       }
     },
+    "Enfants" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Children"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enfants"
+          }
+        }
+      }
+    },
     "Enregistrer" : {
       "localizations" : {
         "en" : {
@@ -1981,22 +2189,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Liaison"
-          }
-        }
-      }
-    },
-    "Lien" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Link"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lien"
           }
         }
       }
@@ -2657,22 +2849,6 @@
         }
       }
     },
-    "Pointillé : la sonde change de parent." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dotted line: the probe changes parent."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pointillé : la sonde change de parent."
-          }
-        }
-      }
-    },
     "Port" : {
       "localizations" : {
         "en" : {
@@ -3169,6 +3345,22 @@
         }
       }
     },
+    "Replier la liste" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collapse list"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replier la liste"
+          }
+        }
+      }
+    },
     "Retirer le surnom" : {
       "localizations" : {
         "en" : {
@@ -3617,6 +3809,22 @@
         }
       }
     },
+    "Rôle et parent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Role and parent"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rôle et parent"
+          }
+        }
+      }
+    },
     "Sans pièce" : {
       "localizations" : {
         "en" : {
@@ -3905,6 +4113,22 @@
         }
       }
     },
+    "Trait vertical : la sonde change de parent." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vertical line: the probe changes parent."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trait vertical : la sonde change de parent."
+          }
+        }
+      }
+    },
     "Tronçon" : {
       "localizations" : {
         "en" : {
@@ -3949,6 +4173,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "USB"
+          }
+        }
+      }
+    },
+    "Voisins radio" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Radio neighbors"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voisins radio"
           }
         }
       }
@@ -4065,6 +4305,22 @@
         }
       }
     },
+    "a changé %lld fois de parent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "changed parent %lld times"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a changé %lld fois de parent"
+          }
+        }
+      }
+    },
     "absente (débranchée ?)" : {
       "localizations" : {
         "en" : {
@@ -4141,6 +4397,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "active"
+          }
+        }
+      }
+    },
+    "aucun" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "none"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "aucun"
           }
         }
       }
@@ -4353,6 +4625,22 @@
         }
       }
     },
+    "connu seulement avec la sonde" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "known only with the probe"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "connu seulement avec la sonde"
+          }
+        }
+      }
+    },
     "diagnostic" : {
       "localizations" : {
         "en" : {
@@ -4429,6 +4717,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "démarrage"
+          }
+        }
+      }
+    },
+    "déplié" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "expanded"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "déplié"
           }
         }
       }
@@ -4561,6 +4865,38 @@
         }
       }
     },
+    "et %lld autres" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "and %lld more"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "et %lld autres"
+          }
+        }
+      }
+    },
+    "et 1 autre" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "and 1 more"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "et 1 autre"
+          }
+        }
+      }
+    },
     "faible" : {
       "localizations" : {
         "en" : {
@@ -4573,6 +4909,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "faible"
+          }
+        }
+      }
+    },
+    "finit sur %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ends on %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "finit sur %@"
           }
         }
       }
@@ -4849,6 +5201,22 @@
         }
       }
     },
+    "liens par le réseau local (TREL) non montrés : la carte est radio seulement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "links over the local network (TREL) not shown: the map is radio only"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "liens par le réseau local (TREL) non montrés : la carte est radio seulement"
+          }
+        }
+      }
+    },
     "lue" : {
       "localizations" : {
         "en" : {
@@ -5025,6 +5393,22 @@
         }
       }
     },
+    "pas vu par la sonde" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "not seen by the probe"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pas vu par la sonde"
+          }
+        }
+      }
+    },
     "pile" : {
       "localizations" : {
         "en" : {
@@ -5149,6 +5533,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "refusée : %@"
+          }
+        }
+      }
+    },
+    "replié" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "collapsed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replié"
           }
         }
       }
@@ -5341,6 +5741,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "sur batterie"
+          }
+        }
+      }
+    },
+    "tous les liens" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "all links"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tous les liens"
+          }
+        }
+      }
+    },
+    "tous les liens (+%lld)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "all links (+%lld)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tous les liens (+%lld)"
+          }
+        }
+      }
+    },
+    "très faible" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "very low"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "très faible"
+          }
+        }
+      }
+    },
+    "un enfant ne parle qu'à son parent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a child only talks to its parent"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "un enfant ne parle qu'à son parent"
           }
         }
       }

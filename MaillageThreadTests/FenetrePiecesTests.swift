@@ -246,6 +246,11 @@ struct FenetrePiecesTests {
         try await auDessusDeLaPile(m, grande, "fiche avec courbes")
     }
 
+    /// Une fenetre ou la legende ouverte tient au-dessus de la fiche d'un noeud de la demo : depuis la fiche en quatre
+    /// colonnes (reprise de Maillage Zigbee, 09/10), plus haute, plus celle par defaut (1100 x 760), ou elle se replie
+    /// faute de place.
+    static let hauteAssez = CGSize(width: 1100, height: 880)
+
     /// La legende reste visible quand une fiche est ouverte (verification du 02/10) : elle monte au-dessus de la fiche
     /// au lieu de disparaitre. De haut en bas : la legende, puis la fiche ; la vue d'ensemble se cadre au-dessus de
     /// tout cela. A la fermeture, la fiche part et la legende redescend.
@@ -255,7 +260,7 @@ struct FenetrePiecesTests {
         p.set(false, forKey: LegendePieces.cleRepliee)
         let demo = Surveillance(mode: .demo, dossier: nil)
         demo.demarrer()
-        let taille = CGSize(width: 1100, height: 760)
+        let taille = Self.hauteAssez
         let (fenetre, moteur) = try Self.fenetre(demo, taille: taille, preferences: p)
         defer { Self.fermer(fenetre) }
         try await MoteurPiecesTests.attendre { moteur.cadresInterface["legende"] != nil }
@@ -328,9 +333,10 @@ struct FenetrePiecesTests {
         // Petite fenetre, fiche de la demo : repliee faute de place, puis rouverte.
         let (sousPetite, apresPetite) = try await essai(demo, petite, "Apple TV 4K", repliee: false)
         #expect(sousPetite < 40 && apresPetite > 150, "820 x 680 : repliee sous la fiche (\(sousPetite)), rouverte ensuite (\(apresPetite))")
-        // Fenetre par defaut, fiche de la demo : la place suffit, elle reste ouverte.
-        let (sousDefaut, _) = try await essai(demo, defaut, "Apple TV 4K", repliee: false)
-        #expect(sousDefaut > 150, "1100 x 760 : ouverte au-dessus de la fiche (\(sousDefaut))")
+        // Fenetre assez haute, fiche de la demo : la place suffit, elle reste ouverte (dans la fenetre par defaut, la fiche
+        // en quatre colonnes la fait replier).
+        let (sousHaute, _) = try await essai(demo, Self.hauteAssez, "Apple TV 4K", repliee: false)
+        #expect(sousHaute > 150, "1100 x 880 : ouverte au-dessus de la fiche (\(sousHaute))")
         // Fenetre par defaut, fiche avec ses courbes : repliee.
         let historique = try CourbesFicheTests.surveillance()
         let (sousCourbes, apresCourbes) = try await essai(historique, defaut, JournalMaillageTests.appareil, repliee: false)
@@ -685,7 +691,7 @@ struct FenetrePiecesTests {
         let demo = Surveillance(mode: .demo, dossier: nil)
         demo.demarrer()
         demo.recevoir(try #require(demo.maillage), a: demo.maintenant.addingTimeInterval(-7 * 60))
-        let taille = CGSize(width: 1100, height: 760)
+        let taille = Self.hauteAssez
         let (fenetre, moteur) = try Self.fenetre(demo, taille: taille, preferences: p, reduire: true)
         defer { Self.fermer(fenetre) }
         try await MoteurPiecesTests.attendre {
@@ -706,8 +712,8 @@ struct FenetrePiecesTests {
 
     /// La pastille du chef : sur la fiche d'un noeud couronne, et seulement lui, les memes que la scene
     /// (`EntreeScene.chefs`) : un routeur de bordure (le chef de la demo), un routeur que la sonde seule
-    /// connait (le chef de son maillage). La fiche d'un chef a la pastille en plus : elle est plus haute
-    /// ou plus large que sans couronne ; celle d'un autre noeud ne change pas.
+    /// connait (le chef de son maillage). La fiche d'un chef a la pastille en plus : posee etroite (400 pt, ses quatre
+    /// colonnes empilees, `ColonnesFiche`), elle est plus haute que sans couronne ; celle d'un autre noeud ne change pas.
     @Test func pastilleDuChef() throws {
         let (_, _, e) = try NomsSceneTests.demo()
         for n in e.scene.noeuds {
@@ -731,49 +737,35 @@ struct FenetrePiecesTests {
         }
         func taille(_ id: String, _ e: EntreeScene) -> CGSize {
             let fiche = FicheNoeud(id: id, entree: e, instant: Date(), aRenommer: .constant(nil)) {}
-            return NSHostingView(rootView: fiche.environment(s).environment(PiecesChoisies(fichier: nil))).fittingSize
+            return NSHostingView(rootView: fiche.frame(width: 400).environment(s).environment(PiecesChoisies(fichier: nil)))
+                .fittingSize
         }
         var sansCouronne = thread
         sansCouronne.chefs = []
         for id in ["Apple TV 4K", "rloc:B400"] {
             let avec = taille(id, thread)
             let sans = taille(id, sansCouronne)
-            #expect(avec != sans && avec.width >= sans.width && avec.height >= sans.height, "\(id) : \(avec), \(sans)")
+            #expect(avec.height > sans.height, "\(id) : \(avec), \(sans)")
         }
         #expect(taille("HomePod Avant", thread) == taille("HomePod Avant", sansCouronne))
     }
 
-    /// La pastille du chef tient sur une ligne dans la fiche d'un routeur de bordure couronne, a la largeur
-    /// par defaut de la fenetre (1100 pt, `MaillageThreadApp`) comme a sa largeur minimale : les colonnes de
-    /// la fiche se serrent, et une pastille qui prend la largeur qu'on lui laisse passait a la ligne. Mesure
-    /// sur la fiche d'« Apple TV 4K » avec les courbes de l'historique (comme avec une sonde), ou la colonne
-    /// de la couronne est la plus haute : la couronne y ajoute sa pastille et son espacement, `uneLigne`
-    /// dans une fenetre assez large pour que tout tienne sur une ligne ; une deuxieme ligne en ajouterait
-    /// davantage.
-    @Test func pastilleDuChefSurUneLigne() throws {
-        let s = try CourbesFicheTests.surveillance()
-        let id = "Apple TV 4K"
-        let avec = try #require(Self.entree(s))
-        #expect(s.instantane?.routeur(id) != nil && FicheNoeud.couronne(id, entree: avec), "un routeur de bordure couronne")
-        var sans = avec
-        sans.chefs = []
-        // Ce que la couronne ajoute a la hauteur de la fiche dans une fenetre de `fenetre` pt de large : la fiche
-        // est posee avec le bord de chaque cote (`FenetrePieces`).
-        func ajout(fenetre: CGFloat) -> CGFloat {
-            func hauteur(_ e: EntreeScene) -> CGFloat {
-                let fiche = FicheNoeud(id: id, entree: e, instant: Date(), aRenommer: .constant(nil)) {}
-                return NSHostingView(rootView: fiche.frame(width: fenetre - 2 * FenetrePieces.bord)
-                    .environment(s).environment(PiecesChoisies(fichier: nil))).fittingSize.height
-            }
-            return hauteur(avec) - hauteur(sans)
-        }
-        let pastille = NSHostingView(rootView: PastilleChef()).fittingSize.height
-        let uneLigne = ajout(fenetre: 3000)
-        #expect(uneLigne >= pastille && uneLigne < 2 * pastille, "sur une ligne : \(uneLigne) pt pour une pastille de \(pastille)")
-        for fenetre in [1100, FenetrePieces.tailleMinimale.width] {
-            let plus = ajout(fenetre: fenetre)
-            #expect(plus > 0, "fenetre de \(Int(fenetre)) pt : la couronne agrandit la fiche, dont sa colonne est la plus haute")
-            #expect(plus <= uneLigne + 0.5, "fenetre de \(Int(fenetre)) pt : la couronne ajoute \(plus) pt, plus que \(uneLigne) : la pastille passe a la ligne")
+    /// La pastille du chef tient sur une ligne dans la colonne d'identite de la fiche, a la largeur par defaut de la
+    /// fenetre (1100 pt, `MaillageThreadApp`) comme a sa largeur minimale : posee a la largeur d'une colonne
+    /// (`ColonnesFiche`), plus etroite qu'elle, elle garde la hauteur d'une ligne et ne deborde pas.
+    @Test func pastilleDuChefSurUneLigne() {
+        let pastille = NSHostingView(rootView: PastilleChef()).fittingSize
+        // 926 pt : la plus etroite des fenetres a quatre colonnes, de 190 pt.
+        for fenetre in [1100, 926, FenetrePieces.tailleMinimale.width] {
+            // La fiche : le bord de chaque cote, ses marges de 16 pt, la place du bouton de fermeture (30 pt).
+            let largeur = fenetre - 2 * FenetrePieces.bord - 32 - 30
+            let c = ColonnesFiche.colonnes(largeur: largeur, nombre: 4)
+            let colonne = (largeur - CGFloat(c - 1) * 24) / CGFloat(c)
+            let posee = NSHostingView(rootView: PastilleChef().frame(width: colonne, alignment: .leading)).fittingSize
+            // Une ligne, au texte un peu reduit si la colonne est plus etroite qu'elle : pas plus haute, pas deux fois.
+            #expect(posee.height <= pastille.height && posee.height > 0.7 * pastille.height,
+                    "fenetre de \(Int(fenetre)) pt, colonne de \(Int(colonne)) pt : \(posee.height) pt de haut")
+            #expect(posee.width <= colonne.rounded(.up), "elle tient dans sa colonne : \(posee.width) pt")
         }
     }
 
