@@ -194,6 +194,7 @@ extension MoteurPieces {
         teintes = Dictionary(uniqueKeysWithValues: scene.pieces.indices.map { ($0, scene.pieces[$0].teinte) })
         construireEtiquettes()
         majFil()
+        majMiseEnAvant()
         if !pret {
             pret = true
             orbite = CameraScene.canonique(geometrie, aspect: aspect, u: t)

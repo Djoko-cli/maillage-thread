@@ -68,6 +68,13 @@ struct EntreeScene: Equatable {
         a.scene == b.scene && a.libelles == b.libelles && a.apparences == b.apparences && a.domicile == b.domicile
     }
 
+    /// Mode focus du graphe : ce qui reste net a la selection du noeud `id`, calcule par la fonction propre a Thread
+    /// (`FocusThread`) sur le graphe de cette scene et ses chefs. Le moteur, generique, ne fait que l'appeler
+    /// (`MoteurPieces.majMiseEnAvant`).
+    func miseEnAvant(de id: String) -> MiseEnAvant? {
+        FocusThread.miseEnAvant(de: id, graphe: graphe, chefs: chefs)
+    }
+
     /// Ce qui oblige a recalculer la disposition : celle de la scene, sans les badges des noms (polissage D, section 2).
     typealias CleDisposition = ScenePieces.CleDisposition
 

@@ -46,9 +46,14 @@ public struct EtatAnime: Hashable, Sendable {
     public var ek: [Double]
     /// Disque cliquable sous le pointeur : il s'eclaircit.
     public var survolEtage: Int?
+    /// Mode focus : l'estompement de chaque noeud, par identifiant, et de chaque lien, par paire (`MiseEnAvant.cle`), de
+    /// 0 (net) a 1 (estompe) ; absent : net.
+    public var noeudsEstompes: [String: Double]
+    public var liensEstompes: [String: Double]
 
     public init(t: Double = 0, s: Double = 0, fk: [Double], focus: Int? = nil, survol: String? = nil,
-                selection: String? = nil, se: Double = 0, ek: [Double] = [], survolEtage: Int? = nil) {
+                selection: String? = nil, se: Double = 0, ek: [Double] = [], survolEtage: Int? = nil,
+                noeudsEstompes: [String: Double] = [:], liensEstompes: [String: Double] = [:]) {
         self.t = t
         self.s = s
         self.fk = fk
@@ -58,6 +63,8 @@ public struct EtatAnime: Hashable, Sendable {
         self.se = se
         self.ek = ek
         self.survolEtage = survolEtage
+        self.noeudsEstompes = noeudsEstompes
+        self.liensEstompes = liensEstompes
     }
 }
 
@@ -132,8 +139,11 @@ public struct SceneProjetee: Sendable {
         public var noeud: String
         public var centre: CGPoint
         public var rayon: Double
+        /// Opacite hors du mode focus : elle decide de ce qui se clique, un noeud estompe se clique encore.
         public var opacite: Double
         public var profondeur: Double
+        /// Facteur d'opacite du mode focus (`MiseEnAvant.facteur`) : 1 net ; le dessin le multiplie a `opacite`.
+        public var focus = 1.0
     }
 
     public struct Sphere: Sendable {
@@ -184,6 +194,11 @@ public struct SceneProjetee: Sendable {
     /// Noeuds qui s'effacent pendant une transition (polissage D, section 1) : absents de la scene, ils ne se cliquent
     /// pas et n'ont pas de nom.
     public var fantomes: Set<String> = []
+    /// Mode focus : le facteur d'opacite des noeuds estompes (et de leurs noms), par identifiant ; absent : 1.
+    public var facteursNoeuds: [String: Double] = [:]
+
+    /// Le facteur d'opacite du mode focus d'un noeud et de son nom : 1 net.
+    public func facteur(noeud id: String) -> Double { facteursNoeuds[id] ?? 1 }
 
     public init() {}
 
@@ -344,14 +359,15 @@ public struct SceneProjetee: Sendable {
             return e < ve.count ? ve[e] : 1
         }
 
-        // Pastilles.
+        // Pastilles ; en mode focus, celles qui ne sont pas mises en avant s'estompent, avec leur nom.
+        for (id, e) in etat.noeudsEstompes where e > 0 { facteursNoeuds[id] = MiseEnAvant.facteur(e) }
         for n in scene.noeuds {
             guard let p = mondes[n.id], let e = proj.ecran(p) else { continue }
             let r = rayonPastille(n.rayon, en: p)
             disques.append(Disque(noeud: n.id, centre: e, rayon: r,
                                   opacite: min(1 - 0.8 * (1 - voiles[n.piece]), voileEtage(n.piece))
                                       * (apparitions[n.id] ?? 1),
-                                  profondeur: proj.profondeur(p)))
+                                  profondeur: proj.profondeur(p), focus: facteur(noeud: n.id)))
             ancresNoeuds[n.id] = CGRect(x: Double(e.x) - r, y: Double(e.y) - r, width: 2 * r, height: 2 * r)
         }
         for id in fantomes.sorted() {
@@ -359,12 +375,13 @@ public struct SceneProjetee: Sendable {
             disques.append(Disque(noeud: id, centre: e, rayon: rayonPastille(n.rayon, en: p),
                                   opacite: min(1 - 0.8 * (pieceRestante(n).map { 1 - voiles[$0] } ?? es),
                                                voileAncres(n.ancres)) * n.opacite,
-                                  profondeur: proj.profondeur(p)))
+                                  profondeur: proj.profondeur(p), focus: facteur(noeud: id)))
         }
         disques.sort { $0.profondeur > $1.profondeur }
 
         // Liens : estompes avec leurs pieces ; un lien qui touche l'etage isole reste visible, meme vers un autre
-        // etage ; eclaires au survol (ou a la selection) d'un bout.
+        // etage ; eclaires au survol (ou a la selection) d'un bout ; en mode focus, estompes s'ils ne sont pas mis en
+        // avant.
         for l in scene.liens {
             guard let a = mondes[l.de], let b = mondes[l.vers], let (pa, pb) = proj.segment(a, b),
                   let na = scene.noeud(l.de), let nb = scene.noeud(l.vers) else { continue }
@@ -372,7 +389,10 @@ public struct SceneProjetee: Sendable {
                             max(voileEtage(na.piece), voileEtage(nb.piece)))
             let eclaire = [l.de, l.vers].contains { $0 == etat.survol || $0 == etat.selection }
             // Sans transition, pas de cle de lien a construire (relecture finale, Mineur 5).
-            let fondu = poses.liens.isEmpty ? 1 : poses.liens[PosesScene.cle(l)]?.opacite ?? 1
+            var fondu = poses.liens.isEmpty ? 1 : poses.liens[PosesScene.cle(l)]?.opacite ?? 1
+            if !etat.liensEstompes.isEmpty, let e = etat.liensEstompes[MiseEnAvant.cle(l)] {
+                fondu *= MiseEnAvant.facteur(e)
+            }
             if l.genre == .radio {
                 liensRouteurs.append(Lien(a: pa, b: pb, genre: .radio, qualite: l.qualite,
                                           opacite: Self.opaciteLienRadio * poids * fondu, eclaire: eclaire))

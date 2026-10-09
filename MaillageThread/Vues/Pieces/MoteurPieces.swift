@@ -104,7 +104,10 @@ final class MoteurPieces {
     var isolement = Isolement.maison
     var fil = Fil()
     var curseurForme = Curseur.fleche
-    var selection: String?
+    /// Le noeud choisi, dont la fiche est ouverte : le graphe passe en mode focus (`majMiseEnAvant`).
+    var selection: String? {
+        didSet { if selection != oldValue { majMiseEnAvant() } }
+    }
     var ligneNiveau = LigneNiveau.lisibles
     var cibleMenu = CibleMenu.aucune
     /// Version de la scene la plus recente (`sceneRecente`), observee : elle change avec elle, a chaque scene
@@ -256,6 +259,12 @@ final class MoteurPieces {
     @ObservationIgnored var moniteur: Any?
     /// Captures : l'etat est pose a la main, l'horloge n'avance pas.
     @ObservationIgnored var fige = false
+    /// Mode focus (repris de Maillage Zigbee, 09/10) : ce qui reste net autour du noeud choisi (nil : pas de focus),
+    /// l'estompement vise de chaque noeud et de chaque lien, et celui de l'image, qui le rejoint en douceur (`avancer`).
+    @ObservationIgnored var miseEnAvant: MiseEnAvant?
+    @ObservationIgnored var ciblesFocus: (noeuds: [String: Double], liens: [String: Double]) = ([:], [:])
+    @ObservationIgnored var noeudsEstompes: [String: Double] = [:]
+    @ObservationIgnored var liensEstompes: [String: Double] = [:]
 
     /// Dernier clic sur le fond (instant, point) : un second, assez pres et assez tot, est un double-clic.
     @ObservationIgnored var clicFond: (instant: Double, point: CGPoint)?
@@ -333,6 +342,25 @@ final class MoteurPieces {
         places = fichierPlaces.map(PlacesGardees.lire) ?? depart ?? PlacesGardees()
         self.selection = selection
     }
+
+    /// Ce qui reste net autour du noeud choisi, d'apres la scene affichee (`EntreeScene.miseEnAvant`, la fonction du
+    /// protocole) : a chaque selection et a chaque scene installee. L'estompement suit en douceur ; une capture (`fige`)
+    /// le prend tout de suite.
+    func majMiseEnAvant() {
+        let m = selection.flatMap { entree?.miseEnAvant(de: $0) }
+        miseEnAvant = m
+        ciblesFocus = scene.map {
+            MiseEnAvant.cibles(m, noeuds: $0.noeuds.map(\.id), liens: $0.liens.map(MiseEnAvant.cle))
+        } ?? ([:], [:])
+        if fige {
+            noeudsEstompes = ciblesFocus.noeuds
+            liensEstompes = ciblesFocus.liens
+        }
+        reveiller()
+    }
+
+    /// L'estompement du mode focus est en route vers sa cible.
+    var focusEnRoute: Bool { noeudsEstompes != ciblesFocus.noeuds || liensEstompes != ciblesFocus.liens }
 
     static func maintenant() -> Double { CACurrentMediaTime() }
 

@@ -268,14 +268,16 @@ extension MoteurPieces {
         majCurseur()
     }
 
-    /// Clic sans glisser, selon sa cible (polissage C, sections 5.1 et 5.4) : un appareil ou son nom ouvre sa fiche ;
-    /// une piece ou son nom l'isole (en piece isolee, une autre piece y mene, meme pendant le vol) ; le nom ou le
-    /// disque d'un etage l'isole ; a cote, la fiche se ferme et la vue remonte d'ou elle vient. Rien pendant l'envol.
+    /// Clic sans glisser, selon sa cible (polissage C, sections 5.1 et 5.4) : un appareil ou son nom ouvre sa fiche, ou
+    /// la ferme s'il est deja choisi (mode focus) ; une piece ou son nom l'isole (en piece isolee, une autre piece y
+    /// mene, meme pendant le vol) ; le nom ou le disque d'un etage l'isole ; a cote, la fiche se ferme et la vue remonte
+    /// d'ou elle vient. Rien pendant l'envol.
     func cliquer(_ p: CGPoint) {
         guard envol == nil, fondu == nil else { return }
         switch cibleClic(en: p) {
         case .appareil(let n):
-            selection = n
+            // Un second clic sur le noeud choisi ferme sa fiche, et rend la vue normale (mode focus).
+            selection = selection == n ? nil : n
         case .piece(let i):
             if !(focus == i && sCible == 1) { isoler(i) }
         case .nomEtage(let e):

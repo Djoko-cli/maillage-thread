@@ -183,12 +183,13 @@ enum RenduCanvas {
                    style: StrokeStyle(lineWidth: 2, lineCap: .round))
     }
 
-    /// Pastilles, du plus loin au plus proche, puis l'anneau de la selection.
+    /// Pastilles, du plus loin au plus proche, puis l'anneau de la selection ; en mode focus, estompees si elles ne sont
+    /// pas mises en avant.
     private static func dessinerPastilles(_ ctx: inout GraphicsContext, _ image: ImagePieces, _ palette: Palette) {
         for d in image.projetee.disques {
             guard let a = image.apparences[d.noeud] else { continue }
             var g = ctx
-            g.opacity = d.opacite
+            g.opacity = d.opacite * d.focus
             DessinNoeud.dessiner(&g, centre: d.centre, rayon: d.rayon, apparence: a, palette: palette)
             if d.noeud == image.selection {
                 DessinNoeud.dessinerSelection(&g, centre: d.centre, rayon: d.rayon, apparence: a, palette: palette)
@@ -218,7 +219,8 @@ enum RenduCanvas {
     /// Aligne sur les pixels de l'ecran : un texte net.
     private static func aligner(_ v: CGFloat, _ echelle: Double) -> CGFloat { (v * echelle).rounded() / echelle }
 
-    /// Noms poses : immobiles, alignes sur les pixels ; en mouvement, a leur place fractionnaire.
+    /// Noms poses : immobiles, alignes sur les pixels ; en mouvement, a leur place fractionnaire. En mode focus, le nom
+    /// d'un noeud estompe s'estompe avec lui.
     private static func dessinerNoms(_ ctx: inout GraphicsContext, _ image: ImagePieces, _ palette: Palette,
                                      _ cache: CacheTextes) {
         let e = image.echelle
@@ -231,6 +233,7 @@ enum RenduCanvas {
             switch l.genre {
             case .noeud(let id):
                 guard let libelle = image.textes.noeuds[id] else { continue }
+                g.opacity *= image.projetee.facteur(noeud: id)
                 let routeur = image.routeurs.contains(id)
                 let texte = cache.resolu(g, "n|\(routeur)|\(l.fort)|" + libelle.texte, echelle: e) {
                     texteNom(libelle.texte, routeur: routeur, fort: l.fort, palette: palette)

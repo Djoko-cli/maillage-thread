@@ -27,7 +27,8 @@ extension MoteurPieces {
         guard pret, let scene else { return }
         let parts = scene.pieces.map { fk[$0.id] ?? 0 }
         let etat = EtatAnime(t: t, s: s, fk: parts, focus: focus, survol: survol, selection: selection, se: se,
-                             ek: scene.etages.map { ek[$0.id] ?? 0 }, survolEtage: survolEtage)
+                             ek: scene.etages.map { ek[$0.id] ?? 0 }, survolEtage: survolEtage,
+                             noeudsEstompes: noeudsEstompes, liensEstompes: liensEstompes)
         let p = SceneProjetee(scene: scene, cartes: cartes, positions: positions, geometrie: geometrie, etat: etat,
                               orbite: orbite, cadre: cadre, poses: posesAffichees)
         PlacementNoms.regler(&etiquettes, scene: scene, niveau: p.niveau, survol: survol, selection: selection,
@@ -191,6 +192,12 @@ extension MoteurPieces {
             for p in scene.pieces { fk[p.id] = tendre(fk[p.id], vers: p.id == piece ? 1 : 0) }
             for e in scene.etages { ek[e.id] = tendre(ek[e.id], vers: e.id == etageEnVue ? 1 : 0) }
         }
+        // Le mode focus : ce qui n'est pas mis en avant s'estompe, ou revient, en douceur.
+        if focusEnRoute {
+            let k = dt * Self.vitesseFocus
+            noeudsEstompes = MiseEnAvant.tendre(noeudsEstompes, vers: ciblesFocus.noeuds, k: k)
+            liensEstompes = MiseEnAvant.tendre(liensEstompes, vers: ciblesFocus.liens, k: k)
+        }
         // Les plateaux et les pieces glissent ; la vue suit ce qu'elle regarde.
         if glissementPlateaux != nil || transition != nil {
             let ancre0 = ancreCamera()
@@ -268,6 +275,10 @@ extension MoteurPieces {
         apparencesParties = [:]
     }
 
+    /// Vitesse de l'estompement du mode focus : la part du chemin faite par seconde (les deux tiers en 0,2 s, presque
+    /// tout en 0,8 s).
+    static let vitesseFocus = 5.0
+
     // MARK: Horloge
 
     func doitContinuer(_ now: Double) -> Bool {
@@ -277,7 +288,7 @@ extension MoteurPieces {
             return true
         }
         if se != seCible || fk.values.contains(where: { $0 != 0 && $0 != 1 })
-            || ek.values.contains(where: { $0 != 0 && $0 != 1 }) {
+            || ek.values.contains(where: { $0 != 0 && $0 != 1 }) || focusEnRoute {
             return true
         }
         if rotationLente { return true }
