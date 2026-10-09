@@ -6,6 +6,49 @@ the notes of the GitHub release and those of the update window.
 Maillage Thread : une section par version publiée, en anglais puis en français. `outils/publier.sh` en tire les
 notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour.
 
+## 1.2.0
+
+**English**
+
+- Radio-only map: a link between two routers that both advertise TREL (Thread over the local network, like Apple's)
+  is no longer drawn. Their routing table can't say whether a link uses the radio, and a passive 802.15.4 listen
+  confirmed that Apple routers exchange no radio frames with each other. Third-party routers and children keep their
+  radio links; the card of an Apple router says its TREL links are not shown.
+- Focus mode: selecting a node keeps its parent, its children, its radio links and the mesh leader sharp, and fades
+  the rest. Click it again, click an empty spot or press Esc to get the full view back.
+- The node card has four columns: identity; role and parent, with the node's journal; children; radio neighbors,
+  summarized ("5 neighbors · 2 good · 2 medium · 1 low") with a list to expand.
+- A readable history: a wide band, up to six curves (radio links, then children, the weakest first) and an "all
+  links" checkbox, legend chips that highlight a curve, a named axis, the quality on hover, and parent changes as thin
+  markers, grouped and read on hover. A router also shows the curve of each of its children.
+- A grouped journal: the parent changes of a node within an hour fit on one line, with their relays ("A → B → C ·
+  ends on C") and the details to expand, in the card and in the journal window.
+- Routers that are not border routers get a blue ring, and the legend now says "border router", "border router in
+  another partition" and "router"; the probe shows radio waves on both sides; the menu bar icon and the app icon
+  carry the Thread symbol.
+- The probe firmware is unchanged (1.1.0).
+
+**Français**
+
+- Carte radio seulement : un lien entre deux routeurs qui annoncent tous deux TREL (Thread par le réseau local, comme
+  ceux d'Apple) n'est plus dessiné. Leur table de routage ne dit pas si un lien passe par la radio, et une écoute
+  802.15.4 passive a confirmé que les routeurs d'Apple ne s'échangent aucune trame radio. Les routeurs tiers et les
+  enfants gardent leurs liens radio ; la fiche d'un routeur d'Apple dit que ses liens TREL ne sont pas montrés.
+- Mode focus : choisir un nœud garde nets son parent, ses enfants, ses liens radio et le chef du maillage, et estompe
+  le reste. Un second clic sur lui, un clic dans le vide ou Échap rendent la vue entière.
+- La fiche d'un nœud a quatre colonnes : identité ; rôle et parent, avec le journal du nœud ; enfants ; voisins
+  radio, résumés (« 5 voisins · 2 bons · 2 moyens · 1 faible ») avec une liste à déplier.
+- Un historique lisible : une bande large, six courbes au plus (les liens radio, puis les enfants, du plus faible au
+  meilleur) et une case « tous les liens », une légende en pastilles qui met une courbe en avant, un axe nommé, la
+  qualité au survol, et les changements de parent en traits fins, regroupés et lus au survol. Un routeur montre aussi
+  la courbe de chacun de ses enfants.
+- Un journal regroupé : les changements de parent d'un nœud dans la même heure tiennent sur une ligne, avec leurs
+  relais (« A → B → C · finit sur C ») et le détail à déplier, dans la fiche et dans la fenêtre du journal.
+- Les routeurs qui ne sont pas de bordure ont un cercle bleu, et la légende dit « routeur de bordure », « routeur de
+  bordure d'une autre partition » et « routeur » ; la sonde a des ondes de part et d'autre ; l'icône de la barre des
+  menus et celle de l'app portent le symbole de Thread.
+- Le firmware de la sonde ne change pas (1.1.0).
+
 ## 1.1.0
 
 **English**
