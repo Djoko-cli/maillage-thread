@@ -31,9 +31,9 @@ struct TexteEvenementTests {
         #expect(TexteEvenement.isoles(scission) == "Aqara HubM100 #DFEB")
         let notification = TexteEvenement.notification(AlerteAEnvoyer(categorie: .pertes, identifiant: "p", evenements: pertes))
         #expect(notification.corps.contains("Prise bureau"))
-        let vides = try #require(UserDefaults(suiteName: "vide-\(UUID())"))
+        let vides = try #require(PreferencesMemoire(domaine: "vide-\(UUID())"))
         #expect(Notifications.active(.scission, preferences: vides))
-        let videsAussi = try #require(UserDefaults(suiteName: "vide-\(UUID())"))
+        let videsAussi = try #require(PreferencesMemoire(domaine: "vide-\(UUID())"))
         #expect(!Notifications.active(.informations, preferences: videsAussi))
     }
 

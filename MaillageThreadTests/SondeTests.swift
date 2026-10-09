@@ -626,13 +626,63 @@ struct SondeUSBTests {
     }
 }
 
+/// Preferences des tests, en memoire (reprises de Maillage Zigbee, 09/10) : chaque lecture et chaque ecriture passent
+/// par un dictionnaire, sans jamais toucher le domaine sur le disque. Avec `UserDefaults(suiteName:)`,
+/// `removePersistentDomain` laissait un fichier vide par test dans `Library/Preferences` du conteneur de l'app (50 497
+/// au 09/10 : cfprefsd ecrit en asynchrone).
+final class PreferencesMemoire: UserDefaults, @unchecked Sendable {
+    /// Sous `verrou` (des valeurs `Any`, que `Mutex` refuse de partager) ; `parDefaut` : celles de `register`.
+    private var valeurs: [String: Any] = [:]
+    private var parDefaut: [String: Any] = [:]
+    private let verrou = NSLock()
+    let domaine: String
+
+    init?(domaine: String) {
+        self.domaine = domaine
+        super.init(suiteName: domaine)
+    }
+
+    override func object(forKey cle: String) -> Any? { verrou.withLock { valeurs[cle] ?? parDefaut[cle] } }
+    /// Chaque changement est annonce par KVO, comme le fait `UserDefaults` : `@AppStorage` (les tests de la fenetre) le
+    /// suit ainsi.
+    override func set(_ valeur: Any?, forKey cle: String) {
+        willChangeValue(forKey: cle)
+        verrou.withLock { valeurs[cle] = valeur }
+        didChangeValue(forKey: cle)
+    }
+
+    override func register(defaults: [String: Any]) {
+        verrou.withLock { parDefaut.merge(defaults) { _, nouvelle in nouvelle } }
+    }
+
+    override func removeObject(forKey cle: String) { set(nil as Any?, forKey: cle) }
+    override func string(forKey cle: String) -> String? { object(forKey: cle) as? String }
+    override func stringArray(forKey cle: String) -> [String]? { object(forKey: cle) as? [String] }
+    override func bool(forKey cle: String) -> Bool { object(forKey: cle) as? Bool ?? false }
+    override func integer(forKey cle: String) -> Int { object(forKey: cle) as? Int ?? 0 }
+    override func double(forKey cle: String) -> Double { object(forKey: cle) as? Double ?? 0 }
+    override func data(forKey cle: String) -> Data? { object(forKey: cle) as? Data }
+    override func set(_ valeur: Bool, forKey cle: String) { set(valeur as Any, forKey: cle) }
+    override func set(_ valeur: Int, forKey cle: String) { set(valeur as Any, forKey: cle) }
+    override func set(_ valeur: Double, forKey cle: String) { set(valeur as Any, forKey: cle) }
+    override func dictionaryRepresentation() -> [String: Any] { verrou.withLock { parDefaut.merging(valeurs) { $1 } } }
+    override func persistentDomain(forName nom: String) -> [String: Any]? {
+        nom == domaine ? verrou.withLock { valeurs } : nil
+    }
+    override func removePersistentDomain(forName nom: String) {
+        guard nom == domaine else { return }
+        verrou.withLock { valeurs = [:] }
+    }
+}
+
 /// Chaque test borne a une minute : une attente sans fin echoue au lieu de bloquer la suite.
 @MainActor
 @Suite("Sonde dans l'app : port retenu, refus, fraicheur du maillage", .timeLimit(.minutes(1)))
 struct SondeMaillageTests {
+    /// Preferences d'un test, en memoire (`PreferencesMemoire`) : aucun fichier dans le conteneur de l'app.
     static func preferences() throws -> (UserDefaults, String) {
         let domaine = "fr.djoko.maillage.tests.sonde.\(UUID().uuidString)"
-        return (try #require(UserDefaults(suiteName: domaine)), domaine)
+        return (try #require(PreferencesMemoire(domaine: domaine)), domaine)
     }
 
     static let port = PortUSB(chemin: "/dev/cu.usbmodem11301", vid: 0x303A, pid: 0x1001, serie: "A0:00:00:00:00:01",
