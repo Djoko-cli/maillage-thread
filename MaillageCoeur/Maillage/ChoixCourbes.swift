@@ -27,4 +27,11 @@ public enum ChoixCourbes {
     public static func basculer(_ enAvant: String?, _ cle: String) -> String? {
         enAvant == cle ? nil : cle
     }
+
+    /// La courbe vraiment mise en avant parmi les courbes montrees : `enAvant` s'il en fait partie, sinon nil. Une
+    /// courbe choisie puis cachee (case « tous » decochee, autre periode) n'estompe plus toutes les autres.
+    public static func enAvant(_ enAvant: String?, parmi montrees: [String]) -> String? {
+        guard let enAvant, montrees.contains(enAvant) else { return nil }
+        return enAvant
+    }
 }

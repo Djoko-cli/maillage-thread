@@ -156,7 +156,8 @@ struct FicheNoeud: View {
                 Text(Self.ligneEnfants(enfants.count)).font(.caption).foregroundStyle(.secondary)
                 RangeesFluides {
                     ForEach(enfants) { d in
-                        PastilleNoeud(nom: nomNoeud(d.id), couleur: Self.palette.lienSonde(d.qualite)) {
+                        PastilleNoeud(nom: nomNoeud(d.id), couleur: Self.palette.lienSonde(d.qualite),
+                                      valeur: Self.valeurPastille(qualite: d.qualite)) {
                             choisir(d.id)
                         }
                     }
@@ -250,6 +251,11 @@ struct FicheNoeud: View {
                      dans surveillance: Surveillance) -> Bool {
         guard let ext = maillage?.extMacs[id] ?? graphe?.noeud(id)?.extMac else { return false }
         return surveillance.instantane?.trel.contains(ext.uppercased()) == true
+    }
+
+    /// Ce que le point de couleur d'une pastille d'enfant dit a VoiceOver : « qualité du lien : bonne ».
+    static func valeurPastille(qualite: Int?) -> String {
+        String(localized: "qualité du lien : \(NiveauQualite(qualite).nom)")
     }
 
     /// « 4 enfants ».

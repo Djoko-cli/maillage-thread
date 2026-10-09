@@ -104,4 +104,49 @@ struct FocusTests {
         }
         #expect(!m.focusEnRoute, "arrive en 3 s au plus")
     }
+
+    /// Le nom d'un noeud estompe se lit au survol (repris de Maillage Zigbee, 09/10) : sous le focus, un nom fort (survole)
+    /// reste a 80 % au moins ; les autres suivent leur noeud.
+    @Test func nomSurvoleSousLeFocus() {
+        let estompe = MiseEnAvant.opaciteEstompee
+        #expect(RenduCanvas.facteurNom(estompe, fort: true) == RenduCanvas.opaciteNomFort)
+        #expect(RenduCanvas.facteurNom(estompe, fort: false) == estompe)
+        #expect(RenduCanvas.facteurNom(1, fort: true) == 1 && RenduCanvas.facteurNom(1, fort: false) == 1)
+        #expect(RenduCanvas.facteurNom(0.9, fort: true) == 0.9, "jamais plus estompe qu'avant, ni plus net que le noeud net")
+    }
+
+    /// Les rangees fluides : a la ligne quand la place manque ; un element plus large que la rangee est ramene a sa
+    /// largeur (il ne deborde pas), avec ou sans largeur proposee, et une largeur infinie vaut aucune.
+    @Test func rangeesFluides() {
+        let t = [CGSize(width: 40, height: 10), CGSize(width: 50, height: 12), CGSize(width: 200, height: 10)]
+        let large = RangeesFluides.disposer(t, largeur: 100, espacement: 5, interligne: 4)
+        #expect(large.places == [CGPoint(x: 0, y: 0), CGPoint(x: 45, y: 0), CGPoint(x: 0, y: 16)])
+        #expect(large.tailles.map(\.width) == [40, 50, 100], "la pastille trop large est bornee a la rangee")
+        #expect(large.total == CGSize(width: 100, height: 26))
+        let libre = RangeesFluides.disposer(t, largeur: nil, espacement: 5, interligne: 4)
+        #expect(libre.places.map(\.y) == [0, 0, 0] && libre.total.width == 40 + 5 + 50 + 5 + 200)
+        #expect(RangeesFluides.disposer(t, largeur: .infinity).tailles.map(\.width) == [40, 50, 200])
+        #expect(RangeesFluides.disposer([], largeur: 100).total == CGSize(width: 100, height: 0))
+    }
+
+    /// Les colonnes de la fiche : quatre, puis deux, puis une, selon la place ; une largeur infinie ne donne pas de
+    /// colonne infinie. Les courbes : au-dela de huit, le trait change ; le graphe garde la courbe mise en avant dans son
+    /// etat, refait par un autre noeud, une autre periode ou la case « tous les liens ».
+    @Test func colonnesEtCourbes() {
+        #expect(ColonnesFiche.colonnes(largeur: 4 * 190 + 3 * 24, nombre: 4) == 4)
+        #expect(ColonnesFiche.colonnes(largeur: 4 * 190 + 3 * 24 - 1, nombre: 4) == 2, "jamais trois : des rangees pleines")
+        #expect(ColonnesFiche.colonnes(largeur: 300, nombre: 4) == 1)
+        let sansLimite = ColonnesFiche.grille(largeur: .infinity, nombre: 4)
+        #expect(sansLimite.colonnes == 4 && sansLimite.largeur == ColonnesFiche.largeurMinimale)
+        #expect(ColonnesFiche.grille(largeur: nil, nombre: 4).largeur == ColonnesFiche.largeurMinimale)
+        #expect(CourbesFiche.tirets(0).isEmpty && CourbesFiche.tirets(7).isEmpty)
+        #expect(!CourbesFiche.tirets(8).isEmpty && CourbesFiche.tirets(8) != CourbesFiche.tirets(16))
+        #expect(CourbesFiche.couleur(8) == CourbesFiche.couleur(0))
+        let base = CourbesFiche.identiteGraphe(id: "a", tous: false, periode: .jour)
+        #expect(base == CourbesFiche.identiteGraphe(id: "a", tous: false, periode: .jour))
+        #expect(base != CourbesFiche.identiteGraphe(id: "b", tous: false, periode: .jour))
+        #expect(base != CourbesFiche.identiteGraphe(id: "a", tous: true, periode: .jour))
+        #expect(base != CourbesFiche.identiteGraphe(id: "a", tous: false, periode: .semaine))
+        #expect(FicheNoeud.valeurPastille(qualite: 3) == String(localized: "qualité du lien : \(NiveauQualite.bonne.nom)"))
+    }
 }

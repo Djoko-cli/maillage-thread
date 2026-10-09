@@ -21,8 +21,6 @@ struct CourbesFiche: View {
     @State private var periodeChoisie: PeriodeCourbes = .jour
     /// La case « tous les liens » : toutes les courbes, et non les six premieres (`CourbesNoeud.prioritaires`).
     @State private var tous = false
-    /// La courbe mise en avant par sa pastille ; nil, aucune.
-    @State private var enAvant: String?
 
     private var periode: PeriodeCourbes { periodeChoisie }
 
@@ -73,7 +71,10 @@ struct CourbesFiche: View {
                 let montrees = ChoixCourbes.montrees(cles: c.liens.map(\.id), prioritaires: c.prioritaires, tous: tous)
                 HStack(alignment: .top, spacing: 24) {
                     if !montrees.isEmpty {
-                        GrapheQualite(c: c, cles: montrees, noms: noms, periode: periode, enAvant: $enAvant)
+                        GrapheQualite(courbes: c.liens, debut: c.debut, fin: c.fin, reperes: Self.reperes(c),
+                                      titre: Self.titreQualite(c), cles: montrees, noms: noms,
+                                      nomCourbe: { Self.nomLien($0, noms) }, periode: periode)
+                            .id(Self.identiteGraphe(id: id, tous: tous, periode: periode))
                     }
                     if !c.signal.isEmpty {
                         GrapheSignal(c: c, noms: noms, periode: periode)
@@ -85,10 +86,14 @@ struct CourbesFiche: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .onChange(of: id) {
-            tous = false
-            enAvant = nil
-        }
+        .onChange(of: id) { tous = false }
+    }
+
+    /// L'identite du graphe de qualite : un autre noeud, la case « tous les liens » ou une autre periode le refont, et la
+    /// courbe mise en avant (l'etat du graphe) s'efface (repris de Maillage Zigbee, 09/10). Cliquer une pastille ne change
+    /// que cet etat : seul le graphe se recalcule, non l'historique de la periode.
+    static func identiteGraphe(id: String, tous: Bool, periode: PeriodeCourbes) -> String {
+        "\(id)|\(tous)|\(periode.rawValue)"
     }
 
     static func titre(_ p: PeriodeCourbes) -> String {
@@ -136,6 +141,16 @@ struct CourbesFiche: View {
 
     static func couleur(_ rang: Int) -> Color { couleurs[rang % couleurs.count] }
 
+    /// Le motif du trait de la courbe de rang `rang` : plein pour les huit premieres, puis les couleurs se repetent
+    /// (« tous les liens ») avec un trait tirete, puis pointille, pour que deux courbes de meme couleur se distinguent.
+    static func tirets(_ rang: Int) -> [CGFloat] {
+        switch rang / couleurs.count {
+        case 0: []
+        case 1: [5, 3]
+        default: [1.5, 2.5]
+        }
+    }
+
     /// Troncons d'un seul point : une ligne a besoin de deux points, ceux-la sont dessines en point
     /// (juste apres la premiere tournee, ou un point isole entre deux trous ; ajout du controleur,
     /// relecture de la tache 9).
@@ -165,17 +180,31 @@ struct CourbesFiche: View {
     }
 }
 
-/// Le graphe de la qualite des liens d'un noeud (repris de Maillage Zigbee, 09/10) : ses courbes montrees (`cles`), leur
-/// legende en pastilles cliquables (une courbe mise en avant estompe les autres), l'axe nomme, les reperes des
-/// changements de parent, et au survol l'heure et la qualite de chaque courbe (ou de celle mise en avant). Une vue a
-/// part, comme `GrapheSignal` : le survol ne refait qu'elle.
+/// Le graphe de la qualite des liens d'un noeud (etape 5, section 3) : ses courbes montrees (`cles`), leur legende en
+/// pastilles cliquables (une courbe mise en avant estompe les autres), l'axe nomme, les reperes des changements, et au
+/// survol l'heure et le LQI de chaque courbe (ou de celle mise en avant). Une vue a part, comme `GrapheSignal` : le
+/// survol ne refait qu'elle. Generique, elle ne sait rien du protocole (reprise par Maillage Thread) : on lui donne les
+/// courbes, la fenetre de temps, les reperes, le titre et le nom de chaque courbe ; `CourbesFiche` les tire de
+/// `CourbesNoeud`.
 struct GrapheQualite: View {
     @Environment(\.locale) private var langue
-    let c: CourbesNoeud
+    /// Les courbes de lien ; `cles` dit lesquelles se montrent, et dans quel ordre.
+    let courbes: [CourbeLien]
+    let debut: Date
+    let fin: Date
+    /// Les changements de parent, en reperes sur le trace (par date).
+    let reperes: [ChangementParent]
+    /// Le titre du graphe, au-dessus de la legende.
+    let titre: String
     let cles: [String]
+    /// Les noms des noeuds nommes par les bulles des reperes (par cle de noeud).
     let noms: [String: String]
+    /// Le nom d'une courbe (sa pastille de legende et son etiquette de survol), par sa cle.
+    let nomCourbe: (String) -> String
     let periode: PeriodeCourbes
-    @Binding var enAvant: String?
+    /// La courbe mise en avant par sa pastille ; nil, aucune. L'etat est celui du graphe : le parent le refait (`id`) a
+    /// un autre noeud, une autre periode ou un autre choix de courbes.
+    @State private var enAvant: String?
     /// L'heure du releve sous le pointeur ; nil, ailleurs.
     @State private var survole: Date?
     /// La date du repere dont la pointe est sous le pointeur ; nil, ailleurs. Jamais en meme temps que `survole`.
@@ -186,21 +215,25 @@ struct GrapheQualite: View {
 
     /// Ce que le survol montre a l'heure `heure` : pour chaque courbe montree (ou celle mise en avant seulement), son
     /// releve le plus proche, a moins du seuil du survol (`EchelleSignal.plusProche`) ; dans l'ordre des courbes.
-    static func releves(_ c: CourbesNoeud, cles: [String], enAvant: String?, heure: Date?,
+    static func releves(_ courbes: [CourbeLien], cles: [String], enAvant: String?, heure: Date?,
                         periode: PeriodeCourbes) -> [(cle: String, point: PointCourbe)] {
         guard let heure else { return [] }
         return cles.filter { enAvant == nil || enAvant == $0 }.compactMap { k in
-            c.courbe(k).flatMap { EchelleSignal.plusProche($0.points, de: heure, periode: periode) }.map { (k, $0) }
+            courbes.first { $0.id == k }.flatMap { EchelleSignal.plusProche($0.points, de: heure, periode: periode) }
+                .map { (k, $0) }
         }
     }
 
     /// Une ligne du survol : « HomePod salon : moyenne » (Thread ne donne pas de LQI ; sur 7 j et 30 j, la moyenne du
     /// pas, au niveau le plus proche).
     static func ligneSurvol(_ nom: String, _ p: PointCourbe) -> String {
-        "\(nom) : \(CourbesFiche.nomQualite(p.valeur))"
+        String(localized: "\(nom) : \(CourbesFiche.nomQualite(p.valeur))")
     }
 
-    func opacite(_ cle: String) -> Double { enAvant == nil || enAvant == cle ? 1 : Self.opaciteEstompee }
+    /// La courbe mise en avant, si elle est montree (relecture de l'etape 5, I1) ; nil, aucune.
+    private var miseEnAvant: String? { ChoixCourbes.enAvant(enAvant, parmi: cles) }
+
+    func opacite(_ cle: String) -> Double { miseEnAvant == nil || miseEnAvant == cle ? 1 : Self.opaciteEstompee }
 
     /// Le petit decalage vertical de la courbe de rang `rang` parmi `n` : deux liens de meme qualite ne se cachent pas
     /// l'un l'autre ; centre sur le niveau, au plus 0,12 de part et d'autre. Le survol donne la vraie valeur.
@@ -212,23 +245,23 @@ struct GrapheQualite: View {
 
     var body: some View {
         let rangs = Dictionary(uniqueKeysWithValues: cles.enumerated().map { ($1, $0) })
-        let courbes = cles.compactMap { c.courbe($0) }
-        let survol = Self.releves(c, cles: cles, enAvant: enAvant, heure: survole, periode: periode)
-        let reperes = CourbesFiche.reperes(c)
+        let montrees = cles.compactMap { cle in courbes.first { $0.id == cle } }
+        let survol = Self.releves(courbes, cles: cles, enAvant: miseEnAvant, heure: survole, periode: periode)
         let g = CourbesFiche.graduations(periode)
         VStack(alignment: .leading, spacing: 6) {
-            Text(CourbesFiche.titreQualite(c)).font(.caption).foregroundStyle(.secondary)
+            Text(verbatim: titre).font(.caption).foregroundStyle(.secondary)
             RangeesFluides {
                 ForEach(cles, id: \.self) { k in
-                    PastilleNoeud(nom: CourbesFiche.nomLien(k, noms), couleur: CourbesFiche.couleur(rangs[k] ?? 0)) {
+                    PastilleNoeud(nom: nomCourbe(k), couleur: CourbesFiche.couleur(rangs[k] ?? 0),
+                                  indice: String(localized: "Met la courbe en avant ; un second clic rend les autres"),
+                                  enAvant: miseEnAvant == k) {
                         enAvant = ChoixCourbes.basculer(enAvant, k)
                     }
                     .opacity(opacite(k) < 1 ? 0.45 : 1)
-                    .accessibilityAddTraits(enAvant == k ? .isSelected : [])
                 }
             }
             Chart {
-                ForEach(courbes, id: \.id) { l in
+                ForEach(montrees, id: \.id) { l in
                     let seuls = CourbesFiche.tronconsSeuls(l.points)
                     let couleur = CourbesFiche.couleur(rangs[l.id] ?? 0).opacity(opacite(l.id))
                     let ecart = Self.decalage(rangs[l.id] ?? 0, sur: cles.count)
@@ -236,7 +269,8 @@ struct GrapheQualite: View {
                         LineMark(x: .value("Heure", p.date), y: .value("Qualité", p.valeur + ecart),
                                  series: .value("Tronçon", "\(l.id)#\(p.troncon)"))
                             .foregroundStyle(couleur)
-                            .lineStyle(StrokeStyle(lineWidth: enAvant == l.id ? 2.6 : 1.6))
+                            .lineStyle(StrokeStyle(lineWidth: miseEnAvant == l.id ? 2.6 : 1.6,
+                                                   dash: CourbesFiche.tirets(rangs[l.id] ?? 0)))
                             .interpolationMethod(.stepEnd)
                         if seuls.contains(p.troncon) {
                             PointMark(x: .value("Heure", p.date), y: .value("Qualité", p.valeur + ecart))
@@ -249,7 +283,7 @@ struct GrapheQualite: View {
                     RuleMark(x: .value("Heure", h)).foregroundStyle(.primary.opacity(0.5))
                 }
             }
-            .chartXScale(domain: c.debut ... c.fin)
+            .chartXScale(domain: debut ... fin)
             .chartYScale(domain: -0.25 ... 3.25)
             .chartYAxis {
                 AxisMarks(position: .leading, values: [0, 1, 2, 3]) { v in
@@ -267,7 +301,7 @@ struct GrapheQualite: View {
             .chartOverlay { proxy in
                 GeometryReader { geo in
                     let cadre = proxy.plotFrame.map { geo[$0] }
-                    let groupes = cadre.map { ReperesFiche.regrouper(reperes, debut: c.debut, fin: c.fin, largeur: $0.width) } ?? []
+                    let groupes = cadre.map { ReperesFiche.regrouper(reperes, debut: debut, fin: fin, largeur: $0.width) } ?? []
                     Rectangle().fill(.clear).contentShape(Rectangle())
                         .onContinuousHover { phase in
                             var heure: Date?
@@ -275,25 +309,25 @@ struct GrapheQualite: View {
                             if case .active(let position) = phase, let cadre {
                                 let convertir = { (x: CGFloat) in proxy.value(atX: x, as: Date.self) }
                                 // La pointe d'un repere, en haut du trace, prend le survol ; ailleurs, celui des courbes.
-                                repere = ReperesFiche.repereSous(position, cadre: cadre, reperes: groupes, debut: c.debut,
-                                                                 fin: c.fin, convertir: convertir)
+                                repere = ReperesFiche.repereSous(position, cadre: cadre, reperes: groupes, debut: debut,
+                                                                 fin: fin, convertir: convertir)
                                 if repere == nil {
                                     heure = convertir(position.x - cadre.minX).flatMap { h in
-                                        Self.releves(c, cles: cles, enAvant: enAvant, heure: h, periode: periode).first?.point.date
+                                        Self.releves(courbes, cles: cles, enAvant: miseEnAvant, heure: h, periode: periode).first?.point.date
                                     }
                                 }
                             }
                             if heure != survole { survole = heure }
                             if repere != repereSurvole { repereSurvole = repere }
                         }
-                    CoucheReperes(reperes: groupes, survole: repereSurvole, noms: noms, periode: periode, debut: c.debut,
-                                  fin: c.fin, proxy: proxy, geo: geo)
+                    CoucheReperes(reperes: groupes, survole: repereSurvole, noms: noms, periode: periode, debut: debut,
+                                  fin: fin, proxy: proxy, geo: geo)
                     if let cadre = proxy.plotFrame, let d = survol.first?.point.date,
                        let x = proxy.position(forX: d) {
                         etiquette(survol, date: d)
                             .fixedSize()
                             .frame(width: 0, height: 0,
-                                   alignment: EchelleSignal.aGauche(d, debut: c.debut, fin: c.fin) ? .topTrailing : .topLeading)
+                                   alignment: EchelleSignal.aGauche(d, debut: debut, fin: fin) ? .topTrailing : .topLeading)
                             .position(x: geo[cadre].origin.x + x, y: geo[cadre].origin.y + 2)
                             .allowsHitTesting(false)
                     }
@@ -317,7 +351,7 @@ struct GrapheQualite: View {
             ForEach(survol, id: \.cle) { r in
                 HStack(spacing: 4) {
                     Circle().fill(CourbesFiche.couleur(rangs[r.cle] ?? 0)).frame(width: 6, height: 6)
-                    Text(verbatim: Self.ligneSurvol(CourbesFiche.nomLien(r.cle, noms), r.point))
+                    Text(verbatim: Self.ligneSurvol(nomCourbe(r.cle), r.point))
                 }
                 .font(.caption2.monospacedDigit())
             }

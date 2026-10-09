@@ -1,5 +1,6 @@
 {
   "%@ (profil de 7 jours expiré ? relance outils/passeur.sh)": "%@ (7-day profile expired? Run outils/passeur.sh again)",
+  "%@ : %@": "%1$@: %2$@",
   "%@ : %@ %lld/%lld…": "%1$@: %2$@ %3$lld/%4$lld…",
   "%@ : %@…": "%1$@: %2$@…",
   "%@ : absente": "%@: absent",
@@ -143,6 +144,7 @@
   "Mac en veille de %@ à %@": "Mac asleep from %1$@ to %2$@",
   "Maillage": "Mesh",
   "Maison": "Home",
+  "Met la courbe en avant ; un second clic rend les autres": "Highlights this curve; click again to bring the others back",
   "Mi-distance : les pièces et les routeurs": "Mid-distance: rooms and routers",
   "Mises à jour": "Updates",
   "Mode démo : panne du 27/09 rejouée": "Demo mode: replay of the September 27 outage",
@@ -341,6 +343,7 @@
   "port fermé par l'app": "port closed by the app",
   "port inconnu": "unknown port",
   "qualité %lld": "quality %lld",
+  "qualité du lien : %@": "link quality: %@",
   "qualité inconnue": "unknown quality",
   "rattachement supposé": "assumed attachment",
   "refusée : %@": "refused: %@",
