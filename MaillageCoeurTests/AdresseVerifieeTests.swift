@@ -263,6 +263,23 @@ struct AdresseVerifieeTests {
         }
     }
 
+    /// Un appareil que l'app ne demande plus (son adresse est annoncee par un autre identifiant) n'est plus place sous
+    /// son parent par sa resolution d'avant, gardee en memoire jusqu'a la resolution complete suivante.
+    @Test func horsDeLaListeNePlacePlus() async throws {
+        let a = "E00000000000000A"
+        let sonde = try TourneeTests.sondeResolue()
+        let (m1, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(),
+                                                                 maintenant: Self.t0,
+                                                                 appareils: TourneeTests.appareils))
+        #expect(m1.enfants.contains { $0.extMac == a && $0.source == .resolution })
+        let sansA = TourneeTests.appareils.filter { $0.id != a }
+        let (m2, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 300,
+                                                                 appareils: sansA))
+        #expect(mem2.resolutions[a] != nil, "sa resolution reste en memoire")
+        #expect(!m2.enfants.contains { $0.extMac == a }, "mais il n'est plus place")
+        #expect(m2.enfants.contains { $0.source == .resolution }, "les autres le sont toujours")
+    }
+
     /// Le maillage porte les appareils trouves par la resolution (la memoire de la tournee), quel que soit leur
     /// parent, avec leur date ; pas l'introuvable. Ils ne sont pas gardes sur disque : relu, le maillage n'en a aucun.
     @Test func resolusDansLeMaillage() async throws {

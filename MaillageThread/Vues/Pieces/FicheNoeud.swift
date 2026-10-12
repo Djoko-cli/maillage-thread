@@ -138,7 +138,8 @@ struct FicheNoeud: View {
                     Text("Fabriques : \(a.fabriques.count)").foregroundStyle(.secondary)
                 }
                 ligneSonde
-                lignesPartition(partition: a.partition ?? surveillance.suivi.dernieresPartitions[a.id], prefixe: a.prefixe,
+                let verifie = surveillance.verification(a.id, a: surveillance.maintenant) != nil
+                lignesPartition(partition: surveillance.partitionAffichee(a, verifie: verifie), prefixe: a.prefixe,
                                 incertaine: surveillance.instantane?.partitionIncertaine(a) == true)
             } else if let m = sonde, let n = m.noeud(id) {
                 ligneSonde

@@ -454,7 +454,11 @@ public enum Tournee {
         // resolution plus ancienne, ou que le cache seul a donnee (repondu faux, ou firmware ancien), ne prouve rien.
         let pertes = Dictionary(appareils.compactMap { a in a.derniereAnnonce.map { (a.id, $0) } },
                                 uniquingKeysWith: { a, _ in a })
+        // Un appareil que l'app ne demande plus (son adresse est annoncee par un autre identifiant, ou il a quitte la
+        // liste) n'est plus dessine : sa resolution d'avant ne vaut plus pour lui. Sans liste (tests anciens), rien.
+        let demandables = Set(appareils.map(\.id))
         for (id, r) in mem.resolutions.sorted(by: { $0.key < $1.key }) where muets.contains(r.parent) {
+            if !appareils.isEmpty, !demandables.contains(id) { continue }
             if let annonce = pertes[id], !r.prouve(apres: annonce) { continue }
             let ext = GrapheReseau.extMac(hote: id)
             if let ext, extMacs.contains(ext) { continue }

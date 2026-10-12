@@ -37,7 +37,8 @@ struct RapprochementTests {
     static func maillage(entendus: [UInt16: String] = [:]) async throws -> Maillage {
         let cible = "fd00:5555:6666:0:b00::6"
         let sonde = try SondeRejouee.capture(table: SondeRejouee.table(entendus: entendus),
-                                             resolutions: [cible: ResultatResolution(id: 0, cible: cible, ok: true, rloc16: "AC00", repondu: true)])
+                                             resolutions: [cible: ResultatResolution(id: 0, cible: cible, ok: true,
+                                                                                     rloc16: "AC00", repondu: true)])
         let appareils = [AppareilAResoudre(id: "E00000000000000A", partition: "46CBEBCD", adresse: try #require(AdresseIPv6(cible)))]
         return try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: .now,
                                                        appareils: appareils)).maillage

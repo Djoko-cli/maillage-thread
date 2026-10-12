@@ -416,6 +416,10 @@ struct AdresseVerifieeAppTests {
         tot.recevoir(Self.maillage(lancement + 90, resolus: [Self.hap: lancement + 100]), a: t - 10)
         #expect(tot.verification(Self.hap, a: t) == lancement + 100)
         #expect(tot.appareilsAResoudre().first { $0.id == Self.hap }?.derniereAnnonce != nil)
+        // Le disque est corrige : relue plus tard, l'annonce n'est plus la date future d'origine.
+        let relue = Surveillance(mode: .direct, dossier: dossier)
+        relue.chargerAdressesGardees(maintenant: brute + 7200)
+        #expect(relue.suivi.dernieresAnnonces[Self.hap] == lancement)
     }
 
     /// Les appareils sans annonce depuis plus de 30 jours sont oublies, a l'ecriture comme a la relecture.

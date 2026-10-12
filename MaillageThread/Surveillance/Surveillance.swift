@@ -454,6 +454,12 @@ final class Surveillance {
     /// resolution a plus de `ageMaxVerification`, et si elle n'est pas strictement posterieure a la derniere annonce de
     /// son adresse (`Suivi.dernieresAnnonces`). L'instantane reste le reflet de Bonjour : cet etat est derive ici, a
     /// chaque lecture, du dernier maillage de la sonde.
+    /// Partition montree pour un appareil (liste, graphe, fiche) : la sienne s'il en a une ; verifie par la sonde,
+    /// celle qui porte aujourd'hui le prefixe de sa derniere adresse ; sinon sa derniere partition connue.
+    func partitionAffichee(_ a: Appareil, verifie: Bool) -> String? {
+        a.partition ?? (verifie ? suivi.partitionActuelle(de: a.id) : suivi.dernieresPartitions[a.id])
+    }
+
     func verification(_ id: String, a maintenant: Date) -> Date? {
         verifications(a: maintenant)[id]
     }
@@ -735,8 +741,9 @@ final class Surveillance {
         let verifies = verifications(a: maintenant)
         func appartient(_ a: Appareil) -> Bool {
             if let x = a.idReseau { return x == r.id }
-            // Derniere partition connue : l'appareil va au reseau qui la contient, et a lui seul.
-            if let p = suivi.dernieresPartitions[a.id],
+            // Partition qui porte aujourd'hui le prefixe de sa derniere adresse, sinon la derniere connue : l'appareil
+            // va au reseau qui la contient, et a lui seul.
+            if let p = suivi.partitionActuelle(de: a.id),
                let proprio = i.reseaux.first(where: { $0.partitions.contains { $0.id == p } }) {
                 return proprio.id == r.id
             }
@@ -744,9 +751,7 @@ final class Surveillance {
         }
         // Un appareil verifie par la sonde est dans la partition qui porte aujourd'hui le prefixe de sa derniere
         // adresse.
-        func partitionDerniere(_ a: Appareil, verifie: Bool) -> String? {
-            verifie ? suivi.partitionActuelle(de: a.id) : suivi.dernieresPartitions[a.id]
-        }
+        func partitionDerniere(_ a: Appareil, verifie: Bool) -> String? { partitionAffichee(a, verifie: verifie) }
         func affiche(_ a: Appareil, _ etat: EtatAffiche, verifie: Bool = false) -> AppareilAffiche {
             let maison = accessoire(a)
             return AppareilAffiche(id: a.id, nom: nom(a), piece: maison?.piece,

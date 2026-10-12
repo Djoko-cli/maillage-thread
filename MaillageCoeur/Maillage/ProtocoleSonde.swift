@@ -209,7 +209,8 @@ public struct PartieAnnonces: Hashable, Sendable {
 
 /// Reponse a `resoudre` (firmware 1.1.0, `repondu` depuis la 1.1.1) : le RLOC16 que le cache d'adresses de la sonde
 /// donne pour l'adresse (celui du parent pour un routeur Apple, celui de l'enfant pour un routeur tiers), et le
-/// ML-EID de la cible quand la reponse l'a porte ; ou l'erreur (`introuvable`, `syntaxe`, `suspendue`, `occupee`, `envoi`...).
+/// ML-EID de la cible quand la reponse l'a porte ; ou l'erreur (`introuvable`, `syntaxe`, `suspendue`, `occupee`,
+/// `envoi`...).
 public struct ResultatResolution: Hashable, Sendable, Codable {
     public let id: Int
     public let cible: String
