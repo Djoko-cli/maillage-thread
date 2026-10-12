@@ -56,8 +56,10 @@ struct LegendePiecesTests {
     @Test func groupesEtOrdre() {
         let tout = Lecture(couleurs: ["a": .routeur(principale: true), "b": .routeur(principale: false),
                                       "c": .appareil(.joignable), "d": .appareil(.partitionCoupee),
-                                      "e": .appareil(.sansAdresse), "f": .appareil(.disparu)],
-                           routeursSimples: ["c"], sondes: ["c"], inconnus: ["g"], chefs: ["a"], endormis: ["c"], piles: ["c"], candidats: ["g"],
+                                      "e": .appareil(.sansAdresse), "f": .appareil(.disparu),
+                                      "h": .appareil(.joignable)],
+                           routeursSimples: ["c"], verifies: ["h"], sondes: ["c"], inconnus: ["g"], chefs: ["a"],
+                           endormis: ["c"], piles: ["c"], candidats: ["g"],
                            liens: [Self.radio(3), Self.radio(2), Self.radio(1), Self.radio(nil),
                                    ScenePieces.Lien(de: "c", vers: "a", genre: .parent),
                                    ScenePieces.Lien(de: "d", vers: "a")],

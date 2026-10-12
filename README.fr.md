@@ -86,7 +86,9 @@ Le Mac n'a pas de radio Thread : l'app **écoute** seulement le réseau local.
 principale*, pas « répond ». Une exception vient de la sonde : un appareil qui
 n'annonce plus son adresse (ou plus rien), mais que la sonde trouve à sa
 dernière adresse (requête d'adresse), est montré « joignable, adresse plus
-annoncée », avec l'âge de cette vérification. Une disparition n'est retenue
+annoncée », avec l'âge de cette vérification ; sur la carte, son point reste
+vert et un anneau jaune pointillé l'entoure (la légende ne le montre que si un
+appareil est dans cet état). Une disparition n'est retenue
 qu'après 2 minutes d'absence et datée de la première absence. Les vrais liens
 (enfant → parent, routeur ↔ routeur, qualité) viennent de la sonde, un ESP32-C6
 branché au Mac ou joint par le réseau Thread (voir « Sonde » plus bas).

@@ -30,17 +30,22 @@ enum DessinNoeud {
         var cercle = false
         /// Les ondes de la sonde elle-meme (demande de Djoko du 08/10).
         var sonde = false
+        /// L'anneau pointille jaune d'un appareil joignable que la sonde a trouve, alors qu'il n'annonce plus
+        /// d'adresse (variante B, choisie par Djoko le 12/10).
+        var verifie = false
     }
 
     /// Apparence d'un noeud : sphere pour un routeur de bordure ou un routeur que seule la sonde
     /// connait, pastille pour un appareil, anneau pour un appareil disparu, avec un cercle s'il route. `etat` :
     /// celui de l'appareil ; `principale` : la partition du noeud est la principale. La legende reprend les
     /// memes (`apparenceRouteur`, `apparenceAppareil`).
-    /// `sonde` : le noeud est la sonde elle-meme (ses ondes).
-    static func apparence(_ n: ScenePieces.Noeud, etat: EtatAffiche?, principale: Bool, sonde: Bool = false) -> Apparence {
+    /// `sonde` : le noeud est la sonde elle-meme (ses ondes) ; `verifie` : l'appareil est joignable parce que la
+    /// sonde l'a trouve (son anneau).
+    static func apparence(_ n: ScenePieces.Noeud, etat: EtatAffiche?, principale: Bool, sonde: Bool = false,
+                          verifie: Bool = false) -> Apparence {
         var a = switch n.genre {
         case .centre, .routeur: apparenceRouteur(centre: n.genre == .centre, inconnu: n.inconnu, principale: principale)
-        case .appareil: apparenceAppareil(etat, routeur: n.routeur)
+        case .appareil: apparenceAppareil(etat, routeur: n.routeur, verifie: verifie)
         }
         a.sonde = sonde
         return a
@@ -60,12 +65,19 @@ enum DessinNoeud {
     }
 
     /// Un appareil : pastille de la couleur de son etat (inconnu sans etat), anneau s'il a disparu ; entoure du cercle
-    /// bleu s'il route, sauf disparu (il ne route plus).
-    static func apparenceAppareil(_ etat: EtatAffiche?, routeur: Bool = false) -> Apparence {
+    /// bleu s'il route, sauf disparu (il ne route plus) ; entoure de l'anneau pointille jaune s'il est joignable
+    /// grace a la sonde (`verifie`, sans effet sur un autre etat).
+    static func apparenceAppareil(_ etat: EtatAffiche?, routeur: Bool = false, verifie: Bool = false) -> Apparence {
         let e = etat ?? .inconnu
         return Apparence(forme: e == .disparu ? .anneau : .pastille, couleur: .appareil(e),
-                         cercle: routeur && e != .disparu)
+                         cercle: routeur && e != .disparu, verifie: verifie && e == .joignable)
     }
+
+    /// L'anneau d'un appareil verifie : jaune, de 2 points, en tirets de 3 pour 3. Son rayon est celui du point plus
+    /// 4 pt pour un point de 8 (maquette : un point de 8, un anneau de 12), proportionnel si le point change de taille.
+    static let epaisseurAnneauVerifie: CGFloat = 2
+    static let tiretsAnneauVerifie: [CGFloat] = [3, 3]
+    static func rayonAnneauVerifie(_ r: CGFloat) -> CGFloat { r + 4 * r / 8 }
 
     /// Le cercle d'un routeur : 1,5 point, a 2 points de sa pastille ; il s'etend de `ecartCercle` au-dela d'elle.
     static let epaisseurCercle: CGFloat = 1.5
@@ -109,6 +121,12 @@ enum DessinNoeud {
             ctx.stroke(Path(ellipseIn: CGRect(x: c.x - a, y: c.y - a, width: 2 * a, height: 2 * a)),
                        with: .color(palette.routeur(principale: true)), lineWidth: epaisseurCercle)
         }
+        if apparence.verifie {
+            let a = rayonAnneauVerifie(r)
+            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - a, y: c.y - a, width: 2 * a, height: 2 * a)),
+                       with: .color(palette.anneauVerifie),
+                       style: StrokeStyle(lineWidth: epaisseurAnneauVerifie, dash: tiretsAnneauVerifie))
+        }
         if apparence.sonde {
             for (ecart, opacite) in [(CGFloat(3), 0.9), (6, 0.55)] {
                 var ondes = Path()
@@ -128,7 +146,9 @@ enum DessinNoeud {
     /// Anneau du noeud selectionne, 4 points autour de sa pastille, de son cercle ou des ondes de la sonde.
     static func dessinerSelection(_ ctx: inout GraphicsContext, centre c: CGPoint, rayon r: CGFloat, apparence: Apparence,
                                   palette: Palette) {
-        let a = r + 4 + (apparence.sonde ? ecartOndes : apparence.cercle ? ecartCercle : 0)
+        var a = r + 4 + (apparence.sonde ? ecartOndes : apparence.cercle ? ecartCercle : 0)
+        // Celui d'un appareil verifie passe au-dela de son anneau pointille.
+        if apparence.verifie { a = max(a, rayonAnneauVerifie(r) + epaisseurAnneauVerifie / 2 + 3) }
         ctx.stroke(Path(ellipseIn: CGRect(x: c.x - a, y: c.y - a, width: 2 * a, height: 2 * a)),
                    with: .color(palette.selection), lineWidth: 2)
     }

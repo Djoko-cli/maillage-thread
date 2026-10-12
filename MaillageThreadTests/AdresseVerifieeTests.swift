@@ -1,5 +1,6 @@
 import Foundation
 @testable import MaillageCoeur
+import SwiftUI
 import Testing
 @testable import MaillageThread
 
@@ -364,6 +365,69 @@ struct AdresseVerifieeAppTests {
         let encore = Surveillance(mode: .direct, dossier: dossier)
         encore.chargerAdressesGardees()
         #expect(encore.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(9)))
+    }
+
+    /// L'anneau de la variante B (12/10) : porte par l'appareil que la sonde a trouve, et par lui seul ; la carte garde
+    /// son vert, y ajoute l'anneau pointille jaune (2 pt, tirets 3/3, rayon du point plus 4 pt pour un point de 8) ; la
+    /// legende a son entree, apres « joignable », montree seulement quand un appareil est verifie.
+    @Test func anneauDesAppareilsVerifies() throws {
+        let maintenant = Date()
+        let s = Self.surveillance(muets: [Self.matter, Self.hap], maintenant: maintenant)
+        let r = try #require(s.reseau)
+        #expect(s.appareilsAffiches(pour: r).allSatisfy { !$0.verifie }, "rien de verifie sans la sonde")
+        let sans = try #require(FenetrePiecesTests.entree(s))
+        #expect(sans.apparences.values.allSatisfy { !$0.verifie })
+        #expect(!LegendePieces.entrees(LegendePieces.Lecture(sans, ailleurs: false)).contains(.verifiee))
+
+        let trouve = maintenant - 120
+        s.recevoir(Self.maillage(maintenant - 150, resolus: [Self.matter: trouve, Self.hap: trouve]),
+                   a: maintenant - 60)
+        let affiches = s.appareilsAffiches(pour: r)
+        #expect(Set(affiches.filter(\.verifie).map(\.id)) == [Self.matter, Self.hap])
+        #expect(affiches.first { $0.id == Self.temoin }?.verifie == false, "il annonce son adresse")
+        #expect(affiches.filter(\.verifie).allSatisfy { $0.etat == .joignable }, "le point reste joignable, donc vert")
+        let entree = try #require(FenetrePiecesTests.entree(s))
+        #expect(Set(entree.apparences.filter { $0.value.verifie }.keys) == [Self.matter, Self.hap])
+        #expect(entree.apparences[Self.matter]?.couleur == .appareil(.joignable))
+        #expect(entree.apparences[Self.temoin]?.verifie == false)
+        let entrees = LegendePieces.entrees(LegendePieces.Lecture(entree, ailleurs: false))
+        #expect(entrees.isSuperset(of: [.joignable, .verifiee]), "le temoin reste « joignable »")
+        let rubriques = LegendePieces.rubriques(LegendePieces.Lecture(entree, ailleurs: false))
+        let appareils = try #require(rubriques.first { $0.groupe == .appareils })
+        #expect(Array(appareils.entrees.prefix(2)) == [.joignable, .verifiee], "juste apres « joignable »")
+        // Tous verifies : plus de « joignable » simple.
+        #expect(LegendePieces.entrees(LegendePieces.Lecture(couleurs: ["a": .appareil(.joignable)], verifies: ["a"]))
+                == [.verifiee])
+
+        // Les valeurs de la maquette.
+        #expect(Palette(sombre: true).anneauVerifie == Color(red: 232 / 255, green: 240 / 255, blue: 90 / 255))
+        #expect(Palette(sombre: false).anneauVerifie == Palette(sombre: true).anneauVerifie)
+        #expect(DessinNoeud.epaisseurAnneauVerifie == 2)
+        #expect(DessinNoeud.tiretsAnneauVerifie == [3, 3])
+        #expect(DessinNoeud.rayonAnneauVerifie(8) == 12)
+        #expect(DessinNoeud.rayonAnneauVerifie(4) == 6, "proportionnel au point")
+        // Seul un appareil joignable porte l'anneau ; l'apparence du point ne change pas.
+        let vert = DessinNoeud.apparenceAppareil(.joignable)
+        #expect(DessinNoeud.apparenceAppareil(.joignable, verifie: true).couleur == vert.couleur)
+        #expect(DessinNoeud.apparenceAppareil(.joignable, verifie: true).forme == vert.forme)
+        #expect(DessinNoeud.apparenceAppareil(.sansAdresse, verifie: true).verifie == false)
+        #expect(LegendePieces.signe(.verifiee)
+                == .noeud(DessinNoeud.apparenceAppareil(.joignable, verifie: true), rayon: LegendePieces.rayonAppareil))
+        #expect(SigneLegende.taille(LegendePieces.signe(.verifiee))
+                == SigneLegende.taille(LegendePieces.signe(.joignable)))
+    }
+
+    /// Rendu : de l'encre jaune autour du point d'un appareil verifie (signe de la legende, tel que la scene le
+    /// dessine), et nulle part pour un point joignable ordinaire.
+    @Test func anneauDessine() throws {
+        func jaunes(_ e: LegendePieces.Entree) throws -> Int {
+            let p = try LegendePiecesTests.pixels(SigneLegende(signe: LegendePieces.signe(e)).padding(12))
+            return stride(from: 0, to: p.octets.count, by: 4).filter { i in
+                p.octets[i + 3] > 200 && p.octets[i] > 180 && p.octets[i + 1] > 190 && p.octets[i + 2] < 150
+            }.count
+        }
+        #expect(try jaunes(.joignable) == 0)
+        #expect(try jaunes(.verifiee) > 4)
     }
 
     /// Les textes dans la langue du lancement des tests (`-testLanguage fr`, puis `en`).

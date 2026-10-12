@@ -677,11 +677,11 @@ final class Surveillance {
             }
             return premier
         }
-        func affiche(_ a: Appareil, _ etat: EtatAffiche) -> AppareilAffiche {
+        func affiche(_ a: Appareil, _ etat: EtatAffiche, verifie: Bool = false) -> AppareilAffiche {
             let maison = accessoire(a)
             return AppareilAffiche(id: a.id, nom: nom(a), piece: maison?.piece,
                                    partition: a.partition ?? suivi.dernieresPartitions[a.id], etat: etat,
-                                   endormi: a.endormi, batterie: maison?.batterie)
+                                   endormi: a.endormi, batterie: maison?.batterie, verifie: verifie)
         }
         var liste = i.appareils.filter(appartient).map { a in
             let etat: EtatAffiche = switch a.etat {
@@ -690,10 +690,11 @@ final class Surveillance {
             case .sansAdresse: verifies[a.id] != nil ? .joignable : .sansAdresse
             case .inconnu: .inconnu
             }
-            return affiche(a, etat)
+            return affiche(a, etat, verifie: a.etat == .sansAdresse && verifies[a.id] != nil)
         }
         liste += suivi.disparus.values.filter(appartient).map {
-            affiche($0, verifies[$0.id] != nil ? .joignable : .disparu)
+            let verifie = verifies[$0.id] != nil
+            return affiche($0, verifie ? .joignable : .disparu, verifie: verifie)
         }
         return liste
     }

@@ -15,9 +15,11 @@ public struct AppareilAffiche: Hashable, Sendable, Identifiable {
     public var endormi: Bool
     /// Batterie selon Maison, pour un appareil qui en a une.
     public var batterie: BatterieMaison?
+    /// Joignable parce que la sonde l'a trouve, alors qu'il n'annonce plus d'adresse : la carte l'entoure d'un anneau.
+    public var verifie: Bool
 
     public init(id: String, nom: String, piece: String? = nil, partition: String?, etat: EtatAffiche,
-                endormi: Bool = false, batterie: BatterieMaison? = nil) {
+                endormi: Bool = false, batterie: BatterieMaison? = nil, verifie: Bool = false) {
         self.id = id
         self.nom = nom
         self.piece = piece
@@ -25,6 +27,7 @@ public struct AppareilAffiche: Hashable, Sendable, Identifiable {
         self.etat = etat
         self.endormi = endormi
         self.batterie = batterie
+        self.verifie = verifie
     }
 }
 

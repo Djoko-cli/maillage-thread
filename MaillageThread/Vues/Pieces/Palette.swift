@@ -57,6 +57,10 @@ struct Palette {
         }
     }
 
+    /// Anneau pointille d'un appareil joignable dont l'adresse n'est plus annoncee (variante B, choisie le 12/10) :
+    /// rgb(232, 240, 90).
+    var anneauVerifie: Color { Color(red: 232 / 255, green: 240 / 255, blue: 90 / 255) }
+
     // MARK: Vue par pieces (spec de la vue par pieces, sections 5 et 6)
 
     /// Couleur de zone de l'app (celle de la partition principale) : plateaux et noms d'etage.

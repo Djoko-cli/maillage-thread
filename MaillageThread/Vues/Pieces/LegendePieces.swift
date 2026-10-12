@@ -133,7 +133,7 @@ extension LegendePieces {
     enum Entree: Hashable, CaseIterable {
         /// `routeur` : un routeur de bordure ; `routeurSimple` : un routeur qui ne l'est pas.
         case routeur, routeurSimple, nonIdentifie, autrePartition, chef
-        case joignable, partitionCoupee, sansAdresse, disparu, endormi, pile, sonde
+        case joignable, verifiee, partitionCoupee, sansAdresse, disparu, endormi, pile, sonde
         case bonne, moyenne, faible, inconnue
         case versParent, rattachement, ailleurs, candidats
 
@@ -145,6 +145,7 @@ extension LegendePieces {
             case .autrePartition: String(localized: "routeur de bordure d'une autre partition")
             case .chef: String(localized: "chef du réseau Thread, élu automatiquement")
             case .joignable: String(localized: "joignable")
+            case .verifiee: String(localized: "joignable, adresse plus annoncée")
             case .partitionCoupee: String(localized: "partition coupée")
             case .sansAdresse: String(localized: "adresse non annoncée")
             case .disparu: String(localized: "disparu")
@@ -170,7 +171,7 @@ extension LegendePieces {
         var entrees: [Entree] {
             switch self {
             case .routeurs: [.routeur, .routeurSimple, .nonIdentifie, .autrePartition, .chef]
-            case .appareils: [.joignable, .partitionCoupee, .sansAdresse, .disparu, .endormi, .pile, .sonde]
+            case .appareils: [.joignable, .verifiee, .partitionCoupee, .sansAdresse, .disparu, .endormi, .pile, .sonde]
             case .liens: [.bonne, .moyenne, .faible, .inconnue]
             case .autres: [.versParent, .rattachement, .ailleurs, .candidats]
             }
@@ -199,6 +200,8 @@ extension LegendePieces {
         var couleurs: [String: DessinNoeud.Couleur] = [:]
         /// Les routeurs qui ne sont pas de bordure (leur cercle).
         var routeursSimples: Set<String> = []
+        /// Les appareils joignables que la sonde a trouves alors qu'ils n'annoncent plus d'adresse (leur anneau).
+        var verifies: Set<String> = []
         /// La sonde elle-meme (ses ondes).
         var sondes: Set<String> = []
         var inconnus: Set<String> = []
@@ -210,7 +213,9 @@ extension LegendePieces {
         var ailleurs = false
     }
 
-    /// Les entrees que la scene contient (spec du polissage B, section 2) : chaque couleur de noeud ; un routeur qui
+    /// Les entrees que la scene contient (spec du polissage B, section 2) : chaque couleur de noeud (un appareil
+    /// joignable avec l'anneau de la sonde a sa propre entree, « joignable » ne se montre que pour les autres) ; un
+    /// routeur qui
     /// n'est pas de bordure (son cercle) ; la sonde (ses ondes) ; un
     /// noeud que la sonde seule connait, routeur ou enfant, en gris (« non identifie ») ; un chef, un
     /// endormi, une pile ; chaque qualite d'un lien radio trace ; un lien vers un parent, un rattachement
@@ -218,11 +223,11 @@ extension LegendePieces {
     /// inconnu, en gris, n'a pas d'entree.
     static func entrees(_ l: Lecture) -> Set<Entree> {
         var r = Set<Entree>()
-        for c in l.couleurs.values {
+        for (id, c) in l.couleurs {
             switch c {
             case .routeur(principale: true): r.insert(.routeur)
             case .routeur(principale: false): r.insert(.autrePartition)
-            case .appareil(.joignable): r.insert(.joignable)
+            case .appareil(.joignable): r.insert(l.verifies.contains(id) ? .verifiee : .joignable)
             case .appareil(.partitionCoupee): r.insert(.partitionCoupee)
             case .appareil(.sansAdresse): r.insert(.sansAdresse)
             case .appareil(.disparu): r.insert(.disparu)
@@ -272,6 +277,7 @@ extension LegendePieces.Lecture {
         couleurs = Dictionary(ids.compactMap { id in e.apparences[id].map { (id, $0.couleur) } },
                               uniquingKeysWith: { a, _ in a })
         routeursSimples = Set(ids.filter { e.apparences[$0]?.cercle == true })
+        verifies = Set(ids.filter { e.apparences[$0]?.verifie == true })
         sondes = Set(ids.filter { e.apparences[$0]?.sonde == true })
         inconnus = Set(e.scene.noeuds.filter(\.inconnu).map(\.id))
         chefs = Set(e.scene.noeuds.filter(\.chef).map(\.id))
