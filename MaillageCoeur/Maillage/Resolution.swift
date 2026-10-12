@@ -30,13 +30,13 @@ public struct AppareilAResoudre: Hashable, Sendable {
     }
 
     /// Un appareil qui n'annonce plus d'adresse, perdue depuis au plus `Tournee.periodeRedemande`, dont la resolution
-    /// connue (`resolution`, nil si aucune) n'est pas posterieure a sa derniere annonce : a redemander a chaque
-    /// tournee. Faux pour un appareil qui annonce son adresse.
-    func aRedemander(a maintenant: Date, resolution: Date?) -> Bool {
+    /// connue (`resolution`, nil si aucune) ne prouve pas qu'il est la depuis sa derniere annonce (`prouve(apres:)` :
+    /// posterieure ET repondue) : a redemander a chaque tournee. Faux pour un appareil qui annonce son adresse.
+    func aRedemander(a maintenant: Date, resolution: ResolutionAppareil?) -> Bool {
         guard let annonce = derniereAnnonce, maintenant.timeIntervalSince(annonce) <= Tournee.periodeRedemande else {
             return false
         }
-        return resolution.map { $0 <= annonce } ?? true
+        return !(resolution?.prouve(apres: annonce) ?? false)
     }
 
     /// Les appareils Thread d'un instantane qui ont une partition et une adresse sur son prefixe OMR, par identifiant.
@@ -49,18 +49,19 @@ public struct AppareilAResoudre: Hashable, Sendable {
     }
 
     /// Ceux de l'instantane du suivi (`depuis(_:)`), puis les appareils qui n'annoncent plus d'adresse (sans adresse)
-    /// ou plus rien (disparus), avec leur derniere adresse sur le prefixe OMR et leur derniere partition
-    /// (`Suivi.dernieresAdresses`, `Suivi.dernieresPartitions`) et la date de leur derniere annonce
-    /// (`Suivi.dernieresAnnonces`) : la sonde verifie s'ils sont toujours la. Un appareil dont l'une manque n'est pas
-    /// demande. Par identifiant ; aucun sans instantane.
+    /// ou plus rien (disparus), avec leur derniere adresse sur le prefixe OMR, la partition qui porte aujourd'hui ce
+    /// prefixe (`Suivi.partitionActuelle`) et la date de leur derniere annonce (`Suivi.dernieresAnnonces`) : la sonde
+    /// verifie s'ils sont toujours la. Un appareil dont l'une manque n'est pas demande, ni celui dont la derniere
+    /// adresse est annoncee aujourd'hui par un autre identifiant (`Suivi.adresseAnnonceeParUnAutre`) : le meme
+    /// appareil sous un nouvel hote, pas un doublon joignable. Par identifiant ; aucun sans instantane.
     public static func depuis(_ s: Suivi) -> [AppareilAResoudre] {
         guard let i = s.instantane else { return [] }
         let annoncent = depuis(i)
         let deja = Set(annoncent.map(\.id))
         let muets = i.appareils.filter { $0.genre == .sansAdresse }.map(\.id) + Array(s.disparus.keys)
         let verifies = Set(muets).subtracting(deja).compactMap { id -> AppareilAResoudre? in
-            guard let p = s.dernieresPartitions[id], let adresse = s.dernieresAdresses[id],
-                  let annonce = s.dernieresAnnonces[id] else { return nil }
+            guard let p = s.partitionActuelle(de: id), let adresse = s.dernieresAdresses[id],
+                  let annonce = s.dernieresAnnonces[id], !s.adresseAnnonceeParUnAutre(id) else { return nil }
             return AppareilAResoudre(id: id, partition: p, adresse: adresse, derniereAnnonce: annonce,
                                      disparu: s.disparus[id] != nil)
         }
@@ -91,14 +92,24 @@ public struct ResolutionAppareil: Hashable, Sendable {
     /// Taux d'acces au canal refuses tire des compteurs MAC a cette resolution (`AccesCanal`), a titre d'information :
     /// il ne donne pas de qualite ; nil : pas de taux.
     public var echecs: Double?
+    /// L'appareil a repondu a la sonde a cette resolution (`ResultatResolution.repondu`) : vrai, il est la ; faux, seul
+    /// le cache d'adresses de la sonde l'a donne ; nil, firmware ancien qui ne le dit pas.
+    public let repondu: Bool?
 
-    public init(rloc16: UInt16, mleid: AdresseIPv6?, adresse: AdresseIPv6, date: Date, echecs: Double? = nil) {
+    public init(rloc16: UInt16, mleid: AdresseIPv6?, adresse: AdresseIPv6, date: Date, echecs: Double? = nil,
+                repondu: Bool? = nil) {
         self.rloc16 = rloc16
         self.mleid = mleid
         self.adresse = adresse
         self.date = date
         self.echecs = echecs
+        self.repondu = repondu
     }
+
+    /// Cette resolution prouve que l'appareil est la apres la perte de son annonce `annonce` : l'appareil a repondu
+    /// (`repondu == true`) dans une resolution strictement posterieure. Un cache seul (faux) ou un firmware ancien
+    /// (nil) ne prouve rien.
+    public func prouve(apres annonce: Date) -> Bool { repondu == true && date > annonce }
 
     /// Identifiant de routeur du parent : le RLOC16 rendu, sans ses 10 bits de poids faible.
     public var parent: Int { Int(rloc16 >> 10) }

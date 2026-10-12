@@ -164,6 +164,9 @@ public struct Maillage: Hashable, Sendable, Codable {
     /// n'annonce plus son adresse et que la sonde trouve est joignable. Pas garde sur disque : un maillage relu
     /// au lancement n'en a aucun, jusqu'a la tournee suivante.
     public var resolus: [String: Date] = [:]
+    /// Ceux de `resolus` dont l'appareil a repondu a la sonde (`ResolutionAppareil.repondu == true`) ; les autres n'ont
+    /// que leur entree du cache d'adresses (repondu faux) ou une sonde au firmware ancien (nil). Pas garde sur disque.
+    public var resolusRepondus: Set<String> = []
 
     private enum CodingKeys: String, CodingKey {
         case date, partition, routeurs, liens, enfants, signaux, resolution, annoncesLues

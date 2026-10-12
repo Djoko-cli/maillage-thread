@@ -367,7 +367,7 @@ public enum Tournee {
         // Un appareil qui vient de perdre son annonce (sans adresse, disparu) est redemande a chaque tournee, comme un
         // appareil nouveau, tant que sa resolution connue date d'avant la perte : elle ne prouve rien d'apres.
         let aResoudre = annonces == nil ? [] : complete ? cibles : cibles.filter {
-            !mem.demandes.contains($0.id) || $0.aRedemander(a: maintenant, resolution: mem.resolutions[$0.id]?.date)
+            !mem.demandes.contains($0.id) || $0.aRedemander(a: maintenant, resolution: mem.resolutions[$0.id])
         }
         signaler(.resolution, 0, aResoudre.count)
         let resolues = try await parallele(aResoudre, { try await sonde.resoudre($0.adresse) },
@@ -377,7 +377,8 @@ public enum Tournee {
         for (a, r) in resolues where !r.refus {
             demandees.insert(a.id)
             if let rloc = r.rloc16Valeur {
-                nouvelles[a.id] = ResolutionAppareil(rloc16: rloc, mleid: r.adresseMleid, adresse: a.adresse, date: maintenant)
+                nouvelles[a.id] = ResolutionAppareil(rloc16: rloc, mleid: r.adresseMleid, adresse: a.adresse,
+                                                     date: maintenant, repondu: r.repondu)
             }
         }
         if complete && annonces != nil {
@@ -448,12 +449,13 @@ public enum Tournee {
         let dejaLa = c.maillage()
         let extMacs = Set(dejaLa.enfants.compactMap(\.extMac)), adresses = Set(dejaLa.enfants.flatMap(\.adresses))
         var inventes: [Int: UInt16] = [:]
-        // Une resolution qui n'est pas posterieure a la derniere annonce de l'appareil (il a perdu son adresse depuis)
-        // ne prouve plus rien : il n'est pas dessine sous ce parent tant que la sonde ne l'a pas retrouve.
+        // Un appareil qui n'annonce plus son adresse n'est dessine sous ce parent que si la sonde l'a retrouve depuis
+        // la perte : une resolution posterieure a sa derniere annonce ET repondue (`ResolutionAppareil.prouve`). Une
+        // resolution plus ancienne, ou que le cache seul a donnee (repondu faux, ou firmware ancien), ne prouve rien.
         let pertes = Dictionary(appareils.compactMap { a in a.derniereAnnonce.map { (a.id, $0) } },
                                 uniquingKeysWith: { a, _ in a })
         for (id, r) in mem.resolutions.sorted(by: { $0.key < $1.key }) where muets.contains(r.parent) {
-            if let annonce = pertes[id], r.date <= annonce { continue }
+            if let annonce = pertes[id], !r.prouve(apres: annonce) { continue }
             let ext = GrapheReseau.extMac(hote: id)
             if let ext, extMacs.contains(ext) { continue }
             if adresses.contains(r.adresse) { continue }
@@ -474,6 +476,7 @@ public enum Tournee {
         // Date de la resolution complete dont viennent les enfants resolus (une resolution refusee ne la change pas).
         maillage.resolution = mem.derniereResolution
         maillage.resolus = mem.resolutions.mapValues(\.date)
+        maillage.resolusRepondus = Set(mem.resolutions.filter { $0.value.repondu == true }.keys)
         return (maillage, mem)
     }
 

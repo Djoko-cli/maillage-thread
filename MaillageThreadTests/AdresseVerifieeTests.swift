@@ -52,7 +52,9 @@ struct AdresseVerifieeAppTests {
     /// enfants trouves par la resolution (numeros inventes, comme sous un routeur Apple) ; `resolus` : ce que porte
     /// le maillage. `places` faux : sans ces enfants, comme la tournee pour une resolution anterieure a la perte de
     /// l'annonce.
-    static func maillage(_ date: Date, resolus: [String: Date], places: Bool = true) -> Maillage {
+    /// `repondus` : ceux de `resolus` dont l'appareil a repondu a la sonde (nil : tous, firmware 1.1.1).
+    static func maillage(_ date: Date, resolus: [String: Date], places: Bool = true,
+                         repondus: Set<String>? = nil) -> Maillage {
         var c = ConstructionMaillage(date: date, partition: partition)
         c.routeurs(Route64(sequence: 1, routes: [RouteRouteur(idRouteur: 3, qualiteSortante: 0, qualiteEntrante: 0,
                                                               cout: 0)]), chef: 3)
@@ -67,6 +69,7 @@ struct AdresseVerifieeAppTests {
         var m = c.maillage()
         m.resolution = resolus.values.max()
         m.resolus = resolus
+        m.resolusRepondus = repondus ?? Set(resolus.keys)
         return m
     }
 
@@ -133,6 +136,51 @@ struct AdresseVerifieeAppTests {
         #expect(s.verification(Self.hap, a: maintenant) == nil, "resolution trop ancienne")
         s.recevoir(Self.maillage(maintenant - 1100, resolus: [Self.hap: maintenant - 1100]), a: maintenant - 16 * 60)
         #expect(s.verification(Self.hap, a: maintenant) == nil, "maillage perime")
+        #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.hap }?.etat == .sansAdresse)
+    }
+
+    /// Le cache d'adresses seul ne verifie pas : un appareil trouve mais qui n'a pas repondu a la sonde (repondu faux,
+    /// ou firmware ancien qui ne le dit pas) reste « adresse non annoncee », en alerte, sans parent ; celui qui a
+    /// repondu est joignable.
+    @Test func cacheSeulNeVerifiePas() throws {
+        let maintenant = Date()
+        let s = Self.surveillance(muets: [Self.matter, Self.hap], maintenant: maintenant)
+        let r = try #require(s.reseau)
+        let trouve = maintenant - 120
+        s.recevoir(Self.maillage(maintenant - 150, resolus: [Self.matter: trouve, Self.hap: trouve], places: false,
+                                 repondus: []), a: maintenant - 60)
+        #expect(s.verification(Self.matter, a: maintenant) == nil && s.verification(Self.hap, a: maintenant) == nil)
+        #expect(s.appareilsAffiches(pour: r).filter { $0.etat == .sansAdresse }.count == 2)
+        #expect(s.resume?.injoignables == 2)
+        #expect(s.appareilsAffiches(pour: r).allSatisfy { !$0.verifie })
+        let carte = s.maillageAffiche(pour: r)
+        #expect(carte?.parent(de: Self.matter) == nil && carte?.parent(de: Self.hap) == nil)
+        // L'un a repondu, l'autre non.
+        s.recevoir(Self.maillage(maintenant - 150, resolus: [Self.matter: trouve, Self.hap: trouve],
+                                 repondus: [Self.matter]), a: maintenant - 60)
+        #expect(s.verification(Self.matter, a: maintenant) == trouve)
+        #expect(s.verification(Self.hap, a: maintenant) == nil)
+        #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.matter }?.etat == .joignable)
+        #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.hap }?.etat == .sansAdresse)
+        #expect(s.resume?.injoignables == 1)
+    }
+
+    /// Un perdu dont la derniere adresse est annoncee aujourd'hui par un autre identifiant (le meme appareil sous un
+    /// nouvel hote) n'est ni demande ni verifie, meme si la sonde l'a trouve avant : pas de doublon joignable.
+    @Test func perduRevenuSousUnAutreHoteNiDemandeNiVerifie() throws {
+        let maintenant = Date()
+        let s = Self.surveillance(muets: [Self.hap], maintenant: maintenant)
+        let r = try #require(s.reseau)
+        let trouve = maintenant - 120
+        s.recevoir(Self.maillage(maintenant - 150, resolus: [Self.hap: trouve]), a: maintenant - 60)
+        #expect(s.verification(Self.hap, a: maintenant) == trouve)
+        #expect(s.appareilsAResoudre().contains { $0.id == Self.hap })
+        var a = Self.annonces(maintenant - 30, muets: [Self.hap])
+        a.matter.append(AnnonceService(instance: "0000000000000F01-00000000000000AA", hote: "Autre.local", port: 5540))
+        a.adresses["Autre.local"] = [Self.adresse(2)]
+        s.integrer(a)
+        #expect(!s.appareilsAResoudre().contains { $0.id == Self.hap }, "plus demande")
+        #expect(s.verification(Self.hap, a: maintenant) == nil, "plus verifie")
         #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.hap }?.etat == .sansAdresse)
     }
 
@@ -227,16 +275,15 @@ struct AdresseVerifieeAppTests {
         #expect(relu.suivi.dernieresAdresses.isEmpty, "rien avant la relecture")
         relu.chargerAdressesGardees(maintenant: Self.lancement)
         #expect(relu.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(2)))
-        #expect(relu.suivi.dernieresAnnonces[Self.hap] == annonce + Surveillance.ecartAnnonceEcrite,
-                "la marge de prudence s'ajoute a l'annonce relue")
+        #expect(relu.suivi.dernieresAnnonces[Self.hap] == annonce, "l'annonce relue telle quelle")
         #expect(relu.suivi.dernieresPartitions[Self.hap] == Self.partition)
         #expect(relu.appareilsAResoudre().isEmpty, "pas d'instantane : rien a demander")
         // Premier releve de la nouvelle session (3 h plus tard) : hap n'a plus d'adresse, il est demande.
         relu.integrer(Self.annonces(Self.depart + 3 * 3600, muets: [Self.hap]))
         let demande = try #require(relu.appareilsAResoudre().first { $0.id == Self.hap })
         #expect(demande == AppareilAResoudre(id: attendu.id, partition: attendu.partition, adresse: attendu.adresse,
-                                             derniereAnnonce: annonce + Surveillance.ecartAnnonceEcrite),
-                "meme adresse, meme partition, derniere annonce avancee de la marge")
+                                             derniereAnnonce: annonce),
+                "meme adresse, meme partition, meme derniere annonce")
         #expect(!demande.disparu)
         #expect(relu.appareilsAResoudre().map(\.id) == [Self.matter, Self.temoin, Self.hap].sorted())
     }
@@ -347,55 +394,28 @@ struct AdresseVerifieeAppTests {
         #expect(!sansDossier.suivi.dernieresAdresses.isEmpty)
     }
 
-    /// Marge de prudence : le disque peut retarder de `ecartAnnonceEcrite` sur la vraie derniere annonce (app quittee
-    /// pendant que l'appareil annoncait). Apres la relecture, une resolution de la sonde posterieure a la date relue
-    /// mais comprise dans la marge ne verifie pas l'appareil ; une posterieure a la marge, si.
-    @Test func margeDePrudenceALaRelecture() throws {
+    /// Une annonce relue est bornee a l'heure du lancement : une date future (horloge reculee, fichier modifie) ne
+    /// bloque pas l'appareil. Une resolution posterieure a l'annonce bornee le verifie ; le disque est corrige au
+    /// premier changement ecrit, et une annonce non future est relue telle quelle (aucune marge).
+    @Test func annonceReluePasDansLeFutur() throws {
         let dossier = Self.dossierJetable()
         defer { try? FileManager.default.removeItem(at: dossier) }
         let brute = try #require(Self.surveillanceSurDisque(dossier).suivi.dernieresAnnonces[Self.hap])
-        let marge = Surveillance.ecartAnnonceEcrite
-        let lancement = Self.depart + 20 * 60
-        let s = Surveillance(mode: .direct, dossier: dossier)
-        s.chargerAdressesGardees(maintenant: lancement)
-        #expect(s.suivi.dernieresAnnonces[Self.hap] == brute + marge, "la date du disque, plus la marge")
-        s.integrer(Self.annonces(lancement, muets: [Self.hap]))
-        let t = lancement + 60
-        let cas: [(TimeInterval, Date?)] = [(marge - 60, nil), (marge, nil), (marge + 60, brute + marge + 60)]
-        for (resolu, attendu) in cas {
-            s.recevoir(Self.maillage(lancement - 30, resolus: [Self.hap: brute + resolu]), a: t - 60)
-            #expect(s.verification(Self.hap, a: t) == attendu, "resolution a depart + \(Int(resolu)) s")
-        }
-        // La marge ne depasse pas l'heure du lancement : un disque tout frais n'est pas avance dans le futur.
+        // Relue telle quelle, sans marge.
+        let normal = Surveillance(mode: .direct, dossier: dossier)
+        normal.chargerAdressesGardees(maintenant: Self.lancement)
+        #expect(normal.suivi.dernieresAnnonces[Self.hap] == brute)
+        // Lancement avant la date du disque : bornee a l'heure du lancement.
         let tot = Surveillance(mode: .direct, dossier: dossier)
-        tot.chargerAdressesGardees(maintenant: brute + 60)
-        #expect(tot.suivi.dernieresAnnonces[Self.hap] == brute + 60)
-    }
-
-    /// La marge n'est pas reecrite sur le disque : un autre changement fait reecrire le fichier, mais l'annonce non
-    /// revue de l'appareil garde sa date d'origine (sinon elle avancerait de la marge a chaque lancement).
-    @Test func margeNonReecriteSurDisque() throws {
-        let dossier = Self.dossierJetable()
-        defer { try? FileManager.default.removeItem(at: dossier) }
-        let brute = try #require(Self.surveillanceSurDisque(dossier).suivi.dernieresAnnonces[Self.hap])
-        let lancement = Self.depart + 20 * 60
-        let s = Surveillance(mode: .direct, dossier: dossier)
-        s.chargerAdressesGardees(maintenant: lancement)
-        s.integrer(Self.annonces(lancement, muets: [Self.hap]))
-        let fichier = dossier.appendingPathComponent("dernieres-adresses.json")
-        try FileManager.default.removeItem(at: fichier)
-        var changee = Self.annonces(lancement + 60, muets: [Self.hap])
-        changee.adresses[Self.matter + ".local"] = [Self.adresse(9)]
-        s.integrer(changee)
-        #expect(FileManager.default.fileExists(atPath: fichier.path), "matter a une autre adresse")
-        let relu = Surveillance(mode: .direct, dossier: dossier)
-        relu.chargerAdressesGardees(maintenant: brute + 60)
-        #expect(relu.suivi.dernieresAdresses[Self.matter] == AdresseIPv6(Self.adresse(9)))
-        #expect(relu.suivi.dernieresAnnonces[Self.hap] == brute + 60, "marge plafonnee a l'heure du lancement")
-        let fin = Surveillance(mode: .direct, dossier: dossier)
-        fin.chargerAdressesGardees(maintenant: lancement)
-        #expect(fin.suivi.dernieresAnnonces[Self.hap] == brute + Surveillance.ecartAnnonceEcrite,
-                "une seule marge, pas deux")
+        let lancement = brute - 3600
+        tot.chargerAdressesGardees(maintenant: lancement)
+        #expect(tot.suivi.dernieresAnnonces[Self.hap] == lancement)
+        // Une resolution posterieure a l'annonce bornee verifie l'appareil (avec une annonce future, jamais).
+        tot.integrer(Self.annonces(lancement + 60, muets: [Self.hap]))
+        let t = lancement + 120
+        tot.recevoir(Self.maillage(lancement + 90, resolus: [Self.hap: lancement + 100]), a: t - 10)
+        #expect(tot.verification(Self.hap, a: t) == lancement + 100)
+        #expect(tot.appareilsAResoudre().first { $0.id == Self.hap }?.derniereAnnonce != nil)
     }
 
     /// Les appareils sans annonce depuis plus de 30 jours sont oublies, a l'ecriture comme a la relecture.

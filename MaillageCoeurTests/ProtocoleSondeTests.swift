@@ -311,6 +311,22 @@ struct ProtocoleSondeTests {
         }
         #expect(i.introuvable && i.rloc16Valeur == nil)
         #expect(ResultatResolution(id: 1, cible: "fd00::1", ok: false, erreur: "occupee").introuvable == false)
+        #expect(r.repondu == nil && s.repondu == nil && i.repondu == nil, "firmware 1.1.0 : le champ est absent")
+    }
+
+    /// `repondu` (firmware 1.1.1) : vrai si l'appareil a repondu a la sonde, faux si seule une entree du cache
+    /// d'adresses l'a donne ; absent (nil) avec un firmware plus ancien.
+    @Test func resoudreRepondu() throws {
+        func lire(_ repondu: String) -> ResultatResolution? {
+            let json = #"{"v":1,"t":"resoudre","id":7,"cible":"fd00:aaaa:bbbb:1::17","ok":true,"ms":340,"#
+                + #""rloc16":"AC00","# + repondu + #""mleid":null}"#
+            if case .resoudre(let r)? = MessageSonde.lire(Data(json.utf8)) { return r }
+            return nil
+        }
+        #expect(lire(#""repondu":true,"#)?.repondu == true)
+        #expect(lire(#""repondu":false,"#)?.repondu == false)
+        #expect(lire("")?.repondu == nil)
+        #expect(lire(#""repondu":true,"#)?.rloc16Valeur == 0xAC00, "le reste est lu comme avant")
     }
 
     /// Commandes du firmware 1.1.0 : l'adresse IPv6 part sans zone, sous la forme courte (`AdresseIPv6`).

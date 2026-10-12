@@ -66,15 +66,19 @@ public struct ResolveurNoms: Hashable, Sendable {
     }
 
     /// Les accessoires de Maison a proposer pour une association : ceux qui ont un noeud (non nul) qu'aucun des
-    /// `appareils` n'annonce sur la fabrique d'Apple, et que personne n'a deja associe (un accessoire qui partage son
-    /// noeud avec un accessoire deja associe n'est plus propose : le noeud est pris). Par noeud, un seul : celui que
+    /// `appareils` n'annonce sur la fabrique d'Apple, et qu'aucun de ces `appareils` (presents ou disparus) n'a deja
+    /// associe (un accessoire qui partage son noeud avec un accessoire deja associe n'est plus propose : le noeud est
+    /// pris ; l'association d'un appareil inconnu de `appareils` ne le prend pas). Par noeud, un seul : celui que
     /// `accessoire(noeud:)` rendrait (le pont, sinon le premier par nom), car c'est son nom que l'appareil prendrait.
     /// Sans fabrique d'Apple connue (`f` nil), aucun annonceur n'est connu : rien n'est propose. Par nom, puis par
     /// piece.
     public func orphelins(appareils: [Appareil], fabriqueApple f: String?) -> [AccessoireMaison] {
         guard let maison, let f else { return [] }
         let annonces = Set(appareils.flatMap { $0.instances.filter { $0.fabrique == f }.map(\.noeud) })
-        let pris = Set(associations.values.map { $0.uppercased() })
+        // Seules comptent les associations d'appareils presents ou disparus (`appareils`) : celle d'un appareil que
+        // plus personne ne connait ne prend pas l'accessoire.
+        let ids = Set(appareils.map(\.id))
+        let pris = Set(associations.filter { ids.contains($0.key) }.values.map { $0.uppercased() })
         return maison.accessoires.filter { a in
             guard let noeud = a.noeudMatter?.uppercased(), noeud != Self.noeudNul else { return false }
             return !annonces.contains(noeud) && !pris.contains(noeud) && accessoire(noeud: noeud) == a

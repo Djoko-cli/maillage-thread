@@ -207,9 +207,9 @@ public struct PartieAnnonces: Hashable, Sendable {
     }
 }
 
-/// Reponse a `resoudre` (firmware 1.1.0) : le RLOC16 que le cache d'adresses de la sonde donne pour l'adresse (celui
-/// du parent pour un routeur Apple, celui de l'enfant pour un routeur tiers), et le ML-EID de la cible quand la reponse
-/// l'a porte ; ou l'erreur (`introuvable`, `syntaxe`, `suspendue`, `occupee`, `envoi`...).
+/// Reponse a `resoudre` (firmware 1.1.0, `repondu` depuis la 1.1.1) : le RLOC16 que le cache d'adresses de la sonde
+/// donne pour l'adresse (celui du parent pour un routeur Apple, celui de l'enfant pour un routeur tiers), et le
+/// ML-EID de la cible quand la reponse l'a porte ; ou l'erreur (`introuvable`, `syntaxe`, `suspendue`, `occupee`, `envoi`...).
 public struct ResultatResolution: Hashable, Sendable, Codable {
     public let id: Int
     public let cible: String
@@ -219,9 +219,12 @@ public struct ResultatResolution: Hashable, Sendable, Codable {
     /// ML-EID, 32 hexa ; nil si le cache ne le donne pas.
     public let mleid: String?
     public let erreur: String?
+    /// Firmware 1.1.1 : l'appareil a repondu a la sonde (vrai), ou seule une entree du cache d'adresses l'a donne
+    /// (faux, un appareil eteint peut y rester). nil : champ absent, firmware plus ancien, qui ne le dit pas.
+    public let repondu: Bool?
 
     public init(id: Int, cible: String, ok: Bool, ms: Int? = nil, rloc16: String? = nil, mleid: String? = nil,
-                erreur: String? = nil) {
+                erreur: String? = nil, repondu: Bool? = nil) {
         self.id = id
         self.cible = cible
         self.ok = ok
@@ -229,6 +232,7 @@ public struct ResultatResolution: Hashable, Sendable, Codable {
         self.rloc16 = rloc16
         self.mleid = mleid
         self.erreur = erreur
+        self.repondu = repondu
     }
 
     public var rloc16Valeur: UInt16? { ok ? rloc16.flatMap { UInt16($0, radix: 16) } : nil }

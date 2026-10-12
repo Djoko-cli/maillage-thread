@@ -106,10 +106,6 @@ final class Surveillance {
     /// Ce qui est sur disque dans `dernieres-adresses.json` (vide : rien d'ecrit, ou fichier illisible) : on n'ecrit
     /// que ce qui change.
     @ObservationIgnored private var adressesEcrites: [String: Suivi.AdresseGardee] = [:]
-    /// Annonces relues du disque et decalees de la marge de prudence (`chargerAdressesGardees`), par appareil : tant
-    /// que le suivi garde la date decalee, c'est la date du disque (`brute`) qui est comparee et reecrite, pour que la
-    /// marge ne s'ajoute pas a chaque lancement.
-    @ObservationIgnored private var annoncesRelues: [String: (brute: Date, decalee: Date)] = [:]
     @ObservationIgnored private var alertes = Alertes()
     @ObservationIgnored private var suiviMaillage = SuiviMaillage()
     /// Historique sur disque : mode direct avec un dossier ; nil : nulle part (demo, tests).
@@ -239,8 +235,7 @@ final class Surveillance {
 
     /// Tant qu'un appareil annonce son adresse, son annonce avance a chaque releve (toutes les minutes) : une avance de
     /// moins de 15 min ne justifie pas une ecriture. Une annonce qui ne bouge plus est ecrite exacte (voir
-    /// `adressesAEcrire`). C'est aussi la marge de prudence a la relecture (`chargerAdressesGardees`) : si l'app est
-    /// quittee pendant qu'un appareil annonce, la date du disque retarde d'au plus cet ecart.
+    /// `adressesAEcrire`).
     nonisolated static let ecartAnnonceEcrite: TimeInterval = 15 * 60
 
     /// Duree de garde d'une adresse sur disque : au-dela de 30 jours sans annonce, l'appareil est oublie (ecriture et
@@ -273,9 +268,8 @@ final class Surveillance {
     /// avait vues, et un appareil qui n'annonce plus d'adresse est demande a la sonde des le premier releve. Fichier
     /// absent : rien. Illisible ou incoherent (adresse invalide, partition vide) : rien non plus, consigne dans le
     /// journal du Mac. Les appareils sans annonce depuis plus de 30 jours (`dureeAdressesGardees`) sont oublies.
-    /// Marge de prudence : chaque annonce relue est avancee de `ecartAnnonceEcrite` (sans depasser `maintenant`), car
-    /// le disque peut retarder d'autant sur la vraie derniere annonce ; une resolution de la sonde qui tombe dans la
-    /// marge ne vaut pas verification (cote prudent), seule une posterieure compte.
+    /// Une annonce relue est bornee a `maintenant` : une date future (horloge reculee depuis l'ecriture, fichier
+    /// modifie) bloquerait l'appareil, qu'aucune resolution ne pourrait plus rendre posterieure.
     func chargerAdressesGardees(maintenant: Date = Date()) {
         guard let fichierAdresses, FileManager.default.fileExists(atPath: fichierAdresses.path) else { return }
         do {
@@ -284,14 +278,12 @@ final class Surveillance {
                 Self.journalMac.error("dernieres adresses incoherentes, ignorees")
                 return
             }
-            var prudentes = Self.adressesRecentes(garde.appareils, a: maintenant)
-            annoncesRelues = [:]
-            for (id, g) in prudentes {
-                let decalee = min(g.annonce.addingTimeInterval(Self.ecartAnnonceEcrite), max(g.annonce, maintenant))
-                prudentes[id]?.annonce = decalee
-                annoncesRelues[id] = (brute: g.annonce, decalee: decalee)
+            let relues = Self.adressesRecentes(garde.appareils, a: maintenant).mapValues { g in
+                var g = g
+                g.annonce = min(g.annonce, maintenant)
+                return g
             }
-            suivi.amorcer(prudentes)
+            suivi.amorcer(relues)
             // Le disque est tel quel : ce que la purge a oublie y sera retire a la premiere ecriture.
             adressesEcrites = garde.appareils
         } catch {
@@ -304,12 +296,7 @@ final class Surveillance {
     /// est retentee au releve suivant.
     private func garderAdresses(releve: Date) {
         guard let fichierAdresses else { return }
-        var actuelles = suivi.adressesGardees
-        // Une annonce relue et jamais revue garde la date du disque, sans la marge de prudence.
-        for (id, relue) in annoncesRelues where actuelles[id]?.annonce == relue.decalee {
-            actuelles[id]?.annonce = relue.brute
-        }
-        actuelles = Self.adressesRecentes(actuelles, a: releve)
+        let actuelles = Self.adressesRecentes(suivi.adressesGardees, a: releve)
         guard Self.adressesAEcrire(actuelles, ecrites: adressesEcrites, releve: releve) else { return }
         do {
             try FileManager.default.createDirectory(at: fichierAdresses.deletingLastPathComponent(),
@@ -463,9 +450,10 @@ final class Surveillance {
 
     /// Date a laquelle la sonde a trouve, par la resolution d'adresse, un appareil qui n'annonce plus d'adresse (sans
     /// adresse, ou disparu) : il est joignable. Nil s'il annonce son adresse, si la derniere resolution ne l'a pas
-    /// trouve, sans maillage ou s'il est perime, si la resolution a plus de `ageMaxVerification`, et si elle n'est pas
-    /// strictement posterieure a la derniere annonce de son adresse (`Suivi.dernieresAnnonces`). L'instantane reste
-    /// le reflet de Bonjour : cet etat est derive ici, a chaque lecture, du dernier maillage de la sonde.
+    /// trouve ou si l'appareil n'y a pas repondu (cache seul, firmware ancien), sans maillage ou s'il est perime, si la
+    /// resolution a plus de `ageMaxVerification`, et si elle n'est pas strictement posterieure a la derniere annonce de
+    /// son adresse (`Suivi.dernieresAnnonces`). L'instantane reste le reflet de Bonjour : cet etat est derive ici, a
+    /// chaque lecture, du dernier maillage de la sonde.
     func verification(_ id: String, a maintenant: Date) -> Date? {
         verifications(a: maintenant)[id]
     }
@@ -474,9 +462,12 @@ final class Surveillance {
     func verifications(a maintenant: Date) -> [String: Date] {
         guard let m = maillage, let i = instantane, fraicheurMaillage(a: maintenant) != .perime else { return [:] }
         let muets = Set(i.appareils.filter { $0.genre == .sansAdresse }.map(\.id)).union(suivi.disparus.keys)
-        // Une resolution d'avant la derniere annonce de l'adresse ne prouve rien : l'appareil l'annoncait encore.
+        // Une resolution d'avant la derniere annonce de l'adresse ne prouve rien : l'appareil l'annoncait encore. Il
+        // faut aussi que l'appareil ait repondu a la sonde (`resolusRepondus`) : une entree du cache d'adresses seule,
+        // ou un firmware ancien qui ne le dit pas, ne vaut pas verification.
         return m.resolus.filter { id, d in
-            guard muets.contains(id), maintenant.timeIntervalSince(d) <= Self.ageMaxVerification,
+            guard muets.contains(id), m.resolusRepondus.contains(id), !suivi.adresseAnnonceeParUnAutre(id),
+                  maintenant.timeIntervalSince(d) <= Self.ageMaxVerification,
                   let annonce = suivi.dernieresAnnonces[id] else { return false }
             return d > annonce
         }
@@ -751,10 +742,15 @@ final class Surveillance {
             }
             return premier
         }
+        // Un appareil verifie par la sonde est dans la partition qui porte aujourd'hui le prefixe de sa derniere
+        // adresse.
+        func partitionDerniere(_ a: Appareil, verifie: Bool) -> String? {
+            verifie ? suivi.partitionActuelle(de: a.id) : suivi.dernieresPartitions[a.id]
+        }
         func affiche(_ a: Appareil, _ etat: EtatAffiche, verifie: Bool = false) -> AppareilAffiche {
             let maison = accessoire(a)
             return AppareilAffiche(id: a.id, nom: nom(a), piece: maison?.piece,
-                                   partition: a.partition ?? suivi.dernieresPartitions[a.id], etat: etat,
+                                   partition: a.partition ?? partitionDerniere(a, verifie: verifie), etat: etat,
                                    endormi: a.endormi, batterie: maison?.batterie, verifie: verifie)
         }
         var liste = i.appareils.filter(appartient).map { a in

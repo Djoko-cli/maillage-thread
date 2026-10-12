@@ -75,8 +75,9 @@ final class CanalRejoue: CanalSonde {
     static let annoncesVides = #"{"v":1,"t":"annonces","vide":true}"#
 
     /// Reponse a `resoudre` (firmware 1.1.0) : le RLOC16 trouve et, s'il est donne, le ML-EID (32 hexa).
-    static func resolution(_ id: Int, _ cible: String, rloc16: String, mleid: String? = nil) -> String {
-        #"{"v":1,"t":"resoudre","id":\#(id),"cible":"\#(cible)","ok":true,"ms":120,"rloc16":"\#(rloc16)","mleid":\#(mleid.map { "\"\($0)\"" } ?? "null")}"#
+    static func resolution(_ id: Int, _ cible: String, rloc16: String, mleid: String? = nil,
+                           repondu: Bool = true) -> String {
+        #"{"v":1,"t":"resoudre","id":\#(id),"cible":"\#(cible)","ok":true,"ms":120,"rloc16":"\#(rloc16)","repondu":\#(repondu),"mleid":\#(mleid.map { "\"\($0)\"" } ?? "null")}"#
     }
 
     /// Ligne `routeurs` (firmware 1.0.2) : chaque routeur par son RLOC16, avec son ExtMac s'il

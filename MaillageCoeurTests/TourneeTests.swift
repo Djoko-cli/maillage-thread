@@ -295,7 +295,8 @@ struct TourneeTests {
         func ok(_ n: Int, _ rloc16: String, mleid: Bool) -> (String, ResultatResolution) {
             let cible = "\(omr(n))"
             return (cible, ResultatResolution(id: 0, cible: cible, ok: true, ms: 300, rloc16: rloc16,
-                                              mleid: mleid ? String(format: "FD00111122220C87%016lX", n) : nil))
+                                              mleid: mleid ? String(format: "FD00111122220C87%016lX", n) : nil,
+                                              repondu: true))
         }
         return Dictionary(uniqueKeysWithValues: [ok(0x0A, "AC00", mleid: true), ok(0x0B, "AC05", mleid: false),
                                                  ok(0x04, "5004", mleid: true), ok(0x07, "AC00", mleid: false),

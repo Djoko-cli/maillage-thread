@@ -16,7 +16,7 @@ struct AdresseVerifieeTests {
     static func adresse(_ n: Int) -> String { "fd00:aaaa:bbbb:1::\(n)" }
 
     /// Un chef qui publie le prefixe OMR, trois appareils avec leur adresse, un appareil sans adresse des le depart.
-    static func banc(_ date: Date) -> Banc {
+    static func banc(_ date: Date, partition: String = partition) -> Banc {
         var b = Banc(date: date)
         b.routeur("Chef", partition: partition, role: .chef, primaire: true, lien: "fe80::1", omr: omr,
                   xa: "E1000000000000A1")
@@ -270,10 +270,12 @@ struct AdresseVerifieeTests {
         let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
                                                                appareils: TourneeTests.appareils))
         #expect(m.resolus == mem.resolutions.mapValues(\.date))
+        #expect(m.resolusRepondus == Set(m.resolus.keys), "capture du firmware 1.1.1 : repondu vrai")
         #expect(m.resolus["E000000000000004"] == Self.t0, "sous le 20, qui repond : trouve aussi")
         #expect(m.resolus["E00000000000000C"] == nil, "introuvable")
         let relu = try CodageJSON.decodeur().decode(Maillage.self, from: try CodageJSON.encodeur().encode(m))
-        #expect(relu.resolus.isEmpty && relu.enfants == m.enfants && relu.resolution == m.resolution)
+        #expect(relu.resolus.isEmpty && relu.resolusRepondus.isEmpty && relu.enfants == m.enfants
+                && relu.resolution == m.resolution)
     }
 
     /// Un enfant resolu qui n'a l'adresse annoncee d'aucun appareil est rapproche de l'appareil dont c'est la
@@ -294,5 +296,133 @@ struct AdresseVerifieeTests {
                                    dernieresAdresses: ["Prise-HomeKit": TourneeTests.omr(0x50)])
         #expect(avec.enfants[0xAE01]?.id == "Prise-HomeKit")
         #expect(avec.parent(de: "Prise-HomeKit") == avec.routeurs[43]?.id)
+    }
+
+    // MARK: Preuve par la reponse de l'appareil (firmware 1.1.1)
+
+    /// La capture rejouee de `TourneeTests`, chaque resolution portant `repondu` (nil : firmware ancien, sans champ).
+    static func sondeRepondu(_ repondu: Bool?) throws -> SondeRejouee {
+        let resolutions = TourneeTests.resolutions.mapValues {
+            ResultatResolution(id: $0.id, cible: $0.cible, ok: $0.ok, ms: $0.ms, rloc16: $0.rloc16, mleid: $0.mleid,
+                               erreur: $0.erreur, repondu: repondu)
+        }
+        return try TourneeTests.sondeResolue(resolutions: resolutions)
+    }
+
+    static func place(_ id: String, dans m: Maillage) -> Bool {
+        m.enfants.contains { $0.extMac == id && $0.source == .resolution }
+    }
+
+    /// Un appareil qui n'annonce plus son adresse n'est place sous son parent, ni porte par `resolusRepondus`, que si
+    /// la sonde dit qu'il a repondu (vrai) ; faux (cache seul) ou nil (firmware ancien) : ni l'un ni l'autre. Un
+    /// appareil qui annonce son adresse est place comme avant, quel que soit `repondu`.
+    @Test func repondu() async throws {
+        let a = "E00000000000000A", b = "E00000000000000B"
+        var appareils = TourneeTests.appareils
+        let iA = try #require(appareils.firstIndex { $0.id == a })
+        appareils[iA] = try Self.perdu(a, annonce: Self.t0 - 100)
+        for repondu in [true, false, nil] as [Bool?] {
+            let sonde = try Self.sondeRepondu(repondu)
+            let (m, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(),
+                                                                   maintenant: Self.t0, appareils: appareils))
+            let texte = "repondu \(String(describing: repondu))"
+            #expect(mem.resolutions[a]?.repondu == repondu, "porte par la memoire : \(texte)")
+            #expect(m.resolus[a] == Self.t0, "toujours resolu : \(texte)")
+            #expect(Self.place(a, dans: m) == (repondu == true), "perdu : place seulement si repondu vrai, \(texte)")
+            #expect(m.resolusRepondus.contains(a) == (repondu == true), Comment(rawValue: texte))
+            #expect(Self.place(b, dans: m), "il annonce son adresse : place quel que soit repondu, \(texte)")
+            #expect(m.resolusRepondus.contains(b) == (repondu == true), Comment(rawValue: texte))
+        }
+    }
+
+    /// Un perdu dont la resolution posterieure n'a pas ete repondue (cache seul, ou firmware ancien) reste redemande a
+    /// chaque tournee pendant 30 min, comme un introuvable ; repondu vrai, il ne l'est plus avant la resolution
+    /// complete.
+    @Test func perduNonRepondantRedemande() async throws {
+        let a = "E00000000000000A"
+        var appareils = TourneeTests.appareils
+        let iA = try #require(appareils.firstIndex { $0.id == a })
+        appareils[iA] = try Self.perdu(a, annonce: Self.t0 - 100)
+        for repondu in [true, false, nil] as [Bool?] {
+            let sonde = try Self.sondeRepondu(repondu)
+            let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(),
+                                                                    maintenant: Self.t0, appareils: appareils))
+            let avant = await sonde.registre.requetes.count
+            _ = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 300,
+                                                        appareils: appareils))
+            let redemande = await Self.demandees(sonde, depuis: avant)
+            #expect(redemande == (repondu == true ? [] : [Self.cle(0x0A)]), "repondu \(String(describing: repondu))")
+        }
+    }
+
+    /// `ResolutionAppareil.prouve(apres:)` : repondu vrai ET posterieure a la derniere annonce.
+    @Test func preuvePosterieureEtRepondue() throws {
+        let ad = try #require(AdresseIPv6(Self.adresse(1)))
+        func resolution(_ repondu: Bool?) -> ResolutionAppareil {
+            ResolutionAppareil(rloc16: 0xAC00, mleid: nil, adresse: ad, date: Self.t0, repondu: repondu)
+        }
+        #expect(resolution(true).prouve(apres: Self.t0 - 1))
+        #expect(!resolution(true).prouve(apres: Self.t0), "egale : pas posterieure")
+        #expect(!resolution(true).prouve(apres: Self.t0 + 1))
+        #expect(!resolution(false).prouve(apres: Self.t0 - 1))
+        #expect(!resolution(nil).prouve(apres: Self.t0 - 1))
+    }
+
+    // MARK: Partition d'aujourd'hui
+
+    /// Apres un changement de partition (perte du chef, fusion) avec le meme prefixe OMR, un appareil disparu (que
+    /// l'instantane ne montre plus, donc dont la derniere partition vue ne change plus) est demande dans la partition
+    /// qui porte aujourd'hui le prefixe de sa derniere adresse, et non dans l'ancienne. Sans partition qui porte ce
+    /// prefixe, sa derniere partition connue sert de repli.
+    @Test func perduDemandeDansLaPartitionDAujourdhui() throws {
+        let b = "0000BBBB"
+        var s = Suivi()
+        _ = s.integrer(Self.banc(Self.t0).annonces)
+        #expect(s.dernieresPartitions[Self.a2] == Self.partition)
+        // a2 s'en va ; la partition change quand le sursis de 2 min s'acheve et le fait disparaitre.
+        var parti = Self.banc(Self.t0 + 60)
+        parti.retirer(Self.a2)
+        _ = s.integrer(parti.annonces)
+        var change = Self.banc(Self.t0 + 200, partition: b)
+        change.retirer(Self.a2)
+        _ = s.integrer(change.annonces)
+        #expect(s.disparus[Self.a2] != nil)
+        #expect(s.dernieresPartitions[Self.a2] == Self.partition, "la derniere partition vue reste l'ancienne")
+        #expect(s.partitionActuelle(de: Self.a2) == b)
+        let demande = try #require(AppareilAResoudre.depuis(s).first { $0.id == Self.a2 })
+        #expect(demande.partition == b && demande.adresse == AdresseIPv6(Self.adresse(2)) && demande.disparu)
+        // Celui qui annonce encore a la partition de l'instantane, comme avant.
+        #expect(AppareilAResoudre.depuis(s).first { $0.id == Self.a3 }?.partition == b)
+
+        // Aucune partition ne porte le prefixe (ici, pas encore d'instantane apres une relance) : repli sur la derniere
+        // partition connue ; un appareil inconnu n'en a pas.
+        var relance = Suivi()
+        relance.amorcer([Self.a2: .init(adresse: try #require(AdresseIPv6(Self.adresse(2))), partition: Self.partition,
+                                        annonce: Self.t0)])
+        #expect(relance.partitionActuelle(de: Self.a2) == Self.partition)
+        #expect(relance.partitionActuelle(de: "inconnu") == nil)
+        let autre = Banc(date: Self.t0 + 3600)
+        _ = relance.integrer(autre.annonces)
+        #expect(relance.partitionActuelle(de: Self.a2) == Self.partition, "aucune partition ne porte le prefixe")
+    }
+
+    // MARK: Meme appareil sous un nouvel hote
+
+    /// Un perdu dont la derniere adresse est annoncee aujourd'hui par un autre identifiant (le meme appareil sous un
+    /// nouvel hote) n'est pas demande : pas de doublon joignable. Les autres perdus le sont toujours.
+    @Test func perduRevenuSousUnAutreHote() throws {
+        var s = Self.suiviApresPerte()
+        #expect(AppareilAResoudre.depuis(s).map(\.id) == [Self.a1, Self.a2, Self.a3])
+        #expect(!s.adresseAnnonceeParUnAutre(Self.a1))
+        var b = Self.banc(Self.t0 + 300)
+        b.adresses[Self.a1 + ".local"] = []
+        b.retirer(Self.a2)
+        b.appareil("0000000000000009", noeud: 9, adresses: [Self.adresse(1)])
+        _ = s.integrer(b.annonces)
+        #expect(s.adresseAnnonceeParUnAutre(Self.a1))
+        #expect(!s.adresseAnnonceeParUnAutre(Self.a2))
+        #expect(!s.adresseAnnonceeParUnAutre("0000000000000009"), "le nouvel hote ne s'exclut pas lui-meme")
+        #expect(AppareilAResoudre.depuis(s).map(\.id) == [Self.a2, Self.a3, "0000000000000009"].sorted(),
+                "a1 n'est plus demande, a2 (disparu) l'est toujours")
     }
 }

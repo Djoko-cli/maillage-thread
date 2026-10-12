@@ -99,6 +99,25 @@ struct AssociationsTests {
                 == ["A/Piece 1", "A/Piece 2", "B/Piece 2"])
     }
 
+    /// Seules comptent les associations d'appareils presents ou disparus : celle d'un appareil que plus personne ne
+    /// connait ne prend pas l'accessoire, qui redevient propose.
+    @Test func orphelinsIgnoreLesAssociationsDAppareilsInconnus() throws {
+        let i = Self.instantane()
+        var n = ResolveurNoms(maison: Self.maison())
+        let f = n.fabriqueApple(appareils: i.appareils)
+        n.associations["AAAA0000000000FF"] = "00000000000000AA"
+        #expect(n.orphelins(appareils: i.appareils, fabriqueApple: f).map(\.nom) == ["Detecteur 2", "Detecteur 3"],
+                "l'appareil associe n'existe plus : Detecteur 2 est de nouveau propose")
+        n.associations[Self.muet] = "00000000000000BB"
+        #expect(n.orphelins(appareils: i.appareils, fabriqueApple: f).map(\.nom) == ["Detecteur 2"],
+                "un appareil present prend son accessoire")
+        // Un appareil disparu (passe en `appareils`) le prend aussi.
+        var b = Banc()
+        b.appareil("AAAA0000000000FF", noeud: 0xEE, adresses: ["fd00:aaaa:bbbb::ff"])
+        let disparu = try #require(Instantane(annonces: b.annonces).appareil("AAAA0000000000FF"))
+        #expect(n.orphelins(appareils: i.appareils + [disparu], fabriqueApple: f).map(\.nom) == [])
+    }
+
     /// Un pont et un accessoire qu'il porte partagent un noeud : le menu n'en propose qu'un, celui dont l'appareil
     /// prendrait le nom (`accessoire(noeud:)` : le pont, sinon le premier par nom) ; ce qui est affiche est ce qu'on
     /// obtient en l'associant.

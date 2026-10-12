@@ -58,6 +58,27 @@ public struct Suivi: Sendable {
 
     public init() {}
 
+    /// La partition qui porte AUJOURD'HUI le prefixe de la derniere adresse de l'appareil, dans l'instantane courant :
+    /// apres un changement de partition (perte du chef, fusion), la derniere partition vue par l'appareil n'existe plus
+    /// ou n'est plus celle de la sonde, alors que le prefixe OMR est le meme. Repli : sa derniere partition connue
+    /// (`dernieresPartitions`), sans adresse gardee ou sans partition qui porte ce prefixe.
+    public func partitionActuelle(de id: String) -> String? {
+        if let adresse = dernieresAdresses[id],
+           let p = instantane?.reseaux.flatMap(\.partitions).first(where: { p in
+               p.prefixes.contains { $0.contient(adresse) }
+           }) {
+            return p.id
+        }
+        return dernieresPartitions[id]
+    }
+
+    /// La derniere adresse de l'appareil est annoncee aujourd'hui, dans l'instantane courant, par un autre
+    /// identifiant : c'est le meme appareil revenu sous un nouvel hote, pas un appareil perdu a verifier.
+    public func adresseAnnonceeParUnAutre(_ id: String) -> Bool {
+        guard let adresse = dernieresAdresses[id], let i = instantane else { return false }
+        return i.appareils.contains { $0.id != id && $0.adresses.contains(adresse) }
+    }
+
     /// La derniere adresse, la derniere partition et la derniere annonce de chaque appareil qui a les trois, par
     /// identifiant : ce que l'app garde sur disque entre deux lancements.
     public var adressesGardees: [String: AdresseGardee] {
