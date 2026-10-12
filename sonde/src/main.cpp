@@ -1,9 +1,10 @@
 // ===========================================================================
-//  Sonde de maillage Thread, firmware 1.1.0 (spec de la sonde, sections 2 et
+//  Sonde de maillage Thread, firmware 1.1.1 (spec de la sonde, sections 2 et
 //  3 ; contrat de la 1.0.2 : FED, routeurs, acces reseau comme le pont Halo ;
 //  1.0.3 : LED, retour allume apres oubli, refus de la cadence comptes ;
 //  1.1.0 : ecoute des messages MLE et resolution d'adresse, spec de la sonde
-//  tout-en-un, section 1)
+//  tout-en-un, section 1 ; 1.1.1 : voyant du tronc commun, avec le pont
+//  Halo, la carte Amaran et la sonde de Maillage Zigbee)
 //
 //  Noeud Matter sur Thread, en FED non eligible routeur (Full End Device) :
 //  il recoit en permanence mais ne relaie rien, ne devient jamais routeur ni
@@ -85,10 +86,16 @@
 //  defaut) : il suit la carte d'un Mac a l'autre. Apres un oubli, la sonde
 //  revient allumee, comme a sa premiere mise en service.
 //
-//  LED de la carte (WS2812 sur IO8), a faible intensite : deux eclairs verts
-//  rapides quand l'interrupteur s'allume, un eclair orange d'une demi-seconde
-//  quand il s'eteint, puis un bref eclair orange toutes les 10 s tant que la
-//  sonde est suspendue, aussi apres un redemarrage.
+//  LED de la carte (WS2812 sur IO8), a faible intensite (24/255 au plus), le
+//  tronc commun de la 1.1.1 (voyant.h), du plus prioritaire au moins
+//  prioritaire : arc-en-ciel pendant une identification (« Identifier » dans
+//  Maison, au moins un tour de 2 s) ; deux eclairs verts rapides quand
+//  l'interrupteur s'allume, un eclair orange d'une demi-seconde quand il
+//  s'eteint ; bleu clignotant tant que la sonde n'est pas mise en service,
+//  bleu lent (pulsation de 2 s) quand elle l'est mais n'est pas attachee au
+//  reseau Thread ; deux eclairs verts a l'attachement ; un bref eclair orange
+//  toutes les 5 s tant qu'elle est suspendue, aussi apres un redemarrage ;
+//  sinon, attachee, une breve lueur blanche toutes les 10 s.
 // ===========================================================================
 
 #include <Arduino.h>
@@ -116,7 +123,7 @@
 #include "reseau.h"
 #include "voyant.h"
 
-static const char *const kVersion = "1.1.0";
+static const char *const kVersion = "1.1.1";
 
 // ---------------------------------------------------------------------------
 //  FED des la creation de la pile Thread, jamais eligible routeur (repris de
@@ -208,6 +215,13 @@ static const char *const kCleInterrupteur = "interrupteur";
 // de loop() pour updateAccessory() au demarrage et pour setOnOff() d'oubli.
 // Lu par loop(), qui en tire aussi la LED.
 static std::atomic<bool> sSuspendue{false};
+// Identification de l'interrupteur (1.1.1), posee par surIdentification dans
+// la tache CHIP, lue par loop() (voyantTour) : session Identify (IdentifyTime,
+// finie par un STOP de la pile), ou fin datee d'un TriggerEffect (millis,
+// 0 = aucun), que la pile ne termine jamais. Seule la tache CHIP pose une fin ;
+// loop() ne fait qu'effacer une fin echue, par echange compare.
+static std::atomic<bool> sIdentSession{false};
+static std::atomic<uint32_t> sIdentFinEffet{0};
 static bool sThreadPret = false;  // pile Thread creee par Matter.begin()
 static char sMac[13] = "?";
 // Nom de la sonde, garde dans la NVS a cote de l'interrupteur (commande `nom`).
@@ -379,6 +393,18 @@ static bool surInterrupteur(bool allume) {
   return true;
 }
 
+// « Identifier » dans Maison (cluster Identify de l'interrupteur), dans la
+// tache CHIP : ne fait que poser l'etat, comme le pont Halo (onIdentify).
+// La requete est remplie par la bibliotheque juste avant ce rappel.
+static bool surIdentification(bool actif) {
+  const MatterIdentifyRequest r = sInterrupteur.getIdentifyRequest();
+  if (r.fromTriggerEffect)
+    sIdentFinEffet.store(effetIdent::finApres(sIdentFinEffet.load(), r.effectId, millis()));
+  else
+    sIdentSession = actif;
+  return true;
+}
+
 static void demarrerMatter() {
   uint8_t mac[8] = {};
   if (esp_read_mac(mac, ESP_MAC_BASE) == ESP_OK)
@@ -396,6 +422,7 @@ static void demarrerMatter() {
   sInterrupteur.begin(allume);
   // onChange, et non onChangeOnOff : updateAccessory() n'appelle que ce rappel-la.
   sInterrupteur.onChange(surInterrupteur);
+  sInterrupteur.onIdentify(surIdentification);
   char serie[20];
   snprintf(serie, sizeof(serie), "SONDE-%s", sMac);
   Matter.setVendorName("Maillage Thread");
@@ -1328,42 +1355,71 @@ void reseauRecu(uint8_t place, char *charge) {
 }
 
 // ---------------------------------------------------------------------------
-//  LED de la carte (1.0.3)
+//  LED de la carte (1.0.3 ; tronc commun en 1.1.1)
 // ---------------------------------------------------------------------------
 
 // WS2812 de la SuperMini, sur IO8 : rien d'autre n'y touche dans ce firmware.
-// Faible intensite, comme le voyant du pont Halo sur la meme carte : 24/255 au
-// plus par canal ; orange : un quart de vert (le vert d'une WS2812 parait bien
-// plus fort que son rouge). Ordre GRB par defaut de rgbLedWrite.
+// Faible intensite, le tronc commun du pont Halo sur la meme carte (voyant.h) :
+// 24/255 au plus par canal. Ordre GRB par defaut de rgbLedWrite.
 static constexpr uint8_t kBrocheVoyant = 8;
-static constexpr uint8_t kVoyantMax = 24;
 static Voyant sVoyant;
-static bool sVoyantSuspendue = false;  // etat de l'interrupteur que la LED montre
-static int sVoyantEcrit = -1;          // couleur ecrite ; -1 : rien encore
+static bool sVoyantSuspendue = false;    // etat de l'interrupteur que la LED montre
+static Voyant::Rvb sVoyantEcrit;         // couleur ecrite...
+static bool sVoyantEcritValide = false;  // ... si quelque chose l'a deja ete
+static bool sVoyantAttachee = false;     // attachement au reseau Thread, dernier role lu
+static uint32_t sVoyantReseau = 0;       // derniere lecture du reseau (millis)
 
 // rgbLedWrite (Arduino-ESP32 3.x) : 24 bits par le RMT, environ 30 us ; le
 // canal RMT est cree au premier appel, puis reutilise. Seulement si la
-// couleur change.
-static void ecrireVoyant(Voyant::Couleur c) {
-  if ((int)c == sVoyantEcrit) return;
-  sVoyantEcrit = (int)c;
-  switch (c) {
-    case Voyant::kVerte: rgbLedWrite(kBrocheVoyant, 0, kVoyantMax, 0); break;
-    case Voyant::kOrange: rgbLedWrite(kBrocheVoyant, kVoyantMax, kVoyantMax / 4, 0); break;
-    default: rgbLedWrite(kBrocheVoyant, 0, 0, 0); break;
-  }
+// couleur change : 16 ecritures par lueur, 25 par seconde pendant
+// l'arc-en-ciel et la pulsation bleue, sinon une par changement.
+static void ecrireVoyant(Voyant::Rvb c) {
+  if (sVoyantEcritValide && c == sVoyantEcrit) return;
+  sVoyantEcrit = c;
+  sVoyantEcritValide = true;
+  rgbLedWrite(kBrocheVoyant, c.r, c.g, c.b);
 }
 
-// Dans loop() seulement, hors de tout verrou : le rappel Matter ne fait que
-// poser sSuspendue, et un changement vu ici lance les eclairs de
-// l'interrupteur. Sans attente : la sequence se lit sur millis().
+// Identification en cours (session ou effet). Toutes les fins echues sont
+// oubliees a chaque appel, bien avant que le retour a zero de millis() les
+// fasse paraitre futures ; une fin posee entre-temps par la tache CHIP reste.
+static bool identificationEnCours(uint32_t maintenant) {
+  bool enCours = sIdentSession;
+  uint32_t fin = sIdentFinEffet.load();
+  if (effetIdent::enCours(fin, maintenant)) enCours = true;
+  else if (fin) sIdentFinEffet.compare_exchange_strong(fin, 0u);
+  return enCours;
+}
+
+// Etat du reseau que la LED montre. Matter.isDeviceCommissioned() hors du
+// verrou OpenThread (appel Matter) ; le role Thread sous ce verrou, pris sans
+// attendre (occupe : l'attachement d'avant reste, relu a la seconde suivante).
+static Voyant::Reseau voyantReseau() {
+  if (verrouOt(0)) {
+    const otDeviceRole role = otThreadGetDeviceRole(esp_openthread_get_instance());
+    libereOt();
+    sVoyantAttachee = role == OT_DEVICE_ROLE_CHILD || role == OT_DEVICE_ROLE_ROUTER || role == OT_DEVICE_ROLE_LEADER;
+  }
+  if (!Matter.isDeviceCommissioned()) return Voyant::kNonMiseEnService;
+  return sVoyantAttachee ? Voyant::kAttachee : Voyant::kDetachee;
+}
+
+// Dans loop() seulement, hors de tout verrou : les rappels Matter ne font que
+// poser sSuspendue et l'identification ; un changement de l'interrupteur vu
+// ici lance son geste. Sans attente : les motifs se lisent sur millis(). Le
+// reseau (mise en service, role Thread) se relit une fois par seconde.
 static void voyantTour(uint32_t maintenant) {
   const bool suspendue = sSuspendue;
   if (suspendue != sVoyantSuspendue) {
     sVoyantSuspendue = suspendue;
     sVoyant.changer(suspendue, maintenant);
   }
-  ecrireVoyant(sVoyant.couleur(maintenant));
+  if (maintenant - sVoyantReseau >= 1000) {
+    sVoyantReseau = maintenant;
+    sVoyant.changerReseau(voyantReseau(), maintenant);
+  }
+  sVoyant.identifier(identificationEnCours(maintenant), maintenant);
+  ecrireVoyant(sVoyant.rvb(maintenant));
 }
 
 // ---------------------------------------------------------------------------
@@ -1397,12 +1453,16 @@ void setup() {
   // LED au noir d'abord : une WS2812 garde sa couleur a travers un redemarrage
   // (son alimentation ne coupe pas). IO8, broche de strapping, est deja
   // echantillonnee a ce stade.
-  ecrireVoyant(Voyant::kNoire);
+  ecrireVoyant(Voyant::Rvb{});
   demarrerMatter();
   reseauDebut();
-  // Etat relu de la NVS : suspendue, un bref eclair orange des le premier tour.
+  // Etat relu de la NVS : suspendue, un bref eclair orange des le premier tour
+  // (sous le bleu tant que la sonde n'est pas attachee). Reseau lu tout de
+  // suite : mise en service, bleu lent jusqu'a l'attachement, sans eclair de
+  // bleu clignotant.
   sVoyantSuspendue = sSuspendue;
-  sVoyant.demarrer(sVoyantSuspendue, millis());
+  sVoyantReseau = millis();
+  sVoyant.demarrer(sVoyantSuspendue, voyantReseau(), sVoyantReseau);
   cmdBonjour();
 }
 

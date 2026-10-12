@@ -39,8 +39,8 @@ Pour passer une sonde déjà appairée à une nouvelle version, flasher **sans**
 effacement (`-t upload` seul) : l'appairage Maison, le réseau Thread, le nom
 et la clé d'accès réseau sont gardés. De la 1.0.1 à la 1.0.2, la sonde passe
 de MED (`rn`) à FED (`rdn`) au démarrage et se rattache. De la 1.0.3 à la
-1.1.0, rien ne change de ce qui est gardé ; place à la compilation : 76,5 % de
-la flash et 54,1 % de la RAM.
+1.1.1, rien ne change de ce qui est gardé ; place à la compilation (1.1.1) :
+76,6 % de la flash et 54,1 % de la RAM.
 
 **Toujours désigner le port de la sonde.** Le pont Halo de benq est lui
 aussi un C6 : le flasher par erreur le remplacerait. Le numéro de série USB
@@ -71,19 +71,35 @@ l'état de son interrupteur.
 
 ## LED
 
-Depuis la 1.0.3, la LED couleur de la carte (WS2812, sur IO8) montre
-l'interrupteur « Sonde maillage », à faible intensité (24/255 au plus par
-canal, comme le voyant du pont Halo) :
+Depuis la 1.0.3, la LED couleur de la carte (WS2812, sur IO8) montre l'état de
+la sonde, à faible intensité. Depuis la 1.1.1, elle suit le **tronc commun**
+partagé avec le pont Halo, la carte Amaran et la sonde de Maillage Zigbee :
+24/255 au plus par canal, bleu (0, 0, 24), vert (0, 24, 0), orange (24, 6, 0),
+lueur blanche jusqu'à 8/255. Du plus prioritaire au moins prioritaire :
 
 | LED | Signification |
 |---|---|
-| deux éclairs verts rapides (100 ms, 100 ms de pause) | l'interrupteur vient de s'allumer dans Maison |
+| arc-en-ciel, un tour de roue en 2 s (par pas de 40 ms) | identification demandée par Maison (« Identifier ») : pendant toute l'identification, et au moins un tour complet même si elle ne dure qu'un instant |
+| deux éclairs verts rapides (100 ms, 100 ms de pause) | l'interrupteur « Sonde maillage » vient de s'allumer dans Maison |
 | un éclair orange d'une demi-seconde | l'interrupteur vient de s'éteindre |
-| un bref éclair orange (100 ms) toutes les 5 s | la sonde est suspendue ; dès le démarrage si elle l'était avant |
-| éteinte | la sonde est allumée |
+| bleu clignotant (250 ms allumé, 250 ms éteint) | la sonde n'est pas mise en service (pas encore appairée, ou oubliée) |
+| bleu lent, pulsation de 2 s (montée jusqu'à 24/255 puis descente) | mise en service mais pas attachée au réseau Thread : au démarrage, ou après la perte de son parent |
+| deux éclairs verts rapides (100 ms, 100 ms de pause) | la sonde vient de s'attacher au réseau Thread (aussi au premier attachement après le démarrage) |
+| un bref éclair orange (100 ms) toutes les 5 s | la sonde est suspendue (interrupteur éteint) ; dès le démarrage si elle l'était avant |
+| éteinte, une brève lueur blanche toutes les 10 s (montée puis descente jusqu'à 8/255 sur 600 ms) | tout va bien : la sonde est allumée et attachée au réseau Thread ; la première lueur juste après les éclairs verts de l'attachement |
+
+L'orange lent du tronc commun (« mis en service, sans réseau IP ») ne
+s'applique pas à la sonde : son réseau IP est Thread lui-même, couvert par le
+bleu lent. Suspendue et pas attachée, la sonde montre donc le bleu, pas
+l'orange.
 
 Seule la boucle principale écrit la LED, jamais sous le verrou d'OpenThread :
-le rappel de Matter ne fait que noter l'état de l'interrupteur.
+les rappels de Matter (interrupteur, identification) ne font que noter un
+état. La mise en service et l'attachement (rôle Thread) se relisent une fois
+par seconde, le rôle sous le verrou pris sans attendre. Une identification
+par effet (`TriggerEffect`) dure 2 s (Blink, Okay), 8 s (changement de canal)
+ou 15 s (Breathe), comme sur le pont Halo, puisque la pile Matter ne la
+termine jamais.
 
 ## Nom
 
@@ -281,7 +297,8 @@ UBSan ; ce ne sont pas des tests `pio test`) : l'enveloppe H1
 (`test_h1.cpp`, repris de benq) et les briques pures de `distant.cpp` et
 de `voyant.h` (`test_distant.cpp` : rid, liste blanche, réponses gardées,
 cadence ; depuis la 1.0.3, lecture des entiers, reprises CoAP d'un `diag` et
-séquence de la LED) ; depuis la 1.1.0, l'écoute (`test_mle.cpp` : dérivation
+séquence de la LED ; depuis la 1.1.1, chaque motif du tronc commun, ses
+durées et ses priorités, et la fin des effets d'identification) ; depuis la 1.1.0, l'écoute (`test_mle.cpp` : dérivation
 de la clé MLE, AES-CCM et refus d'un MIC faux, trames 802.15.4 de 2006 et de
 2015, IE, PAN, IPHC, UDP compressé ou non, TLV, clés gardées et leur
 lecture sur la pile (une fois par séquence, même après un échec), table des
