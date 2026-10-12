@@ -34,12 +34,11 @@ Download `Maillage-Thread-X.Y.Z.dmg` from the latest
 [release](https://github.com/Djoko-cli/maillage-thread/releases) (`maillage-vX.Y.Z`),
 open it, and drag **Maillage Thread** onto **Applications**. macOS 26 or later.
 
-- **First launch (Gatekeeper).** The app is signed with a self-signed
-  certificate, `Djoko-cli Code Signing`, not with an Apple Developer ID, and
-  isn't notarized. macOS refuses to open it the first time: in System
-  Settings, Privacy & Security, click "Open Anyway" next to Maillage Thread,
-  then confirm with your password (since macOS 15, a right-click no longer
-  does it). Only once.
+- **First launch (Gatekeeper).** Since 1.2.2, the app is signed with an Apple
+  Developer ID and notarized by Apple: macOS opens it after the usual question
+  for an app downloaded from the internet. (Up to 1.2.1, it was signed with a
+  self-signed certificate: macOS refused to open it until "Open Anyway" in
+  System Settings, Privacy & Security.)
 - **Automatic updates** (Sparkle 2). The app checks for a new version at
   launch and then every 24 hours, downloads it, checks its Ed25519 signature,
   and installs it when the app quits, or right away with "Install and
@@ -48,6 +47,12 @@ open it, and drag **Maillage Thread** onto **Applications**. macOS 26 or later.
   General, "Updates", has "Check for updates automatically" and "Install
   updates automatically", both on by default. A copy downloaded before the
   first version with Sparkle (1.0.0) doesn't update itself.
+- **Keychain and folders.** Every version published since 1.2.2 is signed by
+  the same Developer ID: an update keeps the probe's secrets in the keychain,
+  the app's data and the settings. **Updating from 1.2.1 or earlier**,
+  signed otherwise: at the first launch of 1.2.2, macOS says the app differs
+  from the versions opened before and asks whether to open it; choose "Open
+  Anyway". Only once, and the keychain, the data and the settings are kept.
 - **Thread Route.** To reach the probe over the Thread network, the Mac needs
   a route to it, which Thread Route keeps (see "Route to the Thread network"
   below). It installs from a copy of this repository:
@@ -148,18 +153,32 @@ on the same nodes.
 
 `Signature.xcconfig` (tracked) signs ad hoc: the repository builds and tests
 anywhere, without an Apple account, but the local network permission does
-not survive a rebuild. To sign Maillage Thread with your team, create
-`Local.xcconfig` (ignored by git):
+not survive a rebuild. The published versions are signed with the owner's
+Developer ID and notarized (`outils/publier.sh`, since 1.2.2; up to 1.2.1 by
+the self-signed certificate `Djoko-cli Code Signing`). To keep the keychain,
+the data and the local network permission from one build to the next, and
+shared with the installed version, sign your work builds with the same
+Developer ID: create `Local.xcconfig` (ignored by git):
 
 ```
+CODE_SIGN_IDENTITY = Developer ID Application
 DEVELOPMENT_TEAM = <team, 10 characters>
-CODE_SIGN_IDENTITY = Apple Development
 ```
 
-If an ad hoc install already exists, switching to team signing makes macOS
-warn once that the app differs from previously opened versions, and the local
-network permission is asked again. Passeur Noms is signed with the team only
-by `outils/passeur.sh` (see below).
+The hardened runtime is already on in `project.yml`; with a team, it loads the
+frameworks of the app (Sparkle) without lifting library validation. The team
+is the OU field of the certificate, the only part to show:
+`security find-certificate -c "Developer ID Application" -p | openssl x509 -noout -subject -nameopt RFC2253 | sed -E 's/.*OU=([A-Z0-9]{10}).*/\1/'`.
+Only one "Developer ID Application" identity may be in the keychain: after a
+renewal, delete the old one (otherwise `publier.sh` refuses). Signed by the
+Developer ID, the builds write the full name of the certificate in the
+xcodebuild log ("Signing Identity"): those logs stay local, never copy them
+into the repository. At the first codesign, macOS asks for access to the
+certificate's key: "Always Allow". If an ad hoc install already exists,
+switching to a signature by team makes macOS warn once that the app differs
+from previously opened versions, and the local network permission is asked
+again. Passeur Noms is signed with an "Apple Development" team only by
+`outils/passeur.sh` (see below), whatever `Local.xcconfig` says.
 
 ### Publishing a version
 
@@ -168,16 +187,23 @@ by `outils/passeur.sh` (see below).
 tag and the version in the feed don't exist yet (and that the version is
 higher than the head of the feed), that the tree is clean, that the Git author and
 committer are `Djoko-cli` at the GitHub noreply address, that the keychain holds a
-single `Djoko-cli Code Signing` certificate whose subject is only that name,
-and that the anonymization check is on the Mac (it is private): outside a
-rehearsal, without it, nothing is published. Then it runs all the tests,
-builds in Release without debug symbols and with neutral source paths, signs
-the app with that certificate (`IDENTITE_SIGNATURE`, in `publier.sh` only:
-work builds and tests stay ad hoc), and makes the `.dmg` (the app, a shortcut
-to Applications and Sparkle's license). It refuses any binary (Sparkle's
-included) that carries the home folder, `/Users/` or the account name, and any
-real data found by the anonymization check. It signs the `.dmg` with the
-Ed25519 key of the keychain (`sign_update` from the Sparkle 2.10.0 archive,
+single "Developer ID Application" identity, issued by Apple's Developer ID
+authority, that the notarization profile answers (`PROFIL_NOTARISATION`,
+`djoko-notarisation` by default), and that the anonymization check is on the
+Mac (it is private): outside a rehearsal, without it, nothing is published. Then it runs all the tests, builds in
+Release without debug symbols and with neutral source paths, signs the app
+with that Developer ID, hardened runtime included (`IDENTITE_SIGNATURE`, in
+`publier.sh` only: work builds and tests stay ad hoc), and makes the `.dmg`
+(the app, a shortcut to Applications and Sparkle's license). Outside a
+rehearsal, `publier.sh` refuses any other signature, or no notarization:
+a published version never goes back to the self-signed certificate. It
+refuses any binary (Sparkle's included) that carries the home folder,
+`/Users/` or the account name, and any real data found by the anonymization
+check; both read a copy of the contents whose every code has lost its
+signature, which carries the owner's legal name. It signs, notarizes, staples
+and checks the `.dmg` (`notarytool`, `stapler`, `spctl`); what it shows never
+carries the name or the team of the certificate. It then signs the `.dmg` with
+the Ed25519 key of the keychain (`sign_update` from the Sparkle 2.10.0 archive,
 whose `bin` folder is given by `SPARKLE_BIN`), then adds the version, with the
 notes of `NOTES-VERSIONS.md`, at the top of the update feed, `appcast.xml`,
 which keeps every published version. Just before the first public step it
@@ -196,8 +222,11 @@ each `.dmg` stays in its release.
 With `--repetition`, the same without GitHub or Desktop, for a local trial,
 with a test key pair and a test certificate in a separate keychain if given;
 only there may the anonymization check be missing.
-A notarization step (Developer ID) is written but off: `NOTARISER=1`, with
-`PROFIL_NOTARISATION`, the keychain profile of `notarytool store-credentials`.
+Notarization is on by default since 1.2.2 (`NOTARISER=1`, with
+`PROFIL_NOTARISATION`, the keychain profile of `notarytool store-credentials`).
+A rehearsal is required before any real version: it signs the previous version
+with the old certificate and the new one with the Developer ID, and checks the
+update from one to the other.
 Tests: `/usr/bin/python3 -m unittest discover -s outils/tests`.
 
 ## Texts: French and English
@@ -361,7 +390,8 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
 - The team comes from your "Apple Development" certificate (`EQUIPE=` to force
   it). A free team gets a 7-day profile: after that, Maillage Thread can no
   longer launch Passeur Noms; run the script again. Only Passeur Noms is
-  signed with the team; Maillage Thread stays ad hoc.
+  signed with the team; Maillage Thread keeps its own signature (see
+  "Signing").
 - First launch of each build: macOS says the app is "damaged". Click Cancel,
   then System Settings › Privacy & Security › "Open Anyway". Then allow Home
   access. Opened by hand like this, Passeur Noms reads Home, shows what it

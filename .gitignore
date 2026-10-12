@@ -16,7 +16,7 @@ __pycache__/
 # Espace de travail des outils de conception (maquettes, suivi d'execution)
 .superpowers/
 
-# Signature propre au poste (equipe Apple Development), jamais commitee
+# Signature propre au poste (le Developer ID et l'equipe de Djoko), jamais commitee : voir Signature.xcconfig
 Local.xcconfig
 
 # Genere par xcodegen depuis project.yml (info:)

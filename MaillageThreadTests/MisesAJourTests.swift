@@ -10,7 +10,7 @@ struct MisesAJourTests {
     /// L'Info.plist : la version, le flux des versions publiees, la cle publique et les reglages de Sparkle.
     @Test func infoPlist() throws {
         let info = try #require(Bundle.main.infoDictionary)
-        #expect(info["CFBundleShortVersionString"] as? String == "1.2.1")
+        #expect(info["CFBundleShortVersionString"] as? String == "1.2.2")
         #expect(Int(info["CFBundleVersion"] as? String ?? "") != nil, "un nombre, que compare Sparkle")
         #expect(info["SUFeedURL"] as? String
                 == "https://raw.githubusercontent.com/Djoko-cli/maillage-thread/main/appcast.xml")

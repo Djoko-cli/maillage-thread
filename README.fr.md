@@ -36,12 +36,12 @@ Télécharger `Maillage-Thread-X.Y.Z.dmg` depuis la dernière
 l'ouvrir, et glisser **Maillage Thread** sur **Applications**. macOS 26 ou
 plus.
 
-- **Première ouverture (Gatekeeper).** L'app est signée par un certificat
-  auto-signé, `Djoko-cli Code Signing`, sans Developer ID d'Apple ni
-  notarisation. macOS refuse de l'ouvrir la première fois : dans Réglages
-  Système, Confidentialité et sécurité, cliquer « Ouvrir quand même » en face
-  de Maillage Thread, puis confirmer avec son mot de passe (depuis macOS 15, le
-  clic droit ne suffit plus). Une seule fois.
+- **Première ouverture (Gatekeeper).** Depuis la 1.2.2, l'app est signée par
+  un Developer ID d'Apple et notarisée par Apple : macOS l'ouvre après la
+  question habituelle pour une app téléchargée sur Internet. (Jusqu'à la
+  1.2.1, elle était signée par un certificat auto-signé : macOS refusait de
+  l'ouvrir avant « Ouvrir quand même », dans Réglages Système, Confidentialité
+  et sécurité.)
 - **Mises à jour automatiques** (Sparkle 2). L'app recherche une nouvelle
   version au démarrage puis toutes les 24 heures, la télécharge, vérifie sa
   signature Ed25519, et l'installe quand l'app se ferme, ou tout de suite par
@@ -51,6 +51,13 @@ plus.
   « Rechercher automatiquement » et « Installer automatiquement », cochés par
   défaut. Une copie téléchargée avant la première version avec Sparkle
   (1.0.0) ne se met pas à jour seule.
+- **Trousseau et données.** Toutes les versions publiées depuis la 1.2.2 sont
+  signées par le même Developer ID : une mise à jour garde les secrets de la
+  sonde dans le trousseau, les données de l'app et les réglages. **Depuis la
+  1.2.1 ou avant**, signée autrement : au premier lancement de la 1.2.2, macOS
+  dit que l'app diffère des versions ouvertes jusque-là et demande s'il faut
+  l'ouvrir ; choisir « Ouvrir quand même ». Une seule fois, et le trousseau,
+  les données et les réglages sont gardés.
 - **Thread Route.** Pour joindre la sonde par le réseau Thread, il faut au
   Mac une route vers lui, que garde Thread Route (voir « Route vers le réseau
   Thread » plus bas). Il s'installe depuis une copie de ce dépôt :
@@ -151,18 +158,34 @@ sonde dessiné sur les mêmes nœuds.
 
 `Signature.xcconfig` (suivi) signe ad hoc : le dépôt compile et teste
 partout, sans compte Apple, mais l'autorisation « réseau local » ne tient pas
-d'une compilation à l'autre. Pour signer Maillage Thread avec son équipe,
-créer `Local.xcconfig` (ignoré par git) :
+d'une compilation à l'autre. Les versions publiées sont signées par le
+Developer ID du titulaire et notarisées (`outils/publier.sh`, depuis la 1.2.2 ;
+jusqu'à la 1.2.1 par le certificat auto-signé `Djoko-cli Code Signing`). Pour
+que le trousseau, les données et l'autorisation « réseau local » tiennent d'une
+compilation à l'autre, et soient partagés avec la version installée, signer
+les compilations de travail avec le même Developer ID : créer
+`Local.xcconfig` (ignoré par git) :
 
 ```
+CODE_SIGN_IDENTITY = Developer ID Application
 DEVELOPMENT_TEAM = <équipe, 10 caractères>
-CODE_SIGN_IDENTITY = Apple Development
 ```
 
-Si une installation ad hoc existe déjà, passer à la signature d'équipe fait
-dire une fois à macOS « L'app diffère des versions précédemment ouvertes », et
+Le runtime renforcé est déjà posé par `project.yml` ; avec une équipe, il
+charge les cadres de l'app (Sparkle) sans lever la validation des
+bibliothèques. L'équipe est le champ OU du certificat, seul à afficher :
+`security find-certificate -c "Developer ID Application" -p | openssl x509 -noout -subject -nameopt RFC2253 | sed -E 's/.*OU=([A-Z0-9]{10}).*/\1/'`.
+Une seule identité « Developer ID Application » doit être dans le trousseau :
+après un renouvellement, supprimer l'ancienne (sinon `publier.sh` refuse).
+Signées par le Developer ID, les compilations écrivent le nom complet du
+certificat dans le journal de xcodebuild (« Signing Identity ») : ces journaux
+restent locaux, ne jamais les recopier dans le dépôt. Au premier codesign,
+macOS demande l'accès à la clé du certificat : « Toujours autoriser ». Si une
+installation ad hoc existe déjà, passer à une signature d'équipe fait dire une
+fois à macOS « L'app diffère des versions précédemment ouvertes », et
 l'autorisation « réseau local » est redemandée. Passeur Noms n'est signé avec
-l'équipe que par `outils/passeur.sh` (voir plus bas).
+une équipe « Apple Development » que par `outils/passeur.sh` (voir plus bas),
+quoi que dise `Local.xcconfig`.
 
 ### Publier une version
 
@@ -171,18 +194,25 @@ l'équipe que par `outils/passeur.sh` (voir plus bas).
 l'étiquette et la version dans le flux n'existent pas encore (et que la
 version dépasse la tête du flux), que l'arbre est propre, que l'auteur et le
 committer Git sont `Djoko-cli`, à l'adresse noreply de GitHub, que le trousseau porte un
-seul certificat `Djoko-cli Code Signing`, dont le sujet n'est que ce nom, et
-que le contrôle d'anonymisation est sur le Mac (il est privé) : hors
-répétition, sans lui, rien n'est publié. Puis il lance tous les tests,
-compile en Release sans symboles de débogage et avec des chemins de sources
-neutres, signe l'app par ce certificat (`IDENTITE_SIGNATURE`, dans
-`publier.sh` seulement : les compilations de travail et les tests restent ad
-hoc), et fait le `.dmg` (l'app, un raccourci vers Applications et la licence de
-Sparkle). Il refuse tout binaire (celui de Sparkle compris) qui porte le
-dossier personnel, `/Users/` ou le nom du compte, et toute donnée réelle que
-trouve le contrôle d'anonymisation. Il signe le `.dmg` avec la clé Ed25519 du
-trousseau (`sign_update` de l'archive de Sparkle 2.10.0, dont `SPARKLE_BIN`
-donne le dossier `bin`), puis ajoute la version, avec les notes de
+seule identité « Developer ID Application », émise par l'autorité Developer ID
+d'Apple, que le profil de notarisation répond (`PROFIL_NOTARISATION`,
+`djoko-notarisation` par défaut), et que le contrôle d'anonymisation est sur le
+Mac (il est privé) : hors répétition, sans lui, rien n'est publié. Puis il
+lance tous les tests, compile en Release sans symboles de débogage et avec des
+chemins de sources neutres, signe l'app par ce Developer ID, runtime renforcé
+compris (`IDENTITE_SIGNATURE`, dans `publier.sh` seulement : les compilations
+de travail et les tests restent ad hoc), et fait le `.dmg` (l'app, un raccourci
+vers Applications et la licence de Sparkle). Hors répétition, `publier.sh`
+refuse toute autre signature, ou l'absence de notarisation : une version
+publiée ne revient jamais au certificat auto-signé. Il refuse tout binaire
+(celui de Sparkle compris) qui porte le dossier personnel, `/Users/` ou le nom
+du compte, et toute donnée réelle que trouve le contrôle d'anonymisation ;
+l'un et l'autre lisent une copie du contenu dont chaque code a perdu sa
+signature, qui porte le nom légal du titulaire. Il signe, notarise, agrafe et
+évalue le `.dmg` (`notarytool`, `stapler`, `spctl`) ; ce qu'il affiche ne porte
+jamais le nom ni l'équipe du certificat. Il signe ensuite le `.dmg` avec la clé
+Ed25519 du trousseau (`sign_update` de l'archive de Sparkle 2.10.0, dont
+`SPARKLE_BIN` donne le dossier `bin`), puis ajoute la version, avec les notes de
 `NOTES-VERSIONS.md`, en tête du flux des mises à jour, `appcast.xml`, qui
 garde toutes les versions publiées. Juste avant le premier geste public, il
 relit l'état (`main` inchangée et à jour, `gh` connecté, `git push --dry-run`
@@ -200,9 +230,12 @@ chaque `.dmg` reste dans sa version publiée.
 Avec `--repetition`, la même chose sans GitHub ni Bureau, pour un essai
 local, avec une paire de clés d'essai et un certificat d'essai dans un
 trousseau à part, s'ils sont donnés ; là seulement, le contrôle
-d'anonymisation peut manquer. Une étape de notarisation (Developer ID)
-est écrite, désactivée : `NOTARISER=1`, avec `PROFIL_NOTARISATION`, le
-profil du trousseau que range `notarytool store-credentials`.
+d'anonymisation peut manquer. La notarisation est active par défaut depuis la
+1.2.2 (`NOTARISER=1`, avec `PROFIL_NOTARISATION`, le profil du trousseau que
+range `notarytool store-credentials`). Une répétition est obligatoire avant
+toute vraie version : elle signe la version précédente avec l'ancien
+certificat et la nouvelle avec le Developer ID, et vérifie la mise à jour de
+l'une à l'autre.
 Tests : `/usr/bin/python3 -m unittest discover -s outils/tests`.
 
 ## Textes : français et anglais
@@ -375,7 +408,8 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
 - L'équipe vient de ton certificat « Apple Development » (`EQUIPE=` pour
   l'imposer). Une équipe gratuite a un profil de 7 jours : au-delà, Maillage
   Thread ne peut plus lancer Passeur Noms ; relancer le script. Seul Passeur
-  Noms est signé avec l'équipe ; Maillage Thread reste ad hoc.
+  Noms est signé avec l'équipe ; Maillage Thread garde sa propre signature
+  (voir « Signature »).
 - Au premier lancement de chaque compilation, macOS dit que l'app est
   « endommagée » : cliquer Annuler, puis Réglages Système › Confidentialité et
   sécurité › « Ouvrir quand même ». Autoriser ensuite l'accès à Maison. Ouvert

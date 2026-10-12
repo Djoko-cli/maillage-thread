@@ -33,7 +33,7 @@ Le démon système `halo-routes` (dépôt du pont Halo, `tools/macos/halo-routes
 
 **Contraintes qui restent :**
 - **le certificat de signature** est auto-signé, de nom neutre (`Djoko-cli Code Signing` : ni nom, ni adresse, ni équipe), valide 10 ans ; sa clé privée est dans le trousseau de Djoko, jamais dans un dépôt. Seule la compilation de publication (`publier.sh`) signe avec lui ; elle le trouve par son nom dans le trousseau, au moment de publier. Le dépôt peut écrire ce nom ; jamais une empreinte ni un identifiant d'équipe. Djoko le crée une fois, et en garde un `.p12` protégé en lieu sûr, avec la clé Ed25519 ;
-- les compilations de travail et les tests restent signés ad hoc ; pas de certificat Developer ID, pas de notarisation (elle est préparée, désactivée : section 7), jamais de `Local.xcconfig`, aucun identifiant d'équipe dans un fichier commité ;
+- les compilations de travail et les tests restent signés ad hoc ; pas de certificat Developer ID, pas de notarisation (elle est préparée, désactivée : section 7), jamais de `Local.xcconfig`, aucun identifiant d'équipe dans un fichier commité (jusqu'à la 1.2.1 ; depuis la 1.2.2, voir l'amendement du 12/10/2026, à la fin de la section 3) ;
 - elles restent dans le bac à sable ;
 - aucune donnée réelle dans ce qui est publié : le contrôle d'anonymisation passe avant chaque publication.
 
@@ -96,6 +96,62 @@ Un script par dépôt, `outils/publier.sh X.Y.Z`. Pour le pont Halo, il se trouv
 - comment installer Thread Route ;
 - pour Maillage Thread, que le passeur se compile à part (`outils/passeur.sh`), avec la propre équipe de chacun.
 
+**Amendement du 12/10/2026 : Developer ID et notarisation, depuis la 1.2.2.**
+Djoko a pris un compte Apple Developer payant (individuel) et décidé que son nom
+légal, que porte le certificat d'un compte individuel, figure dans la signature
+des versions publiées, et nulle part ailleurs. Cet amendement remplace, pour
+Maillage Thread, les contraintes de la section 0 sur le certificat auto-signé,
+la notarisation et l'équipe, et la section 7 sur la notarisation. (Halo Compagnon
+suit le même chemin dans sa propre copie de cette spec.)
+- **Signature :** le certificat « Developer ID Application » de Djoko (profil
+  G2), trouvé dans le trousseau par ce préfixe : son nom complet n'est écrit
+  ni dans le dépôt, ni dans ce qu'affiche `publication.py`, qui masque le nom et
+  l'équipe (exigence de signature, erreurs de `codesign`, `spctl` ou
+  `notarytool`). Le nom et l'équipe sont dans la signature publiée : le
+  certificat, l'exigence (`leaf[subject.OU]`), le `CodeResources` du code
+  imbriqué. Les journaux de xcodebuild d'une compilation de travail signée par
+  le Developer ID portent le nom complet (« Signing Identity ») : ils restent
+  locaux. `publication.py` vérifie le sujet (UID et OU = l'équipe du CN, O, C,
+  rien d'autre) et l'émetteur (l'autorité Developer ID d'Apple). Notarisation
+  (`notarytool`, profil `djoko-notarisation` du trousseau), agrafe et `spctl` ;
+  Developer ID et notarisation vont ensemble. `publier.sh` les prend par défaut
+  (`IDENTITE_SIGNATURE`, `NOTARISER=1`, `PROFIL_NOTARISATION`).
+- **Gardes du `.dmg` :** la garde des chemins personnels et le contrôle
+  d'anonymisation lisent une copie du contenu dont chaque code a perdu sa
+  signature (`codesign --remove-signature`, sur la copie) ; le reste reste
+  contrôlé, les droits de l'app (dans la signature) le sont à part, et un code
+  dont la signature ne se retire pas est refusé. Après la signature, `codesign
+  -R` vérifie la chaîne (ancrage Apple, intermédiaire et feuille Developer ID).
+- **Le cliquet :** hors répétition, `publier.sh` refuse toute autre signature
+  que le Developer ID notarisé : une version publiée ne revient jamais au
+  certificat auto-signé (elle ramènerait l'alerte « l'app diffère » de macOS et
+  le blocage de Gatekeeper). Il refuse aussi un clone superficiel : le numéro de
+  compilation compte les commits.
+- **La validation des bibliothèques** n'est plus levée : avec une équipe, le
+  runtime renforcé charge les cadres de l'app. Le droit
+  `com.apple.security.cs.disable-library-validation` est refusé en notarisation.
+- **Les compilations de travail** passent au même Developer ID (`Local.xcconfig` :
+  `CODE_SIGN_IDENTITY = Developer ID Application`, l'équipe). Le passeur reste
+  signé par une équipe « Apple Development », seulement par `outils/passeur.sh`.
+- **La répétition est obligatoire** avant toute vraie version signée ainsi, sous
+  un identifiant et des services de trousseau à part (`fr.djoko.maillage.sonde`
+  ne doit pas être celui de la vraie app) : la version précédente signée par
+  l'ancien certificat, la nouvelle par le Developer ID, notarisée ; une paire
+  Ed25519 d'essai. Elle vérifie que Sparkle accepte le changement de certificat
+  (même clé Ed25519), qu'un `.dmg` mal signé reste refusé, et que le trousseau
+  est relu sans rien demander. Chez Amaran Compagnon, macOS a montré une seule
+  fois « L'app diffère des versions précédemment ouvertes… » (protection des
+  données d'app) : « Ouvrir quand même » garde tout. Les notes de la 1.2.2 le
+  disent.
+- **Limites :** le Developer ID vaut 5 ans (profil G2) ; l'exigence d'un
+  Developer ID porte sur l'équipe, pas sur le certificat : un renouvellement
+  garde le trousseau, les signets et le conteneur. Une seule identité Developer
+  ID Application dans le trousseau (après un renouvellement, supprimer
+  l'ancienne). L'équipe n'est pas comparée à une équipe attendue ; la sortie
+  JSON de `notarytool` n'est pas lue (un rejet est rattrapé par `stapler`, puis
+  `spctl`).
+- **`publication.py`** est commun à l'octet avec Amaran Compagnon.
+
 ## 4. La répétition, avant toute publication
 
 Sur le Mac, sans GitHub :
@@ -126,14 +182,14 @@ La répétition doit avoir réussi avant toute version publiée sur GitHub.
 
 ## 6. Limites
 
-- **La première installation** passe par Gatekeeper : il faut autoriser l'app dans Réglages Système, section Confidentialité et sécurité.
+- **La première installation** passe par Gatekeeper : jusqu'à la 1.2.1, il faut autoriser l'app dans Réglages Système, section Confidentialité et sécurité ; depuis la 1.2.2, notarisée, elle s'ouvre après la seule question habituelle d'une app téléchargée.
 - **Halo Compagnon** redemandera sans doute l'accès à sa clé du trousseau au passage d'une compilation de travail, signée ad hoc, à une version publiée, signée par le certificat (et inversement). D'une version publiée à la suivante, l'exigence de signature ne change pas.
 - **Le passeur de Maillage Thread n'est pas distribué.** C'est une app « conçue pour iPad », que chacun signe avec sa propre équipe.
 - **Une copie de l'app déjà téléchargée par quelqu'un d'autre** ne se met à jour qu'à partir de la première version qui contient Sparkle.
 
 ## 7. Distribution large
 
-Préparée, pas activée. Seule l'étape de notarisation de `publier.sh` est écrite, désactivée par défaut (`NOTARISER=1` l'active, avec `PROFIL_NOTARISATION`, le profil que `notarytool store-credentials` range dans le trousseau : jamais d'identifiant Apple, de Team ID ni de mot de passe dans un fichier commité). Elle signe et soumet le `.dmg` (`xcrun notarytool submit --wait`), l'agrafe (`xcrun stapler staple`) et l'évalue (`spctl --assess`), avant la signature Ed25519.
+Préparée au départ, activée depuis la 1.2.2 (amendement, section 3). L'étape de notarisation de `publier.sh` était écrite, désactivée par défaut ; elle est maintenant active par défaut (`NOTARISER=1`, avec `PROFIL_NOTARISATION`, le profil que `notarytool store-credentials` range dans le trousseau : jamais d'identifiant Apple, de Team ID ni de mot de passe dans un fichier commité). Elle signe et soumet le `.dmg` (`xcrun notarytool submit --wait`), l'agrafe (`xcrun stapler staple`) et l'évalue (`spctl --assess`), avant la signature Ed25519.
 
 Ce qu'une distribution au-delà du Mac de Djoko demande :
 - **Une app non notarisée** doit être autorisée dans Réglages Système, Confidentialité et sécurité, « Ouvrir quand même », puis le mot de passe : depuis macOS 15, le clic droit ne suffit plus.
@@ -142,5 +198,5 @@ Ce qu'une distribution au-delà du Mac de Djoko demande :
 - **Le passeur n'est pas distribuable.**
 - **La licence de Sparkle** (MIT) est respectée : le texte est livré dans le `.dmg`, et les README de chaque dépôt, en français et en anglais, ont une section « Crédits ».
 - **Les Macs Intel** demandent un binaire universel, ou d'annoncer Apple Silicon seulement. La compilation de publication est déjà universelle (`arm64` et `x86_64`), mais elle n'a jamais été essayée sur un Mac Intel.
-- **La marche suivante** est le programme développeur d'Apple : Developer ID et notarisation. La transition est transparente par Sparkle, puisque la clé Ed25519 ne change pas.
+- **La marche suivante** était le programme développeur d'Apple : Developer ID et notarisation. Faite le 12/10/2026 pour la 1.2.2 (amendement, section 3) ; la transition est transparente par Sparkle, puisque la clé Ed25519 ne change pas, et macOS demande une seule fois « Ouvrir quand même » à l'app déjà installée.
 - **À prévoir :** un déploiement progressif, un canal bêta, les mises à jour delta, une mention de confidentialité (GitHub voit les adresses IP), et les tickets GitHub pour les signalements.

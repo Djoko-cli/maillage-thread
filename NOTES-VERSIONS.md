@@ -6,6 +6,41 @@ the notes of the GitHub release and those of the update window.
 Maillage Thread : une section par version publiée, en anglais puis en français. `outils/publier.sh` en tire les
 notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour.
 
+## 1.2.2
+
+**English**
+
+- Signed with an Apple Developer ID and notarized by Apple: a fresh download opens without going through System
+  Settings, Privacy & Security, "Open Anyway".
+- Updating from 1.2.1 or earlier: at the first launch of 1.2.2, macOS says the app differs from the versions opened
+  before and asks whether to open it; choose "Open Anyway". Only once: the keychain, the data and the settings
+  are kept.
+- A device whose address Bonjour no longer advertises is marked "address not advertised" (it used to read "no
+  address"). The probe looks for it at its last address: if it answers, the device is shown reachable and attached to
+  its parent, with a dashed yellow ring and "checked by the probe … ago". This needs the probe on firmware 1.1.1.
+- "Link to a Home accessory…" in the card of a device that Home doesn't name: the name and the room of the
+  accessory you pick are used.
+- Probe firmware 1.1.1 (to flash, see `sonde/README.md`): the address resolution says whether the device answered;
+  the LED follows the other boards (blue, adhesion greens, the rainbow of identification, a white glow every 10
+  seconds); the default name is SONDE-T1.
+
+**Français**
+
+- Signée par un Developer ID d'Apple et notarisée par Apple : une app fraîchement téléchargée s'ouvre sans passer
+  par Réglages Système, Confidentialité et sécurité, « Ouvrir quand même ».
+- Depuis la 1.2.1 ou avant : au premier lancement de la 1.2.2, macOS dit que l'app diffère des versions ouvertes
+  jusque-là et demande s'il faut l'ouvrir ; choisir « Ouvrir quand même ». Une seule fois : le trousseau, les
+  données et les réglages sont gardés.
+- Un appareil dont Bonjour n'annonce plus l'adresse est marqué « adresse non annoncée » (il disait « sans
+  adresse »). La sonde le cherche par sa dernière adresse : s'il lui répond, l'appareil est montré joignable et
+  rattaché à son parent, avec un anneau jaune pointillé et « vérifié par la sonde il y a … ». Il faut pour cela la
+  sonde en firmware 1.1.1.
+- « Associer à un accessoire de Maison… » dans la fiche d'un appareil que Maison ne nomme pas : le nom et la pièce
+  de l'accessoire choisi sont repris.
+- Firmware de la sonde 1.1.1 (à flasher, voir `sonde/README.md`) : la résolution d'adresse dit si l'appareil a
+  répondu ; la LED s'aligne sur les autres cartes (bleu, verts d'adhésion, arc-en-ciel d'identification, lueur
+  blanche toutes les 10 secondes) ; le nom par défaut est SONDE-T1.
+
 ## 1.2.1
 
 **English**
