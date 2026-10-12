@@ -10,7 +10,6 @@ import SwiftUI
 /// clair (precision 15 du plan 4b).
 struct FenetrePieces: View {
     @Environment(Surveillance.self) private var surveillance
-    @Environment(NomsInternes.self) private var nomsMaison
     @Environment(\.accessibilityReduceMotion) private var reduire
     /// Le mode 2D ou 3D, garde d'un lancement a l'autre.
     @AppStorage(FenetrePieces.cleMode) private var troisD = false
@@ -227,13 +226,6 @@ struct FenetrePieces: View {
         .onChange(of: moteur.selection == nil) { _, _ in
             legendeRouverte = false
         }
-        .task {
-            // Batteries de Maison a jour tant que la vue est ouverte.
-            while !Task.isCancelled {
-                nomsMaison.rafraichirSiAncien()
-                try? await Task.sleep(for: .seconds(3600))
-            }
-        }
         .fenetreDeLApp()
     }
 }
@@ -413,7 +405,7 @@ struct BandeauSansPieces: View {
     var body: some View {
         HStack(spacing: 8) {
             Label("Pas encore de pièces de Maison : lance le passeur", systemImage: "house")
-            Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
+            Button("Rafraîchir depuis Maison") { nomsMaison.relire() }
                 .buttonStyle(StyleBoutonCapsule(taille: 10))
                 .disabled(surveillance.mode == .demo)
         }

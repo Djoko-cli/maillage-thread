@@ -3643,7 +3643,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes : `AbonnementPasseur`, `FauxDemon`, `attendreQue` (tâche 10) ; `EnvoiPasseur.Cible(…, demande: .abonner)`.
 - Produces (pour la tâche 12) : `NomsInternes` avec `noms`, `probleme`, `connecte: Bool`, `etat: EtatPasseur?`, `releveEnCours: Bool`, `identification: NomsInternes.Identification?` (`accessoire: String`, `texte: String`), `tentative: Int` ; `init(cache:delai:attentes:lanceur:)` ; `demarrer()`, `abonner()`, `relire()`, `identifier(accessoire:)`, `reglerOuvertureSession(_:)`, `integrer(_:)` ; statiques `retenir`, `fichierCache`, `lancerPasseurDuMac`, `problemeInstallation(_:)`, `attente(apres:dans:)`, `texte(_ fin:)`, `texte(_ reponse:)`, `texteDemon(connecte:etat:)`, `profilBientotExpire(_:maintenant:)`, `interrupteurActif(connecte:etat:)`, `cleProtocole`, `reabonnements`, `preavisProfil`. Supprimés : `lancerPasseur`, `rafraichirSiAncien`, `doitRafraichir`, `aRafraichir`, `fraicheur`, `validite`, `estAncien`, `derniereDemande`, `NomsInternes.Fin`.
 
-- [ ] **Step 1 : écrire les tests qui échouent**
+- [x] **Step 1 : écrire les tests qui échouent**
 
 Dans `MaillageThreadTests/NomsInternesTests.swift` :
 - **supprimer** les tests `ancien`, `aRafraichir`, `sansMemoire`, `bonJeton`, `refusDeMaison`, `mauvaisJeton`, `longueurFausse`, `connexionCoupee`, `jsonIllisible`, `delaiDepasse`, `lancementRefuse`, `uneSeuleEcoute`, `ecouteFermeeSiNomsInternesDisparait`, `uneSeuleConnexion`, `deuxConnexionsEnSimultane` ; les aides `lanceur(_:probleme:trame:)`, `bonneTrame`, `releve`, `attendre`, `ecouteFermee`, `occuper` ; les textes `jetonFaux`, `longueurFausse`, `interrompu` ;
@@ -3827,12 +3827,12 @@ Dans `MaillageThreadTests/NomsInternesTests.swift` :
     }
 ```
 
-- [ ] **Step 2 : lancer les tests, vérifier qu'ils échouent**
+- [x] **Step 2 : lancer les tests, vérifier qu'ils échouent**
 
 Run : `outils/tester.sh MaillageThreadTests/NomsInternesTests`
 Expected : échec de compilation (`connecte`, `attentes`, `relire`… inconnus).
 
-- [ ] **Step 3 : réécrire `NomsInternes.swift`**
+- [x] **Step 3 : réécrire `NomsInternes.swift`**
 
 Remplacer tout le fichier par :
 
@@ -4160,7 +4160,7 @@ final class NomsInternes {
 
 Puis `git rm MaillageThread/Noms/EcouteReleve.swift`.
 
-- [ ] **Step 4 : les appels**
+- [x] **Step 4 : les appels**
 
 - `MaillageThread/Vues/MenuBarre.swift` : `Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }` devient `Button("Rafraîchir depuis Maison") { nomsMaison.relire() }` (le `.disabled(nomsMaison.releveEnCours)` reste).
 - `MaillageThread/Vues/Pieces/MorceauxFenetre.swift` : dans le bouton de rafraîchissement, `nomsMaison.lancerPasseur()` devient `nomsMaison.relire()`.
@@ -4187,12 +4187,12 @@ grep -rn "lancerPasseur\|rafraichirSiAncien\|estAncien\|EcouteReleve\|aRafraichi
 
 Expected : aucune ligne (hors commentaires à mettre à jour s'il y en a).
 
-- [ ] **Step 5 : lancer les tests, vérifier qu'ils passent**
+- [x] **Step 5 : lancer les tests, vérifier qu'ils passent**
 
 Run : `outils/tester.sh MaillageThreadTests MaillageCoeurTests/EnvoiPasseurTests`
 Expected : PASS, sauf éventuellement `CataloguesTests` (textes à synchroniser à la tâche 12).
 
-- [ ] **Step 6 : commit**
+- [x] **Step 6 : commit**
 
 ```bash
 git add MaillageThread/Noms/NomsInternes.swift MaillageThreadTests/NomsInternesTests.swift \

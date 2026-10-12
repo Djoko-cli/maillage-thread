@@ -182,18 +182,13 @@ struct FenetreReglages: View {
                 if let zones = n.zones {
                     LabeledContent("Zones", value: Self.texteZones(zones))
                 }
-                if NomsInternes.estAncien(n, maintenant: .now) {
-                    Text("Noms du \(n.date.formatted(date: .abbreviated, time: .omitted)) : relance outils/passeur.sh pour les rafraîchir.")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
             }
             if let p = nomsMaison.probleme {
                 Text(p).font(.caption).foregroundStyle(.red)
             }
             HStack {
                 // Une demande pendant un releve serait ignoree.
-                Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
+                Button("Rafraîchir depuis Maison") { nomsMaison.relire() }
                     .disabled(surveillance.mode == .demo || nomsMaison.releveEnCours)
                 if nomsMaison.releveEnCours {
                     ProgressView().controlSize(.small)

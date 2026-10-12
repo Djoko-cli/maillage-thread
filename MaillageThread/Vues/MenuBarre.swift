@@ -81,7 +81,7 @@ struct MenuBarre: View {
                 Button("Journal…") { ouvrir("journal") }
                 if surveillance.mode == .direct {
                     // Une demande pendant un releve serait ignoree.
-                    Button("Rafraîchir depuis Maison") { nomsMaison.lancerPasseur() }
+                    Button("Rafraîchir depuis Maison") { nomsMaison.relire() }
                         .disabled(nomsMaison.releveEnCours)
                     if let p = nomsMaison.probleme {
                         Text(p).font(.caption).foregroundStyle(.red).padding(.horizontal, 8)

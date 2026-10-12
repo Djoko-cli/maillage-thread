@@ -138,7 +138,7 @@ extension NomsInternes {
 }
 
 @MainActor
-@Suite("Noms de Maison : releve du passeur par la boucle locale", .timeLimit(.minutes(1)))
+@Suite("Noms de Maison : client du demon Passeur Noms", .timeLimit(.minutes(1)))
 struct NomsInternesTests {
     static let date = Date(timeIntervalSince1970: 1_790_000_000)
 
@@ -154,34 +154,15 @@ struct NomsInternesTests {
             .appendingPathComponent(NomsInternes.fichier)
     }
 
-    /// Faux lanceur : note chaque lancement ; puis, comme le passeur, envoie a l'ecoute les
-    /// octets que `trame` tire du jeton recu (nil : il ne se connecte pas). `probleme` : le
-    /// lancement echoue, rien n'est envoye.
-    static func lanceur(_ lancements: LancementsPasseur, probleme: String? = nil,
-                        trame: (@Sendable (String) -> Data)? = nil) -> NomsInternes.Lanceur {
+    /// Faux lanceur : note chaque lancement ; `probleme` : le lancement echoue.
+    static func lanceur(_ lancements: LancementsPasseur, probleme: String? = nil) -> NomsInternes.Lanceur {
         { cible in
             lancements.noter(cible)
-            if let probleme { return probleme }
-            if let trame {
-                Task.detached { _ = await FauxPasseur.envoyer(trame(cible.jeton), port: cible.port) }
-            }
-            return nil
+            return probleme
         }
     }
 
-    /// Trame du vrai passeur, avec le jeton recu.
-    static func bonneTrame(_ n: NomsMaison) throws -> @Sendable (String) -> Data {
-        let json = try n.donnees()
-        return { EnvoiPasseur.trame(jeton: $0, json: json) }
-    }
-
-    /// Demande un releve et attend sa fin, au plus `delai`.
-    static func releve(_ n: NomsInternes, delai: Duration = .seconds(10)) async {
-        n.lancerPasseur()
-        let fin = ContinuousClock.now + delai
-        while n.releveEnCours, ContinuousClock.now < fin { try? await Task.sleep(for: .milliseconds(5)) }
-        #expect(!n.releveEnCours, "releve fini")
-    }
+    static func json(_ n: NomsMaison) throws -> Data { try n.donnees() }
 
     /// Attend que le faux lanceur ait ete appele `fois` fois, au plus 10 s ; rend la cible du
     /// dernier lancement.
@@ -191,37 +172,22 @@ struct NomsInternesTests {
         return lancements.cible
     }
 
-    /// Attend la fin du releve en cours, au plus `delai`.
-    static func attendre(_ n: NomsInternes, delai: Duration = .seconds(10)) async {
-        let fin = ContinuousClock.now + delai
-        while n.releveEnCours, ContinuousClock.now < fin { try? await Task.sleep(for: .milliseconds(5)) }
-        #expect(!n.releveEnCours, "releve fini")
-    }
-
-    /// Attend que plus rien n'ecoute sur ce port, au plus 5 s : l'app a alors accepte une
-    /// connexion. Chaque essai est un client de plus, que l'app ferme aussitot si l'ecoute
-    /// n'est pas encore fermee.
-    static func ecouteFermee(port: UInt16) async -> Bool {
-        let fin = ContinuousClock.now + .seconds(5)
-        while ContinuousClock.now < fin {
-            if await !FauxPasseur.envoyer(Data("essai".utf8), port: port) { return true }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return false
-    }
-
-    /// Occupe le fil principal, sans rendre la main a sa file, jusqu'a `condition` (au plus 5 s) :
-    /// l'ecoute, qui livre ses connexions sur cette file, n'en traite aucune pendant ce temps.
-    static func occuper(jusqua condition: () -> Bool) {
-        let fin = ContinuousClock.now + .seconds(5)
-        while !condition(), ContinuousClock.now < fin { usleep(1000) }
-    }
-
     /// Textes de l'app, dans la langue de l'hote des tests.
     static let refus = String(localized: "Accès à Maison refusé au passeur : Réglages Système › Confidentialité et sécurité › Maison.")
-    static let jetonFaux = String(localized: "Relevé de Maison refusé : jeton faux.")
-    static let longueurFausse = String(localized: "Relevé de Maison illisible : longueur fausse.")
-    static let interrompu = String(localized: "Relevé de Maison interrompu : la connexion avec Passeur Noms a été coupée.")
+
+    /// Un client abonne a un faux demon connecte : le client, le demon et le fichier des noms.
+    static func connecte(attentes: [Duration] = [.milliseconds(20)])
+        async throws -> (NomsInternes, FauxDemon, LancementsPasseur, URL) {
+        let cache = Self.cache()
+        let lancements = LancementsPasseur()
+        let n = NomsInternes(cache: cache, attentes: attentes, lanceur: Self.lanceur(lancements))
+        n.demarrer()
+        let cible = try #require(await Self.cible(lancements))
+        let d = try #require(FauxDemon(port: cible.port))
+        #expect(await d.jeton(cible.jeton))
+        #expect(await attendreQue { n.connecte })
+        return (n, d, lancements, cache)
+    }
 
     /// Un releve reussi remplace les noms ; un echec du passeur les garde et dit
     /// pourquoi, avec les textes de l'app : le message du passeur (en francais
@@ -243,12 +209,6 @@ struct NomsInternesTests {
         #expect(rien == nil)
     }
 
-    /// Au-dela de 7 jours, le profil gratuit du passeur a expire.
-    @Test func ancien() {
-        #expect(!NomsInternes.estAncien(Self.noms(), maintenant: Self.date + 6 * 86_400))
-        #expect(NomsInternes.estAncien(Self.noms(), maintenant: Self.date + 8 * 86_400))
-    }
-
     /// Les noms retenus sont ecrits dans le conteneur et relus au lancement ; un echec ne les
     /// efface pas.
     @Test func memoireDesNoms() throws {
@@ -266,283 +226,154 @@ struct NomsInternesTests {
         #expect(NomsInternes(cache: cache, lanceur: NomsInternes.lanceurInterdit).noms == Self.noms(), "relus au lancement")
     }
 
-    /// Relance a l'ouverture du graphe : releve absent ou de plus de 15 min, et
-    /// pas de demande dans les 15 dernieres minutes (pas de relance en boucle).
-    @Test func aRafraichir() {
-        let t = Date(timeIntervalSince1970: 1_790_000_000)
-        #expect(NomsInternes.aRafraichir(releve: nil, demande: nil, maintenant: t))
-        #expect(!NomsInternes.aRafraichir(releve: t.addingTimeInterval(-14 * 60), demande: nil, maintenant: t))
-        #expect(NomsInternes.aRafraichir(releve: t.addingTimeInterval(-16 * 60), demande: nil, maintenant: t))
-        #expect(!NomsInternes.aRafraichir(releve: t.addingTimeInterval(-3600), demande: t.addingTimeInterval(-60),
-                                          maintenant: t), "demande recente : le passeur ne s'est peut-etre pas lance")
-        #expect(NomsInternes.aRafraichir(releve: t.addingTimeInterval(-3600), demande: t.addingTimeInterval(-16 * 60),
-                                         maintenant: t))
-    }
-
-    /// Sans memoire (demo, tests) : l'ouverture du graphe ne lance jamais le passeur, meme avec
-    /// un releve ancien ; le bouton non plus.
-    @Test func sansMemoire() {
-        let t = Date(timeIntervalSince1970: 1_790_000_000)
-        let ancien = t.addingTimeInterval(-3600)
-        #expect(NomsInternes.doitRafraichir(memoire: true, releve: ancien, demande: nil, maintenant: t))
-        #expect(!NomsInternes.doitRafraichir(memoire: false, releve: ancien, demande: nil, maintenant: t))
-        #expect(!NomsInternes.doitRafraichir(memoire: true, releve: t, demande: nil, maintenant: t))
-        let lancements = LancementsPasseur()
-        let n = NomsInternes(cache: nil, lanceur: Self.lanceur(lancements))
-        n.rafraichirSiAncien()
-        n.lancerPasseur()
-        #expect(!n.releveEnCours)
-        #expect(lancements.tous.isEmpty)
-    }
-
-    /// Un bon jeton : le passeur est lance avec le port de l'ecoute et un jeton de 64 chiffres ;
-    /// le releve est retenu, ecrit dans le conteneur et relu au lancement ; l'ecoute est fermee.
-    @Test func bonJeton() async throws {
-        let cache = Self.cache()
+    /// Au demarrage : l'URL `abonner` ; puis `etat` et les releves successifs, gardes dans `noms.json`.
+    @Test func abonnementEtReleves() async throws {
+        let (n, d, lancements, cache) = try await Self.connecte()
         defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-        let lancements = LancementsPasseur()
-        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(lancements, trame: try Self.bonneTrame(Self.noms())))
-        var recus: [NomsMaison?] = []
-        n.surNoms = { recus.append($0) }
-        await Self.releve(n)
-        #expect(n.noms == Self.noms())
-        #expect(n.probleme == nil)
-        #expect(recus == [Self.noms()])
-        #expect(try NomsMaison.lire(Data(contentsOf: cache)) == Self.noms(), "ecrit dans le conteneur")
-        #expect(NomsInternes(cache: cache, lanceur: NomsInternes.lanceurInterdit).noms == Self.noms(), "relu au lancement")
-        let cible = try #require(lancements.cible)
-        #expect(lancements.tous.count == 1)
-        #expect(cible.jeton.count == 64)
-        #expect(await !FauxPasseur.envoyer(Data("encore".utf8), port: cible.port), "ecoute fermee")
+        #expect(lancements.cible?.demande == .abonner)
+        #expect(lancements.cible?.jeton.count == 64)
+        let e = EtatPasseur(version: "2.0", acces: .autorise, ouvertureSession: .inactive, profilExpire: nil)
+        #expect(await d.message(.etat(e)))
+        #expect(await attendreQue { n.etat == e })
+        #expect(await d.message(.releve(try Self.json(Self.noms()))))
+        #expect(await attendreQue { n.noms == Self.noms() })
+        #expect(await d.message(.releve(try Self.json(Self.noms(nom: "Pont")))))
+        #expect(await attendreQue { n.noms == Self.noms(nom: "Pont") })
+        #expect(NomsInternes(cache: cache, lanceur: NomsInternes.lanceurInterdit).noms == Self.noms(nom: "Pont"))
+        #expect(n.tentative == 0)
     }
 
-    /// Le passeur a pu lire Maison, mais l'acces lui est refuse : les noms gardes restent.
-    @Test func refusDeMaison() async throws {
-        let cache = Self.cache()
+    /// `relire`, `identifier` et `ouvertureSession` partent vers le demon ; la reponse a « Identifier » s'affiche pour
+    /// son accessoire.
+    @Test func commandesEnvoyees() async throws {
+        let (n, d, _, cache) = try await Self.connecte()
         defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(LancementsPasseur(),
-                                                                trame: try Self.bonneTrame(Self.noms(.refuse, message: "Accès refusé"))))
-        n.integrer(Self.noms())
-        await Self.releve(n)
-        #expect(n.noms == Self.noms())
-        #expect(n.probleme == Self.refus)
-    }
-
-    /// Un mauvais jeton : rien n'est retenu ni ecrit, le dernier releve valide reste.
-    @Test func mauvaisJeton() async throws {
-        let cache = Self.cache()
-        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-        let json = try Self.noms(nom: "Intrus").donnees()
-        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(LancementsPasseur(), trame: { jeton in
-            EnvoiPasseur.trame(jeton: String(jeton.reversed()), json: json)
-        }))
-        n.integrer(Self.noms())
-        await Self.releve(n)
-        #expect(n.noms == Self.noms())
-        #expect(n.probleme == Self.jetonFaux)
-        #expect(try NomsMaison.lire(Data(contentsOf: cache)) == Self.noms(), "fichier inchange")
-    }
-
-    /// Une longueur fausse (illisible, au-dela de 8 Mo, ou plus longue que la trame) : le
-    /// dernier releve valide reste.
-    @Test func longueurFausse() async throws {
-        let cache = Self.cache()
-        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-        let json = try Self.noms(nom: "Intrus").donnees()
-        for longueur in ["abc", String(EnvoiPasseur.tailleMax + 1), String(json.count + 10)] {
-            let n = NomsInternes(cache: cache, lanceur: Self.lanceur(LancementsPasseur(), trame: { jeton in
-                Data("\(jeton)\n\(longueur)\n".utf8) + json
-            }))
-            n.integrer(Self.noms())
-            await Self.releve(n)
-            #expect(n.noms == Self.noms(), "longueur \(longueur)")
-            #expect(n.probleme == Self.longueurFausse, "longueur \(longueur)")
-        }
-    }
-
-    /// Une connexion coupee par une erreur avant la fin de la trame se dit interrompue, et non
-    /// « jeton faux » ni « longueur fausse » : la trame n'est pas en cause. Une fin propre (le
-    /// passeur ferme son cote) sans trame complete garde son message. Dans tous les cas, le
-    /// dernier releve valide reste.
-    @Test func connexionCoupee() async throws {
-        let jeton = 2 * EnvoiPasseur.octetsJeton
-        let json = try Self.noms(nom: "Intrus").donnees()
-        // Ou la trame s'arrete, et le message d'une fin propre a cet endroit.
-        let arrets: [(String, (Data) -> Data, String)] = [
-            ("dans le jeton", { $0.prefix(jeton / 2) }, Self.jetonFaux),
-            ("apres le jeton", { $0.prefix(jeton + 1) }, Self.longueurFausse),
-            ("dans le json", { $0.dropLast(3) }, Self.longueurFausse),
-        ]
-        for (ou, tronquer, propre) in arrets {
-            for coupee in [false, true] {
-                let cache = Self.cache()
-                defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-                let lancements = LancementsPasseur()
-                let n = NomsInternes(cache: cache, lanceur: Self.lanceur(lancements))
-                n.integrer(Self.noms())
-                n.lancerPasseur()
-                let cible = try #require(await Self.cible(lancements))
-                let debut = tronquer(EnvoiPasseur.trame(jeton: cible.jeton, json: json))
-                if coupee {
-                    let client = try #require(FauxPasseur.Client(port: cible.port))
-                    #expect(await client.attendre())
-                    #expect(await client.envoyer(debut))
-                    // Plus rien n'ecoute : l'app a accepte la connexion, la coupure vient ensuite.
-                    #expect(await Self.ecouteFermee(port: cible.port))
-                    client.couper()
-                } else {
-                    #expect(await FauxPasseur.envoyer(debut, port: cible.port))
-                }
-                await Self.attendre(n)
-                #expect(n.noms == Self.noms(), "\(ou), coupee \(coupee) : le dernier releve valide reste")
-                #expect(n.probleme == (coupee ? Self.interrompu : propre), "\(ou), coupee \(coupee)")
-            }
-        }
-    }
-
-    /// Un JSON illisible : le dernier releve valide reste, et le detail est dit.
-    @Test func jsonIllisible() async throws {
-        let cache = Self.cache()
-        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(LancementsPasseur(), trame: { jeton in
-            EnvoiPasseur.trame(jeton: jeton, json: Data("pas du json".utf8))
-        }))
-        n.integrer(Self.noms())
-        await Self.releve(n)
-        #expect(n.noms == Self.noms())
-        let debut = String(localized: "Relevé de Maison illisible : \("")")
-        #expect(n.probleme?.hasPrefix(debut) == true && n.probleme != Self.longueurFausse, "\(n.probleme ?? "")")
-    }
-
-    /// Rien dans le delai (le passeur ne se connecte pas) : le dernier releve valide reste, et
-    /// l'ecoute est fermee. (Delai d'une seconde : l'ecoute est prete bien avant.)
-    @Test func delaiDepasse() async throws {
-        let cache = Self.cache()
-        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-        let lancements = LancementsPasseur()
-        let n = NomsInternes(cache: cache, delai: .seconds(1), lanceur: Self.lanceur(lancements))
-        n.integrer(Self.noms())
-        await Self.releve(n)
-        #expect(n.noms == Self.noms())
-        #expect(n.probleme == String(localized: "Passeur Noms n'a rien envoyé en 2 minutes."))
-        let cible = try #require(lancements.cible)
-        #expect(await !FauxPasseur.envoyer(try Self.bonneTrame(Self.noms(nom: "Tard"))(cible.jeton), port: cible.port),
-                "ecoute fermee")
-        #expect(n.noms == Self.noms())
-    }
-
-    /// Passeur introuvable, ou lancement refuse : le probleme est dit, l'ecoute fermee, les noms gardes.
-    @Test func lancementRefuse() async throws {
-        let cache = Self.cache()
-        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-        let lancements = LancementsPasseur()
-        let introuvable = String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
-        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(lancements, probleme: introuvable))
-        n.integrer(Self.noms())
-        await Self.releve(n)
-        #expect(n.noms == Self.noms())
-        #expect(n.probleme == introuvable)
-        let cible = try #require(lancements.cible)
-        #expect(await !FauxPasseur.envoyer(Data("x".utf8), port: cible.port), "ecoute fermee")
-    }
-
-    /// Une seule ecoute a la fois : une demande pendant un releve est ignoree ; une fois le
-    /// releve fini, une autre demande lance de nouveau le passeur, avec un autre jeton.
-    @Test func uneSeuleEcoute() async throws {
-        let cache = Self.cache()
-        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
-        let lancements = LancementsPasseur()
-        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(lancements))
-        n.lancerPasseur()
-        let premiere = n.derniereDemande
-        let fin = ContinuousClock.now + .seconds(10)
-        while lancements.tous.isEmpty, ContinuousClock.now < fin { try? await Task.sleep(for: .milliseconds(5)) }
-        n.lancerPasseur()
-        n.rafraichirSiAncien(maintenant: .now + 3600)
-        try? await Task.sleep(for: .milliseconds(100))
-        #expect(lancements.tous.count == 1, "demandes ignorees pendant le releve")
-        #expect(n.derniereDemande == premiere)
-        let cible = try #require(lancements.cible)
-        #expect(await FauxPasseur.envoyer(try Self.bonneTrame(Self.noms())(cible.jeton), port: cible.port))
-        #expect(!n.releveEnCours)
-        #expect(n.noms == Self.noms())
-        n.lancerPasseur()
+        n.relire()
         #expect(n.releveEnCours)
-        while lancements.tous.count < 2, ContinuousClock.now < fin { try? await Task.sleep(for: .milliseconds(5)) }
-        let seconde = try #require(lancements.cible)
-        #expect(seconde.jeton != cible.jeton, "jeton a usage unique")
-        #expect(await FauxPasseur.envoyer(try Self.bonneTrame(Self.noms(nom: "Pont"))(seconde.jeton), port: seconde.port))
-        #expect(n.noms == Self.noms(nom: "Pont"))
+        n.identifier(accessoire: "A")
+        n.reglerOuvertureSession(true)
+        #expect(await attendreQue { d.messages.count == 3 })
+        #expect(d.messages == [.relire, .identifier(demande: 1, accessoire: "A"), .ouvertureSession(actif: true)])
+        #expect(await d.message(.identifie(ReponseIdentifier(demande: 1, ok: true))))
+        #expect(await attendreQue { n.identification != nil })
+        #expect(n.identification == NomsInternes.Identification(accessoire: "A",
+                                                                texte: String(localized: "Identification demandée")))
+        #expect(await d.message(.releve(try Self.json(Self.noms()))))
+        #expect(await attendreQue { !n.releveEnCours })
     }
 
-    /// Un NomsInternes qui disparait pendant un releve ne laisse pas d'ecoute ouverte : a la fin
-    /// du delai, la minuterie la ferme.
-    @Test func ecouteFermeeSiNomsInternesDisparait() async throws {
+    /// Une reponse a une demande plus ancienne que la derniere est ignoree.
+    @Test func reponseIdentifierEnRetard() async throws {
+        let (n, d, _, cache) = try await Self.connecte()
+        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
+        n.identifier(accessoire: "A")
+        n.identifier(accessoire: "B")
+        #expect(await d.message(.identifie(ReponseIdentifier(demande: 1, ok: true))))
+        #expect(await d.message(.identifie(ReponseIdentifier(demande: 2, ok: false, erreur: ReponseIdentifier.nonIdentifiable))))
+        #expect(await attendreQue { n.identification != nil })
+        #expect(n.identification?.accessoire == "B")
+        #expect(n.identification?.texte == String(localized: "Cet accessoire ne sait pas s'identifier"))
+    }
+
+    /// Le demon ferme : deconnecte, le probleme dit, et un nouvel abonnement (nouveau jeton) apres l'attente.
+    @Test func reabonnementApresFermeture() async throws {
+        let (n, d, lancements, cache) = try await Self.connecte()
+        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
+        let premier = try #require(lancements.cible)
+        d.fermer()
+        #expect(await attendreQue { !n.connecte })
+        #expect(n.probleme == String(localized: "Passeur Noms s'est déconnecté."))
+        let second = try #require(await Self.cible(lancements, fois: 2))
+        #expect(second.jeton != premier.jeton)
+        #expect(second.demande == .abonner)
+    }
+
+    /// Lancement refuse : le probleme, puis d'autres essais ; un demon connecte remet le compte a zero.
+    @Test func essaisApresUnEchec() async throws {
         let cache = Self.cache()
         defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
         let lancements = LancementsPasseur()
-        var n: NomsInternes? = NomsInternes(cache: cache, delai: .milliseconds(100),
-                                            lanceur: Self.lanceur(lancements))
-        n?.lancerPasseur()
-        let cible = try #require(await Self.cible(lancements))
-        n = nil
-        try? await Task.sleep(for: .seconds(1))
-        #expect(await !FauxPasseur.envoyer(Data("x".utf8), port: cible.port), "ecoute fermee par la minuterie")
+        let introuvable = "Passeur Noms introuvable"
+        let n = NomsInternes(cache: cache, attentes: [.milliseconds(10)], lanceur: Self.lanceur(lancements, probleme: introuvable))
+        n.demarrer()
+        _ = await Self.cible(lancements, fois: 3)
+        #expect(lancements.tous.count >= 3)
+        #expect(n.probleme == introuvable)
+        #expect(n.tentative >= 2)
     }
 
-    /// Une seule connexion par releve : des que la premiere est acceptee, meme sans sa trame
-    /// finie, l'ecoute est fermee. Un second client ne trouve plus personne, et le releve reste
-    /// celui du premier.
-    @Test func uneSeuleConnexion() async throws {
+    /// Les attentes avant de se reabonner : 5 s, 10 s, 30 s, puis toutes les minutes.
+    @Test func attentesCroissantes() {
+        let a = NomsInternes.reabonnements
+        #expect(a == [.seconds(5), .seconds(10), .seconds(30), .seconds(60)])
+        #expect(NomsInternes.attente(apres: 0, dans: a) == .seconds(5))
+        #expect(NomsInternes.attente(apres: 1, dans: a) == .seconds(10))
+        #expect(NomsInternes.attente(apres: 2, dans: a) == .seconds(30))
+        #expect(NomsInternes.attente(apres: 3, dans: a) == .seconds(60))
+        #expect(NomsInternes.attente(apres: 40, dans: a) == .seconds(60))
+    }
+
+    /// Aucun demon dans le delai : le probleme, puis un nouvel essai.
+    @Test func delaiSansDemon() async throws {
         let cache = Self.cache()
         defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
         let lancements = LancementsPasseur()
-        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(lancements))
-        n.lancerPasseur()
-        let cible = try #require(await Self.cible(lancements))
-        let trame = EnvoiPasseur.trame(jeton: cible.jeton, json: try Self.noms().donnees())
-        let moitie = trame.count / 2
-        let premier = try #require(FauxPasseur.Client(port: cible.port))
-        #expect(await premier.attendre(), "premier client connecte")
-        #expect(await premier.envoyer(trame.prefix(moitie)))
-        #expect(await Self.ecouteFermee(port: cible.port), "ecoute fermee des la premiere connexion")
-        #expect(n.releveEnCours, "le premier client n'a pas fini : le releve continue")
-        #expect(n.noms == nil && n.probleme == nil)
-        #expect(await premier.terminer(trame.dropFirst(moitie)))
-        await Self.attendre(n)
-        #expect(n.noms == Self.noms(), "le releve est celui du premier client")
-        #expect(n.probleme == nil)
+        let n = NomsInternes(cache: cache, delai: .milliseconds(100), attentes: [.milliseconds(10)],
+                             lanceur: Self.lanceur(lancements))
+        n.demarrer()
+        _ = await Self.cible(lancements, fois: 2)
+        #expect(n.probleme == String(localized: "Passeur Noms ne s'est pas connecté en 2 minutes."))
     }
 
-    /// Deux connexions arrivees avant que l'app ait traite la premiere (le fil principal est
-    /// occupe pendant que les clients se connectent) : l'ecoute a les deux a livrer, et la
-    /// seconde, meme avec un jeton et un releve complets, est refusee. Le releve est celui du
-    /// premier client.
-    @Test func deuxConnexionsEnSimultane() async throws {
+    /// Un releve illisible garde les noms et le dit.
+    @Test func releveIllisible() async throws {
+        let (n, d, _, cache) = try await Self.connecte()
+        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
+        #expect(await d.message(.releve(try Self.json(Self.noms()))))
+        #expect(await attendreQue { n.noms != nil })
+        #expect(await d.message(.releve(Data(#"{"x":1}"#.utf8))))
+        #expect(await attendreQue { n.probleme != nil })
+        #expect(n.noms == Self.noms())
+    }
+
+    /// Sans memoire (demo, tests) : rien ne se lance, ni au demarrage ni sur demande.
+    @Test func sansMemoire() {
+        let n = NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit)
+        n.demarrer()
+        n.relire()
+        n.identifier(accessoire: "A")
+        #expect(!n.connecte && !n.releveEnCours)
+    }
+
+    /// Sans demon connecte, « Rafraichir depuis Maison » relance l'abonnement tout de suite, sans attendre.
+    @Test func relireSansDemon() async throws {
         let cache = Self.cache()
         defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
         let lancements = LancementsPasseur()
-        let n = NomsInternes(cache: cache, lanceur: Self.lanceur(lancements))
-        n.lancerPasseur()
-        let cible = try #require(await Self.cible(lancements))
-        let trame = EnvoiPasseur.trame(jeton: cible.jeton, json: try Self.noms().donnees())
-        let intrus = EnvoiPasseur.trame(jeton: cible.jeton, json: try Self.noms(nom: "Intrus").donnees())
-        let moitie = trame.count / 2
-        let premier = try #require(FauxPasseur.Client(port: cible.port))
-        Self.occuper { premier.pret }
-        let second = try #require(FauxPasseur.Client(port: cible.port))
-        Self.occuper { second.pret }
-        // Le temps que l'ecoute mette les deux connexions dans la file du fil principal.
-        usleep(100_000)
-        #expect(premier.pret && second.pret, "deux connexions etablies avant que l'app en traite une")
-        #expect(await premier.envoyer(trame.prefix(moitie)))
-        _ = await second.terminer(intrus)
-        #expect(n.releveEnCours, "le second client n'a pas pris la place du premier")
-        #expect(n.noms == nil && n.probleme == nil)
-        #expect(await premier.terminer(trame.dropFirst(moitie)))
-        await Self.attendre(n)
-        #expect(n.noms == Self.noms(), "le releve est celui du premier client")
-        #expect(n.probleme == nil)
+        let n = NomsInternes(cache: cache, attentes: [.seconds(60)], lanceur: Self.lanceur(lancements, probleme: "absent"))
+        n.demarrer()
+        _ = await Self.cible(lancements)
+        #expect(await attendreQue { n.probleme == "absent" })
+        n.relire()
+        #expect(await Self.cible(lancements, fois: 2) != nil)
+        #expect(lancements.tous.count == 2)
+    }
+
+    /// L'ancien passeur (app iOS, sans la cle du protocole) n'est pas lance : il ne connait pas `abonner`.
+    @Test func problemeInstallation() {
+        let ancienne = String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh.")
+        #expect(NomsInternes.problemeInstallation(nil) == ancienne)
+        #expect(NomsInternes.problemeInstallation(["CFBundleIdentifier": "fr.djoko.maillage.passeur"]) == ancienne)
+        #expect(NomsInternes.problemeInstallation([NomsInternes.cleProtocole: 1]) == nil)
+    }
+
+    /// Les textes des fins d'abonnement.
+    @Test func textesDesFins() {
+        #expect(NomsInternes.texte(AbonnementPasseur.Fin.jetonFaux) == String(localized: "Connexion de Passeur Noms refusée : jeton faux."))
+        #expect(NomsInternes.texte(AbonnementPasseur.Fin.trameFausse) == String(localized: "Message illisible de Passeur Noms : connexion fermée."))
+        #expect(NomsInternes.texte(AbonnementPasseur.Fin.interrompue) == String(localized: "Connexion avec Passeur Noms coupée."))
+        #expect(NomsInternes.texte(AbonnementPasseur.Fin.ecoute("occupé"))
+                == String(localized: "Écoute de Passeur Noms impossible : \("occupé")"))
     }
 
     /// Reglages › Noms de Maison : les zones lues, dans l'ordre de Maison.

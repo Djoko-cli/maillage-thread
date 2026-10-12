@@ -64,7 +64,7 @@ struct BarreOutils: View {
                 surveillance.rafraichir()
                 sonde.rafraichir()
                 if Self.lancePasseur(mode: surveillance.mode) {
-                    nomsMaison.lancerPasseur()
+                    nomsMaison.relire()
                 }
             } label: {
                 Image(systemName: "arrow.clockwise")
