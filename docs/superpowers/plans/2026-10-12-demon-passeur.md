@@ -80,7 +80,7 @@
   - `public struct ReponseIdentifier: Hashable, Sendable` (`demande: Int`, `ok: Bool`, `erreur: String?`, constantes `inconnu`, `nonIdentifiable`).
   - `public enum MessagePasseur: Hashable, Sendable` : `.etat(EtatPasseur)`, `.releve(Data)`, `.identifie(ReponseIdentifier)`, `.relire`, `.identifier(demande: Int, accessoire: String)`, `.ouvertureSession(actif: Bool)` ; `var type: String` ; `func json() -> Data` ; `static func lire(_ json: Data) -> MessagePasseur.Lu` avec `Lu` = `.message(MessagePasseur)`, `.ignore(String)`, `.illisible`.
 
-- [ ] **Step 1 : renommer le fichier et suivre le renommage dans le projet**
+- [x] **Step 1 : renommer le fichier et suivre le renommage dans le projet**
 
 ```bash
 cd ~/Dev/maillage-thread   # ou la copie de travail de la branche
@@ -89,7 +89,7 @@ git mv MaillageCoeur/Noms/EnvoiPasseur.swift MaillageCoeur/Noms/ProtocolePasseur
 
 Dans `project.yml`, cible `Passeur`, remplacer la ligne `- path: MaillageCoeur/Noms/EnvoiPasseur.swift` par `- path: MaillageCoeur/Noms/ProtocolePasseur.swift`.
 
-- [ ] **Step 2 : écrire les tests qui échouent**
+- [x] **Step 2 : écrire les tests qui échouent**
 
 Créer `MaillageCoeurTests/ProtocolePasseurTests.swift` :
 
@@ -181,12 +181,12 @@ struct ProtocolePasseurTests {
 }
 ```
 
-- [ ] **Step 3 : lancer les tests, vérifier qu'ils échouent**
+- [x] **Step 3 : lancer les tests, vérifier qu'ils échouent**
 
 Run : `outils/tester.sh MaillageCoeurTests/ProtocolePasseurTests`
 Expected : échec de compilation (`Demande`, `EtatPasseur`, `MessagePasseur` inconnus).
 
-- [ ] **Step 4 : écrire le code**
+- [x] **Step 4 : écrire le code**
 
 Dans `MaillageCoeur/Noms/ProtocolePasseur.swift` :
 
@@ -423,12 +423,12 @@ public enum MessagePasseur: Hashable, Sendable {
 }
 ```
 
-- [ ] **Step 5 : lancer les tests, vérifier qu'ils passent**
+- [x] **Step 5 : lancer les tests, vérifier qu'ils passent**
 
 Run : `outils/tester.sh MaillageCoeurTests/ProtocolePasseurTests MaillageCoeurTests/EnvoiPasseurTests MaillageThreadTests/NomsInternesTests`
 Expected : PASS (les tests existants du relevé ponctuel restent verts : `Cible(port:jeton:)` vaut `releve`).
 
-- [ ] **Step 6 : commit**
+- [x] **Step 6 : commit**
 
 ```bash
 git add project.yml MaillageCoeur/Noms/ProtocolePasseur.swift MaillageCoeurTests/ProtocolePasseurTests.swift

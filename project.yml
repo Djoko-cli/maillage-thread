@@ -101,7 +101,7 @@ targets:
     sources:
       - path: Passeur
       - path: MaillageCoeur/Noms/NomsMaison.swift
-      - path: MaillageCoeur/Noms/EnvoiPasseur.swift
+      - path: MaillageCoeur/Noms/ProtocolePasseur.swift
       - path: MaillageCoeur/Annonces/CodageJSON.swift
     info:
       path: Passeur/Info.plist
