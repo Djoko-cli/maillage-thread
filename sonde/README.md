@@ -221,9 +221,11 @@ l'entrée est trouvée **et** que la réponse est venue ; sinon elle attend jusq
 temps jusqu'à l'entrée de cache). Limite : un appareil endormi qui ne se réveille
 pas dans les 15 s rend `repondu:false` (le parent répond à la requête d'adresse,
 pas à l'écho). Une réponse d'écho sans entrée de cache à la fin reste
-`introuvable` : elle ne donne pas le RLOC16. Le diagnostic (`diag`) n'est accepté que sur les adresses
-internes du réseau (RLOC, ML-EID) : c'est au ML-EID que l'app demande la TLV 9
-(compteurs MAC) d'un enfant.
+`introuvable` : elle ne donne pas le RLOC16.
+
+Le diagnostic (`diag`) n'est accepté que sur les adresses internes du réseau
+(RLOC, ML-EID) : c'est au ML-EID que l'app demande la TLV 9 (compteurs MAC)
+d'un enfant.
 
 ## Accès par le réseau Thread
 
