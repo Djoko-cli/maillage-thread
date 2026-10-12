@@ -82,4 +82,84 @@ struct ProtocolePasseurTests {
     func illisible(_ texte: String) {
         #expect(MessagePasseur.lire(Data(texte.utf8)) == .illisible)
     }
+
+    /// Lit des octets arrives en paquets de `taille` ; rend toutes les trames et la premiere erreur.
+    static func lireTrames(_ octets: Data, par taille: Int) -> EnvoiPasseur.IssueFlux {
+        var l = EnvoiPasseur.LectureTrames()
+        var tout = EnvoiPasseur.IssueFlux(trames: [], erreur: nil)
+        var i = octets.startIndex
+        while i < octets.endIndex {
+            let j = min(i + taille, octets.endIndex)
+            let issue = l.ajouter(octets[i..<j])
+            tout.trames += issue.trames
+            if let e = issue.erreur { tout.erreur = e; break }
+            i = j
+        }
+        return tout
+    }
+
+    @Test func trameDUnMessage() {
+        let json = MessagePasseur.relire.json()
+        #expect(EnvoiPasseur.trame(.relire) == Data("\(json.count)\n".utf8) + json)
+        #expect(EnvoiPasseur.ligneJeton(Self.jeton) == Data("\(Self.jeton)\n".utf8))
+    }
+
+    /// Plusieurs trames dans un meme paquet : toutes, dans l'ordre.
+    @Test func plusieursTramesDUnCoup() {
+        let octets = EnvoiPasseur.trame(.etat(Self.etat)) + EnvoiPasseur.trame(.relire)
+            + EnvoiPasseur.trame(.ouvertureSession(actif: true))
+        let issue = Self.lireTrames(octets, par: octets.count)
+        #expect(issue.erreur == nil)
+        #expect(issue.trames.map(MessagePasseur.lire) == [.message(.etat(Self.etat)), .message(.relire),
+                                                          .message(.ouvertureSession(actif: true))])
+    }
+
+    /// Une trame octet par octet, puis en paquets de 7 : la meme lecture.
+    @Test(arguments: [1, 7])
+    func trameOctetParOctet(_ taille: Int) {
+        let octets = EnvoiPasseur.trame(.etat(Self.etat)) + EnvoiPasseur.trame(.relire)
+        let issue = Self.lireTrames(octets, par: taille)
+        #expect(issue.erreur == nil)
+        #expect(issue.trames.count == 2)
+    }
+
+    /// Longueur nulle, trop grande, illisible, ou ligne de longueur sans fin au-dela de 16 chiffres : trame fausse,
+    /// puis plus rien ne se lit.
+    @Test(arguments: ["0\n{}", "\(EnvoiPasseur.tailleMax + 1)\n", "+5\n", "5 \n", "x\n", "12345678901234567"])
+    func trameFausse(_ texte: String) {
+        var l = EnvoiPasseur.LectureTrames()
+        #expect(l.ajouter(Data(texte.utf8)).erreur == .trameFausse)
+        #expect(l.ajouter(EnvoiPasseur.trame(.relire)) == EnvoiPasseur.IssueFlux(trames: [], erreur: .trameFausse))
+    }
+
+    /// Les trames completes avant une trame fausse sont rendues avec l'erreur.
+    @Test func tramesAvantLErreur() {
+        var l = EnvoiPasseur.LectureTrames()
+        let issue = l.ajouter(EnvoiPasseur.trame(.relire) + Data("x\n".utf8))
+        #expect(issue.trames.count == 1)
+        #expect(issue.erreur == .trameFausse)
+    }
+
+    /// Cote app : le jeton d'abord (meme coupe en deux), puis les trames du meme paquet.
+    @Test func fluxAvecJeton() {
+        var l = EnvoiPasseur.LectureFlux(jeton: Self.jeton)
+        let octets = EnvoiPasseur.ligneJeton(Self.jeton) + EnvoiPasseur.trame(.etat(Self.etat))
+        #expect(l.ajouter(octets.prefix(10)) == EnvoiPasseur.IssueFlux(trames: [], erreur: nil))
+        #expect(!l.jetonAccepte)
+        let issue = l.ajouter(octets.dropFirst(10))
+        #expect(l.jetonAccepte)
+        #expect(issue.erreur == nil)
+        #expect(issue.trames.map(MessagePasseur.lire) == [.message(.etat(Self.etat))])
+    }
+
+    /// Mauvais jeton, ou premiere ligne trop longue sans fin : jeton faux, et plus rien ensuite.
+    @Test func fluxJetonFaux() {
+        var l = EnvoiPasseur.LectureFlux(jeton: Self.jeton)
+        #expect(l.ajouter(EnvoiPasseur.ligneJeton(String(repeating: "00", count: 32))).erreur == .jetonFaux)
+        #expect(l.ajouter(EnvoiPasseur.ligneJeton(Self.jeton)).erreur == .jetonFaux)
+        var long = EnvoiPasseur.LectureFlux(jeton: Self.jeton)
+        #expect(long.ajouter(Data(String(repeating: "a", count: 65).utf8)).erreur == .jetonFaux)
+        var vide = EnvoiPasseur.LectureFlux(jeton: "")
+        #expect(vide.ajouter(Data("\n".utf8)).erreur == .jetonFaux, "un jeton attendu vide ne laisse rien passer")
+    }
 }

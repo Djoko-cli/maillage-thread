@@ -7,9 +7,9 @@ import Foundation
 ///    (`Cible`) : une app du bac a sable ne peut pas passer d'arguments de lancement, macOS les retire ;
 /// 3. `releve` (releve ponctuel) : le passeur se connecte, envoie le jeton sur une ligne, la longueur du JSON sur une
 ///    ligne, puis le JSON du releve, et ferme (`trame(jeton:json:)`, lu par `Lecture`) ;
-/// 4. `abonner` : le passeur se connecte, envoie le jeton sur une ligne (`ligneJeton`), puis les deux cotes echangent des
-///    messages (`MessagePasseur`), chacun en trame `<longueur>\n<JSON>` (`trame(_:)`, lu par `LectureTrames` et
-///    `LectureFlux`) ; la connexion reste ouverte.
+/// 4. `abonner` : le passeur se connecte, envoie le jeton sur une ligne (`ligneJeton`), puis les deux cotes
+///    echangent des messages (`MessagePasseur`), chacun en trame `<longueur>\n<JSON>` (`trame(_:)`, lu par
+///    `LectureTrames` et `LectureFlux`) ; la connexion reste ouverte.
 /// Ce fichier est identique a l'octet dans les deux depots, et compile aussi dans le passeur (`project.yml`) : il ne
 /// depend que de Foundation et de `CodageJSON`.
 public enum EnvoiPasseur {
@@ -30,16 +30,16 @@ public enum EnvoiPasseur {
         case abonner
     }
 
-    /// Ou le passeur envoie le releve : port et jeton, donnes par l'URL que l'app ouvre avec lui.
-    /// Toute app du Mac, du bac a sable ou non, peut ouvrir cette URL (des arguments de lancement,
-    /// seul un processus hors du bac a sable pouvait en passer) : le passeur lit alors Maison et
-    /// envoie le releve a 127.0.0.1, au port que l'URL nomme. Rien ne sort du Mac, et l'app
-    /// n'accepte que son propre jeton ; mais un processus local qui ecoute sur 127.0.0.1 peut ainsi
-    /// recevoir le releve (noms, pieces, zones, fabricants, batteries) : le passeur ne peut pas
+    /// Ou le passeur se connecte : 127.0.0.1, au port et avec le jeton que donne l'URL que l'app ouvre avec lui. Pour
+    /// `releve`, il envoie une seule trame (`<64 hexa>\n<longueur>\n<JSON>`) puis ferme ; pour `abonner`, il envoie le
+    /// jeton sur une ligne, puis les deux cotes echangent des trames `<longueur>\n<JSON>`.
+    /// Toute app du Mac, du bac a sable ou non, peut ouvrir cette URL (des arguments de lancement, seul un processus
+    /// hors du bac a sable pouvait en passer) : le passeur lit alors Maison et ecrit a 127.0.0.1, au port que l'URL
+    /// nomme. Rien ne sort du Mac, et l'app n'accepte que son propre jeton ; mais un processus local qui ecoute sur
+    /// 127.0.0.1 peut ainsi recevoir le releve (noms, pieces, zones, fabricants, batteries) : le passeur ne peut pas
     /// reconnaitre l'app, faute de secret partage (ni App Group ni equipe commune).
-    /// La lecture de l'URL est stricte (`init?(url:)`) : le passeur n'ecrit jamais que
-    /// `<64 hexa>\n<longueur>\n<JSON>` ; celui qui ouvre l'URL ne choisit que le port et les 64
-    /// chiffres du jeton, rien d'autre.
+    /// La lecture de l'URL est stricte (`init?(url:)`) : celui qui ouvre l'URL ne choisit que la demande (l'hote), le
+    /// port et les 64 chiffres du jeton, rien d'autre.
     public struct Cible: Hashable, Sendable {
         public var port: UInt16
         public var jeton: String
@@ -63,8 +63,8 @@ public enum EnvoiPasseur {
             return url
         }
 
-        /// Lue dans l'URL recue par le passeur ; nil si ce n'est pas la sienne (autre schema ou
-        /// hote qui n'est pas une `Demande`, sans tenir compte de la casse). Lecture stricte : `URLComponents` decode le
+        /// Lue dans l'URL recue par le passeur ; nil si ce n'est pas la sienne (autre schema ou hote qui n'est pas une
+        /// `Demande`, sans tenir compte de la casse). Lecture stricte : `URLComponents` decode le
         /// pourcent-encodage (`%0D%0A`, `%00` et `%20` arrivent en octets), et le passeur ecrit le
         /// jeton tel quel sur le port nomme. Le jeton est donc exactement `2 * octetsJeton` chiffres
         /// hexadecimaux minuscules, comme `nouveauJeton()` en tire ; le port, un entier de 1 a 65535
@@ -408,5 +408,122 @@ public enum MessagePasseur: Hashable, Sendable {
     private static func entier(_ v: Any?) -> Int? {
         guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
         return Int(exactly: n.doubleValue)
+    }
+}
+
+extension EnvoiPasseur {
+    /// Premiere ligne d'une connexion d'abonnement, du passeur vers l'app : le jeton.
+    public static func ligneJeton(_ jeton: String) -> Data {
+        Data("\(jeton)\n".utf8)
+    }
+
+    /// Trame d'un message de l'abonnement : sa longueur en decimal sur une ligne, puis son JSON.
+    public static func trame(_ m: MessagePasseur) -> Data {
+        let json = m.json()
+        return Data("\(json.count)\n".utf8) + json
+    }
+
+    /// Ce que rend une lecture de flux : les JSON des trames completes, dans l'ordre, et l'erreur qui a arrete la
+    /// lecture (la connexion se ferme alors ; les trames rendues avec elle restent valables).
+    public struct IssueFlux: Equatable, Sendable {
+        public enum Erreur: Equatable, Sendable {
+            /// Premiere ligne autre que le jeton attendu.
+            case jetonFaux
+            /// Longueur illisible, nulle ou au-dela de `tailleMax`.
+            case trameFausse
+        }
+
+        public var trames: [Data]
+        public var erreur: Erreur?
+
+        public init(trames: [Data], erreur: Erreur?) {
+            self.trames = trames
+            self.erreur = erreur
+        }
+    }
+
+    /// Lecture d'une suite de trames `<longueur>\n<JSON>` au fil des octets recus, sans jeton : le passeur lit ainsi ce
+    /// que l'app lui envoie. Plusieurs trames peuvent arriver d'un coup, une trame en plusieurs fois. Apres une
+    /// erreur, plus rien ne se lit.
+    public struct LectureTrames: Sendable {
+        private var tampon = Data()
+        /// Longueur lue, JSON pas encore complet.
+        private var attendue: Int?
+        private var faussee = false
+
+        public init() {}
+
+        public mutating func ajouter(_ octets: Data) -> IssueFlux {
+            guard !faussee else { return IssueFlux(trames: [], erreur: .trameFausse) }
+            tampon.append(octets)
+            var trames: [Data] = []
+            while true {
+                if let n = attendue {
+                    guard tampon.count >= n else { break }
+                    let debut = tampon.startIndex
+                    trames.append(Data(tampon[debut..<debut + n]))
+                    tampon.removeSubrange(debut..<debut + n)
+                    attendue = nil
+                } else {
+                    guard let fin = tampon.firstIndex(of: 0x0A) else {
+                        if tampon.count > Lecture.chiffresMax { return fausser(trames) }
+                        break
+                    }
+                    let ligne = Array(tampon[tampon.startIndex..<fin])
+                    tampon.removeSubrange(tampon.startIndex...fin)
+                    guard let n = Lecture.entier(ligne), n > 0, n <= EnvoiPasseur.tailleMax else { return fausser(trames) }
+                    attendue = n
+                }
+            }
+            return IssueFlux(trames: trames, erreur: nil)
+        }
+
+        private mutating func fausser(_ trames: [Data]) -> IssueFlux {
+            faussee = true
+            tampon = Data()
+            return IssueFlux(trames: trames, erreur: .trameFausse)
+        }
+    }
+
+    /// Lecture d'une connexion d'abonnement par l'app : le jeton sur la premiere ligne (compare a temps constant),
+    /// puis des trames (`LectureTrames`). Apres une erreur, plus rien ne se lit.
+    public struct LectureFlux: Sendable {
+        private let attendu: [UInt8]
+        private var avantJeton = Data()
+        private var trames = LectureTrames()
+        private var erreur: IssueFlux.Erreur?
+        /// Le jeton est arrive et c'est le bon.
+        public private(set) var jetonAccepte = false
+
+        public init(jeton: String) {
+            attendu = Array(jeton.utf8)
+        }
+
+        public mutating func ajouter(_ octets: Data) -> IssueFlux {
+            if let erreur { return IssueFlux(trames: [], erreur: erreur) }
+            var reste = octets
+            if !jetonAccepte {
+                avantJeton.append(octets)
+                guard let fin = avantJeton.firstIndex(of: 0x0A) else {
+                    if avantJeton.count > attendu.count { return echouer(.jetonFaux) }
+                    return IssueFlux(trames: [], erreur: nil)
+                }
+                guard Lecture.egaux(Array(avantJeton[avantJeton.startIndex..<fin]), attendu) else {
+                    return echouer(.jetonFaux)
+                }
+                jetonAccepte = true
+                reste = Data(avantJeton[avantJeton.index(after: fin)...])
+                avantJeton = Data()
+            }
+            let issue = trames.ajouter(reste)
+            if let e = issue.erreur { erreur = e }
+            return issue
+        }
+
+        private mutating func echouer(_ e: IssueFlux.Erreur) -> IssueFlux {
+            erreur = e
+            avantJeton = Data()
+            return IssueFlux(trames: [], erreur: e)
+        }
     }
 }

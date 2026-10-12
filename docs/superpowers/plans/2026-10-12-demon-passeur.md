@@ -456,7 +456,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `public struct EnvoiPasseur.LectureTrames` : `init()`, `mutating func ajouter(_ octets: Data) -> IssueFlux` (le démon lit l'app).
   - `public struct EnvoiPasseur.LectureFlux` : `init(jeton:)`, `var jetonAccepte: Bool`, `mutating func ajouter(_ octets: Data) -> IssueFlux` (l'app lit le démon).
 
-- [ ] **Step 1 : écrire les tests qui échouent**
+- [x] **Step 1 : écrire les tests qui échouent**
 
 Ajouter dans `ProtocolePasseurTests` :
 
@@ -542,12 +542,12 @@ Ajouter dans `ProtocolePasseurTests` :
     }
 ```
 
-- [ ] **Step 2 : lancer les tests, vérifier qu'ils échouent**
+- [x] **Step 2 : lancer les tests, vérifier qu'ils échouent**
 
 Run : `outils/tester.sh MaillageCoeurTests/ProtocolePasseurTests`
 Expected : échec de compilation (`LectureTrames`, `IssueFlux`, `ligneJeton` inconnus).
 
-- [ ] **Step 3 : écrire le code**
+- [x] **Step 3 : écrire le code**
 
 À la fin de `ProtocolePasseur.swift` :
 
@@ -670,12 +670,12 @@ extension EnvoiPasseur {
 }
 ```
 
-- [ ] **Step 4 : lancer les tests, vérifier qu'ils passent**
+- [x] **Step 4 : lancer les tests, vérifier qu'ils passent**
 
 Run : `outils/tester.sh MaillageCoeurTests/ProtocolePasseurTests MaillageCoeurTests/EnvoiPasseurTests`
 Expected : PASS.
 
-- [ ] **Step 5 : commit**
+- [x] **Step 5 : commit**
 
 ```bash
 git add MaillageCoeur/Noms/ProtocolePasseur.swift MaillageCoeurTests/ProtocolePasseurTests.swift
