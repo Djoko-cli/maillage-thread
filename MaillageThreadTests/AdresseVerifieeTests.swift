@@ -189,6 +189,183 @@ struct AdresseVerifieeAppTests {
         #expect(s.resume?.injoignables == 0)
     }
 
+    // MARK: Dernieres adresses sur disque
+
+    static let depart = Date(timeIntervalSince1970: 1_790_000_000)
+
+    static func dossierJetable() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("maillage-adresses-\(UUID().uuidString)")
+    }
+
+    /// Mode direct avec ce dossier : le depart, puis `hap` sans adresse au-dela du sursis de 2 min.
+    static func surveillanceSurDisque(_ dossier: URL) -> Surveillance {
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        s.integrer(annonces(depart))
+        s.integrer(annonces(depart + 60, muets: [hap]))
+        s.integrer(annonces(depart + 200, muets: [hap]))
+        return s
+    }
+
+    /// Les dernieres adresses sont gardees sur disque ; une nouvelle surveillance les relit (sans ecouter le reseau)
+    /// et, au premier releve ou `hap` est deja sans adresse, le demande a la sonde avec sa derniere adresse et sa
+    /// derniere annonce, comme avant la relance. Le fichier ne contient que des valeurs du suivi, par appareil.
+    @Test func dernieresAdressesGardeesEtRelues() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("dernieres-adresses.json")
+        let avant = Self.surveillanceSurDisque(dossier)
+        #expect(FileManager.default.fileExists(atPath: fichier.path))
+        let annonce = try #require(avant.suivi.dernieresAnnonces[Self.hap])
+        let attendu = try #require(avant.appareilsAResoudre().first { $0.id == Self.hap })
+        #expect(attendu.derniereAnnonce == annonce && attendu.adresse == AdresseIPv6(Self.adresse(2)))
+
+        let relu = Surveillance(mode: .direct, dossier: dossier)
+        #expect(relu.suivi.dernieresAdresses.isEmpty, "rien avant la relecture")
+        relu.chargerAdressesGardees()
+        #expect(relu.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(2)))
+        #expect(relu.suivi.dernieresAnnonces[Self.hap] == annonce)
+        #expect(relu.suivi.dernieresPartitions[Self.hap] == Self.partition)
+        #expect(relu.appareilsAResoudre().isEmpty, "pas d'instantane : rien a demander")
+        // Premier releve de la nouvelle session (3 h plus tard) : hap n'a plus d'adresse, il est demande.
+        relu.integrer(Self.annonces(Self.depart + 3 * 3600, muets: [Self.hap]))
+        let demande = try #require(relu.appareilsAResoudre().first { $0.id == Self.hap })
+        #expect(demande == attendu, "meme adresse, meme partition, meme derniere annonce")
+        #expect(!demande.disparu)
+        #expect(relu.appareilsAResoudre().map(\.id) == [Self.matter, Self.temoin, Self.hap].sorted())
+    }
+
+    /// On n'ecrit que ce qui change : un releve identique (annonce avancee de moins de 5 min) ne reecrit pas le
+    /// fichier ; une autre adresse, un appareil de plus ou une annonce qui a avance de 5 min, si.
+    @Test func dernieresAdressesEcritesSeulementSiChangement() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("dernieres-adresses.json")
+        let s = Self.surveillanceSurDisque(dossier)
+        try FileManager.default.removeItem(at: fichier)
+        s.integrer(Self.annonces(Self.depart + 260, muets: [Self.hap]))
+        #expect(!FileManager.default.fileExists(atPath: fichier.path), "releve identique, 60 s plus tard")
+        s.integrer(Self.annonces(Self.depart + 200 + 600, muets: [Self.hap]))
+        #expect(FileManager.default.fileExists(atPath: fichier.path), "l'annonce de matter a avance de 10 min")
+        try FileManager.default.removeItem(at: fichier)
+        var changee = Self.annonces(Self.depart + 900, muets: [Self.hap])
+        changee.adresses[Self.matter + ".local"] = [Self.adresse(9)]
+        s.integrer(changee)
+        #expect(FileManager.default.fileExists(atPath: fichier.path), "matter a une autre adresse")
+        let relu = Surveillance(mode: .direct, dossier: dossier)
+        relu.chargerAdressesGardees()
+        #expect(relu.suivi.dernieresAdresses[Self.matter] == AdresseIPv6(Self.adresse(9)))
+
+        // La regle seule : un appareil qui annonce encore et dont l'annonce avance de moins de 5 min ne s'ecrit pas ;
+        // une annonce qui ne bouge plus s'ecrit exacte.
+        let g = Suivi.AdresseGardee(adresse: try #require(AdresseIPv6(Self.adresse(1))), partition: Self.partition,
+                                    annonce: Self.depart)
+        var proche = g
+        proche.annonce = Self.depart + 299
+        var loin = g
+        loin.annonce = Self.depart + 300
+        #expect(!Surveillance.adressesAEcrire(["x": g], ecrites: ["x": g], releve: Self.depart))
+        #expect(!Surveillance.adressesAEcrire(["x": proche], ecrites: ["x": g], releve: proche.annonce))
+        #expect(Surveillance.adressesAEcrire(["x": loin], ecrites: ["x": g], releve: loin.annonce))
+        #expect(Surveillance.adressesAEcrire(["x": proche], ecrites: ["x": g], releve: loin.annonce),
+                "il n'annonce plus : sa derniere annonce s'ecrit")
+        #expect(Surveillance.adressesAEcrire(["x": g, "y": g], ecrites: ["x": g], releve: Self.depart))
+        #expect(Surveillance.adressesAEcrire([:], ecrites: ["x": g], releve: Self.depart))
+        var autre = g
+        autre.partition = "0000BBBB"
+        #expect(Surveillance.adressesAEcrire(["x": autre], ecrites: ["x": g], releve: Self.depart))
+    }
+
+    /// Un fichier illisible, ou en JSON valide mais incoherent (adresse invalide, partition vide), est ignore sans
+    /// arreter l'app : le suivi ne sait rien, aucun appareil sans adresse n'est demande ; un changement le remplace.
+    @Test func dernieresAdressesIllisibles() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
+        let fichier = dossier.appendingPathComponent("dernieres-adresses.json")
+        let valide = #"{"adresse":"fd00:aaaa:bbbb:1::2","partition":"0000AAAA","annonce":"2026-10-12T08:00:00.000Z"}"#
+        let cas = [
+            "{ pas du json",
+            #"{"appareils":{"\#(Self.hap)":{"adresse":"pas une adresse","partition":"0000AAAA","#
+                + #""annonce":"2026-10-12T08:00:00.000Z"}}}"#,
+            #"{"appareils":{"\#(Self.hap)":{"adresse":"fd00:aaaa:bbbb:1::2","partition":"","#
+                + #""annonce":"2026-10-12T08:00:00.000Z"}}}"#,
+            #"{"appareils":{"\#(Self.hap)":\#(valide), "":\#(valide)}}"#,
+            #"{"appareils":{"\#(Self.hap)":{"adresse":"fd00:aaaa:bbbb:1::2"}}}"#,
+        ]
+        for texte in cas {
+            try Data(texte.utf8).write(to: fichier)
+            let s = Surveillance(mode: .direct, dossier: dossier)
+            s.chargerAdressesGardees()
+            #expect(s.suivi.dernieresAdresses.isEmpty && s.suivi.dernieresAnnonces.isEmpty
+                    && s.suivi.dernieresPartitions.isEmpty, "ignore : \(texte)")
+            s.integrer(Self.annonces(Self.depart + 3 * 3600, muets: [Self.hap]))
+            #expect(s.appareilsAResoudre().map(\.id) == [Self.matter, Self.temoin].sorted(), "hap non demande")
+        }
+        // Le fichier valide du dernier cas est lisible tel quel (garde-fou du test).
+        try Data(#"{"appareils":{"\#(Self.hap)":\#(valide)}}"#.utf8).write(to: fichier)
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        s.chargerAdressesGardees()
+        #expect(s.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(2)))
+        // Un fichier illisible est remplace par le premier changement.
+        try Data("{ pas du json".utf8).write(to: fichier)
+        let t = Surveillance(mode: .direct, dossier: dossier)
+        t.chargerAdressesGardees()
+        t.integrer(Self.annonces(Self.depart))
+        let relu = Surveillance(mode: .direct, dossier: dossier)
+        relu.chargerAdressesGardees()
+        #expect(relu.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(2)))
+    }
+
+    /// La demo n'ecrit ni ne lit rien, meme avec un dossier ; sans dossier, rien sur disque non plus.
+    @Test func dernieresAdressesJamaisEnDemoNiSansDossier() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        _ = Self.surveillanceSurDisque(dossier)
+        let avant = try Data(contentsOf: dossier.appendingPathComponent("dernieres-adresses.json"))
+        let demo = Surveillance(mode: .demo, dossier: dossier)
+        demo.chargerAdressesGardees()
+        #expect(demo.suivi.dernieresAdresses.isEmpty, "rien relu")
+        demo.demarrer()
+        #expect(!demo.suivi.dernieresAdresses.isEmpty, "la demo a son propre suivi")
+        #expect(try Data(contentsOf: dossier.appendingPathComponent("dernieres-adresses.json")) == avant, "rien ecrit")
+
+        let vide = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: vide) }
+        let demoVide = Surveillance(mode: .demo, dossier: vide)
+        demoVide.demarrer()
+        #expect(!FileManager.default.fileExists(atPath: vide.path), "aucun dossier cree")
+        let sansDossier = Surveillance(mode: .direct, dossier: nil)
+        sansDossier.chargerAdressesGardees()
+        sansDossier.integrer(Self.annonces(Self.depart))
+        #expect(!sansDossier.suivi.dernieresAdresses.isEmpty)
+    }
+
+    /// Une adresse annoncee de nouveau remplace celle qui a ete relue, avec sa date : l'appareil n'est plus demande
+    /// comme un appareil perdu.
+    @Test func adresseAnnonceeRemplaceLaRelue() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        _ = Self.surveillanceSurDisque(dossier)
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        s.chargerAdressesGardees()
+        let plusTard = Self.depart + 3 * 3600
+        var a = Self.annonces(plusTard)
+        a.adresses[Self.hap + ".local"] = [Self.adresse(9)]
+        s.integrer(a)
+        #expect(s.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(9)))
+        #expect(s.suivi.dernieresAnnonces[Self.hap] == plusTard)
+        let demande = try #require(s.appareilsAResoudre().first { $0.id == Self.hap })
+        #expect(demande.adresse == AdresseIPv6(Self.adresse(9)) && demande.derniereAnnonce == nil)
+        // Un appareil relu que le releve ne montre pas du tout garde sa derniere adresse, et le fichier aussi.
+        let seul = Surveillance(mode: .direct, dossier: dossier)
+        seul.chargerAdressesGardees()
+        seul.integrer(Self.annonces(plusTard + 60, partis: [Self.hap]))
+        #expect(seul.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(9)))
+        let encore = Surveillance(mode: .direct, dossier: dossier)
+        encore.chargerAdressesGardees()
+        #expect(encore.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(9)))
+    }
+
     /// Les textes dans la langue du lancement des tests (`-testLanguage fr`, puis `en`).
     @Test func textesFrancaisEtAnglais() throws {
         let t = Date(timeIntervalSince1970: 1_790_000_000)

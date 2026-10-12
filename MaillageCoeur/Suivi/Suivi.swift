@@ -22,6 +22,22 @@ import Foundation
 ///   de 2 min ne compte pas la veille, et si elle est retenue, elle est datee
 ///   du reveil, donc de la veille.
 public struct Suivi: Sendable {
+    /// Ce que le suivi sait d'un appareil qui annoncait une adresse : de quoi le redemander a la sonde apres une
+    /// relance de l'app (`Suivi.adressesGardees`, `Suivi.amorcer(_:)`).
+    public struct AdresseGardee: Codable, Hashable, Sendable {
+        /// Derniere adresse de l'appareil sur le prefixe OMR de sa partition.
+        public var adresse: AdresseIPv6
+        public var partition: String
+        /// Date du dernier releve ou il l'annoncait.
+        public var annonce: Date
+
+        public init(adresse: AdresseIPv6, partition: String, annonce: Date) {
+            self.adresse = adresse
+            self.partition = partition
+            self.annonce = annonce
+        }
+    }
+
     public static let apresReveil: TimeInterval = 240
 
     public private(set) var instantane: Instantane?
@@ -41,6 +57,30 @@ public struct Suivi: Sendable {
     private var reseauxVus: Set<String> = []
 
     public init() {}
+
+    /// La derniere adresse, la derniere partition et la derniere annonce de chaque appareil qui a les trois, par
+    /// identifiant : ce que l'app garde sur disque entre deux lancements.
+    public var adressesGardees: [String: AdresseGardee] {
+        var gardees: [String: AdresseGardee] = [:]
+        for (id, adresse) in dernieresAdresses {
+            guard let partition = dernieresPartitions[id], let annonce = dernieresAnnonces[id] else { continue }
+            gardees[id] = AdresseGardee(adresse: adresse, partition: partition, annonce: annonce)
+        }
+        return gardees
+    }
+
+    /// Reprend ce qu'un lancement precedent avait garde (`adressesGardees`) : un appareil sans adresse au premier
+    /// releve est ainsi redemande a la sonde avec sa derniere adresse et sa derniere annonce. Ce que le suivi sait
+    /// deja, d'un releve de ce lancement, l'emporte : l'adresse et l'annonce vont ensemble, la partition seule.
+    public mutating func amorcer(_ gardees: [String: AdresseGardee]) {
+        for (id, g) in gardees {
+            if dernieresAdresses[id] == nil || dernieresAnnonces[id] == nil {
+                dernieresAdresses[id] = g.adresse
+                dernieresAnnonces[id] = g.annonce
+            }
+            if dernieresPartitions[id] == nil { dernieresPartitions[id] = g.partition }
+        }
+    }
 
     /// Note une veille du Mac et rend son evenement.
     public mutating func noterVeille(_ periode: DateInterval) -> [Evenement] {

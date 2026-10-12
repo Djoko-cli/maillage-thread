@@ -189,6 +189,56 @@ struct AdresseVerifieeTests {
         #expect(mem.demandes == ["E00000000000000B", "E000000000000004"])
     }
 
+    /// Apres une relance de l'app, la memoire de la tournee est vide : la premiere tournee est une resolution complete.
+    /// Un appareil sans adresse dont la derniere annonce relue date de plusieurs heures y est demande, comme un
+    /// disparu de moins de 24 h ; pas un disparu de plus de 24 h.
+    @Test func derniereAnnonceReluePlusAncienneDemandeALaPremiereTournee() async throws {
+        let sonde = try TourneeTests.sondeResolue()
+        let appareils = [
+            try Self.perdu("E00000000000000A", annonce: Self.t0 - 5 * 3600),
+            try Self.perdu("E00000000000000B", annonce: Self.t0 - 5 * 3600, disparu: true),
+            try Self.perdu("E000000000000004", annonce: Self.t0 - 25 * 3600, disparu: true),
+        ]
+        let (_, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                              appareils: appareils))
+        #expect(await Self.demandees(sonde, depuis: 0) == [Self.cle(0x0A), Self.cle(0x0B)].sorted())
+        #expect(mem.resolutions["E00000000000000A"]?.date == Self.t0 && mem.derniereResolution == Self.t0)
+    }
+
+    /// Ce qu'un lancement precedent avait garde (`adressesGardees`) amorce le suivi : un appareil sans adresse au
+    /// premier releve est demande avec sa derniere adresse et sa derniere annonce relues. Ce que le suivi a vu depuis
+    /// l'emporte (adresse et annonce ensemble) ; la partition vue aussi.
+    @Test func suiviAmorceParLesAdressesGardees() throws {
+        let avant = Self.suiviApresPerte()
+        let gardees = avant.adressesGardees
+        #expect(gardees[Self.a1]?.adresse == AdresseIPv6(Self.adresse(1)))
+        #expect(gardees[Self.a1]?.partition == Self.partition)
+        #expect(gardees[Self.a1]?.annonce == avant.dernieresAnnonces[Self.a1])
+        #expect(gardees["Jamais-Adresse"] == nil, "jamais d'adresse : rien a garder")
+        let relu = try CodageJSON.decodeur().decode([String: Suivi.AdresseGardee].self,
+                                                    from: CodageJSON.encodeur().encode(gardees))
+        #expect(relu == gardees, "aller-retour JSON, dates a la milliseconde")
+
+        // Un nouveau suivi : a1 est sans adresse des le premier releve (3 h plus tard).
+        var s = Suivi()
+        s.amorcer(relu)
+        #expect(AppareilAResoudre.depuis(s).isEmpty, "pas d'instantane, rien a demander")
+        var b = Self.banc(Self.t0 + 3 * 3600)
+        b.adresses[Self.a1 + ".local"] = []
+        _ = s.integrer(b.annonces)
+        let a1 = try #require(AppareilAResoudre.depuis(s).first { $0.id == Self.a1 })
+        #expect(a1.adresse == AdresseIPv6(Self.adresse(1)) && a1.partition == Self.partition)
+        #expect(a1.derniereAnnonce == avant.dernieresAnnonces[Self.a1] && !a1.disparu)
+        // a3 annonce : son adresse vient du releve, pas du fichier ; amorcer ne l'ecrase pas non plus.
+        #expect(s.dernieresAnnonces[Self.a3] == Self.t0 + 3 * 3600)
+        var autre = s
+        autre.amorcer([Self.a3: .init(adresse: try #require(AdresseIPv6("fd00:aaaa:bbbb:1::99")),
+                                     partition: "0000BBBB", annonce: Self.t0)])
+        #expect(autre.dernieresAdresses[Self.a3] == AdresseIPv6(Self.adresse(3)))
+        #expect(autre.dernieresAnnonces[Self.a3] == Self.t0 + 3 * 3600)
+        #expect(autre.dernieresPartitions[Self.a3] == Self.partition)
+    }
+
     /// Une resolution anterieure a la perte de l'annonce ne place plus l'appareil sous son parent, tant que la sonde ne
     /// l'a pas retrouve (ici introuvable apres la perte) ; posterieure a la perte, elle le place toujours.
     @Test func resolutionAnterieureNePlacePlus() async throws {

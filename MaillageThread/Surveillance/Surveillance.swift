@@ -22,6 +22,13 @@ private struct MaillageGarde: Codable {
     var recu: Date
 }
 
+/// Les dernieres adresses des appareils, telles qu'elles sont gardees sur disque (`dernieres-adresses.json`) pour le
+/// lancement suivant : un appareil qui n'annonce plus d'adresse y garde la derniere, pour que la sonde le verifie.
+private struct AdressesGardees: Codable {
+    /// Par identifiant d'appareil.
+    var appareils: [String: Suivi.AdresseGardee]
+}
+
 /// Modele de l'app : releves -> suivi -> journal et notifications ; maillages de la
 /// sonde -> journal et historique ; noms ; etat lu par les vues.
 @MainActor
@@ -90,6 +97,12 @@ final class Surveillance {
     @ObservationIgnored private let fichierSurnoms: URL?
     /// Le dernier maillage garde (`dernier-maillage.json`) : mode direct avec un dossier ; nil : nulle part (demo).
     @ObservationIgnored private let fichierMaillage: URL?
+    /// Les dernieres adresses gardees (`dernieres-adresses.json`) : mode direct avec un dossier ; nil : nulle part
+    /// (demo, tests sans dossier).
+    @ObservationIgnored private let fichierAdresses: URL?
+    /// Ce qui est sur disque dans `dernieres-adresses.json` (vide : rien d'ecrit, ou fichier illisible) : on n'ecrit
+    /// que ce qui change.
+    @ObservationIgnored private var adressesEcrites: [String: Suivi.AdresseGardee] = [:]
     @ObservationIgnored private var alertes = Alertes()
     @ObservationIgnored private var suiviMaillage = SuiviMaillage()
     /// Historique sur disque : mode direct avec un dossier ; nil : nulle part (demo, tests).
@@ -132,6 +145,7 @@ final class Surveillance {
             journal = dossier.map { JournalFichiers(dossier: $0.appendingPathComponent("Journal")) }
             fichierSurnoms = dossier?.appendingPathComponent("surnoms.json")
             fichierMaillage = dossier?.appendingPathComponent("dernier-maillage.json")
+            fichierAdresses = dossier?.appendingPathComponent("dernieres-adresses.json")
             noms = ResolveurNoms(surnoms: fichierSurnoms.map(Surnoms.lire) ?? [:])
             fichiersHistorique = dossier.map { HistoriqueFichiers(dossier: $0) }
         case .demo:
@@ -140,6 +154,7 @@ final class Surveillance {
             journal = nil
             fichierSurnoms = nil
             fichierMaillage = nil
+            fichierAdresses = nil
             noms = ResolveurNoms(maison: NomsDemo.maison)
             fichiersHistorique = nil
         }
@@ -155,6 +170,7 @@ final class Surveillance {
         case .direct:
             chargerScissionsNotifiees()
             chargerMaillageGarde()
+            chargerAdressesGardees()
             chargerJournal()
             Task { [weak self] in await self?.chargerHistorique() }
             recenseur?.surReleve = { [weak self] a in self?.integrer(a) }
@@ -208,6 +224,64 @@ final class Surveillance {
         }
         let nouveaux = suivi.integrer(a, noms: noms)
         ajouter(nouveaux)
+        garderAdresses(releve: a.date)
+    }
+
+    /// Tant qu'un appareil annonce son adresse, son annonce avance a chaque releve (toutes les minutes) : une avance de
+    /// moins de 5 min ne justifie pas une ecriture. Une annonce qui ne bouge plus est ecrite exacte (voir
+    /// `adressesAEcrire`).
+    nonisolated static let ecartAnnonceEcrite: TimeInterval = 5 * 60
+
+    /// Ce qui est sur disque differe-t-il de `actuelles` ? Un appareil de plus ou de moins, une autre adresse ou
+    /// partition, ou une annonce differente. Seule exception : un appareil qui annonce encore a ce releve (`releve`)
+    /// n'est reecrit que si son annonce a avance de `ecartAnnonceEcrite`. Quand il cesse d'annoncer, sa derniere
+    /// annonce est ecrite exacte : celle que la sonde compare aux resolutions ne retarde jamais apres la relance.
+    nonisolated static func adressesAEcrire(_ actuelles: [String: Suivi.AdresseGardee],
+                                            ecrites: [String: Suivi.AdresseGardee], releve: Date) -> Bool {
+        guard actuelles.keys == ecrites.keys else { return true }
+        return actuelles.contains { id, a in
+            guard let e = ecrites[id] else { return true }
+            guard a.adresse == e.adresse, a.partition == e.partition else { return true }
+            let ecart = abs(a.annonce.timeIntervalSince(e.annonce))
+            return a.annonce == releve ? ecart >= ecartAnnonceEcrite : ecart > 0
+        }
+    }
+
+    /// Reprend les dernieres adresses gardees, avant le premier releve : le suivi les connait alors comme s'il les
+    /// avait vues, et un appareil qui n'annonce plus d'adresse est demande a la sonde des le premier releve. Fichier
+    /// absent : rien. Illisible ou incoherent (adresse invalide, partition vide) : rien non plus, consigne dans le
+    /// journal du Mac.
+    func chargerAdressesGardees() {
+        guard let fichierAdresses, FileManager.default.fileExists(atPath: fichierAdresses.path) else { return }
+        do {
+            let garde = try CodageJSON.decodeur().decode(AdressesGardees.self, from: Data(contentsOf: fichierAdresses))
+            guard garde.appareils.allSatisfy({ !$0.key.isEmpty && !$0.value.partition.isEmpty }) else {
+                Self.journalMac.error("dernieres adresses incoherentes, ignorees")
+                return
+            }
+            suivi.amorcer(garde.appareils)
+            adressesEcrites = garde.appareils
+        } catch {
+            Self.journalMac.error("dernieres adresses illisibles, ignorees")
+        }
+    }
+
+    /// Garde les dernieres adresses sur disque, d'un bloc, quand elles ont change au releve `releve`
+    /// (`adressesAEcrire`). Un echec est consigne dans le journal du Mac ; le suivi garde tout en memoire et l'ecriture
+    /// est retentee au releve suivant.
+    private func garderAdresses(releve: Date) {
+        guard let fichierAdresses else { return }
+        let actuelles = suivi.adressesGardees
+        guard Self.adressesAEcrire(actuelles, ecrites: adressesEcrites, releve: releve) else { return }
+        do {
+            try FileManager.default.createDirectory(at: fichierAdresses.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try CodageJSON.encodeur().encode(AdressesGardees(appareils: actuelles)).write(to: fichierAdresses,
+                                                                                          options: .atomic)
+            adressesEcrites = actuelles
+        } catch {
+            Self.journalMac.error("dernieres adresses non ecrites : \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Reprend le dernier maillage garde, avant la premiere tournee de la sonde : son age se compte depuis sa reception
