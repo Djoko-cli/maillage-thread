@@ -207,7 +207,7 @@ struct FenetreReglages: View {
                     Text(p).font(.caption).foregroundStyle(.red)
                 }
                 HStack {
-                    // Une demande pendant un releve serait ignoree.
+                    // Grise pendant une relecture : le demon y repond, sinon la garde la libere apres 2 minutes.
                     Button("Rafraîchir depuis Maison") { nomsMaison.relire() }
                         .disabled(surveillance.mode == .demo || nomsMaison.releveEnCours)
                     if nomsMaison.releveEnCours {

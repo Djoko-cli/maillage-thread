@@ -64,6 +64,8 @@ final class NomsInternes {
     @ObservationIgnored private var minuterie: Task<Void, Never>?
     @ObservationIgnored private var reprise: Task<Void, Never>?
     @ObservationIgnored private var effacement: Task<Void, Never>?
+    /// Garde de `relire` : libere `releveEnCours` si le demon ne repond pas dans le delai.
+    @ObservationIgnored private var gardeReleve: Task<Void, Never>?
     /// Numero de la derniere demande d'identification, et son accessoire.
     @ObservationIgnored private var demande = 0
     @ObservationIgnored private var enIdentification: String?
@@ -120,6 +122,14 @@ final class NomsInternes {
         if connecte, let a = abonnement {
             releveEnCours = true
             a.envoyer(.relire)
+            // Un demon connecte qui ne repond jamais ne laisse pas le bouton grise pour toujours.
+            gardeReleve?.cancel()
+            gardeReleve = Task { [weak self, delai] in
+                try? await Task.sleep(for: delai)
+                guard !Task.isCancelled, let self, self.releveEnCours else { return }
+                self.releveEnCours = false
+                self.probleme = String(localized: "Passeur Noms n'a pas répondu à la demande de relevé.")
+            }
         } else if abonnement == nil {
             tentative = 0
             abonner()
@@ -168,6 +178,8 @@ final class NomsInternes {
             etat = e
         case .releve(let json):
             releveEnCours = false
+            gardeReleve?.cancel()
+            gardeReleve = nil
             do {
                 integrer(try NomsMaison.lire(json))
             } catch {
@@ -189,6 +201,8 @@ final class NomsInternes {
         a.fermer()
         minuterie?.cancel()
         minuterie = nil
+        gardeReleve?.cancel()
+        gardeReleve = nil
         connecte = false
         releveEnCours = false
         probleme = p

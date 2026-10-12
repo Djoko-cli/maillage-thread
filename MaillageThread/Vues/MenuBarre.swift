@@ -80,7 +80,7 @@ struct MenuBarre: View {
                 Button("Ouvrir le graphe") { ouvrir("graphe") }
                 Button("Journal…") { ouvrir("journal") }
                 if surveillance.mode == .direct {
-                    // Une demande pendant un releve serait ignoree.
+                    // Grise pendant une relecture : le demon y repond, sinon la garde la libere apres 2 minutes.
                     Button("Rafraîchir depuis Maison") { nomsMaison.relire() }
                         .disabled(nomsMaison.releveEnCours)
                     if let p = nomsMaison.probleme {

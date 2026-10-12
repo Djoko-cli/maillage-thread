@@ -336,6 +336,27 @@ struct NomsInternesTests {
         #expect(n.noms == Self.noms())
     }
 
+    /// Un demon connecte qui ne repond pas a `relire` : apres le delai, le bouton est libere, le probleme dit, et la
+    /// connexion reste ouverte.
+    @Test func releveSansReponse() async throws {
+        let cache = Self.cache()
+        defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
+        let lancements = LancementsPasseur()
+        let n = NomsInternes(cache: cache, delai: .milliseconds(100), attentes: [.milliseconds(20)],
+                             lanceur: Self.lanceur(lancements))
+        n.demarrer()
+        let cible = try #require(await Self.cible(lancements))
+        let d = try #require(FauxDemon(port: cible.port))
+        #expect(await d.jeton(cible.jeton))
+        #expect(await attendreQue { n.connecte })
+        n.relire()
+        #expect(n.releveEnCours)
+        #expect(await attendreQue { !n.releveEnCours })
+        #expect(n.probleme == String(localized: "Passeur Noms n'a pas répondu à la demande de relevé."))
+        #expect(n.connecte)
+        #expect(d.messages == [.relire])
+    }
+
     /// Sans memoire (demo, tests) : rien ne se lance, ni au demarrage ni sur demande.
     @Test func sansMemoire() {
         let n = NomsInternes(cache: nil, lanceur: NomsInternes.lanceurInterdit)

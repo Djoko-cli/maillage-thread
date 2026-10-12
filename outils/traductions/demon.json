@@ -20,5 +20,7 @@
   "Ouvrir Passeur Noms à l'ouverture de session": "Open Passeur Noms at login",
   "Accepte Passeur Noms dans Réglages Système › Général › Ouverture.": "Allow Passeur Noms in System Settings › General › Login Items.",
   "Le profil de Passeur Noms expire le %@ : relance outils/passeur.sh.": "The Passeur Noms profile expires on %@: run outils/passeur.sh again.",
-  "Identifier": "Identify"
+  "Identifier": "Identify",
+  "Passeur Noms n'a pas répondu à la demande de relevé.": "Passeur Noms did not answer the reading request.",
+  "Pas encore de pièces de Maison": "No Home rooms yet"
 }

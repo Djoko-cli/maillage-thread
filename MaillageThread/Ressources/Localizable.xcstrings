@@ -3009,18 +3009,18 @@
         }
       }
     },
-    "Pas encore de pièces de Maison : lance le passeur" : {
+    "Pas encore de pièces de Maison" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No rooms from Home yet: run Passeur Noms"
+            "value" : "No Home rooms yet"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pas encore de pièces de Maison : lance le passeur"
+            "value" : "Pas encore de pièces de Maison"
           }
         }
       }
@@ -3069,6 +3069,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Passeur Noms introuvable : lance outils/passeur.sh."
+          }
+        }
+      }
+    },
+    "Passeur Noms n'a pas répondu à la demande de relevé." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms did not answer the reading request."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms n'a pas répondu à la demande de relevé."
           }
         }
       }

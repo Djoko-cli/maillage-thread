@@ -404,7 +404,7 @@ struct BandeauSansPieces: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Label("Pas encore de pièces de Maison : lance le passeur", systemImage: "house")
+            Label("Pas encore de pièces de Maison", systemImage: "house")
             Button("Rafraîchir depuis Maison") { nomsMaison.relire() }
                 .buttonStyle(StyleBoutonCapsule(taille: 10))
                 .disabled(surveillance.mode == .demo)
