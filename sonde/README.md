@@ -85,7 +85,7 @@ lueur blanche jusqu'à 8/255. Du plus prioritaire au moins prioritaire :
 | bleu clignotant (250 ms allumé, 250 ms éteint) | la sonde n'est pas mise en service (pas encore appairée, ou oubliée) |
 | bleu lent, pulsation de 2 s (montée jusqu'à 24/255 puis descente) | mise en service mais pas attachée au réseau Thread : au démarrage, ou après la perte de son parent |
 | deux éclairs verts rapides (100 ms, 100 ms de pause) | la sonde vient de s'attacher au réseau Thread (aussi au premier attachement après le démarrage) |
-| un bref éclair orange (100 ms) toutes les 5 s | la sonde est suspendue (interrupteur éteint) ; dès le démarrage si elle l'était avant |
+| un bref éclair orange (100 ms) toutes les 5 s | la sonde est suspendue (interrupteur éteint) ; dès l'attachement si elle l'était avant |
 | éteinte, une brève lueur blanche toutes les 10 s (montée puis descente jusqu'à 8/255 sur 600 ms) | tout va bien : la sonde est allumée et attachée au réseau Thread ; la première lueur juste après les éclairs verts de l'attachement |
 
 L'orange lent du tronc commun (« mis en service, sans réseau IP ») ne
@@ -298,7 +298,8 @@ UBSan ; ce ne sont pas des tests `pio test`) : l'enveloppe H1
 de `voyant.h` (`test_distant.cpp` : rid, liste blanche, réponses gardées,
 cadence ; depuis la 1.0.3, lecture des entiers, reprises CoAP d'un `diag` et
 séquence de la LED ; depuis la 1.1.1, chaque motif du tronc commun, ses
-durées et ses priorités, et la fin des effets d'identification) ; depuis la 1.1.0, l'écoute (`test_mle.cpp` : dérivation
+durées et ses priorités, et la fin des effets d'identification) ; depuis
+la 1.1.0, l'écoute (`test_mle.cpp` : dérivation
 de la clé MLE, AES-CCM et refus d'un MIC faux, trames 802.15.4 de 2006 et de
 2015, IE, PAN, IPHC, UDP compressé ou non, TLV, clés gardées et leur
 lecture sur la pile (une fois par séquence, même après un échec), table des

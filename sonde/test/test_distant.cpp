@@ -505,6 +505,17 @@ int main() {
     i.identifier(false, 31000);
     CHECK(i.couleur(31999) == Voyant::kArcEnCiel && i.couleur(32000) != Voyant::kArcEnCiel,
           "reprise puis fin : le tour minimal compte depuis le debut");
+    // Nouvelle demande juste apres l'echeance d'un tour minimal, avant que
+    // image() l'ait oublie : un nouveau tour part, depuis le rouge.
+    Voyant e;
+    e.demarrer(false, Voyant::kAttachee, 0);
+    e.identifier(true, 1000);
+    e.identifier(false, 1020);
+    e.identifier(true, 3005);
+    CHECK(e.rvb(3005) == Voyant::roue(0), "nouveau tour : depuis le rouge");
+    e.identifier(false, 3045);
+    CHECK(e.couleur(3045) == Voyant::kArcEnCiel && e.couleur(5004) == Voyant::kArcEnCiel,
+          "demande juste apres un tour echu : un nouveau tour complet");
     // Devant tout : geste, bleu des deux sortes, adhesion, suspension.
     Voyant t1;
     t1.demarrer(false, Voyant::kNonMiseEnService, 0);

@@ -396,6 +396,13 @@ static bool surInterrupteur(bool allume) {
 // « Identifier » dans Maison (cluster Identify de l'interrupteur), dans la
 // tache CHIP : ne fait que poser l'etat, comme le pont Halo (onIdentify).
 // La requete est remplie par la bibliotheque juste avant ce rappel.
+static_assert(effetIdent::kBlink == MatterIdentifyRequest::BLINK &&
+                  effetIdent::kBreathe == MatterIdentifyRequest::BREATHE &&
+                  effetIdent::kOkay == MatterIdentifyRequest::OKAY &&
+                  effetIdent::kChangementCanal == MatterIdentifyRequest::CHANNEL_CHANGE &&
+                  effetIdent::kFinish == MatterIdentifyRequest::FINISH &&
+                  effetIdent::kStop == MatterIdentifyRequest::STOP,
+              "effets d'identification : les valeurs de la bibliotheque Matter");
 static bool surIdentification(bool actif) {
   const MatterIdentifyRequest r = sInterrupteur.getIdentifyRequest();
   if (r.fromTriggerEffect)

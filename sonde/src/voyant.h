@@ -115,7 +115,9 @@ class Voyant {
   // moins un tour complet meme si elle ne dure qu'un instant. Une nouvelle
   // identification pendant ce tour minimal le prolonge sans repartir.
   void identifier(bool actif, uint32_t maintenant) {
-    if (actif && !identification_ && !tourMinimal_) {
+    // Un tour minimal echu mais pas encore oublie par image() ne compte plus.
+    const bool tour = tourMinimal_ && maintenant - debutIdent_ < kArcEnCielMs;
+    if (actif && !identification_ && !tour) {
       debutIdent_ = maintenant;
       tourMinimal_ = true;
     }
