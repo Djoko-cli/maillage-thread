@@ -172,26 +172,47 @@ struct FenetreReglages: View {
         }
     }
 
-    /// Onglet Maison : noms, pieces et zones releves par le passeur.
+    /// Onglet Maison : le demon Passeur Noms (etat, ouverture de session, profil), puis les noms, pieces et zones qu'il
+    /// a releves.
     private var nomsDeMaison: some View {
-        Section("Noms de Maison") {
-            if let n = nomsMaison.noms {
-                LabeledContent("Noms lus",
-                               value: String(localized: "\(n.accessoires.count) accessoires · \(n.date.formatted(date: .abbreviated, time: .shortened))"))
-                // Rien pour un releve d'avant les zones.
-                if let zones = n.zones {
-                    LabeledContent("Zones", value: Self.texteZones(zones))
+        Group {
+            Section("Passeur Noms") {
+                LabeledContent("État", value: NomsInternes.texteDemon(connecte: nomsMaison.connecte, etat: nomsMaison.etat))
+                Toggle("Ouvrir Passeur Noms à l'ouverture de session", isOn: Binding(
+                    get: { nomsMaison.etat?.ouvertureSession == .active },
+                    set: { nomsMaison.reglerOuvertureSession($0) }))
+                    .disabled(!NomsInternes.interrupteurActif(connecte: nomsMaison.connecte, etat: nomsMaison.etat))
+                if nomsMaison.connecte, nomsMaison.etat?.ouvertureSession == .aApprouver {
+                    Text("Accepte Passeur Noms dans Réglages Système › Général › Ouverture.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                if let fin = nomsMaison.etat?.profilExpire,
+                   NomsInternes.profilBientotExpire(nomsMaison.etat, maintenant: .now) {
+                    Text("Le profil de Passeur Noms expire le \(fin.formatted(date: .abbreviated, time: .omitted)) : relance outils/passeur.sh.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
-            if let p = nomsMaison.probleme {
-                Text(p).font(.caption).foregroundStyle(.red)
-            }
-            HStack {
-                // Une demande pendant un releve serait ignoree.
-                Button("Rafraîchir depuis Maison") { nomsMaison.relire() }
-                    .disabled(surveillance.mode == .demo || nomsMaison.releveEnCours)
-                if nomsMaison.releveEnCours {
-                    ProgressView().controlSize(.small)
+            Section("Noms de Maison") {
+                if let n = nomsMaison.noms {
+                    LabeledContent("Noms lus",
+                                   value: String(localized: "\(n.accessoires.count) accessoires · \(n.date.formatted(date: .abbreviated, time: .shortened))"))
+                    // Rien pour un releve d'avant les zones.
+                    if let zones = n.zones {
+                        LabeledContent("Zones", value: Self.texteZones(zones))
+                    }
+                }
+                if let p = nomsMaison.probleme {
+                    Text(p).font(.caption).foregroundStyle(.red)
+                }
+                HStack {
+                    // Une demande pendant un releve serait ignoree.
+                    Button("Rafraîchir depuis Maison") { nomsMaison.relire() }
+                        .disabled(surveillance.mode == .demo || nomsMaison.releveEnCours)
+                    if nomsMaison.releveEnCours {
+                        ProgressView().controlSize(.small)
+                    }
                 }
             }
         }

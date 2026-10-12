@@ -100,7 +100,8 @@ struct FicheNoeud: View {
     }
 
     /// « Renommer… », « Placer dans une pièce… », et pour un appareil Thread que Maison ne nomme pas « Associer à un
-    /// accessoire de Maison… » (« Dissocier » s'il l'est a la main), sous l'identite.
+    /// accessoire de Maison… » (« Dissocier » s'il l'est a la main), et « Identifier » pour un appareil relie a un
+    /// accessoire de Maison (`BoutonIdentifier`), sous l'identite.
     private var boutonsIdentite: some View {
         RangeesFluides(espacement: 8, interligne: 6) {
             if Self.renommable(id, dans: surveillance) {
@@ -113,6 +114,9 @@ struct FicheNoeud: View {
                         .boutonDeFiche()
                 } else if MenuAssocier.propose(a, dans: surveillance) {
                     MenuAssocier(id: id)
+                }
+                if let accessoire = surveillance.accessoire(a) {
+                    BoutonIdentifier(accessoire: accessoire)
                 }
             }
             if let piecesChoisies, let entree,

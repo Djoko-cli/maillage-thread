@@ -4220,7 +4220,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes : `NomsInternes.connecte`, `etat`, `identification`, `relire()`, `identifier(accessoire:)`, `reglerOuvertureSession(_:)`, `texteDemon`, `profilBientotExpire`, `interrupteurActif` (tâche 11) ; `Surveillance.accessoire(_:)`, `surveillance.appareil(_:)`, `.boutonDeFiche()`.
 - Produces : `struct BoutonIdentifier: View` (`accessoire: AccessoireMaison`), `static func actif(connecte: Bool, accessoire: AccessoireMaison) -> Bool`.
 
-- [ ] **Step 1 : écrire les tests qui échouent**
+- [x] **Step 1 : écrire les tests qui échouent**
 
 `MaillageThreadTests/ReglagesDemonTests.swift` :
 
@@ -4289,7 +4289,7 @@ struct ReglagesDemonTests {
 Run : `outils/tester.sh MaillageThreadTests/ReglagesDemonTests`
 Expected : échec de compilation (`BoutonIdentifier` inconnu).
 
-- [ ] **Step 2 : le bouton « Identifier »**
+- [x] **Step 2 : le bouton « Identifier »**
 
 `MaillageThread/Vues/Pieces/BoutonIdentifier.swift` :
 
@@ -4335,7 +4335,7 @@ Dans `FicheNoeud.swift`, `boutonsIdentite`, dans le bloc `if let a = surveillanc
 
 et compléter le commentaire de `boutonsIdentite` : « …, et « Identifier » pour un appareil relié à un accessoire de Maison (`BoutonIdentifier`) ». (Écrire ce commentaire sans accents, comme le reste du fichier.)
 
-- [ ] **Step 3 : Réglages › Maison**
+- [x] **Step 3 : Réglages › Maison**
 
 Dans `FenetreReglages.swift`, remplacer la propriété `nomsDeMaison` entière par :
 
@@ -4386,7 +4386,7 @@ Dans `FenetreReglages.swift`, remplacer la propriété `nomsDeMaison` entière p
     }
 ```
 
-- [ ] **Step 4 : textes et traductions**
+- [x] **Step 4 : textes et traductions**
 
 ```bash
 outils/tester.sh MaillageThreadTests/ReglagesDemonTests
@@ -4431,7 +4431,7 @@ outils/tester.sh
 
 Expected : tout vert, `CataloguesTests` compris (aucune clé absente, inutilisée ou périmée), et les tests qui rendent la fiche sans `NomsInternes` dans l'environnement (`FicheHeureTests`, `AssociationMaisonTests`, `CourbesFicheTests`, `LegendePiecesTests`, `FenetrePiecesTests`) : le bouton y est grisé, sans plantage. Si `CataloguesTests` signale une clé nouvelle absente de `demon.json` (un texte que ce plan n'a pas listé, par exemple « État » s'il n'existait pas), l'ajouter à `demon.json` avec son anglais et relancer les deux commandes.
 
-- [ ] **Step 5 : commit**
+- [x] **Step 5 : commit**
 
 ```bash
 git add MaillageThread/Vues/FenetreReglages.swift MaillageThread/Vues/Pieces/BoutonIdentifier.swift \

@@ -881,6 +881,38 @@
         }
       }
     },
+    "Accepte Passeur Noms dans Réglages Système › Général › Ouverture." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Passeur Noms in System Settings › General › Login Items."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accepte Passeur Noms dans Réglages Système › Général › Ouverture."
+          }
+        }
+      }
+    },
+    "Accessoire introuvable dans Maison" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accessory not found in Home"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accessoire introuvable dans Maison"
+          }
+        }
+      }
+    },
     "Accès au réseau local refusé" : {
       "localizations" : {
         "en" : {
@@ -1441,6 +1473,22 @@
         }
       }
     },
+    "Cet accessoire ne sait pas s'identifier" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This accessory cannot identify itself"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet accessoire ne sait pas s'identifier"
+          }
+        }
+      }
+    },
     "Clé absente de ce Mac pour %@.local : brancher la sonde en USB, puis « Autoriser l'accès réseau »." : {
       "localizations" : {
         "en" : {
@@ -1517,6 +1565,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Compteurs des enfants"
+          }
+        }
+      }
+    },
+    "Connexion avec Passeur Noms coupée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection with Passeur Noms lost."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connexion avec Passeur Noms coupée."
+          }
+        }
+      }
+    },
+    "Connexion de Passeur Noms refusée : jeton faux." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms connection refused: wrong token."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connexion de Passeur Noms refusée : jeton faux."
           }
         }
       }
@@ -2001,6 +2081,70 @@
         }
       }
     },
+    "Identification demandée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identification requested"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identification demandée"
+          }
+        }
+      }
+    },
+    "Identification impossible" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identification failed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identification impossible"
+          }
+        }
+      }
+    },
+    "Identification impossible : %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identification failed: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identification impossible : %@"
+          }
+        }
+      }
+    },
+    "Identifier" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identify"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identifier"
+          }
+        }
+      }
+    },
     "Identité des enfants" : {
       "localizations" : {
         "en" : {
@@ -2225,6 +2369,22 @@
         }
       }
     },
+    "Le profil de Passeur Noms expire le %@ : relance outils/passeur.sh." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Passeur Noms profile expires on %@: run outils/passeur.sh again."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le profil de Passeur Noms expire le %@ : relance outils/passeur.sh."
+          }
+        }
+      }
+    },
     "Le surnom reste sur ce Mac et passe avant le nom de Maison." : {
       "localizations" : {
         "en" : {
@@ -2385,6 +2545,22 @@
         }
       }
     },
+    "Message illisible de Passeur Noms : connexion fermée." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unreadable message from Passeur Noms: connection closed."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message illisible de Passeur Noms : connexion fermée."
+          }
+        }
+      }
+    },
     "Met la courbe en avant ; un second clic rend les autres" : {
       "localizations" : {
         "en" : {
@@ -2509,22 +2685,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Noms de Maison"
-          }
-        }
-      }
-    },
-    "Noms du %@ : relance outils/passeur.sh pour les rafraîchir." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Names from %@: run outils/passeur.sh again to refresh them."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Noms du %@ : relance outils/passeur.sh pour les rafraîchir."
           }
         }
       }
@@ -2669,6 +2829,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ouverture"
+          }
+        }
+      }
+    },
+    "Ouvrir Passeur Noms à l'ouverture de session" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Passeur Noms at login"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir Passeur Noms à l'ouverture de session"
           }
         }
       }
@@ -2849,6 +3025,38 @@
         }
       }
     },
+    "Passeur Noms" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms"
+          }
+        }
+      }
+    },
+    "Passeur Noms est l'ancienne version : relance outils/passeur.sh." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms is the old version: run outils/passeur.sh again."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms est l'ancienne version : relance outils/passeur.sh."
+          }
+        }
+      }
+    },
     "Passeur Noms introuvable : lance outils/passeur.sh." : {
       "localizations" : {
         "en" : {
@@ -2865,18 +3073,34 @@
         }
       }
     },
-    "Passeur Noms n'a rien envoyé en 2 minutes." : {
+    "Passeur Noms ne s'est pas connecté en 2 minutes." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passeur Noms sent nothing within 2 minutes."
+            "value" : "Passeur Noms did not connect within 2 minutes."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passeur Noms n'a rien envoyé en 2 minutes."
+            "value" : "Passeur Noms ne s'est pas connecté en 2 minutes."
+          }
+        }
+      }
+    },
+    "Passeur Noms s'est déconnecté." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms disconnected."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms s'est déconnecté."
           }
         }
       }
@@ -3309,54 +3533,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Relevé de Maison illisible : %@"
-          }
-        }
-      }
-    },
-    "Relevé de Maison illisible : longueur fausse." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unreadable Home reading: wrong length."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Relevé de Maison illisible : longueur fausse."
-          }
-        }
-      }
-    },
-    "Relevé de Maison interrompu : la connexion avec Passeur Noms a été coupée." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Home reading interrupted: the connection with Passeur Noms was cut."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Relevé de Maison interrompu : la connexion avec Passeur Noms a été coupée."
-          }
-        }
-      }
-    },
-    "Relevé de Maison refusé : jeton faux." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Home reading refused: wrong token."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Relevé de Maison refusé : jeton faux."
           }
         }
       }
@@ -4465,6 +4641,54 @@
         }
       }
     },
+    "accès à Maison autorisé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home access allowed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "accès à Maison autorisé"
+          }
+        }
+      }
+    },
+    "accès à Maison en attente" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home access pending"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "accès à Maison en attente"
+          }
+        }
+      }
+    },
+    "accès à Maison refusé" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home access denied"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "accès à Maison refusé"
+          }
+        }
+      }
+    },
     "active" : {
       "localizations" : {
         "en" : {
@@ -4701,6 +4925,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "chemin %@ : /dev/cu.* attendu"
+          }
+        }
+      }
+    },
+    "connecté · version %@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "connected · version %1$@ · %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "connecté · version %1$@ · %2$@"
           }
         }
       }
@@ -5409,6 +5649,22 @@
         }
       }
     },
+    "non connecté" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "not connected"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "non connecté"
+          }
+        }
+      }
+    },
     "non identifié" : {
       "localizations" : {
         "en" : {
@@ -6033,18 +6289,18 @@
         }
       }
     },
-    "Écoute du relevé impossible : %@" : {
+    "Écoute de Passeur Noms impossible : %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cannot listen for the Home reading: %@"
+            "value" : "Cannot listen for Passeur Noms: %@"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Écoute du relevé impossible : %@"
+            "value" : "Écoute de Passeur Noms impossible : %@"
           }
         }
       }
