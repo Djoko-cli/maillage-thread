@@ -29,6 +29,9 @@ public struct Suivi: Sendable {
     public private(set) var disparus: [String: Appareil] = [:]
     /// Derniere partition connue de chaque appareil (pour placer un appareil sans adresse ou disparu).
     public private(set) var dernieresPartitions: [String: String] = [:]
+    /// Derniere adresse de chaque appareil sur le prefixe OMR de sa partition, mise a jour a chaque instantane ou il en
+    /// a une : la sonde verifie avec elle un appareil qui ne l'annonce plus (sans adresse ou disparu).
+    public private(set) var dernieresAdresses: [String: AdresseIPv6] = [:]
     private var memoire = MemoireAnnonces()
     private var derniereVeille: DateInterval?
     /// Reseaux (`Reseau.id`) vus depuis le lancement.
@@ -81,6 +84,7 @@ public struct Suivi: Sendable {
         reseauxVus.formUnion(nouveau.reseaux.map(\.id))
         for a in nouveau.appareils {
             if let p = a.partition { dernieresPartitions[a.id] = p }
+            if let ad = a.adresseOMR { dernieresAdresses[a.id] = ad }
         }
         return ev.map(dater)
     }

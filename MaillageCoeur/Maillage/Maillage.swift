@@ -159,6 +159,15 @@ public struct Maillage: Hashable, Sendable, Codable {
     public var resolution: Date?
     /// La sonde a rendu ses annonces a cette tournee (firmware 1.1.0) : un routeur sans `entendu` n'est pas entendu.
     public var annoncesLues = false
+    /// Appareils que la resolution d'adresse a trouves, par identifiant, avec la date de leur resolution
+    /// (`MemoireTournee.resolutions` a la fin de la tournee), quel que soit leur parent : un appareil qui
+    /// n'annonce plus son adresse et que la sonde trouve est joignable. Pas garde sur disque : un maillage relu
+    /// au lancement n'en a aucun, jusqu'a la tournee suivante.
+    public var resolus: [String: Date] = [:]
+
+    private enum CodingKeys: String, CodingKey {
+        case date, partition, routeurs, liens, enfants, signaux, resolution, annoncesLues
+    }
 
     /// Couverture de l'ecoute : les routeurs entendus sur ceux de la partition ; nil si la sonde n'a pas rendu ses
     /// annonces (firmware 1.0.3, sonde muette).

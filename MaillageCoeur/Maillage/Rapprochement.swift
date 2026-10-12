@@ -143,7 +143,11 @@ public struct MaillageAffiche: Hashable, Sendable {
     /// Carte radio seulement (decision de Djoko du 08/10) : un lien entre deux routeurs dont l'ExtMac est dans `trel`
     /// (ils annoncent TREL, et peuvent se parler par le reseau local) n'est pas garde : leur Route64 ne dit pas s'il passe
     /// par la radio.
-    public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil], trel: Set<String> = []) {
+    /// `dernieresAdresses` : la derniere adresse d'appareils qui ne l'annoncent plus et que la sonde a trouves ; un
+    /// enfant qui n'a l'adresse annoncee d'aucun appareil est rapproche de celui dont c'est la derniere (un
+    /// accessoire HomeKit, dont l'hote n'est pas l'ExtMac, se reconnait ainsi).
+    public init(maillage: Maillage, reseau: Reseau, appareils: [Appareil], trel: Set<String> = [],
+                dernieresAdresses: [String: AdresseIPv6] = [:]) {
         partition = maillage.partition
         date = maillage.date
         let bordures = reseau.partitions.first { $0.id == maillage.partition }?.routeurs ?? []
@@ -220,6 +224,7 @@ public struct MaillageAffiche: Hashable, Sendable {
             if id == nil, !e.adresses.isEmpty {
                 let adresses = Set(e.adresses)
                 id = appareils.first { !adresses.isDisjoint(with: $0.adresses) }?.id
+                    ?? appareils.first { dernieresAdresses[$0.id].map(adresses.contains) == true }?.id
             }
             if let i = id, pris.contains(i) { id = nil }
             if let i = id { pris.insert(i) }

@@ -19,10 +19,33 @@ public struct AppareilAResoudre: Hashable, Sendable {
     /// La tournee garde ceux de la partition de la sonde : la resolution ne traverse pas les partitions.
     public static func depuis(_ i: Instantane) -> [AppareilAResoudre] {
         i.appareils.compactMap { a in
-            guard a.genre == .thread, let p = a.partition, let prefixe = a.prefixe,
-                  let adresse = a.adresses.first(where: prefixe.contient) else { return nil }
+            guard let p = a.partition, let adresse = a.adresseOMR else { return nil }
             return AppareilAResoudre(id: a.id, partition: p, adresse: adresse)
         }.sorted { $0.id < $1.id }
+    }
+
+    /// Ceux de l'instantane du suivi (`depuis(_:)`), puis les appareils qui n'annoncent plus d'adresse (sans adresse)
+    /// ou plus rien (disparus), avec leur derniere adresse sur le prefixe OMR et leur derniere partition
+    /// (`Suivi.dernieresAdresses`, `Suivi.dernieresPartitions`) : la sonde verifie s'ils sont toujours la. Un appareil
+    /// dont l'une manque n'est pas demande. Par identifiant ; aucun sans instantane.
+    public static func depuis(_ s: Suivi) -> [AppareilAResoudre] {
+        guard let i = s.instantane else { return [] }
+        let annoncent = depuis(i)
+        let deja = Set(annoncent.map(\.id))
+        let muets = i.appareils.filter { $0.genre == .sansAdresse }.map(\.id) + Array(s.disparus.keys)
+        let verifies = Set(muets).subtracting(deja).compactMap { id -> AppareilAResoudre? in
+            guard let p = s.dernieresPartitions[id], let adresse = s.dernieresAdresses[id] else { return nil }
+            return AppareilAResoudre(id: id, partition: p, adresse: adresse)
+        }
+        return (annoncent + verifies).sorted { $0.id < $1.id }
+    }
+}
+
+extension Appareil {
+    /// Son adresse sur le prefixe OMR de sa partition (appareil Thread place dans une partition) ; nil sinon.
+    public var adresseOMR: AdresseIPv6? {
+        guard genre == .thread, partition != nil, let prefixe else { return nil }
+        return adresses.first(where: prefixe.contient)
     }
 }
 

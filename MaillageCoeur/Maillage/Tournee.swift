@@ -457,6 +457,7 @@ public enum Tournee {
         var maillage = c.maillage()
         // Date de la resolution complete dont viennent les enfants resolus (une resolution refusee ne la change pas).
         maillage.resolution = mem.derniereResolution
+        maillage.resolus = mem.resolutions.mapValues(\.date)
         return (maillage, mem)
     }
 
