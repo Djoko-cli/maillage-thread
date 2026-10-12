@@ -79,15 +79,17 @@ Le Mac n'a pas de radio Thread : l'app **écoute** seulement le réseau local.
 | `_matter._tcp` | une instance par appareil et par fabrique (`<fabrique>-<nœud>`), regroupées par hôte ; `ICD`, ou `SII` de plus de 2 s : appareil endormi |
 | `_hap._udp` | accessoires HomeKit (leur nom) |
 | `_trel._udp` (TXT) | routeurs qui passent aussi par le réseau local (TREL, `xa`) : leurs liens entre eux ne sont pas dessinés (carte radio seulement) |
-| adresses des hôtes | préfixe OMR → partition ; réseau local → appareil IP ; aucune → « sans adresse » |
+| adresses des hôtes | préfixe OMR → partition ; réseau local → appareil IP ; aucune → « adresse non annoncée » |
 | table de routage du Mac | quel routeur de bordure route quel préfixe OMR |
 
 « Joignable » veut dire *annoncé avec une adresse Thread dans la partition
-principale*, pas « répond » : la joignabilité ne vient jamais de la sonde. Une
-disparition n'est retenue qu'après 2 minutes d'absence et datée de la première
-absence. Les vrais liens (enfant → parent, routeur ↔ routeur, qualité)
-viennent de la sonde, un ESP32-C6 branché au Mac ou joint par le réseau
-Thread (voir « Sonde » plus bas).
+principale*, pas « répond ». Une exception vient de la sonde : un appareil qui
+n'annonce plus son adresse (ou plus rien), mais que la sonde trouve à sa
+dernière adresse (requête d'adresse), est montré « joignable, adresse plus
+annoncée », avec l'âge de cette vérification. Une disparition n'est retenue
+qu'après 2 minutes d'absence et datée de la première absence. Les vrais liens
+(enfant → parent, routeur ↔ routeur, qualité) viennent de la sonde, un ESP32-C6
+branché au Mac ou joint par le réseau Thread (voir « Sonde » plus bas).
 
 Les appareils sont placés d'après le préfixe OMR de leur adresse. Quand deux
 partitions annoncent le même préfixe OMR (vu le 28 septembre : un hub isolé

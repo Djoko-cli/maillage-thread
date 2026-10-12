@@ -76,12 +76,15 @@ The Mac has no Thread radio: the app only **listens** to the local network.
 | `_matter._tcp` | one instance per device and fabric (`<fabric>-<node>`), grouped by host; `ICD`, or `SII` above 2 s: sleepy device |
 | `_hap._udp` | HomeKit accessories (their name) |
 | `_trel._udp` (TXT) | routers that also go over the local network (TREL, `xa`): their links with each other are not drawn (radio-only map) |
-| host addresses | OMR prefix → partition; local network → IP device; none → "no address" |
+| host addresses | OMR prefix → partition; local network → IP device; none → "address not advertised" |
 | Mac routing table | which border router routes which OMR prefix |
 
 "Reachable" means *announced with a Thread address in the main partition*,
-not "answers": reachability never comes from the probe. A disappearance is
-only kept after 2 minutes of absence and is dated from the first absence.
+not "answers". One exception comes from the probe: a device that no longer
+advertises its address (or anything), but that the probe finds at its last
+address (address query), is shown "reachable, address no longer advertised",
+with the age of that check. A disappearance is only kept after 2 minutes of
+absence and is dated from the first absence.
 Real links (child → parent, router ↔ router, link quality) come from the
 probe, an ESP32-C6 plugged into the Mac or reached over the Thread network
 (see "Probe" below).

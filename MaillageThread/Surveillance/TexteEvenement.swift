@@ -78,7 +78,7 @@ enum TexteEvenement {
         case .appareilRevenu:
             return String(localized: "\(nom) est revenu")
         case .appareilSansAdresse:
-            return String(localized: "\(nom) n'a plus d'adresse")
+            return String(localized: "\(nom) n'annonce plus d'adresse")
         case .appareilChangePartition:
             if e.details["coupee"] == "oui" { return String(localized: "\(nom) est isolé dans la partition \(apres)") }
             return String(localized: "\(nom) a rejoint la partition \(apres)")

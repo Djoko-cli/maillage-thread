@@ -9,7 +9,8 @@ struct ResumeReseau: Equatable {
     var partitions: Int
     var routeurs: Int
     var appareils: Int
-    /// Appareils Thread qui ne sont pas joignables (sans adresse, isoles, inconnus) ou disparus.
+    /// Appareils Thread qui ne sont pas joignables (adresse non annoncee, isoles, inconnus) ou disparus, hors ceux
+    /// que la sonde a trouves (`Surveillance.verification`).
     var injoignables: Int
 }
 
@@ -307,7 +308,8 @@ final class Surveillance {
               let r = i.reseaux.first(where: { r in r.partitions.contains { $0.id == m.partition } }) ?? reseau else {
             return nil
         }
-        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values), trel: i.trel)
+        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values),
+                               trel: i.trel, dernieresAdresses: dernieresAdressesVerifiees(a: maintenant))
     }
 
     /// Noeuds d'un maillage pour le journal : leur id dans le graphe et leur nom affiche,
@@ -337,9 +339,37 @@ final class Surveillance {
     }
 
     /// Appareils que la sonde doit resoudre (spec de la sonde tout-en-un, section 2.2) : ceux de l'instantane qui ont
-    /// une adresse sur le prefixe OMR de leur partition, l'adresse nue ; aucun sans instantane.
+    /// une adresse sur le prefixe OMR de leur partition, l'adresse nue, puis ceux qui n'annoncent plus d'adresse (sans
+    /// adresse, disparus) avec leur derniere (`AppareilAResoudre.depuis(_: Suivi)`) ; aucun sans instantane.
     func appareilsAResoudre() -> [AppareilAResoudre] {
-        instantane.map(AppareilAResoudre.depuis) ?? []
+        AppareilAResoudre.depuis(suivi)
+    }
+
+    /// Age au-dela duquel une resolution ne verifie plus un appareil : deux resolutions completes (une toutes les
+    /// 30 min) ; en marche normale, celle que garde la memoire de la tournee a moins de 35 min.
+    static let ageMaxVerification: TimeInterval = 2 * Tournee.periodeResolution
+
+    /// Date a laquelle la sonde a trouve, par la resolution d'adresse, un appareil qui n'annonce plus d'adresse (sans
+    /// adresse, ou disparu) : il est joignable. Nil s'il annonce son adresse, si la derniere resolution ne l'a pas
+    /// trouve, sans maillage ou s'il est perime, et si la resolution a plus de `ageMaxVerification`. L'instantane reste
+    /// le reflet de Bonjour : cet etat est derive ici, a chaque lecture, du dernier maillage de la sonde.
+    func verification(_ id: String, a maintenant: Date) -> Date? {
+        verifications(a: maintenant)[id]
+    }
+
+    /// Appareils qui n'annoncent plus d'adresse et que la sonde a trouves (`verification`), avec la date.
+    func verifications(a maintenant: Date) -> [String: Date] {
+        guard let m = maillage, let i = instantane, fraicheurMaillage(a: maintenant) != .perime else { return [:] }
+        let muets = Set(i.appareils.filter { $0.genre == .sansAdresse }.map(\.id)).union(suivi.disparus.keys)
+        return m.resolus.filter { id, d in
+            muets.contains(id) && maintenant.timeIntervalSince(d) <= Self.ageMaxVerification
+        }
+    }
+
+    /// Derniere adresse de chaque appareil verifie (`verifications`) : le rapprochement le reconnait a elle.
+    private func dernieresAdressesVerifiees(a maintenant: Date) -> [String: AdresseIPv6] {
+        let verifies = verifications(a: maintenant)
+        return suivi.dernieresAdresses.filter { verifies[$0.key] != nil }
     }
 
     /// Sonde oubliee (`SondeMaillage.surOubli`) : son maillage part tout de suite, sans attendre
@@ -554,10 +584,12 @@ final class Surveillance {
     /// Appareil par identifiant, present ou disparu.
     func appareil(_ id: String) -> Appareil? { instantane?.appareil(id) ?? suivi.disparus[id] }
 
-    /// Appareils a dessiner pour un reseau : presents, puis disparus (a leur place).
+    /// Appareils a dessiner pour un reseau : presents, puis disparus (a leur place). Un appareil qui n'annonce plus
+    /// d'adresse et que la sonde a trouve (`verification`) est joignable.
     func appareilsAffiches(pour r: Reseau) -> [AppareilAffiche] {
         guard let i = instantane else { return [] }
         let premier = i.reseaux.first?.id == r.id
+        let verifies = verifications(a: maintenant)
         func appartient(_ a: Appareil) -> Bool {
             if let x = a.idReseau { return x == r.id }
             // Derniere partition connue : l'appareil va au reseau qui la contient, et a lui seul.
@@ -577,12 +609,14 @@ final class Surveillance {
             let etat: EtatAffiche = switch a.etat {
             case .joignable: .joignable
             case .partitionCoupee: .partitionCoupee
-            case .sansAdresse: .sansAdresse
+            case .sansAdresse: verifies[a.id] != nil ? .joignable : .sansAdresse
             case .inconnu: .inconnu
             }
             return affiche(a, etat)
         }
-        liste += suivi.disparus.values.filter(appartient).map { affiche($0, .disparu) }
+        liste += suivi.disparus.values.filter(appartient).map {
+            affiche($0, verifies[$0.id] != nil ? .joignable : .disparu)
+        }
         return liste
     }
 
@@ -605,7 +639,8 @@ final class Surveillance {
         guard let m = maillage, let i = instantane, fraicheurMaillage(a: maintenant) != .perime else {
             return nil
         }
-        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values), trel: i.trel)
+        return MaillageAffiche(maillage: m, reseau: r, appareils: i.appareils + Array(suivi.disparus.values),
+                               trel: i.trel, dernieresAdresses: dernieresAdressesVerifiees(a: maintenant))
     }
 
     /// Le maillage affiche a ete recu il y a plus de 6 min, et aucune tournee n'est

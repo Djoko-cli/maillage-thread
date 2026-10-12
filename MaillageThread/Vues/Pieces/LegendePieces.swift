@@ -146,7 +146,7 @@ extension LegendePieces {
             case .chef: String(localized: "chef du réseau Thread, élu automatiquement")
             case .joignable: String(localized: "joignable")
             case .partitionCoupee: String(localized: "partition coupée")
-            case .sansAdresse: String(localized: "sans adresse")
+            case .sansAdresse: String(localized: "adresse non annoncée")
             case .disparu: String(localized: "disparu")
             case .endormi: String(localized: "endormi")
             case .pile: String(localized: "pile")

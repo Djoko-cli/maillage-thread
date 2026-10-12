@@ -305,22 +305,6 @@
         }
       }
     },
-    "%@ n'a plus d'adresse" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ has no address anymore"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ n'a plus d'adresse"
-          }
-        }
-      }
-    },
     "%@ n'a plus de parent" : {
       "localizations" : {
         "en" : {
@@ -333,6 +317,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ n'a plus de parent"
+          }
+        }
+      }
+    },
+    "%@ n'annonce plus d'adresse" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no longer advertises an address"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ n'annonce plus d'adresse"
           }
         }
       }
@@ -4433,6 +4433,22 @@
         }
       }
     },
+    "adresse non annoncée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "address not advertised"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "adresse non annoncée"
+          }
+        }
+      }
+    },
     "aucun" : {
       "localizations" : {
         "en" : {
@@ -5089,6 +5105,22 @@
         }
       }
     },
+    "joignable, adresse plus annoncée" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "reachable, address no longer advertised"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "joignable, adresse plus annoncée"
+          }
+        }
+      }
+    },
     "la sonde est occupée et n'a pas répondu à « %@ »" : {
       "localizations" : {
         "en" : {
@@ -5713,22 +5745,6 @@
         }
       }
     },
-    "sans adresse" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "no address"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sans adresse"
-          }
-        }
-      }
-    },
     "session réseau fermée" : {
       "localizations" : {
         "en" : {
@@ -5869,6 +5885,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "vers son parent"
+          }
+        }
+      }
+    },
+    "vérifié par la sonde %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "checked by the probe %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "vérifié par la sonde %@"
           }
         }
       }

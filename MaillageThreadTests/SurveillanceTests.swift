@@ -13,12 +13,14 @@ struct SurveillanceTests {
     }
 
     /// Les appareils que la sonde doit resoudre (spec de la sonde tout-en-un, section 2.2) : ceux de l'instantane qui
-    /// ont une adresse sur le prefixe OMR de leur partition ; aucun sans instantane.
+    /// ont une adresse sur le prefixe OMR de leur partition, puis les disparus et les sans adresse, a leur derniere
+    /// adresse ; aucun sans instantane.
     @Test func appareilsAResoudre() throws {
         let s = Self.demo()
         let i = try #require(s.instantane)
-        #expect(s.appareilsAResoudre() == AppareilAResoudre.depuis(i))
-        #expect(!s.appareilsAResoudre().isEmpty)
+        #expect(s.appareilsAResoudre() == AppareilAResoudre.depuis(s.suivi))
+        #expect(Set(AppareilAResoudre.depuis(i)).isStrictSubset(of: Set(s.appareilsAResoudre())))
+        #expect(s.appareilsAResoudre().contains { $0.id == "46F77B36E071F8D0" }, "un disparu de la demo")
         #expect(Surveillance(mode: .demo, dossier: nil).appareilsAResoudre().isEmpty, "pas encore d'instantane")
     }
 

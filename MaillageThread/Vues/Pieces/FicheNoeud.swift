@@ -316,6 +316,8 @@ struct FicheNoeud: View {
     @ViewBuilder
     private func identiteAppareil(_ a: Appareil) -> some View {
         let disparu = surveillance.suivi.disparus[a.id] != nil
+        // Trouve par la sonde alors qu'il n'annonce plus d'adresse : joignable.
+        let verifie = surveillance.verification(a.id, a: instant)
         let maison = surveillance.accessoire(a)
         Text(surveillance.nom(a)).font(.title3.weight(.semibold))
         let description = Self.ligneDescription(maison: maison, modeleHomeKit: a.hap?.modele)
@@ -326,9 +328,12 @@ struct FicheNoeud: View {
             PastilleChef()
         }
         HStack(spacing: 6) {
-            PointEtat(couleur: couleur(a, disparu: disparu), pulse: !disparu && a.etat == .joignable)
-            Text(etat(a, disparu: disparu))
-            if let vu = vuLe(a, disparu: disparu) {
+            PointEtat(couleur: verifie != nil ? .green : couleur(a, disparu: disparu),
+                      pulse: verifie != nil || (!disparu && a.etat == .joignable))
+            Text(Self.texteEtat(a.etat, disparu: disparu, verifie: verifie != nil))
+            if let verifie {
+                Text("· \(Self.texteVerification(verifie, instant))").foregroundStyle(.secondary)
+            } else if let vu = vuLe(a, disparu: disparu) {
                 Text("· vu \(Self.relatif(vu, instant))").foregroundStyle(.secondary)
             }
         }
@@ -392,14 +397,22 @@ struct FicheNoeud: View {
     /// Orange de la batterie faible, assez fonce en mode clair pour se lire sur le verre pale.
     private var orange: Color { apparence == .dark ? .orange : Color(red: 0.72, green: 0.36, blue: 0) }
 
-    private func etat(_ a: Appareil, disparu: Bool) -> String {
+    /// Etat d'un appareil dans la fiche ; `verifie` : il n'annonce plus d'adresse (sans adresse, ou disparu), et la
+    /// sonde l'a trouve (`Surveillance.verification`).
+    static func texteEtat(_ etat: EtatAppareil, disparu: Bool, verifie: Bool) -> String {
+        if verifie { return String(localized: "joignable, adresse plus annoncée") }
         if disparu { return String(localized: "disparu") }
-        switch a.etat {
+        switch etat {
         case .joignable: return String(localized: "joignable")
         case .partitionCoupee: return String(localized: "isolé (partition coupée)")
-        case .sansAdresse: return String(localized: "sans adresse")
+        case .sansAdresse: return String(localized: "adresse non annoncée")
         case .inconnu: return String(localized: "partition inconnue")
         }
+    }
+
+    /// « verifie par la sonde il y a 12 minutes » : l'age de la resolution qui a trouve l'appareil.
+    static func texteVerification(_ d: Date, _ instant: Date) -> String {
+        String(localized: "vérifié par la sonde \(relatif(d, instant))")
     }
 
     private func couleur(_ a: Appareil, disparu: Bool) -> Color {
