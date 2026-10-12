@@ -14,7 +14,7 @@ public enum ProtocoleSonde {
 public struct Bonjour: Hashable, Sendable, Codable {
     public let produit: String
     public let version: String
-    /// Nom de la sonde, garde par la carte (« SONDE-01 » par defaut) ; firmware 1.0.1 et suivants.
+    /// Nom de la sonde, garde par la carte (« SONDE-T1 » par defaut) ; firmware 1.0.1 et suivants.
     public let nom: String?
     public let mac: String?
     public let appairee: Bool

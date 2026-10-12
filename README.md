@@ -419,14 +419,14 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
 - In Maillage Thread: Settings › Probe › Port. Only the chosen port is ever
   opened: another plugged-in ESP32-C6 (the Halo bridge, for example) never
   is. The probe is remembered by its USB serial number and shows under its
-  name, "SONDE-01" by default: the firmware keeps it, so it follows the board
+  name, "SONDE-T1" by default: the firmware keeps it, so it follows the board
   from one Mac to another (the C6's USB name is fixed by the chip). Once
   plugged in, the probe is picked up on its own; if it starts too slowly, the
   app tries once more 5 s later. Any other port shows with its USB
   serial number ("usbmodem… · " then the number), the only way to tell the
   probe from the Halo bridge before the first connection. The menu line uses
-  the name too ("SONDE-01: connected · updated 2 minutes ago"), and so does
-  the state in Settings › Probe ("SONDE-01 · connected"); not for another
+  the name too ("SONDE-T1: connected · updated 2 minutes ago"), and so does
+  the state in Settings › Probe ("SONDE-T1 · connected"); not for another
   port being tried.
 - Settings › Probe shows the probe's Matter QR code and its pairing code
   (4-3-4), even once it is in Home, over USB only: they never travel over the

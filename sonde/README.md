@@ -87,9 +87,9 @@ le rappel de Matter ne fait que noter l'état de l'interrupteur.
 
 ## Nom
 
-La sonde a un nom, « SONDE-01 » par défaut, gardé dans sa mémoire (NVS, à
+La sonde a un nom, « SONDE-T1 » par défaut, gardé dans sa mémoire (NVS, à
 côté de l'état de l'interrupteur) : il suit la carte d'un Mac à l'autre.
-Maillage Thread le montre à la place du port (« SONDE-01 » plutôt que
+Maillage Thread le montre à la place du port (« SONDE-T1 » plutôt que
 « usbmodem11301 »). `nom <texte>` le change : 1 à 32 caractères parmi les
 lettres ASCII, les chiffres, `-`, `_` et `.`. L'app n'a pas encore de quoi le
 changer.

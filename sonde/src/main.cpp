@@ -81,7 +81,7 @@
 //
 //  Dans Maison : un interrupteur « Sonde maillage », allume par defaut.
 //  Eteint, la sonde refuse les requetes (erreur « suspendue »). Son etat est
-//  garde d'un demarrage a l'autre, comme le nom de la sonde (« SONDE-01 » par
+//  garde d'un demarrage a l'autre, comme le nom de la sonde (« SONDE-T1 » par
 //  defaut) : il suit la carte d'un Mac a l'autre. Apres un oubli, la sonde
 //  revient allumee, comme a sa premiere mise en service.
 //
@@ -212,9 +212,9 @@ static bool sThreadPret = false;  // pile Thread creee par Matter.begin()
 static char sMac[13] = "?";
 // Nom de la sonde, garde dans la NVS a cote de l'interrupteur (commande `nom`).
 static const char *const kCleNom = "nom";
-static const char *const kNomDefaut = "SONDE-01";
+static const char *const kNomDefaut = "SONDE-T1";
 static constexpr size_t kNomMax = 32;
-static char sNom[kNomMax + 1] = "SONDE-01";
+static char sNom[kNomMax + 1] = "SONDE-T1";
 
 // 1 a 32 caracteres parmi les lettres ASCII, les chiffres, « - », « _ » et « . » :
 // rien a echapper dans le JSON.
@@ -388,7 +388,7 @@ static void demarrerMatter() {
   // Etat garde de l'interrupteur (allume au premier demarrage) : la sonde reste
   // suspendue apres un redemarrage si « Sonde maillage » est eteint dans Maison.
   sPreferences.begin("sonde", false);
-  // Nom garde (« SONDE-01 » au premier demarrage, ou s'il etait illisible).
+  // Nom garde (« SONDE-T1 » au premier demarrage, ou s'il etait illisible).
   const String nom = sPreferences.getString(kCleNom, kNomDefaut);
   if (nomValide(nom.c_str())) snprintf(sNom, sizeof(sNom), "%s", nom.c_str());
   const bool allume = sPreferences.getBool(kCleInterrupteur, true);

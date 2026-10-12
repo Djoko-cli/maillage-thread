@@ -439,14 +439,14 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
 - Dans Maillage Thread : Réglages › Sonde › Port. L'app n'ouvre que le port
   choisi : un autre ESP32-C6 branché (le pont Halo, par exemple) n'est jamais
   ouvert. La sonde est retenue par son numéro de série USB et s'affiche sous
-  son nom, « SONDE-01 » par défaut : le firmware le garde, il suit donc la
+  son nom, « SONDE-T1 » par défaut : le firmware le garde, il suit donc la
   carte d'un Mac à l'autre (le nom USB du C6 est fixé par la puce). Branchée,
   elle est reprise seule ; si elle démarre trop lentement, l'app réessaie une
   fois 5 s plus tard. Tout autre port s'affiche avec son numéro de série USB
   (« usbmodem… · » suivi du numéro), seul moyen de distinguer la sonde du pont
   Halo avant la première connexion. La ligne du menu prend aussi
-  ce nom (« SONDE-01 : connectée · relevé il y a 2 minutes »), comme l'état
-  dans Réglages › Sonde (« SONDE-01 · connectée ») ; pas pour un autre port
+  ce nom (« SONDE-T1 : connectée · relevé il y a 2 minutes »), comme l'état
+  dans Réglages › Sonde (« SONDE-T1 · connectée ») ; pas pour un autre port
   en essai.
 - Réglages › Sonde montre le QR code Matter de la sonde et son code
   d'appairage (4-3-4), même une fois dans Maison, en USB seulement : ils ne

@@ -51,7 +51,7 @@ enum TexteTournee {
         String(localized: "\(avancement(a)) · depuis \(duree(maintenant.timeIntervalSince(debut)))")
     }
 
-    /// Menu : « SONDE-01 : Resolution des parents 12/26… ».
+    /// Menu : « SONDE-T1 : Resolution des parents 12/26… ».
     static func menu(_ a: AvancementTournee, nom: String) -> String {
         guard a.total > 0 else { return String(localized: "\(nom) : \(etape(a.etape))…") }
         return String(localized: "\(nom) : \(etape(a.etape)) \(a.fait)/\(a.total)…")

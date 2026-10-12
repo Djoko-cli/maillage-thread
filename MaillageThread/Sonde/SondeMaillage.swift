@@ -59,7 +59,7 @@ final class SondeMaillage {
     /// Ports Espressif branches (la sonde, ou un autre C6 comme le pont Halo).
     private(set) var ports: [PortUSB] = []
     private(set) var serie: String?
-    /// Nom de la sonde (« SONDE-01 »), mis a jour a chaque `bonjour` ; nil si le firmware
+    /// Nom de la sonde (« SONDE-T1 »), mis a jour a chaque `bonjour` ; nil si le firmware
     /// n'en donne pas (1.0.0) ou sans sonde retenue.
     private(set) var nom: String?
     /// Numero de serie USB du port que l'etat concerne (connexion, connexion etablie, refus,
