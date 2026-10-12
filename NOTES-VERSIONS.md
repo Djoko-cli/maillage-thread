@@ -6,6 +6,37 @@ the notes of the GitHub release and those of the update window.
 Maillage Thread : une section par version publiée, en anglais puis en français. `outils/publier.sh` en tire les
 notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour.
 
+## 1.2.1
+
+**English**
+
+- The last mesh is kept: at launch, the radio map shows the probe's last mesh as soon as the local network is heard
+  (about two seconds), without waiting for the probe's first round. Older than six minutes, it is marked "Probe
+  survey is old" until the next round replaces it. Forgetting the probe erases it.
+- The probe's first round after launch now waits for the local network to be heard (30 seconds at most). It used to
+  start without the list of devices to resolve, and the map lost most children until the next round, five minutes
+  later.
+- History: the highlighted curve is cleared when you pick another node, another period or the "all links" box;
+  beyond eight curves, the lines change dash; the name of a faded node becomes readable on hover; the legend chips
+  give their value to VoiceOver.
+- The columns of the node card lay out correctly at any width.
+- The probe firmware is unchanged (1.1.0).
+
+**Français**
+
+- Le dernier maillage est gardé : au lancement, la carte radio montre le dernier maillage de la sonde dès que le
+  réseau local est entendu (environ deux secondes), sans attendre la première tournée de la sonde. Au-delà de six
+  minutes, il est signalé « Relevé de la sonde ancien » jusqu'à la tournée qui le remplace. Oublier la sonde
+  l'efface.
+- La première tournée de la sonde après le lancement attend désormais que le réseau local soit entendu (30 secondes
+  au plus). Elle partait sans la liste des appareils à résoudre, et la carte perdait la plupart des enfants jusqu'à
+  la tournée suivante, cinq minutes plus tard.
+- Historique : la courbe mise en avant s'efface quand on choisit un autre nœud, une autre période ou la case « tous
+  les liens » ; au-delà de huit courbes, les traits changent ; le nom d'un nœud estompé devient lisible au survol ;
+  les pastilles de la légende donnent leur valeur à VoiceOver.
+- Les colonnes de la fiche d'un nœud se disposent correctement à toute largeur.
+- Le firmware de la sonde ne change pas (1.1.0).
+
 ## 1.2.0
 
 **English**
