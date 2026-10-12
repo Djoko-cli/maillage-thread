@@ -1110,7 +1110,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `static func ordonner(_ a: [AccessoireMaison]) -> [AccessoireMaison]` (nom, puis `id`), utilisé aussi par `MaisonHomeKit`.
 - Cette tâche écrit le fichier entier ; la tâche 6 ajoute ses tests (identifier, ouverture, durée de vie, ponctuel), qui passent sans changer le code si celui-ci est recopié tel quel.
 
-- [ ] **Step 1 : écrire les imitations des tests**
+- [x] **Step 1 : écrire les imitations des tests**
 
 `PasseurTests/Imitations.swift` :
 
@@ -1308,7 +1308,7 @@ final class BancDemon {
 }
 ```
 
-- [ ] **Step 2 : écrire les tests qui échouent**
+- [x] **Step 2 : écrire les tests qui échouent**
 
 `PasseurTests/DemonPasseurTests.swift` :
 
@@ -1462,12 +1462,12 @@ struct DemonPasseurTests {
 }
 ```
 
-- [ ] **Step 3 : lancer les tests, vérifier qu'ils échouent**
+- [x] **Step 3 : lancer les tests, vérifier qu'ils échouent**
 
 Run : `outils/tester.sh PasseurTests`
 Expected : échec de compilation (`DemonPasseur` inconnu).
 
-- [ ] **Step 4 : écrire le code**
+- [x] **Step 4 : écrire le code**
 
 `Passeur/Logique/DemonPasseur.swift` :
 
@@ -1760,12 +1760,12 @@ final class DemonPasseur {
 }
 ```
 
-- [ ] **Step 5 : lancer les tests, vérifier qu'ils passent**
+- [x] **Step 5 : lancer les tests, vérifier qu'ils passent**
 
 Run : `outils/tester.sh PasseurTests`
 Expected : PASS.
 
-- [ ] **Step 6 : commit**
+- [x] **Step 6 : commit**
 
 ```bash
 git add Passeur/Logique/DemonPasseur.swift PasseurTests/Imitations.swift PasseurTests/DemonPasseurTests.swift
