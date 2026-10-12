@@ -141,7 +141,8 @@ struct AdresseVerifieeAppTests {
         #expect(s.suivi.disparus[Self.matter] != nil)
         #expect(s.appareilsAResoudre().first { $0.id == Self.matter }
                 == AppareilAResoudre(id: Self.matter, partition: Self.partition,
-                                     adresse: try #require(AdresseIPv6(Self.adresse(1)))))
+                                     adresse: try #require(AdresseIPv6(Self.adresse(1))),
+                                     derniereAnnonce: s.suivi.dernieresAnnonces[Self.matter], disparu: true))
         let r = try #require(s.reseau)
         #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.matter }?.etat == .disparu)
         s.recevoir(Self.maillage(maintenant - 150, resolus: [Self.matter: maintenant - 120]), a: maintenant - 60)
@@ -151,6 +152,38 @@ struct AdresseVerifieeAppTests {
         #expect(FicheNoeud.texteEtat(.joignable, disparu: true, verifie: true)
                 == String(localized: "joignable, adresse plus annoncée"))
         #expect(FicheNoeud.texteEtat(.joignable, disparu: true, verifie: false) == String(localized: "disparu"))
+    }
+
+    /// Une resolution faite avant la perte de l'annonce ne prouve rien (l'appareil annoncait encore son adresse),
+    /// egale a la derniere annonce non plus : l'appareil reste « adresse non annoncee » ou « disparu ». Posterieure
+    /// a la perte, elle le montre joignable.
+    @Test func resolutionAnterieureALaPerte() throws {
+        let maintenant = Date()
+        let s = Self.surveillance(muets: [Self.hap], partis: [Self.matter], maintenant: maintenant)
+        let r = try #require(s.reseau)
+        let annonceHap = try #require(s.suivi.dernieresAnnonces[Self.hap])
+        let annonceMatter = try #require(s.suivi.dernieresAnnonces[Self.matter])
+        #expect(s.appareilsAResoudre().first { $0.id == Self.hap }?.derniereAnnonce == annonceHap)
+        #expect(s.appareilsAResoudre().first { $0.id == Self.matter }?.derniereAnnonce == annonceMatter)
+
+        for (hap, matter) in [(annonceHap - 60, annonceMatter - 60), (annonceHap, annonceMatter)] {
+            s.recevoir(Self.maillage(maintenant - 150, resolus: [Self.hap: hap, Self.matter: matter]),
+                       a: maintenant - 60)
+            #expect(s.verification(Self.hap, a: maintenant) == nil)
+            #expect(s.verification(Self.matter, a: maintenant) == nil)
+            #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.hap }?.etat == .sansAdresse)
+            #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.matter }?.etat == .disparu)
+            #expect(s.resume?.injoignables == 2)
+            #expect(s.maillageAffiche(pour: r)?.parent(de: Self.hap) == nil)
+        }
+
+        let apres = maintenant - 120
+        s.recevoir(Self.maillage(maintenant - 150, resolus: [Self.hap: apres, Self.matter: apres]), a: maintenant - 60)
+        #expect(s.verification(Self.hap, a: maintenant) == apres)
+        #expect(s.verification(Self.matter, a: maintenant) == apres)
+        #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.hap }?.etat == .joignable)
+        #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.matter }?.etat == .joignable)
+        #expect(s.resume?.injoignables == 0)
     }
 
     /// Les textes dans la langue du lancement des tests (`-testLanguage fr`, puis `en`).

@@ -8,11 +8,35 @@ public struct AppareilAResoudre: Hashable, Sendable {
     public let partition: String
     /// Son adresse sur le prefixe OMR de sa partition, sans zone (`AdresseIPv6`) : la sonde n'accepte que l'adresse nue.
     public let adresse: AdresseIPv6
+    /// Date du dernier releve ou l'appareil annoncait cette adresse, pour un appareil qui ne l'annonce plus (sans
+    /// adresse, disparu) ; nil pour un appareil qui l'annonce.
+    public let derniereAnnonce: Date?
+    /// Vrai pour un disparu (plus aucune instance Bonjour), faux pour un appareil sans adresse.
+    public let disparu: Bool
 
-    public init(id: String, partition: String, adresse: AdresseIPv6) {
+    public init(id: String, partition: String, adresse: AdresseIPv6, derniereAnnonce: Date? = nil,
+                disparu: Bool = false) {
         self.id = id
         self.partition = partition
         self.adresse = adresse
+        self.derniereAnnonce = derniereAnnonce
+        self.disparu = disparu
+    }
+
+    /// Un disparu dont la derniere annonce date de plus de `Tournee.ageMaxDisparu` : la sonde ne le cherche plus.
+    func perduDepuisTropLongtemps(a maintenant: Date) -> Bool {
+        guard disparu, let annonce = derniereAnnonce else { return false }
+        return maintenant.timeIntervalSince(annonce) > Tournee.ageMaxDisparu
+    }
+
+    /// Un appareil qui n'annonce plus d'adresse, perdue depuis au plus `Tournee.periodeRedemande`, dont la resolution
+    /// connue (`resolution`, nil si aucune) n'est pas posterieure a sa derniere annonce : a redemander a chaque
+    /// tournee. Faux pour un appareil qui annonce son adresse.
+    func aRedemander(a maintenant: Date, resolution: Date?) -> Bool {
+        guard let annonce = derniereAnnonce, maintenant.timeIntervalSince(annonce) <= Tournee.periodeRedemande else {
+            return false
+        }
+        return resolution.map { $0 <= annonce } ?? true
     }
 
     /// Les appareils Thread d'un instantane qui ont une partition et une adresse sur son prefixe OMR, par identifiant.
@@ -26,16 +50,19 @@ public struct AppareilAResoudre: Hashable, Sendable {
 
     /// Ceux de l'instantane du suivi (`depuis(_:)`), puis les appareils qui n'annoncent plus d'adresse (sans adresse)
     /// ou plus rien (disparus), avec leur derniere adresse sur le prefixe OMR et leur derniere partition
-    /// (`Suivi.dernieresAdresses`, `Suivi.dernieresPartitions`) : la sonde verifie s'ils sont toujours la. Un appareil
-    /// dont l'une manque n'est pas demande. Par identifiant ; aucun sans instantane.
+    /// (`Suivi.dernieresAdresses`, `Suivi.dernieresPartitions`) et la date de leur derniere annonce
+    /// (`Suivi.dernieresAnnonces`) : la sonde verifie s'ils sont toujours la. Un appareil dont l'une manque n'est pas
+    /// demande. Par identifiant ; aucun sans instantane.
     public static func depuis(_ s: Suivi) -> [AppareilAResoudre] {
         guard let i = s.instantane else { return [] }
         let annoncent = depuis(i)
         let deja = Set(annoncent.map(\.id))
         let muets = i.appareils.filter { $0.genre == .sansAdresse }.map(\.id) + Array(s.disparus.keys)
         let verifies = Set(muets).subtracting(deja).compactMap { id -> AppareilAResoudre? in
-            guard let p = s.dernieresPartitions[id], let adresse = s.dernieresAdresses[id] else { return nil }
-            return AppareilAResoudre(id: id, partition: p, adresse: adresse)
+            guard let p = s.dernieresPartitions[id], let adresse = s.dernieresAdresses[id],
+                  let annonce = s.dernieresAnnonces[id] else { return nil }
+            return AppareilAResoudre(id: id, partition: p, adresse: adresse, derniereAnnonce: annonce,
+                                     disparu: s.disparus[id] != nil)
         }
         return (annoncent + verifies).sorted { $0.id < $1.id }
     }

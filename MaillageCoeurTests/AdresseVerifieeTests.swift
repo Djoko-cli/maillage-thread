@@ -63,14 +63,130 @@ struct AdresseVerifieeTests {
     @Test func sansAdresseEtDisparuDemandes() throws {
         let s = Self.suiviApresPerte()
         let p = Self.partition
+        let annonce1 = try #require(s.dernieresAnnonces[Self.a1])
+        let annonce2 = try #require(s.dernieresAnnonces[Self.a2])
         #expect(AppareilAResoudre.depuis(s) == [
-            AppareilAResoudre(id: Self.a1, partition: p, adresse: try #require(AdresseIPv6(Self.adresse(1)))),
-            AppareilAResoudre(id: Self.a2, partition: p, adresse: try #require(AdresseIPv6(Self.adresse(2)))),
+            AppareilAResoudre(id: Self.a1, partition: p, adresse: try #require(AdresseIPv6(Self.adresse(1))),
+                              derniereAnnonce: annonce1),
+            AppareilAResoudre(id: Self.a2, partition: p, adresse: try #require(AdresseIPv6(Self.adresse(2))),
+                              derniereAnnonce: annonce2, disparu: true),
             AppareilAResoudre(id: Self.a3, partition: p, adresse: try #require(AdresseIPv6(Self.adresse(3)))),
         ])
         let i = try #require(s.instantane)
         #expect(AppareilAResoudre.depuis(i).map(\.id) == [Self.a3], "l'instantane seul : ceux qui l'annoncent")
         #expect(AppareilAResoudre.depuis(Suivi()).isEmpty, "aucun sans instantane")
+    }
+
+    /// La date de la derniere annonce de l'adresse OMR est gardee a cote de la derniere adresse : mise a jour a chaque
+    /// releve ou l'appareil en a une, figee quand il passe sans adresse ou disparait, absente s'il n'en a jamais eu.
+    @Test func derniereAnnonceGardee() throws {
+        var s = Suivi()
+        _ = s.integrer(Self.banc(Self.t0).annonces)
+        #expect(s.dernieresAnnonces[Self.a1] == Self.t0 && s.dernieresAnnonces[Self.a2] == Self.t0)
+        #expect(s.dernieresAnnonces["Jamais-Adresse"] == nil)
+        let perdu = Self.suiviApresPerte()
+        let a1 = try #require(perdu.dernieresAnnonces[Self.a1])
+        let a2 = try #require(perdu.dernieresAnnonces[Self.a2])
+        #expect(a1 >= Self.t0 && a1 <= Self.t0 + 60, "figee a la perte, avant le releve de t0 + 200")
+        #expect(a2 >= Self.t0 && a2 <= Self.t0 + 60)
+        #expect(perdu.dernieresAnnonces[Self.a3] == Self.t0 + 200, "il annonce encore : le dernier releve")
+        #expect(perdu.dernieresAnnonces["Jamais-Adresse"] == nil)
+    }
+
+    // MARK: Redemande rapide apres la perte de l'annonce
+
+    /// L'appareil `id` de la capture de `TourneeTests`, tel qu'il est demande une fois perdu : derniere annonce a
+    /// `annonce`, disparu ou non.
+    static func perdu(_ id: String, annonce: Date, disparu: Bool = false) throws -> AppareilAResoudre {
+        let a = try #require(TourneeTests.appareils.first { $0.id == id })
+        return AppareilAResoudre(id: a.id, partition: a.partition, adresse: a.adresse, derniereAnnonce: annonce,
+                                 disparu: disparu)
+    }
+
+    /// Adresses demandees a la sonde (resolution) depuis `avant` requetes.
+    static func demandees(_ sonde: SondeRejouee, depuis avant: Int) async -> [String] {
+        await sonde.registre.requetes.dropFirst(avant).filter { $0.hasSuffix("|resoudre") }.sorted()
+    }
+
+    static func cle(_ n: Int) -> String { "\(TourneeTests.omr(n))|resoudre" }
+
+    /// Une resolution faite avant la perte de l'annonce est refaite a la tournee suivante, meme si l'appareil a deja
+    /// ete demande ; celle d'un appareil qui annonce, ou posterieure a la perte, ne l'est pas avant la resolution
+    /// complete.
+    @Test func perduRedemandeALaTourneeSuivante() async throws {
+        let sonde = try TourneeTests.sondeResolue()
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: TourneeTests.appareils))
+        #expect(mem1.demandes.contains("E00000000000000A") && mem1.resolutions["E00000000000000A"]?.date == Self.t0)
+        // A perd son annonce apres sa resolution ; B l'a perdue avant (sa resolution est posterieure) ; les autres
+        // annoncent.
+        var appareils = TourneeTests.appareils
+        let iA = try #require(appareils.firstIndex { $0.id == "E00000000000000A" })
+        let iB = try #require(appareils.firstIndex { $0.id == "E00000000000000B" })
+        appareils[iA] = try Self.perdu("E00000000000000A", annonce: Self.t0 + 100)
+        appareils[iB] = try Self.perdu("E00000000000000B", annonce: Self.t0 - 100)
+        for instant in [Self.t0 + 300, Self.t0 + 600] {
+            let avant = await sonde.registre.requetes.count
+            let (_, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: instant,
+                                                                    appareils: appareils))
+            #expect(await Self.demandees(sonde, depuis: avant) == [Self.cle(0x0A)],
+                    "A seul, bien qu'il soit deja dans les demandes")
+            #expect(mem2.resolutions["E00000000000000A"]?.date == instant, "sa resolution est refaite")
+            #expect(mem2.derniereResolution == Self.t0, "pas une resolution complete")
+            // Resolu apres la perte : il n'est plus redemande a la tournee d'apres.
+            let avant2 = await sonde.registre.requetes.count
+            _ = try #require(try await Tournee.complete(sonde, memoire: mem2, maintenant: instant + 300,
+                                                        appareils: appareils))
+            #expect(await Self.demandees(sonde, depuis: avant2).isEmpty)
+        }
+    }
+
+    /// Un appareil perdu que la sonde ne trouve pas (aucune resolution) est redemande a chaque tournee pendant les
+    /// 30 min qui suivent sa derniere annonce, puis seulement a la resolution complete.
+    @Test func perduIntrouvableRedemandePendantTrenteMinutes() async throws {
+        let sonde = try TourneeTests.sondeResolue()
+        let c = "E00000000000000C"
+        var recent = TourneeTests.appareils
+        let iC = try #require(recent.firstIndex { $0.id == c })
+        recent[iC] = try Self.perdu(c, annonce: Self.t0 - 100)
+        let (_, mem1) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                               appareils: recent))
+        #expect(mem1.demandes.contains(c) && mem1.resolutions[c] == nil, "demande, introuvable")
+        var mem = mem1
+        for instant in [Self.t0 + 300, Self.t0 + 600, Self.t0 + 1700] {
+            let avant = await sonde.registre.requetes.count
+            (_, mem) = try #require(try await Tournee.complete(sonde, memoire: mem, maintenant: instant,
+                                                               appareils: recent))
+            #expect(await Self.demandees(sonde, depuis: avant) == [Self.cle(0x0C)], "a chaque tournee")
+        }
+        // Perdu depuis plus de 30 min : plus qu'a la resolution complete (t0 + 1800).
+        var ancien = recent
+        ancien[iC] = try Self.perdu(c, annonce: Self.t0 - 2000)
+        for instant in [Self.t0 + 300, Self.t0 + 1700] {
+            let avant = await sonde.registre.requetes.count
+            _ = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: instant, appareils: ancien))
+            #expect(await Self.demandees(sonde, depuis: avant).isEmpty, "pas avant la resolution complete")
+        }
+        let avant = await sonde.registre.requetes.count
+        _ = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 1800,
+                                                    appareils: ancien))
+        #expect(await Self.demandees(sonde, depuis: avant).contains(Self.cle(0x0C)), "a la resolution complete")
+    }
+
+    /// Un disparu dont la derniere annonce date de plus de 24 h n'est plus demande, meme a la resolution complete ; un
+    /// disparu plus recent l'est, et un appareil sans adresse (Bonjour l'annonce encore) l'est toujours.
+    @Test func disparuAncienPlusDemande() async throws {
+        let sonde = try TourneeTests.sondeResolue()
+        let jour: TimeInterval = 24 * 3600
+        let appareils = [
+            try Self.perdu("E00000000000000A", annonce: Self.t0 - jour - 60, disparu: true),
+            try Self.perdu("E00000000000000B", annonce: Self.t0 - jour + 60, disparu: true),
+            try Self.perdu("E000000000000004", annonce: Self.t0 - jour - 60),
+        ]
+        let (_, mem) = try #require(try await Tournee.complete(sonde, memoire: MemoireTournee(), maintenant: Self.t0,
+                                                              appareils: appareils))
+        #expect(await Self.demandees(sonde, depuis: 0) == [Self.cle(0x04), Self.cle(0x0B)].sorted())
+        #expect(mem.demandes == ["E00000000000000B", "E000000000000004"])
     }
 
     /// Le maillage porte les appareils trouves par la resolution (la memoire de la tournee), quel que soit leur

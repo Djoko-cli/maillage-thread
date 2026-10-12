@@ -140,6 +140,11 @@ public enum Tournee {
     public static let periodeIdentite: TimeInterval = 30 * 60
     /// Resolution complete des parents : toutes les 30 min (un appareil nouveau, a la tournee suivante).
     public static let periodeResolution: TimeInterval = 30 * 60
+    /// Un appareil qui n'annonce plus d'adresse (sans adresse, disparu) est redemande a chaque tournee pendant ce delai
+    /// apres sa derniere annonce, tant que sa resolution connue date d'avant cette annonce.
+    public static let periodeRedemande: TimeInterval = 30 * 60
+    /// Un disparu dont la derniere annonce date de plus que cela n'est plus demande a la sonde.
+    public static let ageMaxDisparu: TimeInterval = 24 * 3600
     public static let periodeMuet: TimeInterval = 3600
     /// Apres une recherche complete de la Route64 vaine, delai avant la suivante.
     public static let periodeRecherche: TimeInterval = 30 * 60
@@ -355,9 +360,15 @@ public enum Tournee {
         // compte pas : elle est refaite a la tournee suivante. Une resolution complete remplace la precedente, sauf
         // si la sonde a refuse toutes ses demandes ; un appareil non resolu reste en rattachement suppose.
         let moiExt = etat.ext?.uppercased()
-        let cibles = appareils.filter { $0.partition == partition && $0.id.uppercased() != moiExt }.sorted { $0.id < $1.id }
+        let cibles = appareils.filter {
+            $0.partition == partition && $0.id.uppercased() != moiExt && !$0.perduDepuisTropLongtemps(a: maintenant)
+        }.sorted { $0.id < $1.id }
         let complete = mem.derniereResolution.map { maintenant.timeIntervalSince($0) >= periodeResolution } ?? true
-        let aResoudre = annonces == nil ? [] : complete ? cibles : cibles.filter { !mem.demandes.contains($0.id) }
+        // Un appareil qui vient de perdre son annonce (sans adresse, disparu) est redemande a chaque tournee, comme un
+        // appareil nouveau, tant que sa resolution connue date d'avant la perte : elle ne prouve rien d'apres.
+        let aResoudre = annonces == nil ? [] : complete ? cibles : cibles.filter {
+            !mem.demandes.contains($0.id) || $0.aRedemander(a: maintenant, resolution: mem.resolutions[$0.id]?.date)
+        }
         signaler(.resolution, 0, aResoudre.count)
         let resolues = try await parallele(aResoudre, { try await sonde.resoudre($0.adresse) },
                                            apresChacune: { n, _, _ in signaler(.resolution, n, aResoudre.count) })

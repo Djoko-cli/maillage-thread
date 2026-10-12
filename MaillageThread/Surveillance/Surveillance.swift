@@ -351,7 +351,8 @@ final class Surveillance {
 
     /// Date a laquelle la sonde a trouve, par la resolution d'adresse, un appareil qui n'annonce plus d'adresse (sans
     /// adresse, ou disparu) : il est joignable. Nil s'il annonce son adresse, si la derniere resolution ne l'a pas
-    /// trouve, sans maillage ou s'il est perime, et si la resolution a plus de `ageMaxVerification`. L'instantane reste
+    /// trouve, sans maillage ou s'il est perime, si la resolution a plus de `ageMaxVerification`, et si elle n'est pas
+    /// strictement posterieure a la derniere annonce de son adresse (`Suivi.dernieresAnnonces`). L'instantane reste
     /// le reflet de Bonjour : cet etat est derive ici, a chaque lecture, du dernier maillage de la sonde.
     func verification(_ id: String, a maintenant: Date) -> Date? {
         verifications(a: maintenant)[id]
@@ -361,8 +362,11 @@ final class Surveillance {
     func verifications(a maintenant: Date) -> [String: Date] {
         guard let m = maillage, let i = instantane, fraicheurMaillage(a: maintenant) != .perime else { return [:] }
         let muets = Set(i.appareils.filter { $0.genre == .sansAdresse }.map(\.id)).union(suivi.disparus.keys)
+        // Une resolution d'avant la derniere annonce de l'adresse ne prouve rien : l'appareil l'annoncait encore.
         return m.resolus.filter { id, d in
-            muets.contains(id) && maintenant.timeIntervalSince(d) <= Self.ageMaxVerification
+            guard muets.contains(id), maintenant.timeIntervalSince(d) <= Self.ageMaxVerification,
+                  let annonce = suivi.dernieresAnnonces[id] else { return false }
+            return d > annonce
         }
     }
 
