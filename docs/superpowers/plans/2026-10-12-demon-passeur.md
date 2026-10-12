@@ -1786,7 +1786,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes : `DemonPasseur`, `BancDemon`, imitations (tâche 5).
 - Produces : rien de nouveau ; fixe le comportement des sections 3.3 à 3.5 de la spec.
 
-- [ ] **Step 1 : écrire les tests**
+- [x] **Step 1 : écrire les tests**
 
 `PasseurTests/DemonPasseurViesTests.swift` :
 
@@ -1956,12 +1956,12 @@ struct DemonPasseurViesTests {
 }
 ```
 
-- [ ] **Step 2 : lancer les tests**
+- [x] **Step 2 : lancer les tests**
 
 Run : `outils/tester.sh PasseurTests`
 Expected : PASS avec le code de la tâche 5 tel quel. Un test qui échoue est un écart avec la spec (sections 3.3 à 3.5) : corriger `DemonPasseur.swift`, pas le test.
 
-- [ ] **Step 3 : commit**
+- [x] **Step 3 : commit**
 
 ```bash
 git add PasseurTests/DemonPasseurViesTests.swift Passeur/Logique/DemonPasseur.swift
