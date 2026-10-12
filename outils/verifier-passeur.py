@@ -57,7 +57,9 @@ def resumer(message):
     if t == "releve":
         return "releve : " + resumer_noms(message.get("noms") or {})
     if t == "identifie":
-        return f"identifie : demande {message.get('demande')}, ok {message.get('ok')}, erreur {message.get('erreur')}"
+        # Le texte de l'erreur peut reprendre du texte HomeKit : seulement oui ou non.
+        return (f"identifie : demande {message.get('demande')}, ok {message.get('ok')}, erreur "
+                f"{'oui' if message.get('erreur') else 'non'}")
     return f"message de type {t}"
 
 
@@ -69,7 +71,12 @@ def ecouter():
 
 
 def ouvrir(demande, port, jeton):
-    subprocess.run(["open", "-g", f"maillage-passeur://{demande}?port={port}&jeton={jeton}"], check=True)
+    # Sortie de `open` masquee : elle pourrait reprendre l'URL, donc le jeton. Pas de check=True : son exception
+    # afficherait l'URL complete.
+    r = subprocess.run(["open", "-g", f"maillage-passeur://{demande}?port={port}&jeton={jeton}"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if r.returncode != 0:
+        raise SystemExit(f"open a echoue (code {r.returncode}) : Passeur Noms installe ? (outils/passeur.sh)")
 
 
 def accepter(s, jeton, delai=120):
@@ -107,6 +114,21 @@ def releve():
     print("releve ponctuel : " + resumer_noms(json.loads(json_brut[:int(longueur)])))
 
 
+def traiter(c, tampon, relu):
+    """Traite les trames completes du tampon ; rend (reste, relu). Envoie `relire` au premier releve si demande
+    (relu est False)."""
+    trames, reste = lire_trames(tampon)
+    for t in trames:
+        message = json.loads(t)
+        print(f"{time.strftime('%H:%M:%S')} {resumer(message)}")
+        if not relu and message.get("t") == "releve":
+            j = json.dumps({"t": "relire", "v": 1}).encode()
+            c.sendall(str(len(j)).encode() + b"\n" + j)
+            print("relire envoye")
+            relu = True
+    return reste, relu
+
+
 def abonner(duree, relire):
     jeton = secrets.token_hex(32)
     s, port = ecouter()
@@ -115,6 +137,8 @@ def abonner(duree, relire):
     c.settimeout(1)
     debut = time.monotonic()
     relu = not relire
+    # Les trames arrivees avec le jeton sont traitees tout de suite, sans attendre le prochain recv.
+    tampon, relu = traiter(c, tampon, relu)
     while time.monotonic() - debut < duree:
         try:
             morceau = c.recv(65536)
@@ -123,15 +147,7 @@ def abonner(duree, relire):
         if not morceau:
             print("le demon a ferme la connexion")
             break
-        trames, tampon = lire_trames(tampon + morceau)
-        for t in trames:
-            message = json.loads(t)
-            print(f"{time.strftime('%H:%M:%S')} {resumer(message)}")
-            if not relu and message.get("t") == "releve":
-                j = json.dumps({"t": "relire", "v": 1}).encode()
-                c.sendall(str(len(j)).encode() + b"\n" + j)
-                print("relire envoye")
-                relu = True
+        tampon, relu = traiter(c, tampon + morceau, relu)
     c.close()
 
 

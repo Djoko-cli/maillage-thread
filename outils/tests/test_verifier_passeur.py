@@ -1,8 +1,12 @@
 """Tests de l'outil de banc du passeur : trames et resumes, sans reseau."""
+import contextlib
 import importlib.util
+import io
 import json
 import pathlib
+import types
 import unittest
+from unittest import mock
 
 CHEMIN = pathlib.Path(__file__).resolve().parent.parent / "verifier-passeur.py"
 spec = importlib.util.spec_from_file_location("verifier_passeur", CHEMIN)
@@ -13,6 +17,51 @@ spec.loader.exec_module(vp)
 def trame(objet):
     j = json.dumps(objet).encode()
     return str(len(j)).encode() + b"\n" + j
+
+
+class FauxSocket:
+    """Enregistre ce qui serait envoye au demon."""
+
+    def __init__(self):
+        self.envoye = b""
+
+    def sendall(self, donnees):
+        self.envoye += donnees
+
+
+class Ouvrir(unittest.TestCase):
+    def test_echec_sans_jeton(self):
+        with mock.patch.object(vp.subprocess, "run", return_value=types.SimpleNamespace(returncode=1)):
+            with self.assertRaises(SystemExit) as cm:
+                vp.ouvrir("releve", 1234, "a" * 64)
+        self.assertIn("open a echoue (code 1)", str(cm.exception))
+        self.assertNotIn("a" * 64, str(cm.exception))
+
+
+class Traiter(unittest.TestCase):
+    def test_trames_suivant_le_jeton_sont_traitees(self):
+        noms = {"version": 2, "statut": "ok", "accessoires": [{"nom": "Secret", "id": "X"}]}
+        tampon = trame({"t": "etat", "v": 1, "version": "2.0", "acces": "autorise"}) \
+            + trame({"t": "releve", "v": 1, "noms": noms}) + b"12\n{"
+        faux, sortie = FauxSocket(), io.StringIO()
+        with contextlib.redirect_stdout(sortie):
+            reste, relu = vp.traiter(faux, tampon, False)
+        texte = sortie.getvalue()
+        self.assertIn("etat : version 2.0", texte)
+        self.assertIn("releve : version 2", texte)
+        self.assertIn("relire envoye", texte)
+        self.assertNotIn("Secret", texte)
+        self.assertIn(b'"relire"', faux.envoye)
+        self.assertEqual(reste, b"12\n{")
+        self.assertTrue(relu)
+
+    def test_sans_relire_rien_n_est_envoye(self):
+        faux, sortie = FauxSocket(), io.StringIO()
+        with contextlib.redirect_stdout(sortie):
+            reste, relu = vp.traiter(faux, trame({"t": "releve", "v": 1, "noms": {}}), True)
+        self.assertEqual(faux.envoye, b"")
+        self.assertEqual(reste, b"")
+        self.assertTrue(relu)
 
 
 class Trames(unittest.TestCase):
@@ -44,6 +93,14 @@ class Resumes(unittest.TestCase):
                             "ouvertureSession": "inactive", "profilExpire": None})
         self.assertIn("2.0", texte)
         self.assertIn("autorise", texte)
+
+    def test_identifie_sans_texte_d_erreur(self):
+        texte = vp.resumer({"t": "identifie", "v": 1, "demande": "Identifier", "ok": False,
+                            "erreur": "Texte HomeKit secret"})
+        self.assertIn("erreur oui", texte)
+        self.assertNotIn("Texte HomeKit", texte)
+        self.assertIn("erreur non", vp.resumer({"t": "identifie", "v": 1, "demande": "Identifier", "ok": True,
+                                                "erreur": None}))
 
     def test_inconnu(self):
         self.assertIn("allumer", vp.resumer({"t": "allumer", "v": 1}))

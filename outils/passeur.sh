@@ -93,6 +93,16 @@ fi
 # Le passeur qui tourne (ancienne enveloppe ou demon) : arrete par son PID avant de remplacer son paquet.
 for pid in $(pgrep -f "$APP/" 2>/dev/null || true); do
   kill "$pid" 2>/dev/null || true
+  # Attente de la fin, 5 s au plus (25 x 0,2 s) : sinon l'installation ne remplace rien.
+  attente=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$attente" -ge 25 ]; then
+      echo "Passeur Noms (PID $pid) ne s'arrete pas : arret de l'installation." >&2
+      exit 1
+    fi
+    sleep 0.2
+    attente=$((attente + 1))
+  done
 done
 # LaunchServices : l'ancienne installation et les copies de compilation (l'ancienne app iOS et la nouvelle) ne
 # doivent plus reclamer l'URL maillage-passeur:// ni l'identifiant du passeur.
