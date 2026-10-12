@@ -2347,7 +2347,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Pas de test automatique (HomeKit, UIKit, AppKit) : la vérification est une compilation Catalyst sans signature ; le banc de la tâche 9 vérifie le reste avec Djoko.
 
-- [ ] **Step 1 : le projet**
+- [x] **Step 1 : le projet**
 
 Dans `project.yml`, remplacer la cible `Passeur` entière par :
 
@@ -2433,7 +2433,7 @@ Dans `Passeur/Passeur.entitlements`, garder `com.apple.developer.homekit` et ajo
 	<true/>
 ```
 
-- [ ] **Step 2 : le Masqueur**
+- [x] **Step 2 : le Masqueur**
 
 `Masqueur/Masqueur.swift` (le fichier `Masqueur/Info.plist` est écrit par XcodeGen) :
 
@@ -2524,7 +2524,7 @@ extension NSWindow {
 }
 ```
 
-- [ ] **Step 3 : Maison par HomeKit**
+- [x] **Step 3 : Maison par HomeKit**
 
 `Passeur/MaisonHomeKit.swift` (reprend le relevé et les batteries de l'ancien `PasseurApp.swift`, et ajoute `id`, les délégués de changement et `identify()`) :
 
@@ -2706,7 +2706,7 @@ private final class Compteur {
 }
 ```
 
-- [ ] **Step 4 : l'entrée de l'app et la scène**
+- [x] **Step 4 : l'entrée de l'app et la scène**
 
 `Passeur/AppDelegate.swift` :
 
@@ -2795,7 +2795,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
 Supprimer l'ancien point d'entrée : `git rm Passeur/PasseurApp.swift`.
 
-- [ ] **Step 5 : vérifier la compilation Catalyst (sans signature) et les tests**
+- [x] **Step 5 : vérifier la compilation Catalyst (sans signature) et les tests**
 
 Run :
 
@@ -2812,7 +2812,7 @@ Expected : `** BUILD SUCCEEDED **` sans `error:` ni `warning:` ; `Masqueur.bundl
 
 Si Swift 6 refuse une conformité d'un délégué de HomeKit (« conformance … crosses into main actor-isolated code »), garder les méthodes `nonisolated` qui repassent par `Task { @MainActor in … }`, comme ci-dessus ; ne pas baisser `SWIFT_VERSION`.
 
-- [ ] **Step 6 : commit**
+- [x] **Step 6 : commit**
 
 ```bash
 git add project.yml Passeur/AppDelegate.swift Passeur/SceneDelegate.swift Passeur/MaisonHomeKit.swift \
