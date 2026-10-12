@@ -1105,6 +1105,22 @@
         }
       }
     },
+    "Associer à un accessoire de Maison…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link to a Home accessory…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Associer à un accessoire de Maison…"
+          }
+        }
+      }
+    },
     "Attention et alertes" : {
       "localizations" : {
         "en" : {
@@ -1165,6 +1181,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aucun"
+          }
+        }
+      }
+    },
+    "Aucun accessoire de Maison à associer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Home accessory to link"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun accessoire de Maison à associer"
           }
         }
       }
@@ -1645,6 +1677,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diagnostic"
+          }
+        }
+      }
+    },
+    "Dissocier" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlink"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dissocier"
           }
         }
       }
@@ -4445,6 +4493,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "adresse non annoncée"
+          }
+        }
+      }
+    },
+    "associé à la main" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "linked by hand"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "associé à la main"
           }
         }
       }

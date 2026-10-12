@@ -392,7 +392,14 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
   atomique). La boucle locale ne demande pas l'accès au réseau local. Limite
   connue : toute app de ce Mac peut ouvrir cette URL avec son propre port et
   recevrait le relevé ; rien ne sort du Mac.
-- Priorité des noms : surnom > Maison > HomeKit (`_hap._udp`) > hôte.
+- Priorité des noms : surnom > Maison (par le nœud, puis associé à la main) > HomeKit (`_hap._udp`) > hôte.
+- Un appareil que Maison ne nomme plus par son nœud (il a perdu son inscription à la fabrique d'Apple : le nœud
+  exporté par Maison n'est annoncé par personne) peut être associé à la main : sa fiche propose « Associer à un
+  accessoire de Maison… », qui liste les accessoires de Maison dont le nœud n'est annoncé par personne et qui ne
+  sont pas déjà associés (nom, pièce, modèle). L'appareil prend alors le nom et la pièce de cet accessoire partout,
+  comme s'il était trouvé par son nœud. L'association est gardée dans `associations.json` (appareil → nœud de
+  l'accessoire) à côté de `surnoms.json` ; la fiche dit « associé à la main » et propose « Dissocier ». Si
+  l'appareil retrouve son nœud, le nœud l'emporte et l'association reste, sans effet.
 - Le dernier relevé valide est gardé. Un échec (par exemple Passeur Noms
   introuvable ou refusé, rien en 2 minutes, jeton faux, longueur ou JSON
   illisible, accès à Maison refusé) le garde et se lit dans Réglages › Maison

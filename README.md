@@ -377,7 +377,13 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   write). The loopback needs no local network permission. Known limit: any
   app on this Mac can open that URL with its own port and would get the
   reading; nothing leaves the Mac.
-- Priority of names: nickname > Home > HomeKit (`_hap._udp`) > host.
+- Priority of names: nickname > Home (by node, then linked by hand) > HomeKit (`_hap._udp`) > host.
+- A device Home no longer names by its node (it lost its enrolment in Apple's fabric, so the node Home exports is
+  announced by nobody) can be linked by hand: its card offers "Link to a Home accessory…", listing the Home
+  accessories whose node nobody announces and that are not yet linked (name, room, model). The device then takes
+  that accessory's name and room everywhere, as if found by its node. The link is kept in `associations.json`
+  (device → node of the accessory) next to `surnoms.json`; the card says "linked by hand" and offers "Unlink". If
+  the device gets its node back, the node wins and the link stays, unused.
 - The last valid reading is kept. A failure (for example Passeur Noms not
   found or refused, nothing within 2 minutes, wrong token, unreadable length
   or JSON, Home access denied) keeps it and shows in Settings › Home and in

@@ -99,12 +99,21 @@ struct FicheNoeud: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// « Renommer… » et « Placer dans une pièce… », sous l'identite.
+    /// « Renommer… », « Placer dans une pièce… », et pour un appareil Thread que Maison ne nomme pas « Associer à un
+    /// accessoire de Maison… » (« Dissocier » s'il l'est a la main), sous l'identite.
     private var boutonsIdentite: some View {
         RangeesFluides(espacement: 8, interligne: 6) {
             if Self.renommable(id, dans: surveillance) {
                 Button("Renommer…") { aRenommer = NoeudChoisi(id: id) }
                     .boutonDeFiche()
+            }
+            if let a = surveillance.appareil(id) {
+                if surveillance.associeALaMain(a) {
+                    Button("Dissocier") { surveillance.dissocier(id) }
+                        .boutonDeFiche()
+                } else if MenuAssocier.propose(a, dans: surveillance) {
+                    MenuAssocier(id: id)
+                }
             }
             if let piecesChoisies, let entree,
                let placement = PiecesChoisies.placement(id, dans: surveillance, entree: entree) {
@@ -323,6 +332,9 @@ struct FicheNoeud: View {
         let description = Self.ligneDescription(maison: maison, modeleHomeKit: a.hap?.modele)
         if !description.isEmpty {
             Text(description).foregroundStyle(.secondary)
+        }
+        if surveillance.associeALaMain(a) {
+            Text("associé à la main").font(.caption).foregroundStyle(.tertiary)
         }
         if Self.couronne(a.id, entree: entree) {
             PastilleChef()

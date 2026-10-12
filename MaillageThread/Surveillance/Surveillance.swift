@@ -95,6 +95,9 @@ final class Surveillance {
     @ObservationIgnored private let recenseur: Recenseur?
     @ObservationIgnored private let journal: JournalFichiers?
     @ObservationIgnored private let fichierSurnoms: URL?
+    /// Les associations a la main appareil -> accessoire de Maison (`associations.json`) : mode direct avec un
+    /// dossier ; nil : nulle part (demo, tests sans dossier).
+    @ObservationIgnored private let fichierAssociations: URL?
     /// Le dernier maillage garde (`dernier-maillage.json`) : mode direct avec un dossier ; nil : nulle part (demo).
     @ObservationIgnored private let fichierMaillage: URL?
     /// Les dernieres adresses gardees (`dernieres-adresses.json`) : mode direct avec un dossier ; nil : nulle part
@@ -144,15 +147,18 @@ final class Surveillance {
             recenseur = Recenseur()
             journal = dossier.map { JournalFichiers(dossier: $0.appendingPathComponent("Journal")) }
             fichierSurnoms = dossier?.appendingPathComponent("surnoms.json")
+            fichierAssociations = dossier?.appendingPathComponent("associations.json")
             fichierMaillage = dossier?.appendingPathComponent("dernier-maillage.json")
             fichierAdresses = dossier?.appendingPathComponent("dernieres-adresses.json")
-            noms = ResolveurNoms(surnoms: fichierSurnoms.map(Surnoms.lire) ?? [:])
+            noms = ResolveurNoms(surnoms: fichierSurnoms.map(Surnoms.lire) ?? [:],
+                                 associations: fichierAssociations.map(Associations.lire) ?? [:])
             fichiersHistorique = dossier.map { HistoriqueFichiers(dossier: $0) }
         case .demo:
             etatEcoute = .demo
             recenseur = nil
             journal = nil
             fichierSurnoms = nil
+            fichierAssociations = nil
             fichierMaillage = nil
             fichierAdresses = nil
             noms = ResolveurNoms(maison: NomsDemo.maison)
@@ -485,6 +491,31 @@ final class Surveillance {
         }
     }
 
+    /// Associe l'appareil `id` a un accessoire de Maison (« Associer a un accessoire de Maison… ») : il en prend le nom
+    /// et la piece, comme s'il etait trouve par son noeud. Garde dans `associations.json`, en mode direct avec un
+    /// dossier seulement ; sans effet pour un accessoire sans noeud.
+    func associer(_ id: String, a accessoire: AccessoireMaison) {
+        guard let noeud = accessoire.noeudMatter?.uppercased(), noeud != ResolveurNoms.noeudNul else { return }
+        guard noms.associations[id] != noeud else { return }
+        noms.associations[id] = noeud
+        ecrireAssociations()
+    }
+
+    /// Defait l'association de l'appareil `id` (« Dissocier »).
+    func dissocier(_ id: String) {
+        guard noms.associations.removeValue(forKey: id) != nil else { return }
+        ecrireAssociations()
+    }
+
+    private func ecrireAssociations() {
+        guard let fichierAssociations else { return }
+        do {
+            try Associations.ecrire(noms.associations, dans: fichierAssociations)
+        } catch {
+            erreurJournal = error.localizedDescription
+        }
+    }
+
     /// Dernier releve en JSON (option de capture).
     func captureJSON() throws -> Data? {
         try dernierReleve.map { try CodageJSON.encodeur(lisible: true).encode($0) }
@@ -658,6 +689,17 @@ final class Surveillance {
         return LibellesNoeuds.inconnu(n, noms: noms)
     }
     func accessoire(_ a: Appareil) -> AccessoireMaison? { noms.accessoire(de: a, fabriqueApple: fabriqueApple) }
+
+    /// Le nom de l'appareil vient d'une association faite a la main (et non de son noeud).
+    func associeALaMain(_ a: Appareil) -> Bool { noms.associeALaMain(a, fabriqueApple: fabriqueApple) }
+
+    /// Accessoires de Maison a proposer a « Associer a un accessoire de Maison… » : ceux dont le noeud n'est annonce
+    /// par aucun appareil de l'instantane (ni disparu) sur la fabrique d'Apple, et pas deja associes.
+    var accessoiresOrphelins: [AccessoireMaison] {
+        guard let i = instantane else { return [] }
+        return noms.orphelins(appareils: i.appareils + i.appareilsIP + Array(suivi.disparus.values),
+                              fabriqueApple: fabriqueApple)
+    }
 
     /// Appareil par identifiant, present ou disparu.
     func appareil(_ id: String) -> Appareil? { instantane?.appareil(id) ?? suivi.disparus[id] }

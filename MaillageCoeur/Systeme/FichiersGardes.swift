@@ -2,8 +2,9 @@ import Foundation
 import os
 
 /// Fichiers JSON gardes dans le conteneur de l'app : les places des pieces (`positions-pieces.json`),
-/// les pieces choisies (`pieces-routeurs.json`), les surnoms (`surnoms.json`) et les identites des
-/// routeurs (`identites-routeurs.json`). Une regle commune, pour ne jamais perdre ce qu'ils gardent :
+/// les pieces choisies (`pieces-routeurs.json`), les surnoms (`surnoms.json`), les associations a la main
+/// (`associations.json`) et les identites des routeurs (`identites-routeurs.json`). Une regle commune, pour ne
+/// jamais perdre ce qu'ils gardent :
 /// - absent, ou lisible et d'une version connue : lu et ecrit comme d'habitude ;
 /// - d'une version plus recente (une app plus recente l'a ecrit, peut-etre sous un autre schema) : lu
 ///   comme vide, et jamais reecrit ; l'app travaille en memoire, et le note une fois au journal du Mac ;
