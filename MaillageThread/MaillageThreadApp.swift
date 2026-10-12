@@ -56,6 +56,7 @@ struct MaillageThreadApp: App {
             sm.surTournee = { [weak s] enCours in s?.tourneeEnCours = enCours }
             sm.surOubli = { [weak s] in s?.oublierMaillage() }
             sm.appareilsAResoudre = { [weak s] in s?.appareilsAResoudre() ?? [] }
+            sm.reseauConnu = { [weak s] in s?.instantane != nil }
             sm.demarrer()
         }
         s.demarrer()

@@ -1581,3 +1581,85 @@ struct SondeMaillageTests {
         #expect(s.fraicheurMaillage(a: t0 + 15 * 60 + 1) == .perime)
     }
 }
+
+/// Avant la premiere tournee d'une liaison, la sonde attend le premier releve Bonjour de l'app : sans lui, aucun enfant
+/// n'est rattache sous les routeurs muets (banc du 12/10 : 2 enfants au lieu de 24 a chaque lancement). Pas un clic sur
+/// rafraichir.
+@MainActor
+@Suite("Sonde : attente du premier releve Bonjour avant la premiere tournee")
+struct AttenteReseauTests {
+    // Une attente de 10 min sous une limite d'une minute : un test qui attendrait au lieu de partir echoue.
+    /// Le premier releve Bonjour, recu ou non.
+    final class Releve {
+        var recu = false
+    }
+
+    /// Une sonde sur un canal rejoue, qui attend au plus `attente` le releve Bonjour (`connu`).
+    /// Une tournee est partie : la sonde a demande la liste des routeurs (jamais hors tournee).
+    static func tournee(_ c: CanalRejoue) -> Bool { c.envoyes.contains("routeurs\n") }
+
+    static func sonde(_ p: UserDefaults, attente: Duration, connu: @escaping @MainActor () -> Bool)
+        -> (SondeMaillage, CanalRejoue) {
+        let canal = CanalRejoue { CanalRejoue.reseauMinimal($0) }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal }, attenteReseau: attente,
+                              pasAttenteReseau: .milliseconds(10))
+        s.reseauConnu = connu
+        return (s, canal)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func premiereTourneeApresLeReleve() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let releve = Releve()
+        let (s, canal) = Self.sonde(p, attente: .seconds(600)) { releve.recu }
+        await s.connecter(SondeMaillageTests.port, choisi: true)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!Self.tournee(canal) && !s.tourneeEnCours, "pas de tournee avant le releve")
+        releve.recu = true
+        await SondeMaillageTests.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        #expect(Self.tournee(canal), "le releve arrive : la tournee part sans attendre la limite")
+        await s.oublier()
+    }
+
+    @Test(.timeLimit(.minutes(1))) func limiteSansReleve() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let (s, _) = Self.sonde(p, attente: .milliseconds(100)) { false }
+        await s.connecter(SondeMaillageTests.port, choisi: true)
+        await SondeMaillageTests.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        await s.oublier()
+    }
+
+    @Test(.timeLimit(.minutes(1))) func rafraichirNAttendPas() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let (s, canal) = Self.sonde(p, attente: .seconds(600)) { false }
+        await s.connecter(SondeMaillageTests.port, choisi: true)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!Self.tournee(canal), "la liaison attend le releve")
+        s.rafraichir()
+        await SondeMaillageTests.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        await s.oublier()
+    }
+
+    @Test(.timeLimit(.minutes(1))) func oublierPendantLAttente() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let (s, canal) = Self.sonde(p, attente: .seconds(600)) { false }
+        await s.connecter(SondeMaillageTests.port, choisi: true)
+        let boucle = try #require(s.boucle)
+        await s.oublier()
+        await boucle.value
+        #expect(!Self.tournee(canal), "aucune tournee sur une liaison oubliee")
+    }
+
+    @Test(.timeLimit(.minutes(1))) func sansSourcePasDAttente() async throws {
+        let (p, domaine) = try SondeMaillageTests.preferences()
+        defer { p.removePersistentDomain(forName: domaine) }
+        let canal = CanalRejoue { CanalRejoue.reseauMinimal($0) }
+        let s = SondeMaillage(preferences: p, actif: true, ouvrirCanal: { _ in canal }, attenteReseau: .seconds(600))
+        await s.connecter(SondeMaillageTests.port, choisi: true)
+        await SondeMaillageTests.attendre { s.derniereTournee != nil && !s.tourneeEnCours }
+        await s.oublier()
+    }
+}

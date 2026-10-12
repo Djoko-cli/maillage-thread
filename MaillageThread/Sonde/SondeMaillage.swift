@@ -47,6 +47,8 @@ final class SondeMaillage {
     /// Liaison choisie dans les Reglages (USB si absente).
     static let cleLiaison = "sondeLiaison"
     static let periode: Duration = .seconds(300)
+    /// Attente la plus longue du premier releve Bonjour avant la premiere tournee (`attendreReseau`).
+    static let attenteReseau: Duration = .seconds(30)
     /// Reprises de la liaison reseau apres un echec : 1, 2, 5, 10 s, puis toutes les 30 s.
     static let delaisReprise: [Duration] = [.seconds(1), .seconds(2), .seconds(5), .seconds(10), .seconds(30)]
     /// Nouvel essai d'une connexion automatique (USB) en echec : une sonde qui demarre en plus
@@ -101,8 +103,14 @@ final class SondeMaillage {
     /// Appareils de l'app a resoudre (l'instantane : spec de la sonde tout-en-un, section 2.2), demandes au debut de
     /// chaque tournee ; nil : aucun.
     @ObservationIgnored var appareilsAResoudre: (@MainActor () -> [AppareilAResoudre])?
+    /// L'app a recu son premier releve Bonjour : la liste des appareils a resoudre est connue (`attendreReseau`) ;
+    /// nil : rien a attendre.
+    @ObservationIgnored var reseauConnu: (@MainActor () -> Bool)?
 
     @ObservationIgnored private let preferences: UserDefaults
+    /// Attente du premier releve Bonjour et pas de sa relecture (`attendreReseau`) ; courts dans les tests.
+    @ObservationIgnored private let attenteReseau: Duration
+    @ObservationIgnored private let pasAttenteReseau: Duration
     @ObservationIgnored private let actif: Bool
     @ObservationIgnored private let ouvrirCanal: (String) -> any CanalSonde
     /// Cles de l'acces reseau : en memoire par defaut, celui du Mac au lancement de l'app.
@@ -156,6 +164,7 @@ final class SondeMaillage {
              = { try await CanalReseau.connecter(hote: $0, cle: $1) },
          delaisReprise: [Duration] = SondeMaillage.delaisReprise,
          delaiNouvelEssai: Duration = SondeMaillage.delaiNouvelEssai,
+         attenteReseau: Duration = SondeMaillage.attenteReseau, pasAttenteReseau: Duration = .seconds(1),
          horloge: @escaping () -> Date = { Date() }, fichierIdentites: URL? = nil) {
         self.preferences = preferences
         self.actif = actif
@@ -164,6 +173,8 @@ final class SondeMaillage {
         self.ouvrirReseau = ouvrirReseau
         self.delaisReprise = delaisReprise
         self.delaiNouvelEssai = delaiNouvelEssai
+        self.attenteReseau = attenteReseau
+        self.pasAttenteReseau = pasAttenteReseau
         self.horloge = horloge
         self.fichierIdentites = fichierIdentites
         serie = actif ? preferences.string(forKey: Self.cleSerie) : nil
@@ -318,7 +329,7 @@ final class SondeMaillage {
     /// boucle ne ferait que repousser la suivante de 5 min apres ce clic.
     func rafraichir() {
         guard tourneeAuRafraichir else { return }
-        lancerBoucle()
+        lancerBoucle(attendre: false)
     }
 
     /// Ports branches : la sonde retenue revient, ou s'en va.
@@ -623,13 +634,29 @@ final class SondeMaillage {
         etat = nouveau
     }
 
-    private func lancerBoucle() {
+    /// `attendre` : la premiere tournee attend le premier releve Bonjour (`attendreReseau`), a chaque nouvelle
+    /// liaison ; pas un clic sur rafraichir, un ordre explicite.
+    private func lancerBoucle(attendre: Bool = true) {
         boucle?.cancel()
         boucle = Task { [weak self] in
+            if attendre { await self?.attendreReseau() }
             while !Task.isCancelled {
                 await self?.uneTournee()
                 try? await Task.sleep(for: Self.periode)
             }
+        }
+    }
+
+    /// Avant la premiere tournee d'une liaison, attend que l'app ait recu son premier releve Bonjour (`reseauConnu`),
+    /// quelques secondes apres le lancement, au plus `attenteReseau`. Sans lui, la liste des appareils a resoudre est
+    /// vide : la sonde ne rattache aucun enfant sous les routeurs muets, et la premiere carte (ou le dernier maillage
+    /// garde, relu au lancement) laisserait place a une carte appauvrie jusqu'a la tournee suivante, 5 min plus tard
+    /// (banc du 12/10 : 2 enfants au lieu de 24). Ensuite (reconnexion), le releve est la : pas d'attente.
+    private func attendreReseau() async {
+        guard let connu = reseauConnu else { return }
+        let fin = ContinuousClock.now + attenteReseau
+        while !Task.isCancelled, !connu(), ContinuousClock.now < fin {
+            try? await Task.sleep(for: pasAttenteReseau)
         }
     }
 
