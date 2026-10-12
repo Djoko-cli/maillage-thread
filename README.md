@@ -393,9 +393,12 @@ outils/passeur.sh          # build with your team (Xcode account), install, laun
   "Developer ID Application" one (`EQUIPE=` to force it; it is never shown).
   HomeKit is not available to Mac apps signed with a Developer ID (an App
   Store-only capability), so Passeur Noms stays a development build for your
-  registered Mac, never distributed: a paid team gets a one-year profile (a
-  free team, 7 days); after that macOS no longer launches it; run the script
-  again (Settings › Home warns 30 days before). Only Passeur Noms is signed
+  registered Mac, never distributed. It needs a paid team (Apple Developer
+  Program): the profile lasts one year, and a free team cannot build the
+  daemon (HomeKit is refused without a paid team: "Entitlement
+  com.apple.developer.homekit not found"). After a year macOS no longer
+  launches it; run the script again (Settings › Home warns 30 days before).
+  Only Passeur Noms is signed
   with the team; Maillage Thread keeps its own signature (see "Signing").
 - `outils/passeur.sh` builds Passeur Noms and Masqueur, stops the running
   daemon (by its PID), replaces `~/Applications/Passeur Noms.app` only if the
@@ -421,8 +424,8 @@ outils/passeur.sh          # build with your team (Xcode account), install, laun
 - The daemon follows Home: changes within 2 s are grouped, and a reading is
   sent only if it differs from the last one; batteries are read every hour
   (and on request). It stays launched while an app is subscribed (10 minutes
-  after the last one leaves), or permanently if it is registered to open at
-  login.
+  after the last one leaves, or 10 minutes after a launch with no subscriber),
+  or permanently if it is registered to open at login.
 - In the app: it subscribes at launch, and again after 5 s, 10 s, 30 s, then
   every minute if the connection closes; "Refresh from Home" sends `relire`
   (a request to a connected daemon that does not answer is released after 2

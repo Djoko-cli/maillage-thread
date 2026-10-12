@@ -414,9 +414,11 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, 
   n'est jamais affichée). HomeKit n'est pas offert aux apps Mac signées
   Developer ID (capacité réservée à l'App Store) : Passeur Noms reste une
   compilation de développement pour ton Mac enregistré, jamais distribuée.
-  Une équipe payante a un profil d'un an (une équipe gratuite, 7 jours) :
-  au-delà, macOS ne le lance plus ; relancer le script (Réglages › Maison
-  prévient 30 jours avant). Seul Passeur Noms est signé avec l'équipe ;
+  Il faut une équipe payante (Apple Developer Program) : le profil dure un
+  an, et une équipe gratuite ne peut pas compiler le démon (HomeKit est
+  refusé sans équipe payante : « Entitlement com.apple.developer.homekit not
+  found »). Au bout d'un an, macOS ne le lance plus ; relancer le script
+  (Réglages › Maison prévient 30 jours avant). Seul Passeur Noms est signé avec l'équipe ;
   Maillage Thread garde sa propre signature (voir « Signature »).
 - `outils/passeur.sh` compile Passeur Noms et Masqueur, arrête le démon qui
   tourne (par son PID), remplace `~/Applications/Passeur Noms.app` seulement
@@ -442,8 +444,9 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, 
 - Le démon suit Maison : les changements sont regroupés sur 2 s, et un relevé
   n'est envoyé que s'il diffère du dernier ; les batteries sont relues toutes
   les heures (et sur demande). Il reste lancé tant qu'une app est abonnée
-  (10 minutes après le départ de la dernière), ou en permanence s'il est
-  inscrit à l'ouverture de session.
+  (10 minutes après le départ de la dernière, ou 10 minutes après un
+  lancement sans abonné), ou en permanence s'il est inscrit à l'ouverture de
+  session.
 - Côté app : elle s'abonne au lancement, et de nouveau après 5 s, 10 s, 30 s,
   puis chaque minute si la connexion se ferme ; « Rafraîchir depuis Maison »
   envoie `relire` (une demande à un démon connecté qui ne répond pas est

@@ -2,8 +2,9 @@
 # Passeur Noms, demon de Maison (docs/superpowers/specs/2026-10-12-demon-passeur-design.md) : app Mac Catalyst sans
 # fenetre ni Dock, qui lit Maison en arriere-plan et la sert a Maillage Thread et Maillage Zigbee par la boucle locale.
 # HomeKit n'est pas offert aux apps Mac signees Developer ID (capacite reservee a l'App Store) : le demon reste une
-# compilation de developpement, signee par l'equipe payante pour ce Mac enregistre, avec un profil d'un an ; relancer
-# ce script pour le renouveler (les apps le rappellent 30 jours avant).
+# compilation de developpement pour ce Mac enregistre. Il exige une equipe payante (Apple Developer Program), profil
+# d'un an ; une equipe gratuite ne peut pas le compiler (HomeKit refuse : « Entitlement com.apple.developer.homekit
+# not found »). Relancer ce script pour renouveler le profil (les apps le rappellent 30 jours avant).
 # Compile, arrete le demon qui tourne (par son PID), remplace l'app installee (seulement une installation faite par ce
 # script : l'ancienne enveloppe, lien WrappedBundle, ou le demon, cle MaillagePasseurProtocole de son Info.plist),
 # l'enregistre aupres de LaunchServices (et desinscrit les copies de compilation, qui reclameraient aussi l'URL
@@ -91,19 +92,22 @@ if [ ! -d "$PRODUIT/Contents/PlugIns/Masqueur.bundle" ]; then
   exit 1
 fi
 # Le passeur qui tourne (ancienne enveloppe ou demon) : arrete par son PID avant de remplacer son paquet.
-for pid in $(pgrep -f "$APP/" 2>/dev/null || true); do
-  kill "$pid" 2>/dev/null || true
-  # Attente de la fin, 5 s au plus (25 x 0,2 s) : sinon l'installation ne remplace rien.
-  attente=0
-  while kill -0 "$pid" 2>/dev/null; do
-    if [ "$attente" -ge 25 ]; then
-      echo "Passeur Noms (PID $pid) ne s'arrete pas : arret de l'installation." >&2
-      exit 1
-    fi
-    sleep 0.2
-    attente=$((attente + 1))
+arreter() {
+  for pid in $(pgrep -f "$APP/" 2>/dev/null || true); do
+    kill "$pid" 2>/dev/null || true
+    # Attente de la fin, 5 s au plus (25 x 0,2 s) : sinon l'installation ne remplace rien.
+    attente=0
+    while kill -0 "$pid" 2>/dev/null; do
+      if [ "$attente" -ge 25 ]; then
+        echo "Passeur Noms (PID $pid) ne s'arrete pas : arret de l'installation." >&2
+        exit 1
+      fi
+      sleep 0.2
+      attente=$((attente + 1))
+    done
   done
-done
+}
+arreter
 # LaunchServices : l'ancienne installation et les copies de compilation (l'ancienne app iOS et la nouvelle) ne
 # doivent plus reclamer l'URL maillage-passeur:// ni l'identifiant du passeur.
 if [ -e "$APP" ]; then
@@ -113,6 +117,9 @@ fi
 for copie in "$DD/Build/Products/Debug-iphoneos/Passeur Noms.app" "$PRODUIT"; do
   [ -e "$copie" ] && "$LSREGISTER" -u "$copie" 2>/dev/null || true
 done
+# Une app a pu relancer le passeur entre-temps (URL maillage-passeur://) : on l'arrete de nouveau juste avant de
+# remplacer le paquet.
+arreter
 rm -rf "$APP"
 mkdir -p "$(dirname "$APP")"
 ditto "$PRODUIT" "$APP"
