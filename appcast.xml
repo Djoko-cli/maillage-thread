@@ -3,6 +3,20 @@
   <channel>
     <title>Maillage Thread</title>
     <item>
+      <title>1.2.1</title>
+      <pubDate>Mon, 12 Oct 2026 09:13:34 +0000</pubDate>
+      <sparkle:version>493</sparkle:version>
+      <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+<p><strong>English</strong></p>
+<ul><li>The last mesh is kept: at launch, the radio map shows the probe's last mesh as soon as the local network is heard (about two seconds), without waiting for the probe's first round. Older than six minutes, it is marked "Probe survey is old" until the next round replaces it. Forgetting the probe erases it.</li><li>The probe's first round after launch now waits for the local network to be heard (30 seconds at most). It used to start without the list of devices to resolve, and the map lost most children until the next round, five minutes later.</li><li>History: the highlighted curve is cleared when you pick another node, another period or the "all links" box; beyond eight curves, the lines change dash; the name of a faded node becomes readable on hover; the legend chips give their value to VoiceOver.</li><li>The columns of the node card lay out correctly at any width.</li><li>The probe firmware is unchanged (1.1.0).</li></ul>
+<p><strong>Français</strong></p>
+<ul><li>Le dernier maillage est gardé : au lancement, la carte radio montre le dernier maillage de la sonde dès que le réseau local est entendu (environ deux secondes), sans attendre la première tournée de la sonde. Au-delà de six minutes, il est signalé « Relevé de la sonde ancien » jusqu'à la tournée qui le remplace. Oublier la sonde l'efface.</li><li>La première tournée de la sonde après le lancement attend désormais que le réseau local soit entendu (30 secondes au plus). Elle partait sans la liste des appareils à résoudre, et la carte perdait la plupart des enfants jusqu'à la tournée suivante, cinq minutes plus tard.</li><li>Historique : la courbe mise en avant s'efface quand on choisit un autre nœud, une autre période ou la case « tous les liens » ; au-delà de huit courbes, les traits changent ; le nom d'un nœud estompé devient lisible au survol ; les pastilles de la légende donnent leur valeur à VoiceOver.</li><li>Les colonnes de la fiche d'un nœud se disposent correctement à toute largeur.</li><li>Le firmware de la sonde ne change pas (1.1.0).</li></ul>
+]]></description>
+      <enclosure url="https://github.com/Djoko-cli/maillage-thread/releases/download/maillage-v1.2.1/Maillage-Thread-1.2.1.dmg" length="7930259" type="application/octet-stream" sparkle:edSignature="9NJHqvMAC1cfbScENHHxxyPKCJGZELkNTepKFRMHl6PcIDczksX+WzoK/p53+2tgnRcO4n0TV+WY6eZQq/GTAA=="/>
+    </item>
+    <item>
       <title>1.2.0</title>
       <pubDate>Fri, 09 Oct 2026 10:44:18 +0000</pubDate>
       <sparkle:version>487</sparkle:version>
