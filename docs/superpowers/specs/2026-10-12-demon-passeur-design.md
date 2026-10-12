@@ -1,6 +1,6 @@
 # Démon Passeur Noms : Maison en arrière-plan, sans fenêtre ni Dock
 
-Spec du 12/10/2026. Djoko a validé la conception le même jour, section par section, après quatre essais de faisabilité et un essai d'Identifier.
+Spec du 12/10/2026. Djoko a validé la conception le même jour, section par section, après cinq essais de faisabilité et un essai d'Identifier.
 
 ## 0. Contexte et décisions
 
@@ -11,7 +11,8 @@ Aujourd'hui, Passeur Noms est une app iOS « conçue pour iPad », lancée sur l
 - **App iOS sur le Mac** (forme actuelle) : HomeKit répond, mais la fenêtre et l'icône du Dock restent, et `requestSceneSessionDestruction` est ignoré.
 - **App Catalyst** : HomeKit répond **en arrière-plan** (143 accessoires, dont 142 joignables, dès la première seconde, pendant 4 minutes), et `LSUIElement` supprime l'icône du Dock. Catalyst + HomeKit n'est accepté qu'une fois l'App ID créé avec la capacité HomeKit (sinon : « Entitlement com.apple.developer.homekit not found »).
 - **macOS 27 impose une scène** : une app UIKit sans scène s'arrête au lancement (`UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`), et la fenêtre de la scène reste visible même détruite dès sa connexion.
-- **Un module AppKit chargé par l'app** (`setActivationPolicy(.accessory)`, `orderOut` des fenêtres) réduit cette fenêtre à un éclair d'une fraction de seconde au lancement.
+- **Un module AppKit chargé par l'app** (`setActivationPolicy(.accessory)`, `orderOut` des fenêtres sur les notifications d'AppKit) réduit cette fenêtre à un éclair d'une fraction de seconde au lancement : les notifications arrivent après l'affichage.
+- **Cinquième essai : plus aucun éclair.** Le module intercepte les initialiseurs de `NSWindow` dès son chargement (avant la connexion de la scène) : toute fenêtre de l'app naît transparente et inerte, avant tout affichage. Djoko n'a vu ni fenêtre ni éclair ; HomeKit répond toujours (143 accessoires dès la première seconde, en arrière-plan, 4 minutes).
 - **`HMAccessory.identify()` fonctionne** : depuis une app Catalyst, un détecteur de présence a clignoté.
 
 **Décisions de Djoko (12/10) :**
@@ -86,7 +87,11 @@ Le jeton authentifie le démon auprès de l'app : un autre processus ne peut pas
 ### 3.1 Démarrage et masquage
 
 - Lancé par une URL (LaunchServices le démarre s'il ne tourne pas) ou à l'ouverture de session.
-- Il charge `Masqueur.bundle` : politique d'activation `.accessory`, et masquage (`orderOut`) de toute fenêtre de l'app dès qu'elle apparaît. Il essaie aussi de rendre la fenêtre transparente avant son affichage, pour supprimer l'éclair ; si l'éclair reste, il est accepté (une fraction de seconde, une fois par lancement).
+- Il charge `Masqueur.bundle` **dans `application(_:didFinishLaunchingWithOptions:)`**, avant que UIKit connecte la scène :
+  - le module échange les initialiseurs de `NSWindow` (`init(contentRect:styleMask:backing:defer:)` et sa variante avec `screen:`) contre des versions qui rendent toute fenêtre de l'app invisible dès sa création : `alphaValue = 0`, `ignoresMouseEvents`, sans ombre, `collectionBehavior` `.transient` et `.ignoresCycle` (hors de Mission Control et du cycle des fenêtres) ;
+  - politique d'activation `.accessory` ;
+  - par sécurité, `orderOut` de toute fenêtre de l'app sur les notifications d'AppKit (devient clé, principale, mise à jour, exposée).
+  Validé au cinquième essai : ni fenêtre ni éclair.
 - La scène imposée par UIKit est déclarée, sans contenu, et refermée dès sa connexion.
 - Il crée le `HMHomeManager` et attend l'autorisation ; `acces` suit `authorizationStatus`.
 
@@ -179,5 +184,5 @@ Les mêmes ajouts, faits par la session Zigbee : `ProtocolePasseur.swift` recopi
 - **Distribution du démon** : il reste à compiler soi-même (`outils/passeur.sh`), comme le Passeur aujourd'hui ; pas de .dmg, pas d'App Store.
 - **Commandes HomeKit** : seulement « Identifier » ; ni allumer, ni éteindre, ni piloter.
 - **Renouvellement annuel** du profil : relancer `outils/passeur.sh`, que l'app rappelle 30 jours avant.
-- **Éclair de fenêtre** au lancement, si la transparence avant affichage ne le supprime pas.
+- **L'interception des initialiseurs de `NSWindow`** repose sur le comportement actuel d'UIKit pour Mac (macOS 27) : à revérifier à chaque version majeure de macOS (premier point du banc après une mise à jour).
 - **Les changements reçus en arrière-plan** sont attendus d'après les essais (HomeKit répond en arrière-plan), mais non vérifiés en direct : c'est le premier point du banc.
