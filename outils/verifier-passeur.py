@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""Banc du demon Passeur Noms : joue le role d'une app sur la boucle locale (127.0.0.1).
+
+  python3 outils/verifier-passeur.py releve
+  python3 outils/verifier-passeur.py abonner [--duree 120] [--relire]
+
+releve  : demande un releve ponctuel (URL maillage-passeur://releve) et le resume.
+abonner : s'abonne (URL maillage-passeur://abonner) et resume chaque message recu pendant --duree secondes ;
+          --relire envoie `relire` apres le premier releve.
+N'affiche que des nombres et des etats : jamais un nom de Maison, une piece, ni un identifiant d'accessoire, ni le
+jeton. Ouvre l'URL avec `open -g` (le demon ne passe pas au premier plan).
+"""
+import argparse
+import json
+import secrets
+import socket
+import subprocess
+import sys
+import time
+
+TAILLE_MAX = 8 * 1024 * 1024
+
+
+def lire_trames(tampon):
+    """Trames completes `<longueur>\\n<JSON>` du tampon ; rend (trames, reste). ValueError si une longueur est fausse."""
+    trames = []
+    while True:
+        fin = tampon.find(b"\n")
+        if fin < 0:
+            if len(tampon) > 16:
+                raise ValueError("ligne de longueur trop longue")
+            return trames, tampon
+        ligne = tampon[:fin]
+        if not ligne.isdigit():
+            raise ValueError("longueur illisible")
+        n = int(ligne)
+        if n <= 0 or n > TAILLE_MAX:
+            raise ValueError("longueur hors bornes")
+        if len(tampon) < fin + 1 + n:
+            return trames, tampon
+        trames.append(tampon[fin + 1:fin + 1 + n])
+        tampon = tampon[fin + 1 + n:]
+
+
+def resumer_noms(noms):
+    accessoires = noms.get("accessoires", [])
+    avec_id = sum(1 for a in accessoires if a.get("id"))
+    return (f"version {noms.get('version')}, statut {noms.get('statut')}, {len(accessoires)} accessoires, "
+            f"{avec_id} avec id, {len(noms.get('zones') or [])} zones")
+
+
+def resumer(message):
+    t = message.get("t")
+    if t == "etat":
+        return (f"etat : version {message.get('version')}, acces {message.get('acces')}, ouverture "
+                f"{message.get('ouvertureSession')}, profil {message.get('profilExpire')}")
+    if t == "releve":
+        return "releve : " + resumer_noms(message.get("noms") or {})
+    if t == "identifie":
+        return f"identifie : demande {message.get('demande')}, ok {message.get('ok')}, erreur {message.get('erreur')}"
+    return f"message de type {t}"
+
+
+def ecouter():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    s.listen(1)
+    return s, s.getsockname()[1]
+
+
+def ouvrir(demande, port, jeton):
+    subprocess.run(["open", "-g", f"maillage-passeur://{demande}?port={port}&jeton={jeton}"], check=True)
+
+
+def accepter(s, jeton, delai=120):
+    s.settimeout(delai)
+    c, _ = s.accept()
+    s.close()
+    c.settimeout(delai)
+    tampon = b""
+    while b"\n" not in tampon:
+        morceau = c.recv(65536)
+        if not morceau:
+            raise SystemExit("connexion fermee avant le jeton")
+        tampon += morceau
+    ligne, _, reste = tampon.partition(b"\n")
+    if not secrets.compare_digest(ligne, jeton.encode()):
+        raise SystemExit("jeton faux")
+    print("jeton : ok")
+    return c, reste
+
+
+def releve():
+    jeton = secrets.token_hex(32)
+    s, port = ecouter()
+    ouvrir("releve", port, jeton)
+    c, tampon = accepter(s, jeton)
+    while True:
+        morceau = c.recv(65536)
+        if not morceau:
+            break
+        tampon += morceau
+    c.close()
+    longueur, _, json_brut = tampon.partition(b"\n")
+    if not longueur.isdigit() or len(json_brut) < int(longueur):
+        raise SystemExit("trame du releve incomplete")
+    print("releve ponctuel : " + resumer_noms(json.loads(json_brut[:int(longueur)])))
+
+
+def abonner(duree, relire):
+    jeton = secrets.token_hex(32)
+    s, port = ecouter()
+    ouvrir("abonner", port, jeton)
+    c, tampon = accepter(s, jeton)
+    c.settimeout(1)
+    debut = time.monotonic()
+    relu = not relire
+    while time.monotonic() - debut < duree:
+        try:
+            morceau = c.recv(65536)
+        except socket.timeout:
+            continue
+        if not morceau:
+            print("le demon a ferme la connexion")
+            break
+        trames, tampon = lire_trames(tampon + morceau)
+        for t in trames:
+            message = json.loads(t)
+            print(f"{time.strftime('%H:%M:%S')} {resumer(message)}")
+            if not relu and message.get("t") == "releve":
+                j = json.dumps({"t": "relire", "v": 1}).encode()
+                c.sendall(str(len(j)).encode() + b"\n" + j)
+                print("relire envoye")
+                relu = True
+    c.close()
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("demande", choices=["releve", "abonner"])
+    p.add_argument("--duree", type=int, default=120)
+    p.add_argument("--relire", action="store_true")
+    a = p.parse_args()
+    if a.demande == "releve":
+        releve()
+    else:
+        abonner(a.duree, a.relire)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

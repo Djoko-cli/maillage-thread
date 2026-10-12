@@ -2838,7 +2838,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Les steps 1 à 4 peuvent être faits par un sous-agent ; les steps 5 à 7 (banc) **par le contrôleur, avec Djoko**.
 
-- [ ] **Step 1 : tests de l'outil de banc (échouent)**
+- [x] **Step 1 : tests de l'outil de banc (échouent)**
 
 `outils/tests/test_verifier_passeur.py` :
 
@@ -2901,7 +2901,7 @@ if __name__ == "__main__":
 Run : `python3 -m unittest outils/tests/test_verifier_passeur.py`
 Expected : échec (`verifier-passeur.py` absent).
 
-- [ ] **Step 2 : l'outil de banc**
+- [x] **Step 2 : l'outil de banc**
 
 `outils/verifier-passeur.py` :
 
@@ -3062,7 +3062,7 @@ if __name__ == "__main__":
 Run : `python3 -m unittest outils/tests/test_verifier_passeur.py`
 Expected : `OK` (6 tests). **Ne pas lancer l'outil lui-même** (il ouvre le démon).
 
-- [ ] **Step 3 : réécrire `outils/passeur.sh`**
+- [x] **Step 3 : réécrire `outils/passeur.sh`**
 
 Remplacer tout le fichier par :
 
@@ -3184,7 +3184,7 @@ else
 fi
 ```
 
-- [ ] **Step 4 : vérifier le script sans le lancer, puis commit**
+- [x] **Step 4 : vérifier le script sans le lancer, puis commit**
 
 Run : `sh -n outils/passeur.sh && echo syntaxe-ok` (et `shellcheck outils/passeur.sh` s'il est installé).
 Expected : `syntaxe-ok`.

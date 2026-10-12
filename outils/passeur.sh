@@ -1,31 +1,22 @@
 #!/bin/sh
-# Passeur des noms de Maison : app iOS lancee sur le Mac (« concue pour
-# iPad »). HomeKit n'est pas offert aux apps Mac signees Developer ID (capacite
-# reservee a l'App Store) : le passeur reste une app de developpement, signee par
-# l'equipe de Djoko pour son Mac enregistre.
-# Compile, enveloppe l'app comme Xcode (Wrapper/ et WrappedBundle), puis la
-# lance. Seul le passeur est signe avec l'equipe (l'app reste ad hoc : changer
-# sa signature ferait redemander ses autorisations).
-# Lance ainsi, a la main, le passeur lit Maison et n'envoie rien : ce premier
-# lancement de chaque compilation passe Gatekeeper et, la premiere fois, la
-# demande d'acces a Maison. Ensuite, Maillage Thread le lance lui-meme, avec un
-# port et un jeton, et recoit le releve par la boucle locale (127.0.0.1).
-# Equipe payante (depuis le 12/10/2026) : profil de developpement d'un an ;
-# relancer ce script pour le renouveler. (L'equipe gratuite ne donnait que 7 jours.)
+# Passeur Noms, demon de Maison (docs/superpowers/specs/2026-10-12-demon-passeur-design.md) : app Mac Catalyst sans
+# fenetre ni Dock, qui lit Maison en arriere-plan et la sert a Maillage Thread et Maillage Zigbee par la boucle locale.
+# HomeKit n'est pas offert aux apps Mac signees Developer ID (capacite reservee a l'App Store) : le demon reste une
+# compilation de developpement, signee par l'equipe payante pour ce Mac enregistre, avec un profil d'un an ; relancer
+# ce script pour le renouveler (les apps le rappellent 30 jours avant).
+# Compile, arrete le demon qui tourne (par son PID), remplace l'app installee (seulement une installation faite par ce
+# script : l'ancienne enveloppe, lien WrappedBundle, ou le demon, cle MaillagePasseurProtocole de son Info.plist),
+# l'enregistre aupres de LaunchServices (et desinscrit les copies de compilation, qui reclameraient aussi l'URL
+# maillage-passeur://), puis la lance en arriere-plan : le premier lancement demande l'acces a Maison.
 #
 #   outils/passeur.sh [--sans-lancer]
 #
-#   --sans-lancer  compile et enveloppe, sans lancer.
-#   APP=...        paquet a creer, en .app (defaut : ~/Applications/Passeur Noms.app).
-#                  Un paquet existant n'est remplace que si c'est une enveloppe
-#                  faite par ce script (lien WrappedBundle vers Wrapper/Passeur Noms.app).
-#   DD=...         produits de compilation (defaut :
-#                  ~/Library/Developer/Xcode/DerivedData/maillage-passeur).
-#   EQUIPE=...     equipe de signature, 10 caracteres (defaut : celle du premier
-#                  certificat « Apple Development » encore valide du trousseau,
-#                  sinon celle du certificat « Developer ID Application », la meme
-#                  equipe payante : Xcode cree alors le certificat Apple Development).
-#                  Jamais affichee.
+#   --sans-lancer  compile et installe, sans lancer.
+#   APP=...        paquet a installer, en .app (defaut : ~/Applications/Passeur Noms.app).
+#   DD=...         produits de compilation (defaut : ~/Library/Developer/Xcode/DerivedData/maillage-passeur).
+#   EQUIPE=...     equipe de signature, 10 caracteres (defaut : celle du premier certificat « Apple Development »
+#                  encore valide du trousseau, sinon celle du certificat « Developer ID Application », la meme
+#                  equipe payante : Xcode cree alors le certificat Apple Development). Jamais affichee.
 set -eu
 USAGE="usage : outils/passeur.sh [--sans-lancer]"
 LANCER=oui
@@ -38,18 +29,24 @@ done
 cd "$(dirname "$0")/.."
 DD=${DD:-$HOME/Library/Developer/Xcode/DerivedData/maillage-passeur}
 APP=${APP:-"$HOME/Applications/Passeur Noms.app"}
-# Gardes, avant de toucher au disque : l'enveloppe est effacee puis refaite.
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+# Gardes, avant de toucher au disque : l'app installee est effacee puis remplacee.
 case "$APP" in
   *.app) ;;
   *) echo "APP : chemin d'un paquet .app (par exemple ~/Applications/Passeur Noms.app), pas « $APP »" >&2
      exit 1 ;;
 esac
-if [ -e "$APP" ] && [ "$(readlink "$APP/WrappedBundle" 2>/dev/null)" != "Wrapper/Passeur Noms.app" ]; then
-  echo "$APP existe mais n'est pas une enveloppe faite par ce script (lien WrappedBundle) : rien n'est effacé." >&2
-  exit 1
+ENVELOPPE=non
+if [ -e "$APP" ]; then
+  if [ "$(readlink "$APP/WrappedBundle" 2>/dev/null)" = "Wrapper/Passeur Noms.app" ]; then
+    ENVELOPPE=oui
+  elif ! /usr/libexec/PlistBuddy -c "Print :MaillagePasseurProtocole" "$APP/Contents/Info.plist" >/dev/null 2>&1; then
+    echo "$APP existe mais n'est pas une installation faite par ce script : rien n'est effacé." >&2
+    exit 1
+  fi
 fi
-# Equipe : celle du premier certificat « Apple Development » encore valide (le
-# trousseau peut garder des certificats expires).
+# Equipe : celle du premier certificat « Apple Development » encore valide (le trousseau peut garder des certificats
+# expires).
 equipe() {
   pem=""
   security find-certificate -a -c "Apple Development" -p 2>/dev/null | while IFS= read -r ligne; do
@@ -80,7 +77,7 @@ fi
 JOURNAL=${TMPDIR:-/tmp}/maillage-passeur.log
 xcodegen generate --quiet
 if ! xcodebuild -project MaillageThread.xcodeproj -scheme Passeur \
-    -destination 'platform=macOS,arch=arm64,variant=Designed for iPad' \
+    -destination 'platform=macOS,variant=Mac Catalyst' \
     -derivedDataPath "$DD" -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
     DEVELOPMENT_TEAM="$EQUIPE" build > "$JOURNAL" 2>&1; then
   # Les erreurs, sans le nom du titulaire ni l'equipe.
@@ -88,19 +85,31 @@ if ! xcodebuild -project MaillageThread.xcodeproj -scheme Passeur \
   echo "échec de la compilation, journal complet : $JOURNAL" >&2
   exit 1
 fi
-PRODUIT="$DD/Build/Products/Debug-iphoneos/Passeur Noms.app"
-if [ ! -d "$PRODUIT" ]; then
-  echo "Produit de compilation introuvable : $PRODUIT ($APP n'est pas touché)" >&2
+PRODUIT="$DD/Build/Products/Debug-maccatalyst/Passeur Noms.app"
+if [ ! -d "$PRODUIT/Contents/PlugIns/Masqueur.bundle" ]; then
+  echo "Produit de compilation incomplet (Masqueur.bundle absent) : $PRODUIT ($APP n'est pas touché)" >&2
   exit 1
 fi
-# Enveloppe : un paquet Mac qui contient l'app iOS, comme Xcode l'installe.
+# Le passeur qui tourne (ancienne enveloppe ou demon) : arrete par son PID avant de remplacer son paquet.
+for pid in $(pgrep -f "$APP/" 2>/dev/null || true); do
+  kill "$pid" 2>/dev/null || true
+done
+# LaunchServices : l'ancienne installation et les copies de compilation (l'ancienne app iOS et la nouvelle) ne
+# doivent plus reclamer l'URL maillage-passeur:// ni l'identifiant du passeur.
+if [ -e "$APP" ]; then
+  [ "$ENVELOPPE" = oui ] && "$LSREGISTER" -u "$APP/Wrapper/Passeur Noms.app" 2>/dev/null || true
+  "$LSREGISTER" -u "$APP" 2>/dev/null || true
+fi
+for copie in "$DD/Build/Products/Debug-iphoneos/Passeur Noms.app" "$PRODUIT"; do
+  [ -e "$copie" ] && "$LSREGISTER" -u "$copie" 2>/dev/null || true
+done
 rm -rf "$APP"
-mkdir -p "$APP/Wrapper"
-cp -R "$PRODUIT" "$APP/Wrapper/"
-ln -s "Wrapper/Passeur Noms.app" "$APP/WrappedBundle"
+mkdir -p "$(dirname "$APP")"
+ditto "$PRODUIT" "$APP"
+"$LSREGISTER" -f "$APP"
 if [ "$LANCER" = non ]; then
-  echo "Passeur Noms prêt (non lancé) : $APP"
+  echo "Passeur Noms installé (non lancé) : $APP"
 else
-  open "$APP"
-  echo "Passeur Noms lancé : $APP"
+  open -g "$APP"
+  echo "Passeur Noms installé et lancé en arrière-plan : $APP"
 fi
