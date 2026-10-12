@@ -197,4 +197,9 @@ Reprises reprisesDiag(uint32_t delaiMs) {
   return r;
 }
 
+bool reponseEcho(uint8_t type, const uint8_t donnees[4], uint32_t id) {
+  constexpr uint8_t kTypeEchoReply = 129;
+  return type == kTypeEchoReply && (uint16_t)((donnees[0] << 8) | donnees[1]) == (uint16_t)id;
+}
+
 }  // namespace distant

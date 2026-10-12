@@ -585,12 +585,18 @@ class AnnoncesEtResolution(unittest.TestCase):
             s.afficher(self.ANNONCE)
             s.afficher({"v": 1, "t": "annonces", "vide": True})
             s.afficher({"v": 1, "t": "resoudre", "id": 17, "cible": "fd00::1", "ok": True, "ms": 340,
-                        "rloc16": "AC00", "mleid": "FD00111122220C87" + "0000000000000017"})
+                        "rloc16": "AC00", "repondu": True, "mleid": "FD00111122220C87" + "0000000000000017"})
+            s.afficher({"v": 1, "t": "resoudre", "id": 18, "cible": "fd00::2", "ok": True, "ms": 90,
+                        "rloc16": "B000", "repondu": False, "mleid": None})
+            s.afficher({"v": 1, "t": "resoudre", "id": 19, "cible": "fd00::3", "ok": True, "ms": 90,
+                        "rloc16": "B400", "mleid": None})
         texte = ecran.getvalue()
         self.assertIn("5000 ext E000000000000A01 partition 1234ABCD rssi -61 (-70..-55) 12 msg il y a 7 s", texte)
         self.assertIn("liens : 0400 3/3, AC00 2/1", texte)
         self.assertIn("aucun routeur entendu", texte)
-        self.assertIn("fd00::1 : AC00 (parent AC00), 340 ms, ML-EID fd00:1111:2222:c87::17", texte)
+        self.assertIn("fd00::1 : AC00 (parent AC00), 340 ms, a repondu a l'echo, ML-EID fd00:1111:2222:c87::17", texte)
+        self.assertIn("fd00::2 : B000 (parent B000), 90 ms, sans reponse d'echo, ML-EID inconnu", texte)
+        self.assertIn("fd00::3 : B400 (parent B400), 90 ms, reponse d'echo inconnue, ML-EID inconnu", texte)
 
     def test_donnees_entieres(self):
         """Une Route64 et un ML-EID ont plus de 16 hexa : ce sont des donnees, jamais masquees."""

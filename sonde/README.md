@@ -125,7 +125,7 @@ le C6, il faut mettre DTR et RTS à 0 dans un seul appel (voir benq).
 | `routeurs` | table des routeurs d'OpenThread : `{"v":1,"t":"routeurs","liste":[{"id":…,"rloc16":"XXXX","ext":"<16 hexa>"\|null,"lqIn":…,"lqOut":…,"age":…,"lien":…}],"suite":…}`, plusieurs lignes si besoin (`"suite":true` sur toutes sauf la dernière) |
 | `diag <cible> <t,t,…> <id> [<délai ms>]` | TLV de la réponse en hexa, ou l'erreur : `delai`, `suspendue`, `occupee` (8 requêtes en vol, ou verrou d'OpenThread refusé), `envoi…` |
 | `annonces` | (1.1.0) une ligne par routeur entendu : `{"v":1,"t":"annonces","rloc16":"XXXX","ext":"<16 hexa>","partition":"<8 hexa>"\|null,"route64":"<hexa>"\|null,"seq":…,"rssi":…,"rssi_min":…,"rssi_max":…,"nb":…,"age_s":…,"suite":…}` (`"suite":true` sur toutes sauf la dernière) ; sans routeur entendu, une seule ligne `{"v":1,"t":"annonces","vide":true}` ; par le réseau, les lignes partent au fil des places libres de la file d'émission (6 places), en quelques secondes pour 32 routeurs, et la réponse est un instantané de la table à la commande ; un autre `annonces` pendant ce temps répond `{"v":1,"t":"erreur","erreur":"occupee"}` ; cette réponse n'est pas gardée (un rid répété après la fin relance la lecture : l'app fusionne par `ext` ou `rloc16`) ; l'envoi laisse une place libre dans la file |
-| `resoudre <ipv6> <id>` | (1.1.0) `{"v":1,"t":"resoudre","id":…,"cible":"<ipv6>","ok":true,"ms":…,"rloc16":"XXXX","mleid":"<32 hexa>"\|null}`, ou l'erreur : `introuvable` (rien en 15 s), `syntaxe` (adresse mal formée), `suspendue`, `occupee` (8 résolutions en vol, ou verrou d'OpenThread refusé), `envoi…` |
+| `resoudre <ipv6> <id>` | (1.1.0) `{"v":1,"t":"resoudre","id":…,"cible":"<ipv6>","ok":true,"ms":…,"rloc16":"XXXX","repondu":true\|false,"mleid":"<32 hexa>"\|null}` (`repondu` : 1.1.1, l'appareil a répondu à l'écho pendant cette résolution), ou l'erreur : `introuvable` (rien en 15 s), `syntaxe` (adresse mal formée), `suspendue`, `occupee` (8 résolutions en vol, ou verrou d'OpenThread refusé), `envoi…` |
 | `cle` | `{"v":1,"t":"cle","empreinte":"<8 hexa>"\|null,…}`, avec `effacement_en_echec`, le nom d'hôte, les compteurs du transport (`udp`, dont `lignes_perdues` et `refus_cadence`) et le tas (`tas`) |
 | `cle efface` | efface la clé (plus d'accès réseau) ; la réponse de `cle`, ou l'erreur `ecriture` |
 | `cle nouvelle <64 HEXA> <id>` | nouvelle clé (réservé à l'app) : `{"v":1,"t":"cle","id":<id>,"cle":"<64 HEXA>","empreinte":"<8 hexa>","hote":…}`, **une seule fois** ; sans `id` : erreur `syntaxe` ; clé écrite mais pas chargée : un `msg` en plus |
@@ -206,7 +206,22 @@ sa place : les routeurs Apple avec leur propre RLOC16, les routeurs tiers avec
 celui de l'enfant. La sonde lit ensuite son cache d'adresses
 (`otThreadGetNextCacheEntry`) toutes les 250 ms, 15 s au plus : `rloc16`, et
 `mleid` (le ML-EID de l'appareil) quand la réponse l'a porté. Au plus 8 en
-vol, comme `diag`. Le diagnostic (`diag`) n'est accepté que sur les adresses
+vol, comme `diag`.
+
+Depuis la 1.1.1, la réponse porte aussi `repondu` (juste après `rloc16`). Une
+entrée du cache d'adresses peut dater d'une résolution précédente (la sonde
+résout chaque appareil toutes les 30 min) : « trouvée » ne dit donc pas que
+l'appareil est là. `repondu:true` veut dire que **l'appareil lui-même a répondu
+à l'écho ICMPv6 pendant cette résolution** : la sonde enregistre un
+gestionnaire ICMPv6 (`otIcmp6RegisterHandler`) et note une réponse d'écho
+(Echo Reply) dont l'identifiant (celui de `<id>`, sur 16 bits) et l'adresse
+source sont ceux de la résolution en vol. La résolution se termine dès que
+l'entrée est trouvée **et** que la réponse est venue ; sinon elle attend jusqu'aux
+15 s, puis rend `repondu:false` si la réponse n'est pas venue (`ms` reste le
+temps jusqu'à l'entrée de cache). Limite : un appareil endormi qui ne se réveille
+pas dans les 15 s rend `repondu:false` (le parent répond à la requête d'adresse,
+pas à l'écho). Une réponse d'écho sans entrée de cache à la fin reste
+`introuvable` : elle ne donne pas le RLOC16. Le diagnostic (`diag`) n'est accepté que sur les adresses
 internes du réseau (RLOC, ML-EID) : c'est au ML-EID que l'app demande la TLV 9
 (compteurs MAC) d'un enfant.
 

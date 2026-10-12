@@ -123,6 +123,12 @@ class Cadence {
 // tout le reste : vide, signe, espace, autre caractere, trop grand.
 bool lireEntier(const char *s, uint32_t *v);
 
+// Reponse d'echo ICMPv6 (1.1.1) : type 129 (Echo Reply) et identifiant d'echo
+// egal a id (16 bits, en gros-boutiste dans les deux premiers octets des
+// donnees de l'en-tete ICMPv6, comme otIcmp6Header.mData.m8). L'adresse source
+// se compare a part (main.cpp).
+bool reponseEcho(uint8_t type, const uint8_t donnees[4], uint32_t id);
+
 // Reprises CoAP d'un diag, pour que l'echec tombe au bout du delai demande
 // (3 a 60 s) : attente totale = accuse x (2^(reprises+1) - 1) avec un facteur
 // aleatoire de 1, et l'accuse ne descend pas sous 1 s (plancher d'OpenThread).

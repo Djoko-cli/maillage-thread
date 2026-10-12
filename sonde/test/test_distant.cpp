@@ -594,6 +594,17 @@ int main() {
   CHECK(lueurs >= ((1ull << 32) + 60000) / 10000 * 4, "attachee 50 jours : la lueur continue (%llu)",
         (unsigned long long)lueurs);
 
+  // reponse d'echo ICMPv6 (1.1.1) : type 129 et identifiant sur 16 bits, gros-boutiste
+  const uint8_t id7[4] = {0x00, 0x07, 0x00, 0x01};
+  const uint8_t id1234[4] = {0x12, 0x34, 0x00, 0x09};
+  CHECK(reponseEcho(129, id7, 7), "echo : reponse, id 7");
+  CHECK(reponseEcho(129, id1234, 0x1234), "echo : id gros-boutiste");
+  CHECK(reponseEcho(129, id1234, 0x51234u), "echo : id tronque sur 16 bits, comme l'envoi");
+  CHECK(!reponseEcho(128, id7, 7), "echo : une demande n'est pas une reponse");
+  CHECK(!reponseEcho(1, id7, 7), "echo : destination injoignable");
+  CHECK(!reponseEcho(129, id7, 8), "echo : autre identifiant");
+  CHECK(!reponseEcho(129, id1234, 0x3412), "echo : octets inverses");
+
   printf("test_distant : %d verification(s), %d echec(s)\n", gChecks, gFails);
   return gFails ? 1 : 0;
 }

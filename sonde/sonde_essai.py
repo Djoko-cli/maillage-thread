@@ -247,6 +247,13 @@ def liens_route64(hexa):
     return [(r, b >> 6, (b >> 4) & 3) for r, b in zip(ids, v[9:]) if b >> 4]
 
 
+def reponse_echo(m):
+    """Firmware 1.1.1 : « repondu » dit si l'appareil lui-meme a repondu a l'echo ; absent avant (1.1.0)."""
+    if "repondu" not in m:
+        return "reponse d'echo inconnue"
+    return "a repondu a l'echo" if m["repondu"] else "sans reponse d'echo"
+
+
 def afficher(m):
     m = sans_cle(m)
     if m.get("t") == "annonces" and m.get("vide"):
@@ -259,7 +266,8 @@ def afficher(m):
     elif m.get("t") == "resoudre" and m.get("ok"):
         rloc = int(m["rloc16"], 16)
         mleid = str(ipaddress.IPv6Address(bytes.fromhex(m["mleid"]))) if m.get("mleid") else "inconnu"
-        print(f"<< resoudre {m['cible']} : {m['rloc16']} (parent {rloc & 0xFC00:04X}), {m.get('ms')} ms, ML-EID {mleid}")
+        print(f"<< resoudre {m['cible']} : {m['rloc16']} (parent {rloc & 0xFC00:04X}), {m.get('ms')} ms, "
+              f"{reponse_echo(m)}, ML-EID {mleid}")
     elif m.get("t") == "resoudre":
         print(f"<< resoudre {m.get('cible')} : {m.get('erreur')}")
     elif m.get("t") == "diag" and m.get("ok") and "tlv" in m:

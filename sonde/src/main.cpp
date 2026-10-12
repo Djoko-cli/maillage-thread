@@ -57,7 +57,8 @@
 //    resoudre <ipv6> <id>             resolution d'adresse (1.1.0) : demande
 //                                     d'echo ICMPv6, puis le cache d'adresses
 //                                     toutes les 250 ms, 15 s au plus ;
-//                                     rloc16 et mleid, ou « introuvable »
+//                                     rloc16, repondu (l'appareil a repondu
+//                                     a l'echo) et mleid, ou « introuvable »
 //    cle                              empreinte de la cle d'acces reseau
 //                                     (null sans cle), effacement_en_echec,
 //                                     hote, compteurs udp (lignes_perdues et
@@ -223,6 +224,7 @@ static std::atomic<bool> sSuspendue{false};
 static std::atomic<bool> sIdentSession{false};
 static std::atomic<uint32_t> sIdentFinEffet{0};
 static bool sThreadPret = false;  // pile Thread creee par Matter.begin()
+static otError enregistrerIcmp6(otInstance *ot);  // gestionnaire d'echo de resoudre (plus bas)
 static char sMac[13] = "?";
 // Nom de la sonde, garde dans la NVS a cote de l'interrupteur (commande `nom`).
 static const char *const kCleNom = "nom";
@@ -444,7 +446,10 @@ static void demarrerMatter() {
   if (sThreadPret) {
     esp_openthread_lock_acquire(portMAX_DELAY);
     ecoute::demarrer(esp_openthread_get_instance(), {lireSequenceCle, lireCleReseau});
+    // Reponses d'echo de resoudre (1.1.1) : une fois, la pile creee.
+    const otError eIcmp = enregistrerIcmp6(esp_openthread_get_instance());
     esp_openthread_lock_release();
+    if (eIcmp != OT_ERROR_NONE) Serial.println("!! gestionnaire ICMPv6 refuse");
   }
   // Comme l'exemple officiel : l'etat relu passe par le rappel une fois Matter demarre.
   sInterrupteur.updateAccessory();
@@ -999,13 +1004,51 @@ static void annoncesTour() {
 // trouve (celui du parent, ou de l'enfant, selon le routeur), et le ML-EID de
 // la cible quand la reponse l'a porte. loop() lit le cache toutes les 250 ms,
 // 15 s au plus.
+//
+// Une entree de cache peut dater d'une resolution anterieure (la sonde resout
+// chaque appareil toutes les 30 min) : « trouvee » ne dit pas que l'appareil
+// est la. La preuve (1.1.1, champ « repondu ») est une reponse d'echo ICMPv6
+// (Echo Reply) venue de l'adresse avec l'identifiant de la demande, vue par un
+// gestionnaire ICMPv6 d'OpenThread. Le mode d'echo (OT_ICMP6_ECHO_HANDLER_ALL
+// par defaut) ne regle que les demandes d'echo auxquelles la sonde repond : les
+// gestionnaires enregistres voient toutes les reponses (Icmp::HandleMessage).
+// Une resolution est finie quand elle est trouvee ET repondue, ou apres 15 s
+// (alors « repondu » dit si la reponse est venue entre-temps). Une reponse sans
+// entree de cache reste « introuvable » : elle ne donne pas le RLOC16.
 static constexpr uint32_t kResolutionMs = 15000, kPasCacheMs = 250;
+
+// Attente de la reponse d'echo, un emplacement par resolution (meme indice que
+// sResolutions). Le rappel ICMPv6 tourne dans la tache OpenThread, verrou OT
+// tenu ; cmdResoudre et resolutionsTour ne touchent ces champs que sous ce meme
+// verrou : il les serialise, sans atomique ni course. Rien de Matter/CHIP.
+struct AttenteEcho {
+  bool active = false;  // la resolution attend sa reponse
+  bool repondu = false;
+  uint16_t id = 0;      // identifiant d'echo envoye
+  otIp6Address adresse = {};
+};
+static AttenteEcho sAttentes[kEnVol];
+
+// Rappel du gestionnaire : note la reponse d'echo (type, identifiant et
+// adresse source) de la resolution en vol qui l'attend, et rien d'autre. Un
+// message qui ne s'accorde avec aucune attente est ignore.
+static void surIcmp6(void *, otMessage *, const otMessageInfo *info, const otIcmp6Header *entete) {
+  if (!info || !entete) return;
+  for (AttenteEcho &a : sAttentes)
+    if (a.active && !a.repondu && distant::reponseEcho(entete->mType, entete->mData.m8, a.id) &&
+        !memcmp(&info->mPeerAddr, &a.adresse, sizeof(a.adresse)))
+      a.repondu = true;
+}
+// Statique : OpenThread ne copie pas le gestionnaire.
+static otIcmp6Handler sGestionnaireIcmp6 = {surIcmp6, nullptr, nullptr};
+static otError enregistrerIcmp6(otInstance *ot) { return otIcmp6RegisterHandler(ot, &sGestionnaireIcmp6); }
 
 // Un emplacement par resolution en vol, dans la tache loop seulement.
 struct Resolution {
   bool enVol = false;
   bool finie = false;    // trouvee ou echue : la reponse attend son depart
   bool trouvee = false;
+  bool repondu = false;  // l'appareil a repondu a l'echo (copie de l'attente, prise sous le verrou OT)
   uint32_t id = 0;
   char cible[48] = {};
   otIp6Address adresse = {};
@@ -1046,6 +1089,13 @@ static void cmdResoudre(char *args) {
     }
   if (libre == kEnVol || !verrouOt(500)) return repondreResolutionErreur(id, cible, "occupee");
   otInstance *ot = esp_openthread_get_instance();
+  // L'attente est posee avant l'envoi, sous le verrou : une reponse ne peut
+  // pas arriver avant (le rappel attend le verrou).
+  AttenteEcho &attente = sAttentes[libre];
+  attente = AttenteEcho();
+  attente.active = true;
+  attente.id = (uint16_t)id;
+  attente.adresse = adresse;
   otMessage *msg = otIp6NewMessage(ot, nullptr);
   otError e = msg ? OT_ERROR_NONE : OT_ERROR_NO_BUFS;
   if (msg) {
@@ -1055,6 +1105,7 @@ static void cmdResoudre(char *args) {
     e = otIcmp6SendEchoRequest(ot, msg, &info, (uint16_t)id);
     if (e != OT_ERROR_NONE) otMessageFree(msg);  // refuse : il nous reste
   }
+  if (e != OT_ERROR_NONE) attente = AttenteEcho();
   libereOt();
   if (e != OT_ERROR_NONE) {
     char texte[24];
@@ -1074,8 +1125,8 @@ static void cmdResoudre(char *args) {
 
 // Le cache d'adresses, toutes les 250 ms, pour les resolutions en vol : une
 // entree resolue (ou vue passer) de leur adresse donne le RLOC16 et, s'il est
-// connu, le ML-EID. 15 s sans elle : introuvable. Verrou OT occupe : au tour
-// suivant.
+// connu, le ML-EID. Finie quand l'entree est trouvee ET que l'echo a recu sa
+// reponse ; 15 s sans entree : introuvable. Verrou OT occupe : au tour suivant.
 static void resolutionsTour(uint32_t maintenant) {
   bool due = false;
   for (const Resolution &r : sResolutions)
@@ -1096,21 +1147,31 @@ static void resolutionsTour(uint32_t maintenant) {
       r.finMs = maintenant;
     }
   }
-  libereOt();
-  for (Resolution &r : sResolutions) {
+  // Toujours sous le verrou : l'attente d'echo est celle du rappel ICMPv6.
+  for (size_t i = 0; i < kEnVol; i++) {
+    Resolution &r = sResolutions[i];
     if (!r.enVol || r.finie || (int32_t)(maintenant - r.prochainMs) < 0) continue;
-    if (r.trouvee || maintenant - r.debutMs >= kResolutionMs) r.finie = true;
-    else r.prochainMs = maintenant + kPasCacheMs;
+    r.repondu = sAttentes[i].repondu;
+    if ((r.trouvee && r.repondu) || maintenant - r.debutMs >= kResolutionMs) {
+      r.finie = true;
+      sAttentes[i] = AttenteEcho();  // le rappel n'a plus rien a noter
+    } else {
+      r.prochainMs = maintenant + kPasCacheMs;
+    }
   }
+  libereOt();
 }
 
-// {"v":1,"t":"resoudre","id":7,"cible":"<ipv6>","ok":true,"ms":340,"rloc16":"AC00","mleid":"<32 HEXA>"|null}, ou
-// "ok":false et "erreur":"introuvable".
+// {"v":1,"t":"resoudre","id":7,"cible":"<ipv6>","ok":true,"ms":340,"rloc16":"AC00","repondu":true,
+// "mleid":"<32 HEXA>"|null}, ou "ok":false et "erreur":"introuvable". ms : le temps jusqu'a l'entree de cache ;
+// repondu : l'appareil lui-meme a repondu a l'echo pendant cette resolution (faux s'il dort et ne s'est pas
+// reveille en 15 s).
 static void imprimerResolution(const Resolution &r) {
   debut("resoudre");
   ajoute(",\"id\":%lu,\"cible\":\"%s\"", (unsigned long)r.id, r.cible);
   if (r.trouvee) {
-    ajoute(",\"ok\":true,\"ms\":%lu,\"rloc16\":\"%04X\"", (unsigned long)(r.finMs - r.debutMs), r.rloc16);
+    ajoute(",\"ok\":true,\"ms\":%lu,\"rloc16\":\"%04X\",\"repondu\":%s", (unsigned long)(r.finMs - r.debutMs), r.rloc16,
+           r.repondu ? "true" : "false");
     if (r.mleidValide) hexa("mleid", r.mleid.mFields.m8, sizeof(r.mleid.mFields.m8));
     else ajoute(",\"mleid\":null");
   } else {
