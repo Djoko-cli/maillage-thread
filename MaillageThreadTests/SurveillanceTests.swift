@@ -189,4 +189,159 @@ struct SurveillanceTests {
         Surveillance(mode: .direct, dossier: nil, preferences: preferences).integrer(scinde)
         #expect(preferences.stringArray(forKey: cle) == [], "pas demarree (comme les autres tests) : rien n'est ecrit")
     }
+
+    // MARK: - Dernier maillage garde (repris de Maillage Zigbee, 12/10)
+
+    /// Un maillage de la demo, recu a `date` (une seconde ronde : les dates du fichier gardent les millisecondes).
+    static func maillageGarde(_ date: Date) throws -> Maillage {
+        try #require(MaillageDemo.maillage(Instantane(annonces: Releve20260928.annonces), date: date))
+    }
+
+    static func dossierJetable() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("maillage-\(UUID().uuidString)")
+    }
+
+    /// Le maillage recu est garde sur disque ; le lancement suivant le relit (comme au demarrage, sans ecouter le
+    /// reseau), avec sa date de reception : la pastille « ancien » s'applique. Le maillage suivant remplace le fichier.
+    @Test func dernierMaillageGarde() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("dernier-maillage.json")
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        #expect(!FileManager.default.fileExists(atPath: fichier.path))
+        let recu = Date(timeIntervalSince1970: 1_790_000_000)
+        let m = try Self.maillageGarde(recu.addingTimeInterval(-60))
+        s.recevoir(m, a: recu)
+        #expect(!s.maillageRelu, "recu pendant que l'app tourne")
+        #expect(FileManager.default.fileExists(atPath: fichier.path))
+
+        let relu = Surveillance(mode: .direct, dossier: dossier)
+        #expect(relu.maillage == nil, "rien avant le demarrage")
+        relu.chargerMaillageGarde()
+        #expect(relu.maillage == m)
+        #expect(relu.maillageRecu == recu)
+        #expect(relu.maillageRelu)
+        #expect(relu.fraicheurMaillage(a: recu.addingTimeInterval(10 * 60)) == .ancien,
+                "la pastille « ancien » s'applique")
+
+        let suivant = try Self.maillageGarde(recu.addingTimeInterval(840))
+        s.recevoir(suivant, a: recu.addingTimeInterval(900))
+        let apres = Surveillance(mode: .direct, dossier: dossier)
+        apres.chargerMaillageGarde()
+        #expect(apres.maillage == suivant && apres.maillageRecu == recu.addingTimeInterval(900))
+    }
+
+    /// Un maillage relu au lancement est montre quel que soit son age (apres une nuit, c'est le cas vise), avec la
+    /// pastille « ancien », jusqu'a la premiere tournee qui le remplace ; la peremption de 15 min reprend ensuite pour
+    /// les maillages recus pendant que l'app tourne.
+    @Test func maillageReluMontreQuelQueSoitSonAge() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        // Recu il y a une nuit, a l'heure du Mac : `maillageAffiche` compte l'age depuis maintenant.
+        let recu = Date().addingTimeInterval(-10 * 3600)
+        let m = try Self.maillageGarde(recu)
+        Surveillance(mode: .direct, dossier: dossier).recevoir(m, a: recu)
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        s.integrer(Releve20260928.annonces)
+        s.chargerMaillageGarde()
+        let matin = recu.addingTimeInterval(10 * 3600)
+        #expect(s.fraicheurMaillage(a: matin) == .ancien, "jamais perime tant qu'il est relu")
+        #expect(Surveillance.fraicheur(recu, maintenant: matin, tourneeEnCours: false) == .perime,
+                "la regle normale, elle, ne change pas")
+        let r = try #require(s.reseau)
+        #expect(s.maillageRelu && s.maillageAffiche(pour: r) != nil && s.maillageAncien)
+        // Pendant la premiere tournee, il reste « ancien » : la tournee ne le rend pas frais.
+        s.tourneeEnCours = true
+        #expect(s.fraicheurMaillage(a: matin) == .ancien && s.maillageAffiche(pour: r) != nil)
+        s.tourneeEnCours = false
+        // La premiere tournee le remplace : la regle des 15 min reprend.
+        s.recevoir(m, a: Date().addingTimeInterval(-20 * 60))
+        #expect(!s.maillageRelu && s.maillageAffiche(pour: r) == nil, "recu il y a 20 min : perime")
+        s.recevoir(m, a: Date())
+        #expect(s.maillageAffiche(pour: r) != nil && !s.maillageAncien)
+    }
+
+    /// Un fichier du dernier maillage illisible est ignore, sans erreur : comme s'il n'y en avait pas. Le maillage
+    /// suivant le remplace.
+    @Test func dernierMaillageIllisible() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        try FileManager.default.createDirectory(at: dossier, withIntermediateDirectories: true)
+        try Data("{ pas du json".utf8).write(to: dossier.appendingPathComponent("dernier-maillage.json"))
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        s.chargerMaillageGarde()
+        #expect(s.maillage == nil && s.maillageRecu == nil && !s.maillageRelu)
+
+        let recu = Date(timeIntervalSince1970: 1_790_000_000)
+        let m = try Self.maillageGarde(recu)
+        s.recevoir(m, a: recu)
+        let relu = Surveillance(mode: .direct, dossier: dossier)
+        relu.chargerMaillageGarde()
+        #expect(relu.maillage == m)
+    }
+
+    /// Un fichier trafique ou abime, mais du JSON valide, est ignore lui aussi, sans arreter l'app : un identifiant de
+    /// routeur hors de 0...62, deux routeurs de meme identifiant, une adresse IPv6 invalide.
+    @Test func dernierMaillageIncoherent() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("dernier-maillage.json")
+        let recu = Date(timeIntervalSince1970: 1_790_000_000)
+        Surveillance(mode: .direct, dossier: dossier).recevoir(try Self.maillageGarde(recu), a: recu)
+        let original = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: fichier)) as? [String: Any])
+        /// Le fichier, une fois le maillage retouche par `retouche`, relu au lancement.
+        func relu(_ retouche: (inout [String: Any]) -> Void) throws -> Maillage? {
+            var garde = original
+            var m = try #require(garde["maillage"] as? [String: Any])
+            retouche(&m)
+            garde["maillage"] = m
+            try JSONSerialization.data(withJSONObject: garde).write(to: fichier)
+            let s = Surveillance(mode: .direct, dossier: dossier)
+            s.chargerMaillageGarde()
+            return s.maillage
+        }
+        #expect(try relu { _ in } != nil, "le fichier intact est relu")
+        #expect(try relu { m in
+            var routeurs = m["routeurs"] as? [[String: Any]] ?? []
+            routeurs[0]["id"] = 99
+            m["routeurs"] = routeurs
+        } == nil, "identifiant hors de 0...62")
+        #expect(try relu { m in
+            var routeurs = m["routeurs"] as? [[String: Any]] ?? []
+            routeurs[1]["id"] = routeurs[0]["id"]
+            m["routeurs"] = routeurs
+        } == nil, "deux routeurs de meme identifiant")
+        #expect(try relu { m in
+            var enfants = m["enfants"] as? [[String: Any]] ?? []
+            enfants[0]["adresses"] = ["pas une adresse"]
+            m["enfants"] = enfants
+        } == nil, "adresse invalide")
+    }
+
+    /// Une sonde oubliee emporte son maillage garde : le lancement suivant n'a rien a relire.
+    @Test func sondeOublieeEffaceLeMaillageGarde() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let fichier = dossier.appendingPathComponent("dernier-maillage.json")
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        let recu = Date(timeIntervalSince1970: 1_790_000_000)
+        s.recevoir(try Self.maillageGarde(recu), a: recu)
+        #expect(FileManager.default.fileExists(atPath: fichier.path))
+        s.oublierMaillage()
+        #expect(!FileManager.default.fileExists(atPath: fichier.path))
+        #expect(s.maillage == nil && !s.maillageRelu)
+        let relu = Surveillance(mode: .direct, dossier: dossier)
+        relu.chargerMaillageGarde()
+        #expect(relu.maillage == nil)
+    }
+
+    /// La demo ne garde aucun maillage, meme avec un dossier.
+    @Test func demoNeGardeAucunMaillage() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let s = Surveillance(mode: .demo, dossier: dossier)
+        s.demarrer()
+        #expect(s.maillage != nil, "la demo a son maillage")
+        #expect(!FileManager.default.fileExists(atPath: dossier.appendingPathComponent("dernier-maillage.json").path))
+    }
 }

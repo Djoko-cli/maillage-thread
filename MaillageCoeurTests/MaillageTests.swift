@@ -462,3 +462,36 @@ struct AccesCanalTests {
         #expect(AccesCanal.taux(avant: avant, apres: Self.releve(envois: 9900, echecs: 2)) == nil, "echecs")
     }
 }
+
+@Suite("Maillage : aller-retour JSON du dernier maillage garde")
+struct MaillageJSONTests {
+    /// Un maillage complet (sources et dates des liens, ecoute, adresses, resolution, echecs) fait l'aller-retour JSON
+    /// du dernier maillage garde (`CodageJSON`) sans rien perdre ; une adresse s'ecrit en texte.
+    @Test func allerRetourJSON() throws {
+        let t = Date(timeIntervalSince1970: 1_790_000_000)  // une seconde ronde : le JSON garde les millisecondes
+        var chef = RouteurMaillage(id: 3)
+        chef.extMac = "0000000000000001"
+        chef.bordure = true
+        chef.chef = true
+        chef.version = 4
+        chef.pile = "test"
+        chef.entendu = t
+        var muet = RouteurMaillage(id: 12)
+        muet.muet = true
+        let adresse = try #require(AdresseIPv6("fd00::1"))
+        var m = Maillage(date: t, partition: "00000001", routeurs: [chef, muet],
+                         liens: [LienRadio(a: 3, b: 12, qualiteAB: 3, qualiteBA: nil, sourceAB: .diagnostic,
+                                           sourceBA: .ecoute, dateAB: t, dateBA: t.addingTimeInterval(-30))],
+                         enfants: [EnfantMaillage(rloc16: 0x0C01, extMac: "0000000000000002", qualite: 2, delai: 240,
+                                                  endormi: true, adresses: [adresse], source: .resolution,
+                                                  resolu: t, echecs: 0.25),
+                                   EnfantMaillage(rloc16: 0x0C02, source: .sonde)],
+                         signaux: [SignalSonde(routeur: 3, rssi: -61)])
+        m.resolution = t
+        m.annoncesLues = true
+        let json = try CodageJSON.encodeur().encode(m)
+        #expect(String(decoding: json, as: UTF8.self).contains("\"fd00::1\""))
+        #expect(try CodageJSON.decodeur().decode(Maillage.self, from: json) == m)
+        #expect(m.identifiantsValides)
+    }
+}

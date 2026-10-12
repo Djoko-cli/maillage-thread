@@ -13,6 +13,14 @@ struct ResumeReseau: Equatable {
     var injoignables: Int
 }
 
+/// Le dernier maillage de la sonde, tel qu'il est garde sur disque (`dernier-maillage.json`) pour le lancement suivant
+/// (repris de Maillage Zigbee, 12/10).
+private struct MaillageGarde: Codable {
+    var maillage: Maillage
+    /// Reception du maillage (`Surveillance.maillageRecu`).
+    var recu: Date
+}
+
 /// Modele de l'app : releves -> suivi -> journal et notifications ; maillages de la
 /// sonde -> journal et historique ; noms ; etat lu par les vues.
 @MainActor
@@ -50,6 +58,10 @@ final class Surveillance {
     /// Reception du dernier maillage, a la fin de sa tournee : son age se compte
     /// depuis (le maillage, lui, est date du debut de sa tournee).
     private(set) var maillageRecu: Date?
+    /// Le maillage affiche est celui relu au lancement (`chargerMaillageGarde`), pas encore remplace par une tournee :
+    /// il se montre quel que soit son age, frais ou « ancien » selon la regle normale, mais jamais perime (la
+    /// peremption de 15 min ne vaut que pour un maillage recu pendant que l'app tourne).
+    private(set) var maillageRelu = false
     /// Une tournee de la sonde est en cours (`SondeMaillage.surTournee`) : le
     /// maillage affiche attend le suivant, il n'est pas « ancien ».
     var tourneeEnCours = false
@@ -75,6 +87,8 @@ final class Surveillance {
     @ObservationIgnored private let recenseur: Recenseur?
     @ObservationIgnored private let journal: JournalFichiers?
     @ObservationIgnored private let fichierSurnoms: URL?
+    /// Le dernier maillage garde (`dernier-maillage.json`) : mode direct avec un dossier ; nil : nulle part (demo).
+    @ObservationIgnored private let fichierMaillage: URL?
     @ObservationIgnored private var alertes = Alertes()
     @ObservationIgnored private var suiviMaillage = SuiviMaillage()
     /// Historique sur disque : mode direct avec un dossier ; nil : nulle part (demo, tests).
@@ -116,6 +130,7 @@ final class Surveillance {
             recenseur = Recenseur()
             journal = dossier.map { JournalFichiers(dossier: $0.appendingPathComponent("Journal")) }
             fichierSurnoms = dossier?.appendingPathComponent("surnoms.json")
+            fichierMaillage = dossier?.appendingPathComponent("dernier-maillage.json")
             noms = ResolveurNoms(surnoms: fichierSurnoms.map(Surnoms.lire) ?? [:])
             fichiersHistorique = dossier.map { HistoriqueFichiers(dossier: $0) }
         case .demo:
@@ -123,6 +138,7 @@ final class Surveillance {
             recenseur = nil
             journal = nil
             fichierSurnoms = nil
+            fichierMaillage = nil
             noms = ResolveurNoms(maison: NomsDemo.maison)
             fichiersHistorique = nil
         }
@@ -137,6 +153,7 @@ final class Surveillance {
             }
         case .direct:
             chargerScissionsNotifiees()
+            chargerMaillageGarde()
             chargerJournal()
             Task { [weak self] in await self?.chargerHistorique() }
             recenseur?.surReleve = { [weak self] a in self?.integrer(a) }
@@ -192,15 +209,48 @@ final class Surveillance {
         ajouter(nouveaux)
     }
 
+    /// Reprend le dernier maillage garde, avant la premiere tournee de la sonde : son age se compte depuis sa reception
+    /// (la pastille « ancien » le dit). Fichier absent : rien. Illisible ou incoherent : rien non plus, consigne dans
+    /// le journal du Mac. Un maillage deja recu l'emporte.
+    func chargerMaillageGarde() {
+        guard maillage == nil, let fichierMaillage,
+              let donnees = try? Data(contentsOf: fichierMaillage) else { return }
+        guard let garde = try? CodageJSON.decodeur().decode(MaillageGarde.self, from: donnees),
+              garde.maillage.identifiantsValides else {
+            Self.journalMac.error("dernier maillage illisible, ignore")
+            return
+        }
+        maillage = garde.maillage
+        maillageRecu = garde.recu
+        maillageRelu = true
+    }
+
+    /// Garde le maillage recu sur disque, d'un bloc. Un echec est consigne dans le journal du Mac ; le maillage reste
+    /// en memoire.
+    private func garderMaillage(_ m: Maillage, recu: Date) {
+        guard let fichierMaillage else { return }
+        do {
+            try FileManager.default.createDirectory(at: fichierMaillage.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try CodageJSON.encodeur().encode(MaillageGarde(maillage: m, recu: recu)).write(to: fichierMaillage,
+                                                                                          options: .atomic)
+        } catch {
+            Self.journalMac.error("dernier maillage non ecrit : \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// Nouveau maillage de la sonde, recu a `date` (fin de sa tournee) : ses evenements vont au
     /// journal (changements de parent, routeurs Thread) ; en mode direct, son releve va a
     /// l'historique, en memoire et, avec un dossier, sur disque. Un echec d'ecriture est consigne
-    /// dans le journal du Mac ; le releve reste en memoire.
+    /// dans le journal du Mac ; le releve reste en memoire. Le maillage est aussi garde sur disque, pour le prochain
+    /// lancement.
     func recevoir(_ m: Maillage, a date: Date) {
         maillage = m
         maillageRecu = date
+        maillageRelu = false
         ajouter(suiviMaillage.integrer(m, sujets: sujets(m)))
         guard mode == .direct else { return }
+        garderMaillage(m, recu: date)
         let r = ReleveMaillage(m)
         let limite = date.addingTimeInterval(-Self.dureeHistorique)
         historique = historique.filter { $0.date >= limite } + [r]
@@ -299,6 +349,14 @@ final class Surveillance {
     func oublierMaillage() {
         maillage = nil
         maillageRecu = nil
+        maillageRelu = false
+        if let fichierMaillage, FileManager.default.fileExists(atPath: fichierMaillage.path) {
+            do {
+                try FileManager.default.removeItem(at: fichierMaillage)
+            } catch {
+                Self.journalMac.error("dernier maillage non efface : \(error.localizedDescription, privacy: .public)")
+            }
+        }
         suiviMaillage = SuiviMaillage()
     }
 
@@ -535,9 +593,11 @@ final class Surveillance {
         return age <= 6 * 60 || tourneeEnCours ? .frais : .ancien
     }
 
-    /// Fraicheur du maillage de la sonde a `maintenant` ; nil sans maillage.
+    /// Fraicheur du maillage de la sonde a `maintenant` ; nil sans maillage. Un maillage relu au lancement n'est jamais
+    /// perime : au-dela de 15 min il reste « ancien » jusqu'a la premiere tournee qui le remplace.
     func fraicheurMaillage(a maintenant: Date) -> Fraicheur? {
-        maillageRecu.map { Self.fraicheur($0, maintenant: maintenant, tourneeEnCours: tourneeEnCours) }
+        let f = maillageRecu.map { Self.fraicheur($0, maintenant: maintenant, tourneeEnCours: tourneeEnCours) }
+        return maillageRelu && f == .perime ? .ancien : f
     }
 
     /// Maillage de la sonde rapproche d'un reseau ; nil sans sonde ou s'il est perime.

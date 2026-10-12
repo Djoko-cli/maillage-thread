@@ -1,7 +1,7 @@
 import Foundation
 
 /// Routeur Thread vu par la sonde.
-public struct RouteurMaillage: Hashable, Sendable, Identifiable {
+public struct RouteurMaillage: Hashable, Sendable, Identifiable, Codable {
     /// Identifiant de routeur, de 0 a 62 : son RLOC16 est `id << 10`.
     public let id: Int
     public var extMac: String?
@@ -25,7 +25,7 @@ public struct RouteurMaillage: Hashable, Sendable, Identifiable {
 
 /// D'ou vient la mesure d'un sens d'un lien entre routeurs (spec de la sonde tout-en-un, section 2.1). Un lien est un
 /// lien : il est dessine pareil quelle que soit sa source ; la fiche dit la source et l'age.
-public enum SourceLien: String, Hashable, Sendable {
+public enum SourceLien: String, Hashable, Sendable, Codable {
     /// Route64 d'un routeur qui repond au diagnostic, mesuree au debut de la tournee.
     case diagnostic = "diag"
     /// Route64 d'une annonce MLE que la sonde a entendue, datee de l'age que la sonde donne.
@@ -34,7 +34,7 @@ public enum SourceLien: String, Hashable, Sendable {
 
 /// Lien radio entre deux routeurs voisins (a < b), avec la qualite dans chaque
 /// sens, de 0 a 3 ; nil : inconnue.
-public struct LienRadio: Hashable, Sendable {
+public struct LienRadio: Hashable, Sendable, Codable {
     public let a: Int
     public let b: Int
     /// Qualite du lien de a vers b.
@@ -72,7 +72,7 @@ public struct CouvertureEcoute: Hashable, Sendable {
 }
 
 /// D'ou vient un enfant.
-public enum SourceEnfant: String, Hashable, Sendable {
+public enum SourceEnfant: String, Hashable, Sendable, Codable {
     /// Child Table de son parent, un routeur qui repond.
     case tableEnfants
     /// Rattache a son parent par la resolution d'adresse (spec de la sonde tout-en-un, section 2.2), sous un routeur
@@ -83,7 +83,7 @@ public enum SourceEnfant: String, Hashable, Sendable {
 }
 
 /// Enfant d'un routeur (appareil endormi ou non, ou la sonde).
-public struct EnfantMaillage: Hashable, Sendable, Identifiable {
+public struct EnfantMaillage: Hashable, Sendable, Identifiable, Codable {
     public let rloc16: UInt16
     public var extMac: String?
     /// Qualite du lien de l'enfant vers son parent, de 0 a 3 ; nil sous un routeur muet.
@@ -129,7 +129,7 @@ public struct EnfantMaillage: Hashable, Sendable, Identifiable {
 
 /// Signal d'un routeur tel que la sonde l'entend a une tournee (spec de la sonde, section 6) :
 /// son parent (`etat`) ou un routeur voisin (`voisins`).
-public struct SignalSonde: Hashable, Sendable {
+public struct SignalSonde: Hashable, Sendable, Codable {
     /// Identifiant du routeur.
     public let routeur: Int
     /// RSSI moyen, en dBm.
@@ -142,7 +142,7 @@ public struct SignalSonde: Hashable, Sendable {
 }
 
 /// Le maillage d'une partition, tel qu'une tournee de la sonde le voit.
-public struct Maillage: Hashable, Sendable {
+public struct Maillage: Hashable, Sendable, Codable {
     public let date: Date
     public let partition: String
     /// Par identifiant croissant.
@@ -164,6 +164,17 @@ public struct Maillage: Hashable, Sendable {
     /// annonces (firmware 1.0.3, sonde muette).
     public var couverture: CouvertureEcoute? {
         annoncesLues ? CouvertureEcoute(entendus: routeurs.count { $0.entendu != nil }, routeurs: routeurs.count) : nil
+    }
+
+    /// Les identifiants de routeur sont possibles (0 a 62) et ceux des routeurs uniques : un maillage relu d'un
+    /// fichier (`dernier-maillage.json`) qui ne l'est pas est ignore, plutot que d'arreter l'app (`rloc16`,
+    /// dictionnaires par identifiant).
+    public var identifiantsValides: Bool {
+        let possibles = ReleveMaillage.identifiantsRouteur
+        let ids = routeurs.map(\.id)
+        return Set(ids).count == ids.count && ids.allSatisfy(possibles.contains)
+            && liens.allSatisfy { possibles.contains($0.a) && possibles.contains($0.b) }
+            && signaux.allSatisfy { possibles.contains($0.routeur) }
     }
 
     public func routeur(_ id: Int) -> RouteurMaillage? { routeurs.first { $0.id == id } }

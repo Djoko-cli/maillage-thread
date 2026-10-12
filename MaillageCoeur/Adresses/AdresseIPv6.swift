@@ -2,7 +2,7 @@ import Darwin
 
 /// Adresse IPv6 : 16 octets. Lue depuis le texte (avec ou sans zone "%en0"),
 /// ecrite sous la forme courte de inet_ntop ("fd19:961f:2db3:0:2c97:...").
-public struct AdresseIPv6: Hashable, Comparable, Sendable, CustomStringConvertible {
+public struct AdresseIPv6: Hashable, Comparable, Sendable, CustomStringConvertible, Codable {
     public let octets: [UInt8]
 
     public init?(octets: [UInt8]) {
@@ -31,6 +31,22 @@ public struct AdresseIPv6: Hashable, Comparable, Sendable, CustomStringConvertib
 
     /// Prefixe /64 de l'adresse.
     public var prefixe: PrefixeIPv6 { PrefixeIPv6(huitOctets: Array(octets[0..<8])) }
+
+    /// En JSON, le texte de l'adresse (comme `PrefixeIPv6`) : un texte invalide est refuse au decodage, jamais une
+    /// adresse qui n'aurait pas 16 octets.
+    public init(from decoder: Decoder) throws {
+        let texte = try decoder.singleValueContainer().decode(String.self)
+        guard let a = AdresseIPv6(texte) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                                                    debugDescription: "adresse IPv6 invalide : \(texte)"))
+        }
+        self = a
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(description)
+    }
 
     public static func < (a: AdresseIPv6, b: AdresseIPv6) -> Bool {
         a.octets.lexicographicallyPrecedes(b.octets)
