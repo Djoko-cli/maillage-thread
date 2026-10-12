@@ -792,7 +792,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `enum ProfilPasseur { static func fichier(paquet: URL) -> URL; static func expiration(_ donnees: Data) -> Date?; static func expiration(paquet: URL) -> Date? }`
   - `extension EtatPasseur.Ouverture { init(_ s: SMAppService.Status) }`, `final class OuvertureSMAppService: OuvertureSessionDemon`
 
-- [ ] **Step 1 : déclarer la cible de tests**
+- [x] **Step 1 : déclarer la cible de tests**
 
 Dans `project.yml`, sous `targets:`, après `MaillageThreadTests`, ajouter :
 
@@ -816,7 +816,7 @@ Dans `project.yml`, sous `targets:`, après `MaillageThreadTests`, ajouter :
 
 et dans le schéma `MaillageThread` : `PasseurTests: [test]` sous `build: targets:`, et `- PasseurTests` sous `test: targets:`.
 
-- [ ] **Step 2 : écrire les tests qui échouent**
+- [x] **Step 2 : écrire les tests qui échouent**
 
 `PasseurTests/ProfilPasseurTests.swift` :
 
@@ -883,12 +883,12 @@ struct OuvertureSessionDemonTests {
 }
 ```
 
-- [ ] **Step 3 : lancer les tests, vérifier qu'ils échouent**
+- [x] **Step 3 : lancer les tests, vérifier qu'ils échouent**
 
 Run : `outils/tester.sh PasseurTests`
 Expected : échec de compilation (`ProfilPasseur`, `IssueIdentifier` inconnus).
 
-- [ ] **Step 4 : écrire le code**
+- [x] **Step 4 : écrire le code**
 
 `Passeur/Logique/Journal.swift` :
 
@@ -1079,12 +1079,12 @@ final class OuvertureSMAppService: OuvertureSessionDemon {
 }
 ```
 
-- [ ] **Step 5 : lancer les tests, vérifier qu'ils passent**
+- [x] **Step 5 : lancer les tests, vérifier qu'ils passent**
 
 Run : `outils/tester.sh PasseurTests`
 Expected : PASS (5 tests). Puis `outils/tester.sh` : tout vert.
 
-- [ ] **Step 6 : commit**
+- [x] **Step 6 : commit**
 
 ```bash
 git add project.yml Passeur/Logique PasseurTests

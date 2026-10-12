@@ -164,6 +164,21 @@ targets:
         # Le produit s'appelle "Maillage Thread" (avec une espace), pas comme la cible.
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Maillage Thread.app/Contents/MacOS/Maillage Thread"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  # Le coeur du demon Passeur Noms (Passeur/Logique), sans HomeKit ni UIKit, teste sur macOS. Il compile les fichiers
+  # communs lui-meme, comme la cible Passeur : pas de dependance a MaillageCoeur (les types seraient en double).
+  PasseurTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: PasseurTests
+      - path: Passeur/Logique
+      - path: MaillageCoeur/Noms/NomsMaison.swift
+      - path: MaillageCoeur/Noms/ProtocolePasseur.swift
+      - path: MaillageCoeur/Annonces/CodageJSON.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.djoko.maillage.passeur.tests
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
   MaillageThread:
     build:
@@ -172,6 +187,7 @@ schemes:
         MaillageCoeur: all
         MaillageCoeurTests: [test]
         MaillageThreadTests: [test]
+        PasseurTests: [test]
     run:
       config: Debug
     test:
@@ -179,6 +195,7 @@ schemes:
       targets:
         - MaillageCoeurTests
         - MaillageThreadTests
+        - PasseurTests
     archive:
       config: Release
   Passeur:
