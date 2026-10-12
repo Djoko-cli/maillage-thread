@@ -106,6 +106,10 @@ final class Surveillance {
     /// Ce qui est sur disque dans `dernieres-adresses.json` (vide : rien d'ecrit, ou fichier illisible) : on n'ecrit
     /// que ce qui change.
     @ObservationIgnored private var adressesEcrites: [String: Suivi.AdresseGardee] = [:]
+    /// Annonces relues du disque et decalees de la marge de prudence (`chargerAdressesGardees`), par appareil : tant
+    /// que le suivi garde la date decalee, c'est la date du disque (`brute`) qui est comparee et reecrite, pour que la
+    /// marge ne s'ajoute pas a chaque lancement.
+    @ObservationIgnored private var annoncesRelues: [String: (brute: Date, decalee: Date)] = [:]
     @ObservationIgnored private var alertes = Alertes()
     @ObservationIgnored private var suiviMaillage = SuiviMaillage()
     /// Historique sur disque : mode direct avec un dossier ; nil : nulle part (demo, tests).
@@ -234,9 +238,14 @@ final class Surveillance {
     }
 
     /// Tant qu'un appareil annonce son adresse, son annonce avance a chaque releve (toutes les minutes) : une avance de
-    /// moins de 5 min ne justifie pas une ecriture. Une annonce qui ne bouge plus est ecrite exacte (voir
-    /// `adressesAEcrire`).
-    nonisolated static let ecartAnnonceEcrite: TimeInterval = 5 * 60
+    /// moins de 15 min ne justifie pas une ecriture. Une annonce qui ne bouge plus est ecrite exacte (voir
+    /// `adressesAEcrire`). C'est aussi la marge de prudence a la relecture (`chargerAdressesGardees`) : si l'app est
+    /// quittee pendant qu'un appareil annonce, la date du disque retarde d'au plus cet ecart.
+    nonisolated static let ecartAnnonceEcrite: TimeInterval = 15 * 60
+
+    /// Duree de garde d'une adresse sur disque : au-dela de 30 jours sans annonce, l'appareil est oublie (ecriture et
+    /// relecture), comme un appareil que la sonde ne cherche plus.
+    nonisolated static let dureeAdressesGardees: TimeInterval = 30 * 24 * 3600
 
     /// Ce qui est sur disque differe-t-il de `actuelles` ? Un appareil de plus ou de moins, une autre adresse ou
     /// partition, ou une annonce differente. Seule exception : un appareil qui annonce encore a ce releve (`releve`)
@@ -253,11 +262,21 @@ final class Surveillance {
         }
     }
 
+    /// Les adresses dont la derniere annonce a au plus `dureeAdressesGardees` a `maintenant` ; les autres sont
+    /// oubliees.
+    nonisolated static func adressesRecentes(_ gardees: [String: Suivi.AdresseGardee],
+                                             a maintenant: Date) -> [String: Suivi.AdresseGardee] {
+        gardees.filter { maintenant.timeIntervalSince($0.value.annonce) <= dureeAdressesGardees }
+    }
+
     /// Reprend les dernieres adresses gardees, avant le premier releve : le suivi les connait alors comme s'il les
     /// avait vues, et un appareil qui n'annonce plus d'adresse est demande a la sonde des le premier releve. Fichier
     /// absent : rien. Illisible ou incoherent (adresse invalide, partition vide) : rien non plus, consigne dans le
-    /// journal du Mac.
-    func chargerAdressesGardees() {
+    /// journal du Mac. Les appareils sans annonce depuis plus de 30 jours (`dureeAdressesGardees`) sont oublies.
+    /// Marge de prudence : chaque annonce relue est avancee de `ecartAnnonceEcrite` (sans depasser `maintenant`), car
+    /// le disque peut retarder d'autant sur la vraie derniere annonce ; une resolution de la sonde qui tombe dans la
+    /// marge ne vaut pas verification (cote prudent), seule une posterieure compte.
+    func chargerAdressesGardees(maintenant: Date = Date()) {
         guard let fichierAdresses, FileManager.default.fileExists(atPath: fichierAdresses.path) else { return }
         do {
             let garde = try CodageJSON.decodeur().decode(AdressesGardees.self, from: Data(contentsOf: fichierAdresses))
@@ -265,7 +284,15 @@ final class Surveillance {
                 Self.journalMac.error("dernieres adresses incoherentes, ignorees")
                 return
             }
-            suivi.amorcer(garde.appareils)
+            var prudentes = Self.adressesRecentes(garde.appareils, a: maintenant)
+            annoncesRelues = [:]
+            for (id, g) in prudentes {
+                let decalee = min(g.annonce.addingTimeInterval(Self.ecartAnnonceEcrite), max(g.annonce, maintenant))
+                prudentes[id]?.annonce = decalee
+                annoncesRelues[id] = (brute: g.annonce, decalee: decalee)
+            }
+            suivi.amorcer(prudentes)
+            // Le disque est tel quel : ce que la purge a oublie y sera retire a la premiere ecriture.
             adressesEcrites = garde.appareils
         } catch {
             Self.journalMac.error("dernieres adresses illisibles, ignorees")
@@ -277,7 +304,12 @@ final class Surveillance {
     /// est retentee au releve suivant.
     private func garderAdresses(releve: Date) {
         guard let fichierAdresses else { return }
-        let actuelles = suivi.adressesGardees
+        var actuelles = suivi.adressesGardees
+        // Une annonce relue et jamais revue garde la date du disque, sans la marge de prudence.
+        for (id, relue) in annoncesRelues where actuelles[id]?.annonce == relue.decalee {
+            actuelles[id]?.annonce = relue.brute
+        }
+        actuelles = Self.adressesRecentes(actuelles, a: releve)
         guard Self.adressesAEcrire(actuelles, ecrites: adressesEcrites, releve: releve) else { return }
         do {
             try FileManager.default.createDirectory(at: fichierAdresses.deletingLastPathComponent(),

@@ -215,12 +215,10 @@ extension LegendePieces {
 
     /// Les entrees que la scene contient (spec du polissage B, section 2) : chaque couleur de noeud (un appareil
     /// joignable avec l'anneau de la sonde a sa propre entree, « joignable » ne se montre que pour les autres) ; un
-    /// routeur qui
-    /// n'est pas de bordure (son cercle) ; la sonde (ses ondes) ; un
-    /// noeud que la sonde seule connait, routeur ou enfant, en gris (« non identifie ») ; un chef, un
-    /// endormi, une pile ; chaque qualite d'un lien radio trace ; un lien vers un parent, un rattachement
-    /// suppose ; un repere « ailleurs » ; un routeur montre avec ses candidats. Un appareil d'etat
-    /// inconnu, en gris, n'a pas d'entree.
+    /// routeur qui n'est pas de bordure (son cercle) ; la sonde (ses ondes) ; un noeud que la sonde seule connait,
+    /// routeur ou enfant, en gris (« non identifie ») ; un chef, un endormi, une pile ; chaque qualite d'un lien
+    /// radio trace ; un lien vers un parent, un rattachement suppose ; un repere « ailleurs » ; un routeur montre
+    /// avec ses candidats. Un appareil d'etat inconnu, en gris, n'a pas d'entree.
     static func entrees(_ l: Lecture) -> Set<Entree> {
         var r = Set<Entree>()
         for (id, c) in l.couleurs {

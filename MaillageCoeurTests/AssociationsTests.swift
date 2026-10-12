@@ -95,8 +95,40 @@ struct AssociationsTests {
             AccessoireMaison(nom: "A", piece: "Piece 2", noeudMatter: "0000000000000012"),
             AccessoireMaison(nom: "A", piece: "Piece 1", noeudMatter: "0000000000000013"),
         ]))
-        #expect(tri.orphelins(appareils: [], fabriqueApple: nil).map { "\($0.nom)/\($0.piece ?? "")" }
+        #expect(tri.orphelins(appareils: [], fabriqueApple: Self.fabrique).map { "\($0.nom)/\($0.piece ?? "")" }
                 == ["A/Piece 1", "A/Piece 2", "B/Piece 2"])
+    }
+
+    /// Un pont et un accessoire qu'il porte partagent un noeud : le menu n'en propose qu'un, celui dont l'appareil
+    /// prendrait le nom (`accessoire(noeud:)` : le pont, sinon le premier par nom) ; ce qui est affiche est ce qu'on
+    /// obtient en l'associant.
+    @Test func orphelinsUnSeulParNoeud() throws {
+        let i = Self.instantane()
+        let muet = try Self.appareil(Self.muet)
+        var n = ResolveurNoms(maison: NomsMaison(date: Self.date, accessoires: [
+            AccessoireMaison(nom: "A prise", noeudMatter: "00000000000000AA"),
+            AccessoireMaison(nom: "Z pont", noeudMatter: "00000000000000aa", pont: true),
+            AccessoireMaison(nom: "Capteur 2", noeudMatter: "00000000000000BB"),
+            AccessoireMaison(nom: "Capteur 1", noeudMatter: "00000000000000BB"),
+        ]))
+        let f = n.fabriqueApple(appareils: i.appareils)
+        #expect(f == nil, "aucun noeud de Maison n'est annonce")
+        let sur = n.orphelins(appareils: i.appareils, fabriqueApple: Self.fabrique)
+        #expect(sur.map(\.nom) == ["Capteur 1", "Z pont"], "le pont l'emporte, sinon le premier par nom")
+        for choisi in sur {
+            n.associations[Self.muet] = choisi.noeudMatter ?? ""
+            #expect(n.nom(appareil: muet, fabriqueApple: Self.fabrique) == choisi.nom, "le nom propose est obtenu")
+        }
+    }
+
+    /// Sans fabrique d'Apple connue (Maison lue, aucun recoupement avec les noeuds annonces), aucun annonceur n'est
+    /// connu : tous les accessoires sembleraient orphelins, on n'en propose aucun.
+    @Test func orphelinsSansFabriqueConnue() throws {
+        let i = Self.instantane()
+        let n = ResolveurNoms(maison: Self.maison())
+        #expect(n.orphelins(appareils: i.appareils, fabriqueApple: nil).isEmpty)
+        #expect(n.orphelins(appareils: [], fabriqueApple: nil).isEmpty)
+        #expect(!n.orphelins(appareils: i.appareils, fabriqueApple: Self.fabrique).isEmpty)
     }
 
     /// Priorite : le surnom passe avant l'association ; l'association passe avant le nom HomeKit et l'identifiant ; et

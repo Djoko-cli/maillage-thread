@@ -2,10 +2,10 @@ import MaillageCoeur
 import SwiftUI
 
 /// « Associer a un accessoire de Maison… », dans la fiche d'un appareil que Maison ne nomme pas : un menu des
-/// accessoires de Maison « orphelins » (`Surveillance.accessoiresOrphelins` : leur noeud n'est annonce par personne, et personne ne
-/// les a associes), dans le style de « Placer dans une piece… ». Choisir un accessoire donne son nom et sa piece a
-/// l'appareil, comme s'il etait trouve par son noeud (`Surveillance.associer`). Sans accessoire a proposer, le menu
-/// reste, un seul article grise le dit.
+/// accessoires de Maison « orphelins » (`Surveillance.accessoiresOrphelins` : leur noeud n'est annonce par personne,
+/// et personne ne les a associes), dans le style de « Placer dans une piece… ». Choisir un accessoire donne son nom
+/// et sa piece a l'appareil, comme s'il etait trouve par son noeud (`Surveillance.associer`). Sans accessoire a
+/// proposer, le menu reste, un seul article grise le dit.
 struct MenuAssocier: View {
     @Environment(Surveillance.self) private var surveillance
     let id: String

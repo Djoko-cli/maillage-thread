@@ -193,6 +193,9 @@ struct AdresseVerifieeAppTests {
     // MARK: Dernieres adresses sur disque
 
     static let depart = Date(timeIntervalSince1970: 1_790_000_000)
+    /// Le lancement qui relit le disque (3 h apres le depart) : l'heure est donnee, pour que la purge de 30 jours ne
+    /// depende pas de la date du jour.
+    static let lancement = depart + 3 * 3600
 
     static func dossierJetable() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("maillage-adresses-\(UUID().uuidString)")
@@ -222,21 +225,24 @@ struct AdresseVerifieeAppTests {
 
         let relu = Surveillance(mode: .direct, dossier: dossier)
         #expect(relu.suivi.dernieresAdresses.isEmpty, "rien avant la relecture")
-        relu.chargerAdressesGardees()
+        relu.chargerAdressesGardees(maintenant: Self.lancement)
         #expect(relu.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(2)))
-        #expect(relu.suivi.dernieresAnnonces[Self.hap] == annonce)
+        #expect(relu.suivi.dernieresAnnonces[Self.hap] == annonce + Surveillance.ecartAnnonceEcrite,
+                "la marge de prudence s'ajoute a l'annonce relue")
         #expect(relu.suivi.dernieresPartitions[Self.hap] == Self.partition)
         #expect(relu.appareilsAResoudre().isEmpty, "pas d'instantane : rien a demander")
         // Premier releve de la nouvelle session (3 h plus tard) : hap n'a plus d'adresse, il est demande.
         relu.integrer(Self.annonces(Self.depart + 3 * 3600, muets: [Self.hap]))
         let demande = try #require(relu.appareilsAResoudre().first { $0.id == Self.hap })
-        #expect(demande == attendu, "meme adresse, meme partition, meme derniere annonce")
+        #expect(demande == AppareilAResoudre(id: attendu.id, partition: attendu.partition, adresse: attendu.adresse,
+                                             derniereAnnonce: annonce + Surveillance.ecartAnnonceEcrite),
+                "meme adresse, meme partition, derniere annonce avancee de la marge")
         #expect(!demande.disparu)
         #expect(relu.appareilsAResoudre().map(\.id) == [Self.matter, Self.temoin, Self.hap].sorted())
     }
 
-    /// On n'ecrit que ce qui change : un releve identique (annonce avancee de moins de 5 min) ne reecrit pas le
-    /// fichier ; une autre adresse, un appareil de plus ou une annonce qui a avance de 5 min, si.
+    /// On n'ecrit que ce qui change : un releve identique (annonce avancee de moins de 15 min) ne reecrit pas le
+    /// fichier ; une autre adresse, un appareil de plus ou une annonce qui a avance de 15 min, si.
     @Test func dernieresAdressesEcritesSeulementSiChangement() throws {
         let dossier = Self.dossierJetable()
         defer { try? FileManager.default.removeItem(at: dossier) }
@@ -245,25 +251,25 @@ struct AdresseVerifieeAppTests {
         try FileManager.default.removeItem(at: fichier)
         s.integrer(Self.annonces(Self.depart + 260, muets: [Self.hap]))
         #expect(!FileManager.default.fileExists(atPath: fichier.path), "releve identique, 60 s plus tard")
-        s.integrer(Self.annonces(Self.depart + 200 + 600, muets: [Self.hap]))
-        #expect(FileManager.default.fileExists(atPath: fichier.path), "l'annonce de matter a avance de 10 min")
+        s.integrer(Self.annonces(Self.depart + 200 + 1000, muets: [Self.hap]))
+        #expect(FileManager.default.fileExists(atPath: fichier.path), "l'annonce de matter a avance de plus de 15 min")
         try FileManager.default.removeItem(at: fichier)
-        var changee = Self.annonces(Self.depart + 900, muets: [Self.hap])
+        var changee = Self.annonces(Self.depart + 1300, muets: [Self.hap])
         changee.adresses[Self.matter + ".local"] = [Self.adresse(9)]
         s.integrer(changee)
         #expect(FileManager.default.fileExists(atPath: fichier.path), "matter a une autre adresse")
         let relu = Surveillance(mode: .direct, dossier: dossier)
-        relu.chargerAdressesGardees()
+        relu.chargerAdressesGardees(maintenant: Self.lancement)
         #expect(relu.suivi.dernieresAdresses[Self.matter] == AdresseIPv6(Self.adresse(9)))
 
-        // La regle seule : un appareil qui annonce encore et dont l'annonce avance de moins de 5 min ne s'ecrit pas ;
+        // La regle seule : un appareil qui annonce encore et dont l'annonce avance de moins de 15 min ne s'ecrit pas ;
         // une annonce qui ne bouge plus s'ecrit exacte.
         let g = Suivi.AdresseGardee(adresse: try #require(AdresseIPv6(Self.adresse(1))), partition: Self.partition,
                                     annonce: Self.depart)
         var proche = g
-        proche.annonce = Self.depart + 299
+        proche.annonce = Self.depart + 899
         var loin = g
-        loin.annonce = Self.depart + 300
+        loin.annonce = Self.depart + 900
         #expect(!Surveillance.adressesAEcrire(["x": g], ecrites: ["x": g], releve: Self.depart))
         #expect(!Surveillance.adressesAEcrire(["x": proche], ecrites: ["x": g], releve: proche.annonce))
         #expect(Surveillance.adressesAEcrire(["x": loin], ecrites: ["x": g], releve: loin.annonce))
@@ -296,7 +302,7 @@ struct AdresseVerifieeAppTests {
         for texte in cas {
             try Data(texte.utf8).write(to: fichier)
             let s = Surveillance(mode: .direct, dossier: dossier)
-            s.chargerAdressesGardees()
+            s.chargerAdressesGardees(maintenant: Self.lancement)
             #expect(s.suivi.dernieresAdresses.isEmpty && s.suivi.dernieresAnnonces.isEmpty
                     && s.suivi.dernieresPartitions.isEmpty, "ignore : \(texte)")
             s.integrer(Self.annonces(Self.depart + 3 * 3600, muets: [Self.hap]))
@@ -305,15 +311,15 @@ struct AdresseVerifieeAppTests {
         // Le fichier valide du dernier cas est lisible tel quel (garde-fou du test).
         try Data(#"{"appareils":{"\#(Self.hap)":\#(valide)}}"#.utf8).write(to: fichier)
         let s = Surveillance(mode: .direct, dossier: dossier)
-        s.chargerAdressesGardees()
+        s.chargerAdressesGardees(maintenant: Self.lancement)
         #expect(s.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(2)))
         // Un fichier illisible est remplace par le premier changement.
         try Data("{ pas du json".utf8).write(to: fichier)
         let t = Surveillance(mode: .direct, dossier: dossier)
-        t.chargerAdressesGardees()
+        t.chargerAdressesGardees(maintenant: Self.lancement)
         t.integrer(Self.annonces(Self.depart))
         let relu = Surveillance(mode: .direct, dossier: dossier)
-        relu.chargerAdressesGardees()
+        relu.chargerAdressesGardees(maintenant: Self.lancement)
         #expect(relu.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(2)))
     }
 
@@ -324,7 +330,7 @@ struct AdresseVerifieeAppTests {
         _ = Self.surveillanceSurDisque(dossier)
         let avant = try Data(contentsOf: dossier.appendingPathComponent("dernieres-adresses.json"))
         let demo = Surveillance(mode: .demo, dossier: dossier)
-        demo.chargerAdressesGardees()
+        demo.chargerAdressesGardees(maintenant: Self.lancement)
         #expect(demo.suivi.dernieresAdresses.isEmpty, "rien relu")
         demo.demarrer()
         #expect(!demo.suivi.dernieresAdresses.isEmpty, "la demo a son propre suivi")
@@ -336,9 +342,91 @@ struct AdresseVerifieeAppTests {
         demoVide.demarrer()
         #expect(!FileManager.default.fileExists(atPath: vide.path), "aucun dossier cree")
         let sansDossier = Surveillance(mode: .direct, dossier: nil)
-        sansDossier.chargerAdressesGardees()
+        sansDossier.chargerAdressesGardees(maintenant: Self.lancement)
         sansDossier.integrer(Self.annonces(Self.depart))
         #expect(!sansDossier.suivi.dernieresAdresses.isEmpty)
+    }
+
+    /// Marge de prudence : le disque peut retarder de `ecartAnnonceEcrite` sur la vraie derniere annonce (app quittee
+    /// pendant que l'appareil annoncait). Apres la relecture, une resolution de la sonde posterieure a la date relue
+    /// mais comprise dans la marge ne verifie pas l'appareil ; une posterieure a la marge, si.
+    @Test func margeDePrudenceALaRelecture() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let brute = try #require(Self.surveillanceSurDisque(dossier).suivi.dernieresAnnonces[Self.hap])
+        let marge = Surveillance.ecartAnnonceEcrite
+        let lancement = Self.depart + 20 * 60
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        s.chargerAdressesGardees(maintenant: lancement)
+        #expect(s.suivi.dernieresAnnonces[Self.hap] == brute + marge, "la date du disque, plus la marge")
+        s.integrer(Self.annonces(lancement, muets: [Self.hap]))
+        let t = lancement + 60
+        let cas: [(TimeInterval, Date?)] = [(marge - 60, nil), (marge, nil), (marge + 60, brute + marge + 60)]
+        for (resolu, attendu) in cas {
+            s.recevoir(Self.maillage(lancement - 30, resolus: [Self.hap: brute + resolu]), a: t - 60)
+            #expect(s.verification(Self.hap, a: t) == attendu, "resolution a depart + \(Int(resolu)) s")
+        }
+        // La marge ne depasse pas l'heure du lancement : un disque tout frais n'est pas avance dans le futur.
+        let tot = Surveillance(mode: .direct, dossier: dossier)
+        tot.chargerAdressesGardees(maintenant: brute + 60)
+        #expect(tot.suivi.dernieresAnnonces[Self.hap] == brute + 60)
+    }
+
+    /// La marge n'est pas reecrite sur le disque : un autre changement fait reecrire le fichier, mais l'annonce non
+    /// revue de l'appareil garde sa date d'origine (sinon elle avancerait de la marge a chaque lancement).
+    @Test func margeNonReecriteSurDisque() throws {
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let brute = try #require(Self.surveillanceSurDisque(dossier).suivi.dernieresAnnonces[Self.hap])
+        let lancement = Self.depart + 20 * 60
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        s.chargerAdressesGardees(maintenant: lancement)
+        s.integrer(Self.annonces(lancement, muets: [Self.hap]))
+        let fichier = dossier.appendingPathComponent("dernieres-adresses.json")
+        try FileManager.default.removeItem(at: fichier)
+        var changee = Self.annonces(lancement + 60, muets: [Self.hap])
+        changee.adresses[Self.matter + ".local"] = [Self.adresse(9)]
+        s.integrer(changee)
+        #expect(FileManager.default.fileExists(atPath: fichier.path), "matter a une autre adresse")
+        let relu = Surveillance(mode: .direct, dossier: dossier)
+        relu.chargerAdressesGardees(maintenant: brute + 60)
+        #expect(relu.suivi.dernieresAdresses[Self.matter] == AdresseIPv6(Self.adresse(9)))
+        #expect(relu.suivi.dernieresAnnonces[Self.hap] == brute + 60, "marge plafonnee a l'heure du lancement")
+        let fin = Surveillance(mode: .direct, dossier: dossier)
+        fin.chargerAdressesGardees(maintenant: lancement)
+        #expect(fin.suivi.dernieresAnnonces[Self.hap] == brute + Surveillance.ecartAnnonceEcrite,
+                "une seule marge, pas deux")
+    }
+
+    /// Les appareils sans annonce depuis plus de 30 jours sont oublies, a l'ecriture comme a la relecture.
+    @Test func adressesDePlusDeTrenteJoursOubliees() throws {
+        let trente = Surveillance.dureeAdressesGardees
+        #expect(trente == 30 * 24 * 3600)
+        let g = Suivi.AdresseGardee(adresse: try #require(AdresseIPv6(Self.adresse(1))), partition: Self.partition,
+                                    annonce: Self.depart)
+        #expect(Surveillance.adressesRecentes(["x": g], a: Self.depart + trente).keys.contains("x"), "30 jours pile")
+        #expect(Surveillance.adressesRecentes(["x": g], a: Self.depart + trente + 1).isEmpty)
+
+        // A la relecture : le fichier garde hap (annonce a `brute`) ; relu 30 jours apres, il est oublie.
+        let dossier = Self.dossierJetable()
+        defer { try? FileManager.default.removeItem(at: dossier) }
+        let brute = try #require(Self.surveillanceSurDisque(dossier).suivi.dernieresAnnonces[Self.hap])
+        let pile = Surveillance(mode: .direct, dossier: dossier)
+        pile.chargerAdressesGardees(maintenant: brute + trente)
+        #expect(pile.suivi.dernieresAdresses[Self.hap] != nil)
+        let oublie = Surveillance(mode: .direct, dossier: dossier)
+        oublie.chargerAdressesGardees(maintenant: Self.depart + 200 + trente + 1)
+        #expect(oublie.suivi.dernieresAdresses[Self.hap] == nil)
+        #expect(oublie.suivi.dernieresAdresses[Self.matter] == nil, "matter aussi : annonce a Self.depart + 200")
+
+        // A l'ecriture : un releve 31 jours plus tard ou matter et temoin annoncent encore reecrit le fichier sans hap.
+        let s = Surveillance(mode: .direct, dossier: dossier)
+        s.chargerAdressesGardees(maintenant: Self.depart + 3600)
+        s.integrer(Self.annonces(Self.depart + 31 * 24 * 3600, muets: [Self.hap]))
+        let relu = Surveillance(mode: .direct, dossier: dossier)
+        relu.chargerAdressesGardees(maintenant: Self.depart + 3600)
+        #expect(relu.suivi.dernieresAdresses[Self.hap] == nil, "hap oublie dans le fichier")
+        #expect(relu.suivi.dernieresAdresses[Self.matter] != nil && relu.suivi.dernieresAdresses[Self.temoin] != nil)
     }
 
     /// Une adresse annoncee de nouveau remplace celle qui a ete relue, avec sa date : l'appareil n'est plus demande
@@ -348,7 +436,7 @@ struct AdresseVerifieeAppTests {
         defer { try? FileManager.default.removeItem(at: dossier) }
         _ = Self.surveillanceSurDisque(dossier)
         let s = Surveillance(mode: .direct, dossier: dossier)
-        s.chargerAdressesGardees()
+        s.chargerAdressesGardees(maintenant: Self.lancement)
         let plusTard = Self.depart + 3 * 3600
         var a = Self.annonces(plusTard)
         a.adresses[Self.hap + ".local"] = [Self.adresse(9)]
@@ -359,11 +447,11 @@ struct AdresseVerifieeAppTests {
         #expect(demande.adresse == AdresseIPv6(Self.adresse(9)) && demande.derniereAnnonce == nil)
         // Un appareil relu que le releve ne montre pas du tout garde sa derniere adresse, et le fichier aussi.
         let seul = Surveillance(mode: .direct, dossier: dossier)
-        seul.chargerAdressesGardees()
+        seul.chargerAdressesGardees(maintenant: Self.lancement)
         seul.integrer(Self.annonces(plusTard + 60, partis: [Self.hap]))
         #expect(seul.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(9)))
         let encore = Surveillance(mode: .direct, dossier: dossier)
-        encore.chargerAdressesGardees()
+        encore.chargerAdressesGardees(maintenant: Self.lancement)
         #expect(encore.suivi.dernieresAdresses[Self.hap] == AdresseIPv6(Self.adresse(9)))
     }
 

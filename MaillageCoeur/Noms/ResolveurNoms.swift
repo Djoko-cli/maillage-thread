@@ -67,16 +67,17 @@ public struct ResolveurNoms: Hashable, Sendable {
 
     /// Les accessoires de Maison a proposer pour une association : ceux qui ont un noeud (non nul) qu'aucun des
     /// `appareils` n'annonce sur la fabrique d'Apple, et que personne n'a deja associe (un accessoire qui partage son
-    /// noeud avec un accessoire deja associe n'est plus propose : le noeud est pris). Par nom, puis par piece.
+    /// noeud avec un accessoire deja associe n'est plus propose : le noeud est pris). Par noeud, un seul : celui que
+    /// `accessoire(noeud:)` rendrait (le pont, sinon le premier par nom), car c'est son nom que l'appareil prendrait.
+    /// Sans fabrique d'Apple connue (`f` nil), aucun annonceur n'est connu : rien n'est propose. Par nom, puis par
+    /// piece.
     public func orphelins(appareils: [Appareil], fabriqueApple f: String?) -> [AccessoireMaison] {
-        guard let maison else { return [] }
-        let annonces: Set<String> = f.map { f in
-            Set(appareils.flatMap { $0.instances.filter { $0.fabrique == f }.map(\.noeud) })
-        } ?? []
+        guard let maison, let f else { return [] }
+        let annonces = Set(appareils.flatMap { $0.instances.filter { $0.fabrique == f }.map(\.noeud) })
         let pris = Set(associations.values.map { $0.uppercased() })
         return maison.accessoires.filter { a in
             guard let noeud = a.noeudMatter?.uppercased(), noeud != Self.noeudNul else { return false }
-            return !annonces.contains(noeud) && !pris.contains(noeud)
+            return !annonces.contains(noeud) && !pris.contains(noeud) && accessoire(noeud: noeud) == a
         }.sorted { ($0.nom, $0.piece ?? "", $0.noeudMatter ?? "") < ($1.nom, $1.piece ?? "", $1.noeudMatter ?? "") }
     }
 
