@@ -47,6 +47,20 @@ struct DemonPasseurTests {
         #expect(l.releves == [BancDemon.noms()])
     }
 
+    /// Tant qu'aucun releve ok n'a ete lu (releve en erreur), les batteries sont relues au releve suivant.
+    @Test func batteriesReluesApresUnReleveEnErreur() async throws {
+        let b = BancDemon(noms: NomsMaison(date: .now, statut: .erreur, message: "Aucun domicile dans Maison"))
+        _ = try #require(await b.abonner())
+        b.maison.noms = BancDemon.noms()
+        b.maison.changer()
+        await b.horloge.avancer(.seconds(2))
+        #expect(b.maison.lectures == [true, true])
+        b.maison.noms = BancDemon.noms("Halo 2")
+        b.maison.changer()
+        await b.horloge.avancer(.seconds(2))
+        #expect(b.maison.lectures == [true, true, false], "releve ok lu : les batteries gardent leurs valeurs")
+    }
+
     /// Des changements groupes : un seul releve, 2 s apres le dernier.
     @Test func regroupement() async throws {
         let b = BancDemon(noms: BancDemon.noms())

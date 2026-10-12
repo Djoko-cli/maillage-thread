@@ -16,6 +16,8 @@ final class DemonPasseur {
     static let inactivite: Duration = .seconds(600)
     /// Attente de Maison pour un releve ponctuel ; au-dela, un releve en erreur part, comme l'ancien passeur.
     static let attenteMaison: Duration = .seconds(100)
+    /// Verification legere : l'ouverture a la session change hors de l'app (Reglages Systeme), sans aucun evenement.
+    static let verificationEtat: Duration = .seconds(60)
 
     private let source: any SourceMaison
     private let ouverture: any OuvertureSessionDemon
@@ -40,6 +42,7 @@ final class DemonPasseur {
     private var regroupe: (any Annulable)?
     private var fermeture: (any Annulable)?
     private var batteries: (any Annulable)?
+    private var verification: (any Annulable)?
     private var attente: (any Annulable)?
 
     init(source: any SourceMaison, ouverture: any OuvertureSessionDemon, horloge: any Horloge, version: String,
@@ -60,6 +63,7 @@ final class DemonPasseur {
     func demarrer() {
         source.surChangement = { [weak self] in self?.changement() }
         planifierBatteries()
+        planifierVerification()
         verifierDuree()
         journal.notice("lancement, version \(self.version, privacy: .public)")
     }
@@ -117,6 +121,8 @@ final class DemonPasseur {
     private func abonner(_ cible: EnvoiPasseur.Cible) async {
         let lien = connecter(cible)
         let cle = ObjectIdentifier(lien)
+        // Un changement silencieux (ouverture a la session) part aux abonnes deja la, avant le nouveau.
+        diffuserEtat()
         abonnes[cle] = lien
         lien.surMessage = { [weak self, weak lien] m in
             guard let self, let lien else { return }
@@ -125,9 +131,7 @@ final class DemonPasseur {
         lien.surFin = { [weak self] in self?.depart(cle) }
         journal.notice("abonné accepté, port \(cible.port), \(self.abonnes.count) abonné(s)")
         verifierDuree()
-        let e = etat
-        dernierEtat = e
-        lien.envoyer(.etat(e))
+        lien.envoyer(.etat(etat))
         if let n = dernierReleve {
             lien.envoyer(Self.message(n))
         } else {
@@ -158,8 +162,8 @@ final class DemonPasseur {
         regroupe = horloge.apres(Self.regroupement) { [weak self] in
             guard let self else { return }
             self.regroupe = nil
-            // Le premier releve du demon lit les batteries ; les suivants gardent leurs valeurs connues.
-            await self.actualiser(batteries: self.dernierReleve == nil, demandeur: nil)
+            // Tant qu'aucun releve ok n'a ete lu, les batteries sont lues ; ensuite on garde leurs valeurs connues.
+            await self.actualiser(batteries: self.dernierReleve?.statut != .ok, demandeur: nil)
         }
     }
 
@@ -186,9 +190,18 @@ final class DemonPasseur {
         batteries = horloge.apres(Self.periodeBatteries) { [weak self] in
             guard let self else { return }
             await self.actualiser(batteries: true, demandeur: nil)
-            // L'ouverture a la session a pu changer dans les reglages du Mac.
-            self.verifierDuree()
             self.planifierBatteries()
+        }
+    }
+
+    /// Toutes les 60 s : `etat` s'il a change (l'ouverture a la session a pu changer dans les reglages du Mac), puis la
+    /// duree de vie.
+    private func planifierVerification() {
+        verification = horloge.apres(Self.verificationEtat) { [weak self] in
+            guard let self else { return }
+            self.diffuserEtat()
+            self.verifierDuree()
+            self.planifierVerification()
         }
     }
 
@@ -280,7 +293,7 @@ final class DemonPasseur {
         case .ok: "faite"
         case .inconnu: "accessoire inconnu"
         case .nonIdentifiable: "accessoire non identifiable"
-        case .erreur(let e): "erreur de HomeKit : \(e)"
+        case .erreur: "erreur de HomeKit"
         }
     }
 }

@@ -40,6 +40,10 @@ final class MaisonHomeKit: NSObject, SourceMaison, HMHomeManagerDelegate, HMHome
             return NomsMaison(date: .now, statut: .erreur, message: "Aucun domicile dans Maison")
         }
         if batteries { await lireBatteries() }
+        // Les domiciles ont pu disparaitre pendant l'attente des lectures.
+        guard !gestionnaire.homes.isEmpty else {
+            return NomsMaison(date: .now, statut: .erreur, message: "Aucun domicile dans Maison")
+        }
         return releveCourant()
     }
 

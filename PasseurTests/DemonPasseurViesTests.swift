@@ -56,6 +56,40 @@ struct DemonPasseurViesTests {
         #expect(l.etats.last?.ouvertureSession == .inactive)
     }
 
+    /// L'ouverture a la session change hors de l'app (Reglages Systeme) : la verification de 60 s le diffuse.
+    @Test func ouvertureChangeeHorsDeLApp() async throws {
+        let b = BancDemon(noms: BancDemon.noms())
+        let l = try #require(await b.abonner(port: 50_000))
+        let autre = try #require(await b.abonner(port: 50_001))
+        let avant = (l.etats.count, autre.etats.count)
+        b.ouverture.statut = .active
+        await b.horloge.avancer(.seconds(59))
+        #expect(l.etats.count == avant.0 && autre.etats.count == avant.1, "pas avant 60 s")
+        await b.horloge.avancer(.seconds(1))
+        #expect(l.etats.count == avant.0 + 1 && l.etats.last?.ouvertureSession == .active)
+        #expect(autre.etats.count == avant.1 + 1 && autre.etats.last?.ouvertureSession == .active)
+    }
+
+    /// Rien n'a change : la verification de 60 s n'envoie aucun `etat`.
+    @Test func verificationSansChangementSilencieuse() async throws {
+        let b = BancDemon(noms: BancDemon.noms())
+        let l = try #require(await b.abonner())
+        let avant = l.etats.count
+        await b.horloge.avancer(.seconds(300))
+        #expect(l.etats.count == avant)
+    }
+
+    /// Un changement silencieux, puis un nouvel abonne : l'ancien recoit aussi le nouvel etat.
+    @Test func nouvelAbonneDiffuseLeChangementSilencieux() async throws {
+        let b = BancDemon(noms: BancDemon.noms())
+        let ancien = try #require(await b.abonner(port: 50_000))
+        let avant = ancien.etats.count
+        b.ouverture.statut = .active
+        let nouveau = try #require(await b.abonner(port: 50_001))
+        #expect(ancien.etats.count == avant + 1 && ancien.etats.last?.ouvertureSession == .active)
+        #expect(nouveau.etats.count == 1 && nouveau.etats.last?.ouvertureSession == .active)
+    }
+
     // MARK: Duree de vie
 
     @Test func fermeture10MinApresLeDernier() async throws {

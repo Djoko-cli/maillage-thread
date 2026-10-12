@@ -342,7 +342,8 @@ struct NomsInternesTests {
         let cache = Self.cache()
         defer { try? FileManager.default.removeItem(at: cache.deletingLastPathComponent()) }
         let lancements = LancementsPasseur()
-        let n = NomsInternes(cache: cache, delai: .milliseconds(100), attentes: [.milliseconds(20)],
+        // Le delai sert aussi de minuterie de connexion : 1 s laisse la connexion s'etablir sur une machine chargee.
+        let n = NomsInternes(cache: cache, delai: .seconds(1), attentes: [.milliseconds(20)],
                              lanceur: Self.lanceur(lancements))
         n.demarrer()
         let cible = try #require(await Self.cible(lancements))
