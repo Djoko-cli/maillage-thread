@@ -3236,7 +3236,7 @@ Expected : lancement, abonné accepté, relevés envoyés (nombres seulement), a
 
 Note : `NomsInternes.swift` utilise encore `EcouteReleve` jusqu'à la tâche 11. Pour garder la compilation verte entre les deux tâches, **ne supprimer `EcouteReleve.swift` qu'à la tâche 11** ; cette tâche ajoute seulement `AbonnementPasseur`.
 
-- [ ] **Step 1 : écrire les tests qui échouent**
+- [x] **Step 1 : écrire les tests qui échouent**
 
 `MaillageThreadTests/AbonnementPasseurTests.swift` :
 
@@ -3434,12 +3434,12 @@ struct AbonnementPasseurTests {
 }
 ```
 
-- [ ] **Step 2 : lancer les tests, vérifier qu'ils échouent**
+- [x] **Step 2 : lancer les tests, vérifier qu'ils échouent**
 
 Run : `outils/tester.sh MaillageThreadTests/AbonnementPasseurTests`
 Expected : échec de compilation (`AbonnementPasseur` inconnu).
 
-- [ ] **Step 3 : écrire le code**
+- [x] **Step 3 : écrire le code**
 
 `MaillageThread/Noms/AbonnementPasseur.swift` :
 
@@ -3615,12 +3615,12 @@ final class AbonnementPasseur {
 }
 ```
 
-- [ ] **Step 4 : lancer les tests, vérifier qu'ils passent**
+- [x] **Step 4 : lancer les tests, vérifier qu'ils passent**
 
 Run : `outils/tester.sh MaillageThreadTests/AbonnementPasseurTests`
 Expected : PASS.
 
-- [ ] **Step 5 : commit**
+- [x] **Step 5 : commit**
 
 ```bash
 git add MaillageThread/Noms/AbonnementPasseur.swift MaillageThreadTests/AbonnementPasseurTests.swift

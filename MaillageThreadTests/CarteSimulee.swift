@@ -257,7 +257,7 @@ final class RecueilLiaison: Sendable {
 }
 
 /// Attend une condition, au plus `delai` ; rend la condition.
-func attendreQue(_ delai: Duration = .seconds(5), _ condition: () -> Bool) async -> Bool {
+nonisolated(nonsending) func attendreQue(_ delai: Duration = .seconds(5), _ condition: () -> Bool) async -> Bool {
     let fin = ContinuousClock.now + delai
     while ContinuousClock.now < fin {
         if condition() { return true }
