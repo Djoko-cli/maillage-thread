@@ -387,9 +387,13 @@ choose.
 outils/passeur.sh          # build with your team (Xcode account), wrap, launch
 ```
 
-- The team comes from your "Apple Development" certificate (`EQUIPE=` to force
-  it). A free team gets a 7-day profile: after that, Maillage Thread can no
-  longer launch Passeur Noms; run the script again. Only Passeur Noms is
+- The team comes from your "Apple Development" certificate, or else from your
+  "Developer ID Application" one (`EQUIPE=` to force it; it is never shown).
+  HomeKit is not available to Mac apps signed with a Developer ID (an App
+  Store-only capability), so Passeur Noms stays a development build for your
+  registered Mac: a paid team gets a one-year profile (a free team, 7 days);
+  after that, Maillage Thread can no longer launch Passeur Noms; run the script
+  again. Only Passeur Noms is
   signed with the team; Maillage Thread keeps its own signature (see
   "Signing").
 - First launch of each build: macOS says the app is "damaged". Click Cancel,
@@ -417,7 +421,8 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
 - The last valid reading is kept. A failure (for example Passeur Noms not
   found or refused, nothing within 2 minutes, wrong token, unreadable length
   or JSON, Home access denied) keeps it and shows in Settings › Home and in
-  the menu; after 7 days, Settings says to run `outils/passeur.sh` again. Passeur Noms logs why it quit:
+  the menu; when the names are more than 7 days old, Settings says to run
+  `outils/passeur.sh` again. Passeur Noms logs why it quit:
   `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
 - Refreshing: the room view window launches Passeur Noms when it opens (if
   the last reading and the last request are older than 15 min), then every

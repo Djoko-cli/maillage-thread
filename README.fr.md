@@ -405,9 +405,13 @@ locale du Mac, et se ferme. Aucun dossier à choisir.
 outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe, lance
 ```
 
-- L'équipe vient de ton certificat « Apple Development » (`EQUIPE=` pour
-  l'imposer). Une équipe gratuite a un profil de 7 jours : au-delà, Maillage
-  Thread ne peut plus lancer Passeur Noms ; relancer le script. Seul Passeur
+- L'équipe vient de ton certificat « Apple Development », sinon de ton
+  certificat « Developer ID Application » (`EQUIPE=` pour l'imposer ; elle
+  n'est jamais affichée). HomeKit n'est pas offert aux apps Mac signées
+  Developer ID (capacité réservée à l'App Store) : Passeur Noms reste une
+  compilation de développement pour ton Mac enregistré. Une équipe payante a
+  un profil d'un an (une équipe gratuite, 7 jours) : au-delà, Maillage Thread
+  ne peut plus lancer Passeur Noms ; relancer le script. Seul Passeur
   Noms est signé avec l'équipe ; Maillage Thread garde sa propre signature
   (voir « Signature »).
 - Au premier lancement de chaque compilation, macOS dit que l'app est
@@ -437,8 +441,8 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
 - Le dernier relevé valide est gardé. Un échec (par exemple Passeur Noms
   introuvable ou refusé, rien en 2 minutes, jeton faux, longueur ou JSON
   illisible, accès à Maison refusé) le garde et se lit dans Réglages › Maison
-  et dans le menu ; au-delà de 7 jours, les Réglages disent de relancer
-  `outils/passeur.sh`. Passeur Noms note au journal pourquoi il
+  et dans le menu ; quand les noms ont plus de 7 jours, les Réglages disent de
+  relancer `outils/passeur.sh`. Passeur Noms note au journal pourquoi il
   s'est fermé :
   `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
 - Rafraîchissement : la fenêtre de la vue par pièces lance Passeur Noms à son

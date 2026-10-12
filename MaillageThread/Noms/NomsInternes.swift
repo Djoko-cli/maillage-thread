@@ -33,7 +33,8 @@ final class NomsInternes {
 
     nonisolated static let fichier = "noms.json"
     nonisolated static let idPasseur = "fr.djoko.maillage.passeur"
-    /// Profil gratuit du passeur : 7 jours ; au-dela, il faut le recompiler.
+    /// Noms de plus de ce temps : le passeur ne les rafraichit plus (profil expire, acces refuse...) ; les Reglages disent
+    /// de le relancer. (Son profil de developpement vaut un an depuis le compte payant, 12/10/2026.)
     nonisolated static let validite: TimeInterval = 7 * 24 * 3600
     /// Plus recent, un releve suffit : l'ouverture du graphe ne relance pas le passeur.
     nonisolated static let fraicheur: TimeInterval = 15 * 60
@@ -175,8 +176,8 @@ final class NomsInternes {
             _ = try await NSWorkspace.shared.open([cible.url], withApplicationAt: url, configuration: configuration)
             return nil
         } catch {
-            // Cause la plus probable apres quelques jours : le profil gratuit a expire.
-            return String(localized: "\(error.localizedDescription) (profil de 7 jours expiré ? relance outils/passeur.sh)")
+            // Cause la plus probable : le profil de developpement du passeur a expire (un an).
+            return String(localized: "\(error.localizedDescription) (profil du passeur expiré ? relance outils/passeur.sh)")
         }
     }
 
@@ -215,7 +216,7 @@ final class NomsInternes {
         }
     }
 
-    /// Noms de plus de 7 jours : le profil gratuit du passeur a expire.
+    /// Noms de plus de 7 jours : le passeur ne les rafraichit plus.
     nonisolated static func estAncien(_ n: NomsMaison, maintenant: Date) -> Bool {
         maintenant.timeIntervalSince(n.date) > validite
     }

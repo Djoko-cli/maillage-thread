@@ -1,5 +1,5 @@
 {
-  "%@ (profil de 7 jours expiré ? relance outils/passeur.sh)": "%@ (7-day profile expired? Run outils/passeur.sh again)",
+  "%@ (profil du passeur expiré ? relance outils/passeur.sh)": "%@ (Passeur profile expired? Run outils/passeur.sh again)",
   "%@ : %@": "%1$@: %2$@",
   "%@ : %@ %lld/%lld…": "%1$@: %2$@ %3$lld/%4$lld…",
   "%@ : %@…": "%1$@: %2$@…",

@@ -1,18 +1,18 @@
 {
   "sourceLanguage" : "fr",
   "strings" : {
-    "%@ (profil de 7 jours expiré ? relance outils/passeur.sh)" : {
+    "%@ (profil du passeur expiré ? relance outils/passeur.sh)" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ (7-day profile expired? Run outils/passeur.sh again)"
+            "value" : "%@ (Passeur profile expired? Run outils/passeur.sh again)"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ (profil de 7 jours expiré ? relance outils/passeur.sh)"
+            "value" : "%@ (profil du passeur expiré ? relance outils/passeur.sh)"
           }
         }
       }
