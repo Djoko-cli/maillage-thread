@@ -63,9 +63,10 @@ plus.
   Thread » plus bas). Il s'installe depuis une copie de ce dépôt :
   `sh outils/thread-route/installer.sh` (mot de passe administrateur).
   Réglages, Diagnostic, montre son état.
-- **Passeur Noms n'est pas distribué.** C'est une app « conçue pour iPad »
-  que chacun compile et signe avec sa propre équipe Apple :
-  `outils/passeur.sh` (voir « Noms de Maison » plus bas).
+- **Passeur Noms n'est pas distribué.** C'est une app Mac Catalyst en
+  arrière-plan (sans fenêtre ni icône dans le Dock) que chacun compile et
+  signe avec sa propre équipe Apple : `outils/passeur.sh` (voir « Noms de
+  Maison » plus bas).
 
 ## Crédits
 
@@ -260,11 +261,11 @@ catalogue vont ensemble.
 | `MaillageCoeur/Scene/` | vue par pièces, sans interface : nœuds et liens, étages et pièces, cartes, disposition (déterministe, avec budget), places gardées, caméra et envol, placement des noms et zoom sémantique, projection vers le moteur `Canvas` ; optimisé même en Debug |
 | `MaillageCoeur/Maillage/` | sonde : TLV du diagnostic, Network Data, protocole USB, modèle du maillage, tournée (routeurs, annonces MLE entendues, résolution des parents, compteurs MAC des enfants), identités des routeurs gardées, rapprochement avec l'instantané (élimination, candidats), journal des parents et des routeurs Thread, historique des tournées et courbes ; testé sur une capture anonymisée |
 | `MaillageThread/Sonde/` | liaison avec la sonde : port série sans redémarrer le C6, ports USB, accès par le réseau Thread (`Reseau/` : transport UDP et enveloppe H1 du pont Halo, clé dans le trousseau, rid et renvois), `SondeUSB` (requêtes appariées par id et par cible, chacune avec son échéance), modèle de l'app (sonde retenue par son numéro de série USB, liaison USB ou réseau, une tournée toutes les 5 minutes) |
-| `MaillageThread/Noms/` | noms de Maison : lancement de Passeur Noms, réception de son relevé par la boucle locale (écoute TCP sur 127.0.0.1, jeton à usage unique), derniers noms valides gardés dans le conteneur de l'app |
+| `MaillageThread/Noms/` | noms de Maison : abonnement à Passeur Noms (écoute TCP persistante sur 127.0.0.1, jeton à usage unique, réabonnement), commandes qu'on lui envoie (relire, identifier, ouvrir à l'ouverture de session), derniers noms valides gardés dans le conteneur de l'app |
 | `MaillageThread/Recenseur/` | NWBrowser (trois types de service) et dns_sd (hôtes, adresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | modèle de l'app : relevés → suivi → journal et notifications ; veille du Mac ; ouverture à la connexion ; mises à jour (Sparkle) ; état de Thread Route |
 | `MaillageThread/Vues/` | barre des menus, fenêtre de la vue par pièces (`Pieces/` : moteur `Canvas`, surcouches en verre, captures), journal, réglages (fenêtre AppKit à onglets : Général, Notifications, Maison, Sonde, Diagnostic ; ⌘,) |
-| `Passeur/` | Passeur Noms : app iOS lancée sur le Mac (« conçue pour iPad ») qui lit Maison et envoie ses noms, pièces et zones à l'app par la boucle locale |
+| `Passeur/` | Passeur Noms : app Mac Catalyst en arrière-plan (sans fenêtre ni icône dans le Dock ; `Masqueur.bundle` rend invisible la fenêtre qu'impose macOS) qui suit Maison et envoie ses noms, pièces, zones et batteries à l'app par la boucle locale |
 | `sonde/` | firmware de la sonde (ESP32-C6, PlatformIO) et outils d'essai |
 | `outils/anonymiser-sonde.py` | anonymise une capture de la sonde avant d'en faire des données de test |
 | `outils/mesurer.sh` | temps de calcul de la vue par pièces (disposition, placement des noms), en Release |
@@ -394,42 +395,67 @@ pour les étages `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-c-
 
 ## Noms de Maison (Passeur Noms)
 
-HomeKit n'existe pas en macOS natif, et une équipe de développement Apple
-gratuite ne peut pas le donner à une app Mac Catalyst. Les noms de Maison
-viennent donc de **Passeur Noms**, une petite app iOS lancée sur le Mac
-(« conçue pour iPad ») : elle lit Maison (noms, pièces, zones, fabricants,
-`matterNodeID`, batteries), passe le relevé à Maillage Thread par la boucle
-locale du Mac, et se ferme. Aucun dossier à choisir.
+HomeKit n'existe pas en macOS natif, et il est refusé aux apps signées avec un
+Developer ID. Les noms de Maison viennent donc de **Passeur Noms**, une petite
+app Mac Catalyst sans fenêtre ni icône dans le Dock (`LSUIElement` ;
+`Masqueur.bundle`, un module AppKit qu'elle charge au lancement, rend
+invisible la fenêtre que macOS lui impose). Elle tourne en arrière-plan, suit
+Maison (noms, pièces, zones, fabricants, `matterNodeID`, batteries) et tient
+Maillage Thread à jour par la boucle locale du Mac : un appareil renommé ou
+déplacé dans Maison change dans l'app en quelques secondes. Aucun dossier à
+choisir.
 
 ```sh
-outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe, lance
+outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, lance
 ```
 
 - L'équipe vient de ton certificat « Apple Development », sinon de ton
   certificat « Developer ID Application » (`EQUIPE=` pour l'imposer ; elle
   n'est jamais affichée). HomeKit n'est pas offert aux apps Mac signées
   Developer ID (capacité réservée à l'App Store) : Passeur Noms reste une
-  compilation de développement pour ton Mac enregistré. Une équipe payante a
-  un profil d'un an (une équipe gratuite, 7 jours) : au-delà, Maillage Thread
-  ne peut plus lancer Passeur Noms ; relancer le script. Seul Passeur
-  Noms est signé avec l'équipe ; Maillage Thread garde sa propre signature
-  (voir « Signature »).
-- Au premier lancement de chaque compilation, macOS dit que l'app est
-  « endommagée » : cliquer Annuler, puis Réglages Système › Confidentialité et
-  sécurité › « Ouvrir quand même ». Autoriser ensuite l'accès à Maison. Ouvert
-  ainsi à la main, Passeur Noms lit Maison, montre ce qu'il a lu et se ferme
-  après 10 s. Il n'envoie rien, sauf si Maillage Thread le demande pendant
-  ces 10 s.
-- Un relevé : Maillage Thread écoute sur `127.0.0.1` (TCP, sur un port choisi
+  compilation de développement pour ton Mac enregistré, jamais distribuée.
+  Une équipe payante a un profil d'un an (une équipe gratuite, 7 jours) :
+  au-delà, macOS ne le lance plus ; relancer le script (Réglages › Maison
+  prévient 30 jours avant). Seul Passeur Noms est signé avec l'équipe ;
+  Maillage Thread garde sa propre signature (voir « Signature »).
+- `outils/passeur.sh` compile Passeur Noms et Masqueur, arrête le démon qui
+  tourne (par son PID), remplace `~/Applications/Passeur Noms.app` seulement
+  si c'est le script qui l'a installé (l'ancien « conçu pour iPad », ou le
+  démon), l'enregistre auprès de LaunchServices et le lance en arrière-plan.
+  Premier lancement : macOS demande l'accès à Maison (il peut le redemander
+  une fois, après le remplacement de l'ancien Passeur Noms).
+- L'échange : Maillage Thread écoute sur `127.0.0.1` (TCP, sur un port choisi
   par le système), tire un jeton à usage unique et ouvre Passeur Noms en
-  arrière-plan avec l'URL `maillage-passeur://releve?port=…&jeton=…` (une app
+  arrière-plan avec l'URL `maillage-passeur://abonner?port=…&jeton=…` (une app
   du bac à sable ne peut pas passer d'arguments de lancement : macOS les
-  retire). Passeur Noms lit Maison, se connecte, envoie le jeton, la longueur
-  du JSON puis le JSON, et se ferme dès que l'app a tout lu. L'app vérifie le
-  jeton, lit au plus 8 Mo et écrit `noms.json` dans son conteneur (écriture
-  atomique). La boucle locale ne demande pas l'accès au réseau local. Limite
-  connue : toute app de ce Mac peut ouvrir cette URL avec son propre port et
-  recevrait le relevé ; rien ne sort du Mac.
+  retire). Le démon se connecte à `127.0.0.1`, envoie le jeton, puis les deux
+  côtés échangent des trames `<longueur>\n<JSON>`, de 8 Mo au plus : le démon
+  envoie `etat` (version, accès à Maison, ouverture de session, expiration du
+  profil), `releve` (les noms) et `identifie` (la réponse à une
+  identification) ; l'app envoie `relire`, `identifier` et `ouvertureSession`.
+  L'app vérifie le jeton et écrit `noms.json` dans son conteneur (écriture
+  atomique). Un message inconnu est ignoré ; une trame mal formée ferme la
+  connexion. La boucle locale ne demande pas l'accès au réseau local. L'URL
+  `releve` (un relevé ponctuel, version 1, puis la connexion se ferme) reste
+  pour les anciennes apps. Limite connue : toute app de ce Mac peut ouvrir
+  l'URL avec son propre port et recevrait le relevé ; rien ne sort du Mac.
+- Le démon suit Maison : les changements sont regroupés sur 2 s, et un relevé
+  n'est envoyé que s'il diffère du dernier ; les batteries sont relues toutes
+  les heures (et sur demande). Il reste lancé tant qu'une app est abonnée
+  (10 minutes après le départ de la dernière), ou en permanence s'il est
+  inscrit à l'ouverture de session.
+- Côté app : elle s'abonne au lancement, et de nouveau après 5 s, 10 s, 30 s,
+  puis chaque minute si la connexion se ferme ; « Rafraîchir depuis Maison »
+  envoie `relire` (une demande à un démon connecté qui ne répond pas est
+  libérée au bout de 2 minutes, avec un message) ; « Identifier », dans la
+  fiche d'un appareil relié à un accessoire de Maison, fait clignoter ou
+  sonner l'accessoire ; Réglages › Maison montre l'état de Passeur Noms,
+  l'interrupteur « Ouvrir Passeur Noms à l'ouverture de session » et un
+  avertissement 30 jours avant l'expiration de son profil ; si le Passeur
+  Noms installé est l'ancien, l'app le dit au lieu de l'ouvrir.
+- Outil de banc, sans l'app : `python3 outils/verifier-passeur.py releve|abonner`
+  joue le rôle de l'app sur la boucle locale et n'affiche que des nombres et
+  des états (jamais un nom, un identifiant ni le jeton).
 - Priorité des noms : surnom > Maison (par le nœud, puis associé à la main) > HomeKit (`_hap._udp`) > hôte.
 - Un appareil que Maison ne nomme plus par son nœud (il a perdu son inscription à la fabrique d'Apple : le nœud
   exporté par Maison n'est annoncé par personne) peut être associé à la main : sa fiche propose « Associer à un
@@ -439,18 +465,15 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), enveloppe,
   l'accessoire) à côté de `surnoms.json` ; la fiche dit « associé à la main » et propose « Dissocier ». Si
   l'appareil retrouve son nœud, le nœud l'emporte et l'association reste, sans effet.
 - Le dernier relevé valide est gardé. Un échec (par exemple Passeur Noms
-  introuvable ou refusé, rien en 2 minutes, jeton faux, longueur ou JSON
-  illisible, accès à Maison refusé) le garde et se lit dans Réglages › Maison
-  et dans le menu ; quand les noms ont plus de 7 jours, les Réglages disent de
-  relancer `outils/passeur.sh`. Passeur Noms note au journal pourquoi il
-  s'est fermé :
-  `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
-- Rafraîchissement : la fenêtre de la vue par pièces lance Passeur Noms à son
-  ouverture (si le relevé et la dernière demande ont plus de 15 min), puis
-  toutes les heures ; « Rafraîchir depuis Maison » (menu ou réglages) et le
-  bouton rafraîchir de sa capsule du réseau le font à la demande. Un relevé à
-  la fois : une demande pendant un relevé est ignorée. La fenêtre de Passeur
-  Noms ne fait que passer derrière les autres.
+  introuvable ou refusé, aucun démon connecté en 2 minutes, jeton faux,
+  longueur ou JSON illisible, accès à Maison refusé) le garde et se lit dans
+  Réglages › Maison et dans le menu. Passeur Noms note ses décisions au
+  journal (jamais un nom de Maison, un identifiant d'accessoire ni le jeton) :
+  `/usr/bin/log show --last 1h --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
+- Rafraîchissement : rien à lancer, les noms suivent Maison tout seuls ;
+  « Rafraîchir depuis Maison » (menu ou réglages) et le bouton rafraîchir de
+  la capsule du réseau envoient `relire` pour un relevé immédiat, batteries
+  comprises.
 - Zones : les zones de Maison (en général les étages) et leurs pièces, dans
   l'ordre de Maison ; Réglages › Maison en liste les noms. Un relevé d'avant
   les zones n'en a pas.
@@ -523,8 +546,8 @@ cd sonde && pio run        # compiler ; flasher et appairer : sonde/README.md
   3 bis).
 - Une tournée toutes les 5 minutes, et au rafraîchissement : le bouton
   rafraîchir de la capsule du réseau relit le réseau, lance une tournée (sauf
-  s'il y en a déjà une) et Passeur Noms ; son aide dit lesquels il lancera
-  vraiment. Pendant une tournée, une ligne en haut à gauche, sous les capsules
+  s'il y en a déjà une) et demande à Passeur Noms de relire Maison ; son aide
+  dit lesquels il lancera vraiment. Pendant une tournée, une ligne en haut à gauche, sous les capsules
   (au-dessus du bandeau d'un réseau scindé), montre son étape, un compteur de
   requêtes et sa durée (« Résolution des parents · 12/26 · 0:42 »). Elle
   n'est là que pendant la tournée : le bandeau et le fil remontent quand elle

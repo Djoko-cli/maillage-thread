@@ -6,6 +6,31 @@ the notes of the GitHub release and those of the update window.
 Maillage Thread : une section par version publiée, en anglais puis en français. `outils/publier.sh` en tire les
 notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour.
 
+## 1.3.0
+
+**English**
+
+- Home names now come from a new **Passeur Noms**, a background helper with no window and no Dock icon: install or
+  update it with `outils/passeur.sh` (the old "Designed for iPad" Passeur Noms is replaced; Home access may be asked
+  once more). Maillage Thread subscribes to it at launch: a device renamed or moved in Home changes in the app within
+  seconds, without relaunching anything.
+- "Identify" in the card of a device linked to a Home accessory: the accessory blinks or beeps.
+- Settings › Home: the state of Passeur Noms, "Open Passeur Noms at login", and a warning 30 days before its
+  development profile expires (run `outils/passeur.sh` again). Batteries are read every hour by Passeur Noms.
+- If the installed Passeur Noms is the old one, the app says so instead of opening it.
+
+**Français**
+
+- Les noms de Maison viennent d'un nouveau **Passeur Noms**, en arrière-plan, sans fenêtre ni icône dans le Dock :
+  l'installer ou le mettre à jour avec `outils/passeur.sh` (il remplace l'ancien Passeur Noms « conçu pour iPad » ;
+  l'accès à Maison peut être redemandé une fois). Maillage Thread s'y abonne au lancement : un appareil renommé ou
+  déplacé dans Maison change dans l'app en quelques secondes, sans rien relancer.
+- « Identifier » dans la fiche d'un appareil relié à un accessoire de Maison : l'accessoire clignote ou émet un son.
+- Réglages › Maison : l'état de Passeur Noms, « Ouvrir Passeur Noms à l'ouverture de session », et un avertissement
+  30 jours avant l'expiration de son profil de développement (relancer `outils/passeur.sh`). Les batteries sont
+  relues toutes les heures par Passeur Noms.
+- Si le Passeur Noms installé est l'ancien, l'app le dit au lieu de l'ouvrir.
+
 ## 1.2.2
 
 **English**

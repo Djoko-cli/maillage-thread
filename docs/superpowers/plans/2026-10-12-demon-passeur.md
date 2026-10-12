@@ -4451,11 +4451,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `NOTES-VERSIONS.md` (section `## 1.3.0` en tête, **English** puis **Français**)
 - Modify: `README.md`, `README.fr.md` (section « Home names (Passeur Noms) » / « Noms de Maison (Passeur Noms) », tableau du code, mentions « conçue pour iPad »)
 
-- [ ] **Step 1 : version**
+- [x] **Step 1 : version**
 
 Dans `project.yml`, cible `MaillageThread` : `MARKETING_VERSION: "1.2.2"` devient `MARKETING_VERSION: "1.3.0"`.
 
-- [ ] **Step 2 : notes de version**
+- [x] **Step 2 : notes de version**
 
 Ajouter en tête des sections de `NOTES-VERSIONS.md`, avant `## 1.2.2` :
 
@@ -4486,7 +4486,7 @@ Ajouter en tête des sections de `NOTES-VERSIONS.md`, avant `## 1.2.2` :
 - Si le Passeur Noms installé est l'ancien, l'app le dit au lieu de l'ouvrir.
 ```
 
-- [ ] **Step 3 : README (anglais puis français, même contenu)**
+- [x] **Step 3 : README (anglais puis français, même contenu)**
 
 Dans `README.md`, réécrire la section `## Home names (Passeur Noms)` (et la puce « Passeur Noms is not distributed », le paragraphe de signature qui en parle, les lignes `MaillageThread/Noms/` et `Passeur/` du tableau du code) pour dire, sans plus de détail que la spec :
 - Passeur Noms est un démon Mac Catalyst sans fenêtre ni Dock (`LSUIElement`, `Masqueur.bundle` qui rend invisible la fenêtre que macOS impose) ; HomeKit est refusé au Developer ID, donc compilation de développement, profil d'un an, `outils/passeur.sh` pour installer et renouveler ; jamais distribué.
@@ -4499,7 +4499,7 @@ Dans `README.md`, réécrire la section `## Home names (Passeur Noms)` (et la pu
 
 Faire exactement la même chose en français dans `README.fr.md` (« Noms de Maison (Passeur Noms) »).
 
-- [ ] **Step 4 : vérifications et commit**
+- [x] **Step 4 : vérifications et commit**
 
 ```bash
 outils/tester.sh

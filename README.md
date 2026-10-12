@@ -58,9 +58,9 @@ open it, and drag **Maillage Thread** onto **Applications**. macOS 26 or later.
   below). It installs from a copy of this repository:
   `sh outils/thread-route/installer.sh` (administrator password). Settings,
   Diagnostics, shows its status.
-- **Passeur Noms is not distributed.** It is an app "Designed for iPad" that
-  everyone builds and signs with their own Apple team: `outils/passeur.sh`
-  (see "Home names" below).
+- **Passeur Noms is not distributed.** It is a background Mac Catalyst app
+  (no window, no Dock icon) that everyone builds and signs with their own
+  Apple team: `outils/passeur.sh` (see "Home names" below).
 
 ## Credits
 
@@ -251,11 +251,11 @@ catalog match.
 | `MaillageCoeur/Scene/` | room view without UI: nodes and links, floors and rooms, cards, layout (deterministic, with a budget), kept places, camera and flight, label placement and semantic zoom, projection for the `Canvas` engine; optimized even in Debug |
 | `MaillageCoeur/Maillage/` | probe: diagnostic TLVs, Network Data, USB protocol, mesh model, tour (routers, MLE advertisements heard, parent resolution, children's MAC counters), kept router identities, matching with the snapshot (elimination, candidates), log of parents and Thread routers, tour history and curves; tested on an anonymized capture |
 | `MaillageThread/Sonde/` | probe link: serial port without resetting the C6, USB ports, access over the Thread network (`Reseau/`: UDP transport and H1 envelope from the Halo bridge, key in the keychain, rid and resends), `SondeUSB` (requests matched by id and target, each with its own deadline), app model (probe remembered by its USB serial number, USB or network link, a tour every 5 minutes) |
-| `MaillageThread/Noms/` | Home names: launching Passeur Noms, receiving its reading over the loopback (TCP listener on 127.0.0.1, one-time token), last valid names kept in the app's container |
+| `MaillageThread/Noms/` | Home names: subscription to Passeur Noms (persistent TCP listener on 127.0.0.1, one-time token, resubscription), commands sent to it (reread, identify, open at login), last valid names kept in the app's container |
 | `MaillageThread/Recenseur/` | NWBrowser (three service types) and dns_sd (hosts, addresses) → `Annonces` |
 | `MaillageThread/Surveillance/` | app model: surveys → tracking → log and notifications; sleep of the Mac; login item; updates (Sparkle); Thread Route status |
 | `MaillageThread/Vues/` | menu bar, room view window (`Pieces/`: `Canvas` engine, glass overlays, captures), log window, settings (AppKit window with tabs: General, Notifications, Home, Probe, Diagnostics; ⌘,) |
-| `Passeur/` | Passeur Noms: iOS app run on the Mac (Designed for iPad) that reads Home and sends its names, rooms and zones to the app over the loopback |
+| `Passeur/` | Passeur Noms: background Mac Catalyst app (no window, no Dock icon; `Masqueur.bundle` hides the window macOS imposes) that follows Home and sends its names, rooms, zones and batteries to the app over the loopback |
 | `sonde/` | probe firmware (ESP32-C6, PlatformIO) and trial tools |
 | `outils/anonymiser-sonde.py` | anonymizes a probe capture before it becomes test data |
 | `outils/mesurer.sh` | timings of the room view (layout, label placement), in Release |
@@ -376,41 +376,64 @@ and for the floors `docs/superpowers/specs/2026-10-03-maillage-thread-polissage-
 
 ## Home names (Passeur Noms)
 
-HomeKit does not exist in native macOS, and a free Apple developer team cannot
-give it to a Mac Catalyst app. So Home names come from **Passeur Noms**, a small
-iOS app run on the Mac ("Designed for iPad"): it reads Home (names, rooms,
-zones, manufacturers, `matterNodeID`, batteries), hands the reading to
-Maillage Thread over the Mac's loopback, and quits. There is no folder to
-choose.
+HomeKit does not exist in native macOS, and it is refused to apps signed with a
+Developer ID. So Home names come from **Passeur Noms**, a small Mac Catalyst
+app with no window and no Dock icon (`LSUIElement`; `Masqueur.bundle`, an AppKit
+module it loads at launch, makes invisible the window macOS imposes on it). It
+runs in the background, follows Home (names, rooms, zones, manufacturers,
+`matterNodeID`, batteries) and keeps Maillage Thread up to date over the Mac's
+loopback: a device renamed or moved in Home changes in the app within seconds.
+There is no folder to choose.
 
 ```sh
-outils/passeur.sh          # build with your team (Xcode account), wrap, launch
+outils/passeur.sh          # build with your team (Xcode account), install, launch
 ```
 
 - The team comes from your "Apple Development" certificate, or else from your
   "Developer ID Application" one (`EQUIPE=` to force it; it is never shown).
   HomeKit is not available to Mac apps signed with a Developer ID (an App
   Store-only capability), so Passeur Noms stays a development build for your
-  registered Mac: a paid team gets a one-year profile (a free team, 7 days);
-  after that, Maillage Thread can no longer launch Passeur Noms; run the script
-  again. Only Passeur Noms is
-  signed with the team; Maillage Thread keeps its own signature (see
-  "Signing").
-- First launch of each build: macOS says the app is "damaged". Click Cancel,
-  then System Settings › Privacy & Security › "Open Anyway". Then allow Home
-  access. Opened by hand like this, Passeur Noms reads Home, shows what it
-  read and quits after 10 s. It sends nothing, unless Maillage Thread asks
-  during those 10 s.
-- A reading: Maillage Thread listens on `127.0.0.1` (TCP, on a port chosen by
-  the system), generates a one-time token and opens Passeur Noms in the
-  background with the URL `maillage-passeur://releve?port=…&jeton=…` (a
-  sandboxed app cannot pass launch arguments: macOS drops them). Passeur Noms
-  reads Home, connects, sends the token, the length of the JSON, then the
-  JSON, and quits once the app has read it all. The app checks the token,
-  reads at most 8 MB and writes `noms.json` in its own container (atomic
-  write). The loopback needs no local network permission. Known limit: any
-  app on this Mac can open that URL with its own port and would get the
-  reading; nothing leaves the Mac.
+  registered Mac, never distributed: a paid team gets a one-year profile (a
+  free team, 7 days); after that macOS no longer launches it; run the script
+  again (Settings › Home warns 30 days before). Only Passeur Noms is signed
+  with the team; Maillage Thread keeps its own signature (see "Signing").
+- `outils/passeur.sh` builds Passeur Noms and Masqueur, stops the running
+  daemon (by its PID), replaces `~/Applications/Passeur Noms.app` only if the
+  script installed it (the old "Designed for iPad" one, or the daemon), registers
+  it with LaunchServices and launches it in the background. First launch: macOS
+  asks for access to Home (it may ask once more after the old Passeur Noms is
+  replaced).
+- The exchange: Maillage Thread listens on `127.0.0.1` (TCP, on a port chosen
+  by the system), generates a one-time token and opens Passeur Noms in the
+  background with the URL `maillage-passeur://abonner?port=…&jeton=…` (a
+  sandboxed app cannot pass launch arguments: macOS drops them). The daemon
+  connects to `127.0.0.1`, sends the token, then both sides exchange frames
+  `<length>\n<JSON>`, at most 8 MB each: the daemon sends `etat` (version,
+  Home access, open at login, profile expiry), `releve` (the names) and
+  `identifie` (the answer to an identification); the app sends `relire`,
+  `identifier` and `ouvertureSession`. The app checks the token, and writes
+  `noms.json` in its own container (atomic write). An unknown message is
+  ignored; a malformed frame closes the connection. The loopback needs no local
+  network permission. The URL `releve` (one reading, version 1, then the
+  connection closes) stays for older apps. Known limit: any app on this Mac can
+  open the URL with its own port and would get the reading; nothing leaves the
+  Mac.
+- The daemon follows Home: changes within 2 s are grouped, and a reading is
+  sent only if it differs from the last one; batteries are read every hour
+  (and on request). It stays launched while an app is subscribed (10 minutes
+  after the last one leaves), or permanently if it is registered to open at
+  login.
+- In the app: it subscribes at launch, and again after 5 s, 10 s, 30 s, then
+  every minute if the connection closes; "Refresh from Home" sends `relire`
+  (a request to a connected daemon that does not answer is released after 2
+  minutes, with a message); "Identify" in the card of a device linked to a Home
+  accessory makes the accessory blink or beep; Settings › Home shows the state
+  of Passeur Noms, the switch "Open Passeur Noms at login" and a warning 30
+  days before its profile expires; if the installed Passeur Noms is the old
+  one, the app says so instead of opening it.
+- Bench tool, without the app: `python3 outils/verifier-passeur.py releve|abonner`
+  plays the app on the loopback and prints only counts and states (never a
+  name, an identifier or the token).
 - Priority of names: nickname > Home (by node, then linked by hand) > HomeKit (`_hap._udp`) > host.
 - A device Home no longer names by its node (it lost its enrolment in Apple's fabric, so the node Home exports is
   announced by nobody) can be linked by hand: its card offers "Link to a Home accessory…", listing the Home
@@ -419,17 +442,14 @@ outils/passeur.sh          # build with your team (Xcode account), wrap, launch
   (device → node of the accessory) next to `surnoms.json`; the card says "linked by hand" and offers "Unlink". If
   the device gets its node back, the node wins and the link stays, unused.
 - The last valid reading is kept. A failure (for example Passeur Noms not
-  found or refused, nothing within 2 minutes, wrong token, unreadable length
-  or JSON, Home access denied) keeps it and shows in Settings › Home and in
-  the menu; when the names are more than 7 days old, Settings says to run
-  `outils/passeur.sh` again. Passeur Noms logs why it quit:
-  `/usr/bin/log show --last 10m --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
-- Refreshing: the room view window launches Passeur Noms when it opens (if
-  the last reading and the last request are older than 15 min), then every
-  hour; "Refresh from Home" (menu or settings) and the refresh button of its
-  network capsule do it on demand. One reading at a time: a request during a
-  reading is ignored. The window of Passeur Noms only flashes behind the
-  others.
+  found or refused, no daemon connected within 2 minutes, wrong token,
+  unreadable length or JSON, Home access denied) keeps it and shows in
+  Settings › Home and in the menu. Passeur Noms logs its decisions (never a
+  name from Home, an accessory identifier or the token):
+  `/usr/bin/log show --last 1h --predicate 'subsystem == "fr.djoko.maillage.passeur"'`.
+- Refreshing: nothing to launch, the names follow Home on their own;
+  "Refresh from Home" (menu or settings) and the refresh button of the
+  network capsule send `relire` for an immediate reading, batteries included.
 - Zones: Home's zones (usually floors) and their rooms, in Home's order;
   Settings › Home lists the zone names. A reading from before zones has none.
 - The `noms.json` written in a chosen folder by an older Passeur Noms (at the
@@ -498,8 +518,8 @@ cd sonde && pio run        # build; flashing and pairing: sonde/README.md
   (`"suite":false`) is lost; details in the spec (section 3 bis).
 - A tour every 5 minutes, and on refresh: the refresh button of the network
   capsule rereads the network, starts a tour (unless one is running) and
-  launches Passeur Noms; its help tag says which of these it will actually
-  start. While a tour runs, a line at the top left, under the capsules (above
+  asks Passeur Noms to reread Home; its help tag says which of these it will
+  actually start. While a tour runs, a line at the top left, under the capsules (above
   the split-network banner), shows its step, a counter of requests and its
   duration ("Parent resolution · 12/26 · 0:42"). It is only there during
   the tour: the banner and the path move up when it goes, and back down
