@@ -189,6 +189,30 @@ struct AdresseVerifieeTests {
         #expect(mem.demandes == ["E00000000000000B", "E000000000000004"])
     }
 
+    /// Une resolution anterieure a la perte de l'annonce ne place plus l'appareil sous son parent, tant que la sonde ne
+    /// l'a pas retrouve (ici introuvable apres la perte) ; posterieure a la perte, elle le place toujours.
+    @Test func resolutionAnterieureNePlacePlus() async throws {
+        let a = "E00000000000000A"
+        let premiere = try TourneeTests.sondeResolue()
+        let (m1, mem1) = try #require(try await Tournee.complete(premiere, memoire: MemoireTournee(),
+                                                                 maintenant: Self.t0,
+                                                                 appareils: TourneeTests.appareils))
+        #expect(m1.enfants.contains { $0.extMac == a && $0.source == .resolution }, "place sous son parent muet")
+        // Apres la perte, la sonde ne le trouve plus ; sa resolution de t0 reste dans la memoire.
+        var introuvable = TourneeTests.resolutions
+        introuvable["\(TourneeTests.omr(0x0A))"] = nil
+        let sonde = try TourneeTests.sondeResolue(resolutions: introuvable)
+        let i = try #require(TourneeTests.appareils.firstIndex { $0.id == a })
+        for (annonce, place) in [(Self.t0 + 100, false), (Self.t0, false), (Self.t0 - 100, true)] {
+            var appareils = TourneeTests.appareils
+            appareils[i] = try Self.perdu(a, annonce: annonce)
+            let (m2, mem2) = try #require(try await Tournee.complete(sonde, memoire: mem1, maintenant: Self.t0 + 300,
+                                                                     appareils: appareils))
+            #expect(mem2.resolutions[a]?.date == Self.t0, "la resolution de t0 reste en memoire")
+            #expect(m2.enfants.contains { $0.extMac == a && $0.source == .resolution } == place)
+        }
+    }
+
     /// Le maillage porte les appareils trouves par la resolution (la memoire de la tournee), quel que soit leur
     /// parent, avec leur date ; pas l'introuvable. Ils ne sont pas gardes sur disque : relu, le maillage n'en a aucun.
     @Test func resolusDansLeMaillage() async throws {

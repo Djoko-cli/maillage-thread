@@ -448,7 +448,12 @@ public enum Tournee {
         let dejaLa = c.maillage()
         let extMacs = Set(dejaLa.enfants.compactMap(\.extMac)), adresses = Set(dejaLa.enfants.flatMap(\.adresses))
         var inventes: [Int: UInt16] = [:]
+        // Une resolution qui n'est pas posterieure a la derniere annonce de l'appareil (il a perdu son adresse depuis)
+        // ne prouve plus rien : il n'est pas dessine sous ce parent tant que la sonde ne l'a pas retrouve.
+        let pertes = Dictionary(appareils.compactMap { a in a.derniereAnnonce.map { (a.id, $0) } },
+                                uniquingKeysWith: { a, _ in a })
         for (id, r) in mem.resolutions.sorted(by: { $0.key < $1.key }) where muets.contains(r.parent) {
+            if let annonce = pertes[id], r.date <= annonce { continue }
             let ext = GrapheReseau.extMac(hote: id)
             if let ext, extMacs.contains(ext) { continue }
             if adresses.contains(r.adresse) { continue }

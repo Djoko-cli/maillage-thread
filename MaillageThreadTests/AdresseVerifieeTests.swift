@@ -49,8 +49,9 @@ struct AdresseVerifieeAppTests {
 
     /// Maillage de la sonde : le chef (routeur 3, son ExtMac est le `xa` de l'annonce), muet, et sous lui les
     /// enfants trouves par la resolution (numeros inventes, comme sous un routeur Apple) ; `resolus` : ce que porte
-    /// le maillage.
-    static func maillage(_ date: Date, resolus: [String: Date]) -> Maillage {
+    /// le maillage. `places` faux : sans ces enfants, comme la tournee pour une resolution anterieure a la perte de
+    /// l'annonce.
+    static func maillage(_ date: Date, resolus: [String: Date], places: Bool = true) -> Maillage {
         var c = ConstructionMaillage(date: date, partition: partition)
         c.routeurs(Route64(sequence: 1, routes: [RouteRouteur(idRouteur: 3, qualiteSortante: 0, qualiteEntrante: 0,
                                                               cout: 0)]), chef: 3)
@@ -58,7 +59,7 @@ struct AdresseVerifieeAppTests {
         c.identite("E1000000000000A1", routeur: 3)
         let ext: [String: String?] = [matter: matter, hap: nil]
         for (k, id) in [matter, hap].enumerated() {
-            guard let d = resolus[id], let ad = AdresseIPv6(adresse(k + 1)) else { continue }
+            guard places, let d = resolus[id], let ad = AdresseIPv6(adresse(k + 1)) else { continue }
             c.enfant(EnfantMaillage(rloc16: 0x0C00 | EnfantMaillage.bitInvente | UInt16(k), extMac: ext[id] ?? nil,
                                     adresses: [ad], source: .resolution, resolu: d))
         }
@@ -167,14 +168,16 @@ struct AdresseVerifieeAppTests {
         #expect(s.appareilsAResoudre().first { $0.id == Self.matter }?.derniereAnnonce == annonceMatter)
 
         for (hap, matter) in [(annonceHap - 60, annonceMatter - 60), (annonceHap, annonceMatter)] {
-            s.recevoir(Self.maillage(maintenant - 150, resolus: [Self.hap: hap, Self.matter: matter]),
+            s.recevoir(Self.maillage(maintenant - 150, resolus: [Self.hap: hap, Self.matter: matter], places: false),
                        a: maintenant - 60)
             #expect(s.verification(Self.hap, a: maintenant) == nil)
             #expect(s.verification(Self.matter, a: maintenant) == nil)
             #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.hap }?.etat == .sansAdresse)
             #expect(s.appareilsAffiches(pour: r).first { $0.id == Self.matter }?.etat == .disparu)
             #expect(s.resume?.injoignables == 2)
-            #expect(s.maillageAffiche(pour: r)?.parent(de: Self.hap) == nil)
+            let carte = s.maillageAffiche(pour: r)
+            #expect(carte?.parent(de: Self.hap) == nil && carte?.parent(de: Self.matter) == nil)
+            #expect(carte?.inconnus.isEmpty == true, "pas de noeud fantome sous le routeur")
         }
 
         let apres = maintenant - 120
