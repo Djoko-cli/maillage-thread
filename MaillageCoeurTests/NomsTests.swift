@@ -151,8 +151,26 @@ struct NomsTests {
         let n = NomsMaison(date: date, accessoires: [AccessoireMaison(nom: "Halo", piece: "Bureau")],
                            zones: [ZoneMaison(nom: "Étage", pieces: ["Bureau"])])
         #expect(try NomsMaison.lire(try n.donnees()) == n)
-        #expect(NomsMaison.versionActuelle == 1)
+        #expect(NomsMaison.versionActuelle == 2)
         #expect(!String(decoding: try NomsMaison(date: date).donnees(), as: UTF8.self).contains("zones"))
+    }
+
+    /// Version 2 : l'identifiant HomeKit de chaque accessoire, que vise « Identifier ». Un releve de version 1 (sans
+    /// `id`) se lit toujours ; `enVersion1` rend le format qu'attendent les anciennes apps (sans `id`).
+    @Test func contratIdentifiant() throws {
+        let date = Date(timeIntervalSince1970: 1_790_000_000)
+        let id = "8D3C2A10-0000-4000-8000-000000000001"
+        let n = NomsMaison(date: date, accessoires: [AccessoireMaison(nom: "Halo", id: id)])
+        #expect(n.version == 2)
+        #expect(String(decoding: try n.donnees(), as: UTF8.self).contains(#""id" : "\#(id)""#))
+        #expect(try NomsMaison.lire(try n.donnees()) == n)
+        let ancien = #"{"accessoires":[{"nom":"Halo"}],"date":"2026-09-28T12:00:00.000Z","statut":"ok","version":1}"#
+        #expect(try NomsMaison.lire(Data(ancien.utf8)).accessoires.first?.id == nil)
+        let v1 = n.enVersion1()
+        #expect(v1.version == 1)
+        #expect(v1.accessoires == [AccessoireMaison(nom: "Halo")])
+        #expect(!String(decoding: try v1.donnees(), as: UTF8.self).contains(#""id""#))
+        #expect(v1.date == n.date && v1.statut == n.statut)
     }
 
     /// Faible : l'accessoire le signale, ou son niveau est a 20 % ou moins.
@@ -212,8 +230,8 @@ struct NomsTests {
         let d = try NomsDemo.maison.donnees()
         #expect(try NomsMaison.lire(d) == NomsDemo.maison)
         var futur = NomsDemo.maison
-        futur.version = 2
-        #expect(throws: NomsMaison.Erreur.versionTropRecente(2)) { try NomsMaison.lire(try futur.donnees()) }
+        futur.version = NomsMaison.versionActuelle + 1
+        #expect(throws: NomsMaison.Erreur.versionTropRecente(NomsMaison.versionActuelle + 1)) { try NomsMaison.lire(try futur.donnees()) }
         let refus = NomsMaison(date: Date(timeIntervalSince1970: 0), statut: .refuse, message: "acces refuse")
         #expect(try NomsMaison.lire(try refus.donnees()).statut == .refuse)
     }

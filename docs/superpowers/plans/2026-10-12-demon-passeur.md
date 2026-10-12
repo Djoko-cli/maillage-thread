@@ -695,7 +695,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces : `AccessoireMaison.id: String?` (dernier paramètre de l'initialiseur, `id: String? = nil`) ; `NomsMaison.versionActuelle == 2` ; `NomsMaison.enVersion1() -> NomsMaison`.
 
-- [ ] **Step 1 : écrire les tests qui échouent**
+- [x] **Step 1 : écrire les tests qui échouent**
 
 Dans `NomsTests.swift` :
 - dans `contratZones`, remplacer `#expect(NomsMaison.versionActuelle == 1)` par `#expect(NomsMaison.versionActuelle == 2)` ;
@@ -722,12 +722,12 @@ Dans `NomsTests.swift` :
     }
 ```
 
-- [ ] **Step 2 : lancer les tests, vérifier qu'ils échouent**
+- [x] **Step 2 : lancer les tests, vérifier qu'ils échouent**
 
 Run : `outils/tester.sh MaillageCoeurTests/NomsTests`
 Expected : échec de compilation (`id` inconnu).
 
-- [ ] **Step 3 : écrire le code**
+- [x] **Step 3 : écrire le code**
 
 Dans `NomsMaison.swift` :
 - dans `AccessoireMaison`, après `batterie`, ajouter
@@ -756,12 +756,12 @@ Dans `NomsMaison.swift` :
     }
 ```
 
-- [ ] **Step 4 : lancer les tests, vérifier qu'ils passent**
+- [x] **Step 4 : lancer les tests, vérifier qu'ils passent**
 
 Run : `outils/tester.sh MaillageCoeurTests MaillageThreadTests`
 Expected : PASS (les autres usages de `AccessoireMaison(…)` n'utilisent pas `id`).
 
-- [ ] **Step 5 : commit**
+- [x] **Step 5 : commit**
 
 ```bash
 git add MaillageCoeur/Noms/NomsMaison.swift MaillageCoeurTests/NomsTests.swift

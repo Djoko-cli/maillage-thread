@@ -95,10 +95,12 @@ public struct AccessoireMaison: Codable, Hashable, Sendable {
     public var pont: Bool?
     /// Batterie, pour un accessoire qui en a une (absent des fichiers anciens).
     public var batterie: BatterieMaison?
+    /// `HMAccessory.uniqueIdentifier` en texte (UUID) : ce que vise « Identifier » (absent des releves de version 1).
+    public var id: String?
 
     public init(nom: String, piece: String? = nil, fabricant: String? = nil, modele: String? = nil,
                 firmware: String? = nil, categorie: String? = nil, noeudMatter: String? = nil, pont: Bool? = nil,
-                batterie: BatterieMaison? = nil) {
+                batterie: BatterieMaison? = nil, id: String? = nil) {
         self.nom = nom
         self.piece = piece
         self.fabricant = fabricant
@@ -108,6 +110,7 @@ public struct AccessoireMaison: Codable, Hashable, Sendable {
         self.noeudMatter = noeudMatter
         self.pont = pont
         self.batterie = batterie
+        self.id = id
     }
 
     /// `matterNodeID` en 16 hexa majuscules ; nil pour un accessoire non Matter (absent ou 0).
@@ -133,8 +136,8 @@ public struct ZoneMaison: Codable, Hashable, Sendable {
 /// l'envoie a l'app par la boucle locale (`EnvoiPasseur`), et l'app garde le dernier
 /// releve valide dans son conteneur (`noms.json`).
 public struct NomsMaison: Codable, Hashable, Sendable {
-    /// Les zones, champ facultatif ajoute ensuite, ne la changent pas.
-    public static let versionActuelle = 1
+    /// 2 : l'identifiant des accessoires (demon Passeur Noms, 12/10/2026). Les zones, champ facultatif, ne l'ont pas changee.
+    public static let versionActuelle = 2
 
     public var version: Int
     public var date: Date
@@ -171,5 +174,18 @@ public struct NomsMaison: Codable, Hashable, Sendable {
 
     public func donnees() throws -> Data {
         try CodageJSON.encodeur(lisible: true).encode(self)
+    }
+
+    /// Le releve au format de la version 1, sans les `id` : une ancienne app qui demande un releve ponctuel (Maillage
+    /// Thread 1.2, Maillage Zigbee 1.1) refuse une version plus recente que la sienne.
+    public func enVersion1() -> NomsMaison {
+        var n = self
+        n.version = 1
+        n.accessoires = accessoires.map { a in
+            var a = a
+            a.id = nil
+            return a
+        }
+        return n
     }
 }
