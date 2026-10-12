@@ -3,6 +3,20 @@
   <channel>
     <title>Maillage Thread</title>
     <item>
+      <title>1.2.2</title>
+      <pubDate>Mon, 12 Oct 2026 15:44:26 +0000</pubDate>
+      <sparkle:version>510</sparkle:version>
+      <sparkle:shortVersionString>1.2.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+<p><strong>English</strong></p>
+<ul><li>Signed with an Apple Developer ID and notarized by Apple: a fresh download opens without going through System Settings, Privacy &amp; Security, "Open Anyway".</li><li>Updating from 1.2.1 or earlier: at the first launch of 1.2.2, macOS says the app differs from the versions opened before and asks whether to open it; choose "Open Anyway". Only once: the keychain, the data and the settings are kept.</li><li>A device whose address Bonjour no longer advertises is marked "address not advertised" (it used to read "no address"). The probe looks for it at its last address: if it answers, the device is shown reachable and attached to its parent, with a dashed yellow ring and "checked by the probe … ago". This needs the probe on firmware 1.1.1.</li><li>"Link to a Home accessory…" in the card of a device that Home doesn't name: the name and the room of the accessory you pick are used.</li><li>Probe firmware 1.1.1 (to flash, see <code>sonde/README.md</code>): the address resolution says whether the device answered; the LED follows the other boards (blue, adhesion greens, the rainbow of identification, a white glow every 10 seconds); the default name is SONDE-T1.</li></ul>
+<p><strong>Français</strong></p>
+<ul><li>Signée par un Developer ID d'Apple et notarisée par Apple : une app fraîchement téléchargée s'ouvre sans passer par Réglages Système, Confidentialité et sécurité, « Ouvrir quand même ».</li><li>Depuis la 1.2.1 ou avant : au premier lancement de la 1.2.2, macOS dit que l'app diffère des versions ouvertes jusque-là et demande s'il faut l'ouvrir ; choisir « Ouvrir quand même ». Une seule fois : le trousseau, les données et les réglages sont gardés.</li><li>Un appareil dont Bonjour n'annonce plus l'adresse est marqué « adresse non annoncée » (il disait « sans adresse »). La sonde le cherche par sa dernière adresse : s'il lui répond, l'appareil est montré joignable et rattaché à son parent, avec un anneau jaune pointillé et « vérifié par la sonde il y a … ». Il faut pour cela la sonde en firmware 1.1.1.</li><li>« Associer à un accessoire de Maison… » dans la fiche d'un appareil que Maison ne nomme pas : le nom et la pièce de l'accessoire choisi sont repris.</li><li>Firmware de la sonde 1.1.1 (à flasher, voir <code>sonde/README.md</code>) : la résolution d'adresse dit si l'appareil a répondu ; la LED s'aligne sur les autres cartes (bleu, verts d'adhésion, arc-en-ciel d'identification, lueur blanche toutes les 10 secondes) ; le nom par défaut est SONDE-T1.</li></ul>
+]]></description>
+      <enclosure url="https://github.com/Djoko-cli/maillage-thread/releases/download/maillage-v1.2.2/Maillage-Thread-1.2.2.dmg" length="9125664" type="application/octet-stream" sparkle:edSignature="DDmW3/nKZxoJSRx8L9JgeC6cUBykaHrckgZ/Aa+Il2u0PGkbIoPMnRQFwc+kXNF8z84XuoND6Llzj2H9hwclDw=="/>
+    </item>
+    <item>
       <title>1.2.1</title>
       <pubDate>Mon, 12 Oct 2026 09:13:34 +0000</pubDate>
       <sparkle:version>493</sparkle:version>
