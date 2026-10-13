@@ -3,6 +3,20 @@
   <channel>
     <title>Maillage Thread</title>
     <item>
+      <title>1.3.0</title>
+      <pubDate>Tue, 13 Oct 2026 10:33:57 +0000</pubDate>
+      <sparkle:version>544</sparkle:version>
+      <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+<p><strong>English</strong></p>
+<ul><li>Home names now come from a new <strong>Passeur Noms</strong>, a background helper with no window and no Dock icon: install or update it with <code>outils/passeur.sh</code> (the old "Designed for iPad" Passeur Noms is replaced; Home access may be asked once more). Maillage Thread subscribes to it at launch: a device renamed or moved in Home changes in the app within seconds, without relaunching anything.</li><li>"Identify" in the card of a device linked to a Home accessory: the accessory blinks or beeps.</li><li>Settings › Home: the state of Passeur Noms, "Open Passeur Noms at login", and a warning 30 days before its development profile expires (run <code>outils/passeur.sh</code> again). Batteries are read every hour by Passeur Noms.</li><li>If the installed Passeur Noms is the old one, the app says so instead of opening it.</li></ul>
+<p><strong>Français</strong></p>
+<ul><li>Les noms de Maison viennent d'un nouveau <strong>Passeur Noms</strong>, en arrière-plan, sans fenêtre ni icône dans le Dock : l'installer ou le mettre à jour avec <code>outils/passeur.sh</code> (il remplace l'ancien Passeur Noms « conçu pour iPad » ; l'accès à Maison peut être redemandé une fois). Maillage Thread s'y abonne au lancement : un appareil renommé ou déplacé dans Maison change dans l'app en quelques secondes, sans rien relancer.</li><li>« Identifier » dans la fiche d'un appareil relié à un accessoire de Maison : l'accessoire clignote ou émet un son.</li><li>Réglages › Maison : l'état de Passeur Noms, « Ouvrir Passeur Noms à l'ouverture de session », et un avertissement 30 jours avant l'expiration de son profil de développement (relancer <code>outils/passeur.sh</code>). Les batteries sont relues toutes les heures par Passeur Noms.</li><li>Si le Passeur Noms installé est l'ancien, l'app le dit au lieu de l'ouvrir.</li></ul>
+]]></description>
+      <enclosure url="https://github.com/Djoko-cli/maillage-thread/releases/download/maillage-v1.3.0/Maillage-Thread-1.3.0.dmg" length="9207299" type="application/octet-stream" sparkle:edSignature="WPDg0OFP5S5WopTeKaGTXwEAk4md9GeRBNUd9RIJ/Vr71drOcw+B090b136KFOQ2KfxC2/do9eoyXm9Wu4tdDA=="/>
+    </item>
+    <item>
       <title>1.2.2</title>
       <pubDate>Mon, 12 Oct 2026 15:44:26 +0000</pubDate>
       <sparkle:version>510</sparkle:version>
