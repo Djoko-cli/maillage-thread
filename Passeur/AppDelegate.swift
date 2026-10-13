@@ -32,7 +32,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         UISceneConfiguration(name: "Defaut", sessionRole: session.role)
     }
 
-    /// URL recues par une scene (`SceneDelegate`).
+    /// URL recues par une scene (`SceneDelegate`, qui reste connectee : sa fenetre est invisible).
     func recevoir(_ urls: [URL]) {
         guard let demon else { return }
         for url in urls {

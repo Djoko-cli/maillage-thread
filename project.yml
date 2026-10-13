@@ -130,6 +130,8 @@ targets:
       path: Passeur/Info.plist
       properties:
         CFBundleDisplayName: Passeur Noms
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # Schema d'URL par lequel les apps lui donnent le port et le jeton (EnvoiPasseur.schema).
         CFBundleURLTypes:
           - CFBundleURLName: fr.djoko.maillage.passeur
@@ -141,7 +143,7 @@ targets:
         MaillagePasseurProtocole: 1
         NSHomeKitUsageDescription: "Passeur Noms lit les noms, pièces, zones, fabricants et batteries de vos accessoires Maison pour Maillage Thread et Maillage Zigbee, et fait clignoter un accessoire quand vous le demandez (Identifier). Rien ne sort de ce Mac."
         UILaunchScreen: {}
-        # macOS 27 impose une scene : declaree sans contenu, refermee des sa connexion (SceneDelegate).
+        # macOS 27 impose une scene : declaree sans contenu, gardee connectee et invisible (SceneDelegate).
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:
