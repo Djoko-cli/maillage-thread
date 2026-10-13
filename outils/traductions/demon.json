@@ -22,5 +22,6 @@
   "Le profil de Passeur Noms expire le %@ : relance outils/passeur.sh.": "The Passeur Noms profile expires on %@: run outils/passeur.sh again.",
   "Identifier": "Identify",
   "Passeur Noms n'a pas répondu à la demande de relevé.": "Passeur Noms did not answer the reading request.",
-  "Pas encore de pièces de Maison": "No Home rooms yet"
+  "Pas encore de pièces de Maison": "No Home rooms yet",
+  "Passeur Noms ne démarre pas : relance outils/passeur.sh.": "Passeur Noms does not start: run outils/passeur.sh again."
 }

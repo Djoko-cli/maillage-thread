@@ -95,6 +95,9 @@ final class UneFois {
         self.action = action
     }
 
+    /// Vrai une fois l'action appelee.
+    var fait: Bool { action == nil }
+
     func appeler() {
         let a = action
         action = nil

@@ -3089,6 +3089,22 @@
         }
       }
     },
+    "Passeur Noms ne démarre pas : relance outils/passeur.sh." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms does not start: run outils/passeur.sh again."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passeur Noms ne démarre pas : relance outils/passeur.sh."
+          }
+        }
+      }
+    },
     "Passeur Noms ne s'est pas connecté en 2 minutes." : {
       "localizations" : {
         "en" : {

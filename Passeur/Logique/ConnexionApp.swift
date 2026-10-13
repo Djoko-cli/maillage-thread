@@ -128,7 +128,11 @@ enum LivraisonPonctuelle {
                         }
                     })
                 case .waiting(let e), .failed(let e):
-                    journal.error("relevé ponctuel : connexion impossible : \(String(describing: e), privacy: .public)")
+                    // Apres une livraison reussie, l'annulation de la connexion fait remonter .waiting/.failed (POSIX 50) :
+                    // ce n'est pas une erreur.
+                    if !fin.fait {
+                        journal.error("relevé ponctuel : connexion impossible : \(String(describing: e), privacy: .public)")
+                    }
                     c.cancel()
                     fin.appeler()
                 default:

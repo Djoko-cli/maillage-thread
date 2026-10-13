@@ -261,12 +261,22 @@ final class NomsInternes {
             // homed refuse un demon lance a froid PAR une URL : il coupe sa connexion XPC au premier sync (4097) et ne
             // livre jamais les maisons (banc du 13/10). On le lance donc d'abord SANS URL, on attend qu'il tourne et
             // que HomeKit se stabilise, puis on envoie l'URL. S'il tourne deja, on envoie l'URL directement.
-            if NSRunningApplication.runningApplications(withBundleIdentifier: idPasseur).isEmpty {
+            // Seule compte la copie trouvee par le schema : une copie perimee qui tourne (ancien passeur iOS, autre
+            // chemin) ne ferait pas de `url` un demon deja lance.
+            let tourne = {
+                NSRunningApplication.runningApplications(withBundleIdentifier: idPasseur)
+                    .contains { $0.bundleURL?.standardizedFileURL == url.standardizedFileURL }
+            }
+            if !tourne() {
                 _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
                 var essais = 0
-                while NSRunningApplication.runningApplications(withBundleIdentifier: idPasseur).isEmpty, essais < 100 {
+                while !tourne(), essais < 100 {
                     try? await Task.sleep(for: .milliseconds(100))
                     essais += 1
+                }
+                // Toujours pas lance apres 10 s : envoyer l'URL a froid serait refuse par HomeKit.
+                guard tourne() else {
+                    return String(localized: "Passeur Noms ne démarre pas : relance outils/passeur.sh.")
                 }
                 try? await Task.sleep(for: attenteDemarrage)
             }

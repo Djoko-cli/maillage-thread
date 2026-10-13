@@ -168,4 +168,15 @@ struct ConnexionAppTests {
         app.fermer()
         #expect(await attendreQue { fini.valeur })
     }
+
+    /// `fait` sert a ne pas journaliser comme erreur le `.waiting` qui suit l'annulation d'une livraison reussie.
+    @Test func uneFoisFait() async {
+        let appels = Boite(0)
+        let fin = UneFois { appels.valeur += 1 }
+        #expect(!fin.fait)
+        fin.appeler()
+        #expect(fin.fait)
+        fin.appeler()
+        #expect(appels.valeur == 1)
+    }
 }
