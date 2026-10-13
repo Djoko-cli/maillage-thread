@@ -37,6 +37,9 @@ final class NomsInternes {
     nonisolated static let preavisProfil: TimeInterval = 30 * 24 * 3600
     /// Duree d'affichage du resultat d'une identification.
     nonisolated static let dureeIdentification: Duration = .seconds(4)
+    /// Pause apres le lancement sans URL du demon : le temps que HomeKit se stabilise (banc du 13/10 : maisons livrees
+    /// en 0,2 s).
+    nonisolated static let attenteDemarrage: Duration = .milliseconds(1500)
 
     /// Dernier releve valide.
     private(set) var noms: NomsMaison?
@@ -243,8 +246,8 @@ final class NomsInternes {
         surNoms?(garde)
     }
 
-    /// Lanceur reel : Passeur Noms, installe par outils/passeur.sh, ouvert sans activation avec l'URL de la cible. Pas
-    /// d'arguments de lancement : macOS retire ceux que passe une app du bac a sable (verifie le 30/09).
+    /// Lanceur reel : Passeur Noms, installe par outils/passeur.sh, ouvert sans activation, d'abord sans URL puis avec
+    /// l'URL de la cible. Pas d'arguments de lancement : macOS retire ceux que passe une app du bac a sable (verifie le 30/09).
     static func lancerPasseurDuMac(_ cible: EnvoiPasseur.Cible) async -> String? {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: idPasseur) else {
             return String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
@@ -254,6 +257,18 @@ final class NomsInternes {
         configuration.activates = false
         configuration.addsToRecentItems = false
         do {
+            // homed refuse un demon lance a froid PAR une URL : il coupe sa connexion XPC au premier sync (4097) et ne
+            // livre jamais les maisons (banc du 13/10). On le lance donc d'abord SANS URL, on attend qu'il tourne et
+            // que HomeKit se stabilise, puis on envoie l'URL. S'il tourne deja, on envoie l'URL directement.
+            if NSRunningApplication.runningApplications(withBundleIdentifier: idPasseur).isEmpty {
+                _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+                var essais = 0
+                while NSRunningApplication.runningApplications(withBundleIdentifier: idPasseur).isEmpty, essais < 100 {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    essais += 1
+                }
+                try? await Task.sleep(for: attenteDemarrage)
+            }
             _ = try await NSWorkspace.shared.open([cible.url], withApplicationAt: url, configuration: configuration)
             return nil
         } catch {

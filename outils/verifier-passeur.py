@@ -70,7 +70,35 @@ def ecouter():
     return s, s.getsockname()[1]
 
 
+ID_PASSEUR = "fr.djoko.maillage.passeur"
+ATTENTE_DEMARRAGE = 1.5
+
+
+def passeur_tourne():
+    r = subprocess.run(["pgrep", "-f", "Passeur Noms.app/Contents/MacOS"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return r.returncode == 0
+
+
+def lancer_sans_url():
+    # HomeKit refuse un demon lance a froid PAR une URL (homed coupe la connexion au premier sync, les maisons
+    # n'arrivent jamais : banc du 13/10). On le lance donc d'abord sans URL, puis on attend qu'il soit stable.
+    if passeur_tourne():
+        return
+    r = subprocess.run(["open", "-g", "-b", ID_PASSEUR], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if r.returncode != 0:
+        raise SystemExit(f"open a echoue (code {r.returncode}) : Passeur Noms installe ? (outils/passeur.sh)")
+    for _ in range(100):
+        if passeur_tourne():
+            break
+        time.sleep(0.1)
+    else:
+        raise SystemExit("Passeur Noms ne demarre pas (10 s)")
+    time.sleep(ATTENTE_DEMARRAGE)
+
+
 def ouvrir(demande, port, jeton):
+    lancer_sans_url()
     # Sortie de `open` masquee : elle pourrait reprendre l'URL, donc le jeton. Pas de check=True : son exception
     # afficherait l'URL complete.
     r = subprocess.run(["open", "-g", f"maillage-passeur://{demande}?port={port}&jeton={jeton}"],

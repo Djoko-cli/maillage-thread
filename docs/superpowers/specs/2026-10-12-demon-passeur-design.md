@@ -45,6 +45,8 @@ Aujourd'hui, Passeur Noms est une app iOS « conçue pour iPad », lancée sur l
 
 Lecture stricte, comme aujourd'hui : port de 1 à 65535, jeton de 64 chiffres hexadécimaux en minuscules, rien d'autre dans la requête. L'app ouvre l'URL sans activer le démon (`activates = false`), l'URL étant le seul moyen de lui passer quelque chose (macOS retire les arguments de lancement d'une app du bac à sable).
 
+- **Banc du 13/10 :** HomeKit refuse un démon lancé à froid *par* une URL : homed coupe sa connexion XPC au premier sync (« Connection to daemon was interrupted », `NSCocoaErrorDomain` 4097) et ne livre jamais les maisons ; le démon répond à `etat` mais n'envoie aucun `releve`. Lancé *sans* URL (`open -g <app>`, ou à l'ouverture de session), il reçoit les maisons en 0,2 s et les URL envoyées ensuite fonctionnent. Règle : toute app cliente (Maillage Zigbee comprise) lance d'abord le démon sans URL, attend qu'il tourne puis 1,5 s, et seulement ensuite envoie l'URL (`abonner` ou `releve`).
+
 ### 2.2 La connexion et les trames
 
 1. L'app écoute sur 127.0.0.1, sur un port choisi par le système, et tire un jeton à usage unique (32 octets aléatoires).

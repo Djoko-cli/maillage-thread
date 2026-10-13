@@ -409,7 +409,10 @@ outils/passeur.sh          # build with your team (Xcode account), install, laun
 - The exchange: Maillage Thread listens on `127.0.0.1` (TCP, on a port chosen
   by the system), generates a one-time token and opens Passeur Noms in the
   background with the URL `maillage-passeur://abonner?port=…&jeton=…` (a
-  sandboxed app cannot pass launch arguments: macOS drops them). The daemon
+  sandboxed app cannot pass launch arguments: macOS drops them). If Passeur
+  Noms is not running, the app first starts it without a URL and waits for it
+  before sending the URL, because HomeKit refuses a daemon launched directly by
+  a URL. The daemon
   connects to `127.0.0.1`, sends the token, then both sides exchange frames
   `<length>\n<JSON>`, at most 8 MB each: the daemon sends `etat` (version,
   Home access, open at login, profile expiry), `releve` (the names) and

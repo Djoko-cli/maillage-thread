@@ -30,12 +30,52 @@ class FauxSocket:
 
 
 class Ouvrir(unittest.TestCase):
-    def test_echec_sans_jeton(self):
-        with mock.patch.object(vp.subprocess, "run", return_value=types.SimpleNamespace(returncode=1)):
-            with self.assertRaises(SystemExit) as cm:
-                vp.ouvrir("releve", 1234, "a" * 64)
+    JETON = "a" * 64
+
+    def lancer(self, tourne, codes_open):
+        """Appelle ouvrir() avec un faux pgrep (`tourne`) et les codes de retour successifs des `open`."""
+        appels = []
+        codes = iter(codes_open)
+
+        def faux_run(cmd, **_):
+            appels.append(cmd)
+            if cmd[0] == "pgrep":
+                return types.SimpleNamespace(returncode=0 if tourne() else 1)
+            return types.SimpleNamespace(returncode=next(codes))
+
+        with mock.patch.object(vp.subprocess, "run", side_effect=faux_run), \
+                mock.patch.object(vp.time, "sleep"):
+            vp.ouvrir("releve", 1234, self.JETON)
+        return [c for c in appels if c[0] == "open"]
+
+    def test_deja_lance_ouvre_seulement_l_url(self):
+        ouvertures = self.lancer(lambda: True, [0])
+        self.assertEqual(len(ouvertures), 1)
+        self.assertTrue(ouvertures[0][-1].startswith("maillage-passeur://releve?port=1234"))
+
+    def test_pas_lance_ouvre_l_app_puis_l_url(self):
+        etat = {"n": 0}
+
+        def tourne():
+            etat["n"] += 1
+            return etat["n"] > 1  # absent au premier controle, present ensuite
+
+        ouvertures = self.lancer(tourne, [0, 0])
+        self.assertEqual(len(ouvertures), 2)
+        self.assertEqual(ouvertures[0], ["open", "-g", "-b", "fr.djoko.maillage.passeur"])
+        self.assertTrue(ouvertures[1][-1].startswith("maillage-passeur://"))
+
+    def test_ouverture_de_l_app_en_echec_sans_jeton(self):
+        with self.assertRaises(SystemExit) as cm:
+            self.lancer(lambda: False, [1])
         self.assertIn("open a echoue (code 1)", str(cm.exception))
-        self.assertNotIn("a" * 64, str(cm.exception))
+        self.assertNotIn(self.JETON, str(cm.exception))
+
+    def test_echec_de_l_url_sans_jeton(self):
+        with self.assertRaises(SystemExit) as cm:
+            self.lancer(lambda: True, [1])
+        self.assertIn("open a echoue (code 1)", str(cm.exception))
+        self.assertNotIn(self.JETON, str(cm.exception))
 
 
 class Traiter(unittest.TestCase):

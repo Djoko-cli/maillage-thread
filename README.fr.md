@@ -430,7 +430,9 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, 
   par le système), tire un jeton à usage unique et ouvre Passeur Noms en
   arrière-plan avec l'URL `maillage-passeur://abonner?port=…&jeton=…` (une app
   du bac à sable ne peut pas passer d'arguments de lancement : macOS les
-  retire). Le démon se connecte à `127.0.0.1`, envoie le jeton, puis les deux
+  retire). Si Passeur Noms ne tourne pas, l'app le lance d'abord sans URL et
+  l'attend avant d'envoyer l'URL, car HomeKit refuse un démon lancé directement
+  par une URL. Le démon se connecte à `127.0.0.1`, envoie le jeton, puis les deux
   côtés échangent des trames `<longueur>\n<JSON>`, de 8 Mo au plus : le démon
   envoie `etat` (version, accès à Maison, ouverture de session, expiration du
   profil), `releve` (les noms) et `identifie` (la réponse à une
