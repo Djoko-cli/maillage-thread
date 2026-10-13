@@ -137,9 +137,11 @@ targets:
           - CFBundleURLName: fr.djoko.maillage.passeur
             CFBundleURLSchemes:
               - maillage-passeur
+              # Second schema : seul le nouveau demon le declare, les apps le trouvent par lui (EnvoiPasseur.schemaProtocole).
+              - maillage-passeur-1
         # Ni Dock ni menu : un demon.
         LSUIElement: true
-        # Version du protocole parle (abonnement) : outils/passeur.sh et les apps reconnaissent ainsi le demon.
+        # Version du protocole parle (abonnement) : outils/passeur.sh reconnait ainsi le demon (les apps, par le schema).
         MaillagePasseurProtocole: 1
         NSHomeKitUsageDescription: "Passeur Noms lit les noms, pièces, zones, fabricants et batteries de vos accessoires Maison pour Maillage Thread et Maillage Zigbee, et fait clignoter un accessoire quand vous le demandez (Identifier). Rien ne sort de ce Mac."
         UILaunchScreen: {}

@@ -436,7 +436,10 @@ outils/passeur.sh          # build with your team (Xcode account), install, laun
   accessory makes the accessory blink or beep; Settings › Home shows the state
   of Passeur Noms, the switch "Open Passeur Noms at login" and a warning 30
   days before its profile expires; if the installed Passeur Noms is the old
-  one, the app says so instead of opening it.
+  one, the app says so instead of opening it. The app tells the new daemon by
+  the `maillage-passeur-1` URL scheme that only the daemon declares (it asks
+  LaunchServices which app opens it), never by reading the daemon's bundle,
+  which the sandbox forbids.
 - Bench tool, without the app: `python3 outils/verifier-passeur.py releve|abonner`
   plays the app on the loopback and prints only counts and states (never a
   name, an identifier or the token).

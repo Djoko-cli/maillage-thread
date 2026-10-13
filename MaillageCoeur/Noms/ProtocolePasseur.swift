@@ -19,6 +19,10 @@ public enum EnvoiPasseur {
     public static let octetsJeton = 32
     /// Schema d'URL du passeur : il le declare dans son Info.plist (`CFBundleURLTypes`, `project.yml`).
     public static let schema = "maillage-passeur"
+    /// Second schema, declare par le nouveau demon seulement (l'ancien passeur ne l'a pas). Une app trouve le demon en
+    /// demandant a LaunchServices quelle app ouvre ce schema (`NSWorkspace.urlForApplication(toOpen:)`) : sans lire
+    /// aucun paquet (le bac a sable l'interdit) et sans tomber sur une copie perimee.
+    public static let schemaProtocole = "maillage-passeur-1"
     /// Chiffres d'un jeton : hexadecimaux, en minuscules. `nouveauJeton()` les tire, `Cible(url:)`
     /// n'en accepte pas d'autres.
     private static let chiffresJeton = "0123456789abcdef"

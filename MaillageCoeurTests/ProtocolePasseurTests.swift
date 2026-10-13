@@ -26,6 +26,12 @@ struct ProtocolePasseurTests {
         #expect(EnvoiPasseur.Cible(url: abonne) == nil, "autre hote")
     }
 
+    /// Les schemas : celui des URL, et celui que seul le nouveau demon declare (les apps le cherchent par lui).
+    @Test func schemas() {
+        #expect(EnvoiPasseur.schema == "maillage-passeur")
+        #expect(EnvoiPasseur.schemaProtocole == "maillage-passeur-1")
+    }
+
     /// Chaque message se relit tel quel.
     @Test(arguments: [
         MessagePasseur.etat(ProtocolePasseurTests.etat),

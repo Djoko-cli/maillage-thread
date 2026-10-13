@@ -457,7 +457,10 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, 
   sonner l'accessoire ; Réglages › Maison montre l'état de Passeur Noms,
   l'interrupteur « Ouvrir Passeur Noms à l'ouverture de session » et un
   avertissement 30 jours avant l'expiration de son profil ; si le Passeur
-  Noms installé est l'ancien, l'app le dit au lieu de l'ouvrir.
+  Noms installé est l'ancien, l'app le dit au lieu de l'ouvrir. L'app
+  reconnaît le nouveau démon au schéma d'URL `maillage-passeur-1`, que lui seul
+  déclare (elle demande à LaunchServices quelle app l'ouvre), jamais en lisant
+  son paquet, ce que le bac à sable interdit.
 - Outil de banc, sans l'app : `python3 outils/verifier-passeur.py releve|abonner`
   joue le rôle de l'app sur la boucle locale et n'affiche que des nombres et
   des états (jamais un nom, un identifiant ni le jeton).

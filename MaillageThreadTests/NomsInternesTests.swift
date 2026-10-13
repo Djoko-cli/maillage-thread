@@ -381,12 +381,14 @@ struct NomsInternesTests {
         #expect(lancements.tous.count == 2)
     }
 
-    /// L'ancien passeur (app iOS, sans la cle du protocole) n'est pas lance : il ne connait pas `abonner`.
+    /// L'ancien passeur (app iOS, sans le schema du protocole) n'est pas lance : il ne connait pas `abonner`.
     @Test func problemeInstallation() {
         let ancienne = String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh.")
-        #expect(NomsInternes.problemeInstallation(nil) == ancienne)
-        #expect(NomsInternes.problemeInstallation(["CFBundleIdentifier": "fr.djoko.maillage.passeur"]) == ancienne)
-        #expect(NomsInternes.problemeInstallation([NomsInternes.cleProtocole: 1]) == nil)
+        let introuvable = String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
+        #expect(NomsInternes.problemeInstallation(nouveau: true, ancien: true) == nil)
+        #expect(NomsInternes.problemeInstallation(nouveau: true, ancien: false) == nil)
+        #expect(NomsInternes.problemeInstallation(nouveau: false, ancien: true) == ancienne)
+        #expect(NomsInternes.problemeInstallation(nouveau: false, ancien: false) == introuvable)
     }
 
     /// Les textes des fins d'abonnement.

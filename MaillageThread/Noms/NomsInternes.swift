@@ -25,9 +25,6 @@ final class NomsInternes {
 
     nonisolated static let fichier = "noms.json"
     nonisolated static let idPasseur = "fr.djoko.maillage.passeur"
-    /// Cle de l'Info.plist du demon : la version du protocole qu'il parle. Absente : l'ancien passeur (app iOS), qui ne
-    /// connait pas `abonner`.
-    nonisolated static let cleProtocole = "MaillagePasseurProtocole"
     /// Premiere attente d'un demon : le temps d'une demande d'acces a Maison. Le texte de `abonner` dit "2 minutes" en
     /// dur : a changer avec cette valeur (le catalogue aussi).
     nonisolated static let delaiParDefaut: Duration = .seconds(120)
@@ -249,10 +246,14 @@ final class NomsInternes {
     /// Lanceur reel : Passeur Noms, installe par outils/passeur.sh, ouvert sans activation, d'abord sans URL puis avec
     /// l'URL de la cible. Pas d'arguments de lancement : macOS retire ceux que passe une app du bac a sable (verifie le 30/09).
     static func lancerPasseurDuMac(_ cible: EnvoiPasseur.Cible) async -> String? {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: idPasseur) else {
-            return String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
+        // Le nouveau demon se trouve par son schema `schemaProtocole`, jamais en lisant son paquet (le bac a sable
+        // l'interdit) ni par son identifiant seul (LaunchServices garde des copies perimees) : banc du 13/10.
+        let marque = URL(string: "\(EnvoiPasseur.schemaProtocole):")
+        let nouveau = marque.flatMap { NSWorkspace.shared.urlForApplication(toOpen: $0) }
+        guard let url = nouveau else {
+            let ancien = NSWorkspace.shared.urlForApplication(withBundleIdentifier: idPasseur) != nil
+            return problemeInstallation(nouveau: false, ancien: ancien)
         }
-        if let p = problemeInstallation(Bundle(url: url)?.infoDictionary) { return p }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = false
         configuration.addsToRecentItems = false
@@ -277,11 +278,14 @@ final class NomsInternes {
         }
     }
 
-    /// L'ancien passeur (app iOS, sans `cleProtocole`) ne connait pas `abonner` et ouvrirait sa fenetre a chaque essai :
-    /// il n'est pas lance.
-    nonisolated static func problemeInstallation(_ info: [String: Any]?) -> String? {
-        (info?[cleProtocole] as? Int) != nil
-            ? nil : String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh.")
+    /// `nouveau` : une app ouvre `schemaProtocole` (le demon) ; `ancien` : une app porte l'identifiant du passeur.
+    /// L'ancien passeur (app iOS, sans ce schema) ne connait pas `abonner` et ouvrirait sa fenetre a chaque essai : il
+    /// n'est pas lance.
+    nonisolated static func problemeInstallation(nouveau: Bool, ancien: Bool) -> String? {
+        if nouveau { return nil }
+        return ancien
+            ? String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh.")
+            : String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
     }
 
     /// L'attente avant le prochain abonnement, apres `tentative` echecs.
