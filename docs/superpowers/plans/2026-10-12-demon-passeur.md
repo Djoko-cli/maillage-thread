@@ -4522,13 +4522,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Pas de code, sauf correctifs. Djoko présent ; Maillage Thread 1.3.0 compilé localement (compilation de travail : Sparkle ne la remplace pas), lancé par Djoko après avoir quitté l'app installée. Chaque correctif passe par un test qui échoue d'abord, dans la tâche concernée.
 
-- [ ] **Step 1 :** Djoko quitte Maillage Thread 1.2.2 ; le contrôleur compile la branche (`outils/tester.sh` vert, puis compilation de l'app) ; Djoko lance la compilation de travail.
-- [ ] **Step 2 (banc 2) :** l'app est abonnée (Réglages › Maison : « connecté · version 2.0 · accès à Maison autorisé ») ; Djoko renomme un accessoire dans Maison : le nom change dans l'app en quelques secondes ; puis il lui rend son nom.
-- [ ] **Step 3 (banc 3) :** « Identifier » dans la fiche d'un appareil relié (par exemple le FP300 de l'essai du 12/10) : l'appareil réagit, la fiche dit « Identification demandée ».
-- [ ] **Step 4 (banc 4) :** l'interrupteur « Ouvrir Passeur Noms à l'ouverture de session » : macOS montre « Élément d'arrière-plan ajouté » ; Djoko ferme sa session puis la rouvre : `pgrep -lf "Passeur Noms.app/Contents/MacOS"` montre le démon avant l'ouverture de Maillage Thread.
-- [ ] **Step 5 (banc 5) :** le contrôleur arrête le démon par son PID (`kill <PID>`) : l'app se réabonne seule (délai de 5 s, puis le démon relancé par l'URL) ; Réglages › Maison repasse à « connecté ».
-- [ ] **Step 6 (banc 6) :** Maillage Thread 1.2.2 (l'app installée, relevé ponctuel) : Djoko la relance à la place de la compilation de travail, ouvre la vue par pièces ou « Rafraîchir depuis Maison » : les noms arrivent, sans fenêtre ni erreur de version.
-- [ ] **Step 7 :** journal du démon relu (aucun nom, aucun UUID) ; résultats notés dans la mémoire du projet (`maillage-thread-projet.md`, `demon-homekit-catalyst.md`).
+- [x] **Step 1 :** Djoko quitte Maillage Thread 1.2.2 ; le contrôleur compile la branche (`outils/tester.sh` vert, puis compilation de l'app) ; Djoko lance la compilation de travail.
+- [x] **Step 2 (banc 2) :** l'app est abonnée (Réglages › Maison : « connecté · version 2.0 · accès à Maison autorisé ») ; Djoko renomme un accessoire dans Maison : le nom change dans l'app en quelques secondes ; puis il lui rend son nom.
+- [x] **Step 3 (banc 3) :** « Identifier » dans la fiche d'un appareil relié (par exemple le FP300 de l'essai du 12/10) : l'appareil réagit, la fiche dit « Identification demandée ».
+- [ ] **Step 4 (banc 4) :** l'interrupteur « Ouvrir Passeur Noms à l'ouverture de session » : macOS montre « Élément d'arrière-plan ajouté » ; Djoko ferme sa session puis la rouvre : `pgrep -lf "Passeur Noms.app/Contents/MacOS"` montre le démon avant l'ouverture de Maillage Thread. **Non fait : saute par Djoko le 13/10 (trop contraignant) ; inscription acceptee, demarrage a verifier a la prochaine session.**
+- [x] **Step 5 (banc 5) :** le contrôleur arrête le démon par son PID (`kill <PID>`) : l'app se réabonne seule (délai de 5 s, puis le démon relancé par l'URL) ; Réglages › Maison repasse à « connecté ».
+- [x] **Step 6 (banc 6) :** Maillage Thread 1.2.2 (l'app installée, relevé ponctuel) : Djoko la relance à la place de la compilation de travail, ouvre la vue par pièces ou « Rafraîchir depuis Maison » : les noms arrivent, sans fenêtre ni erreur de version.
+- [x] **Step 7 :** journal du démon relu (aucun nom, aucun UUID) ; résultats notés dans la mémoire du projet (`maillage-thread-projet.md`, `demon-homekit-catalyst.md`).
 
 Après le banc : relecture finale de toute la branche par Opus, puis fusion sur `main` et push après le balayage d'anonymisation, sur demande de Djoko. La publication de 1.3.0 attend un « publie 1.3.0 » explicite.
 
