@@ -4536,7 +4536,7 @@ Après le banc : relecture finale de toute la branche par Opus, puis fusion sur 
 
 ### Task 15 : passation à la session Zigbee
 
-- [ ] **Step 1 :** avec l'accord de Djoko, envoyer à la session Maillage Zigbee (outil de messages entre sessions) une fiche courte :
+- [x] **Step 1 :** avec l'accord de Djoko, envoyer à la session Maillage Zigbee (outil de messages entre sessions) une fiche courte :
   - recopier **à l'octet** `MaillageCoeur/Noms/ProtocolePasseur.swift` (il remplace son `EnvoiPasseur.swift`) et `MaillageCoeurTests/ProtocolePasseurTests.swift` depuis `main` de Maillage Thread, puis vérifier avec `cmp` ;
   - le relevé arrive en JSON brut (`MessagePasseur.releve(Data)`) : le lire dans `ReleveMaison`, qui gagne `id` dans `AccessoireReleve` et `versionActuelle = 2` (version 1 toujours lisible) ;
   - `NomsPasseur` devient client abonné selon la spec, section 4.2, en reprenant `AbonnementPasseur` et le `NomsInternes` de Thread (réabonnement 5/10/30/60 s, délai 2 min, `relire`, `identifier`, `ouvertureSession`) ;
