@@ -415,7 +415,7 @@ outils/passeur.sh          # build with your team (Xcode account), install, laun
   a URL. The daemon
   connects to `127.0.0.1`, sends the token, then both sides exchange frames
   `<length>\n<JSON>`, at most 8 MB each: the daemon sends `etat` (version,
-  Home access, open at login, profile expiry), `releve` (the names) and
+  Home access, open at login, profile expiry), `releve` (the names, as shown on the Home tiles: the name of each accessory's primary service, else the accessory name) and
   `identifie` (the answer to an identification); the app sends `relire`,
   `identifier` and `ouvertureSession`. The app checks the token, and writes
   `noms.json` in its own container (atomic write). An unknown message is

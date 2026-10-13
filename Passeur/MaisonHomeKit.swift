@@ -64,7 +64,9 @@ final class MaisonHomeKit: NSObject, SourceMaison, HMHomeManagerDelegate, HMHome
     private func releveCourant() -> NomsMaison {
         let accessoires = gestionnaire.homes.flatMap(\.accessories).map { a in
             let b = Self.batterie(a)
-            return AccessoireMaison(nom: a.name, piece: a.room?.name, fabricant: a.manufacturer, modele: a.model,
+            return AccessoireMaison(nom: NomAccessoire.affiche(accessoire: a.name,
+                                                               servicePrincipal: a.services.first(where: \.isPrimaryService)?.name),
+                                    piece: a.room?.name, fabricant: a.manufacturer, modele: a.model,
                                     firmware: a.firmwareVersion, categorie: a.category.localizedDescription,
                                     noeudMatter: AccessoireMaison.noeud(a.matterNodeID),
                                     pont: a.category.categoryType == HMAccessoryCategoryTypeBridge ? true : nil,
@@ -160,6 +162,9 @@ final class MaisonHomeKit: NSObject, SourceMaison, HMHomeManagerDelegate, HMHome
 
     nonisolated func accessoryDidUpdateName(_ accessory: HMAccessory) { Task { @MainActor in self.changer() } }
     nonisolated func accessoryDidUpdateServices(_ accessory: HMAccessory) { Task { @MainActor in self.changer() } }
+    nonisolated func accessory(_ accessory: HMAccessory, didUpdateNameFor service: HMService) {
+        Task { @MainActor in self.changer() }
+    }
 }
 
 /// Compte a rebours des lectures de batteries.
