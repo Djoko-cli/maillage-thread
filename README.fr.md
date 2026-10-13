@@ -435,7 +435,7 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, 
   par une URL. Le démon se connecte à `127.0.0.1`, envoie le jeton, puis les deux
   côtés échangent des trames `<longueur>\n<JSON>`, de 8 Mo au plus : le démon
   envoie `etat` (version, accès à Maison, ouverture de session, expiration du
-  profil), `releve` (les noms, tels que Maison les affiche sur ses vignettes : celui du service principal de l'accessoire, sinon celui de l'accessoire) et `identifie` (la réponse à une
+  profil), `releve` (les noms, tels que Maison les affiche sur ses vignettes : un accessoire à une seule tuile prend le nom de cette tuile, un accessoire à plusieurs tuiles garde le nom de l'accessoire) et `identifie` (la réponse à une
   identification) ; l'app envoie `relire`, `identifier` et `ouvertureSession`.
   L'app vérifie le jeton et écrit `noms.json` dans son conteneur (écriture
   atomique). Un message inconnu est ignoré ; une trame mal formée ferme la

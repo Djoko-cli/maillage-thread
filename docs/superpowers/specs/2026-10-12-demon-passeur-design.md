@@ -101,7 +101,7 @@ Le jeton authentifie le démon auprès de l'app : un autre processus ne peut pas
 ### 3.2 Suivi de Maison
 
 - Délégués de HomeKit : maisons ajoutées ou retirées, maison principale, accessoires ajoutés ou retirés, nom d'un accessoire, d'une pièce ou d'une zone, accessoire changé de pièce, services d'un accessoire mis à jour, nom d'un service renommé.
-- Banc du 13/10 : le nom relevé est celui de la vignette de Maison (nom du service principal de l'accessoire), sinon celui de l'accessoire ; renommer une vignette change le nom du service, pas celui de l'accessoire.
+- Banc du 13/10 : une seule tuile (service interactif, hors informations d'accessoire et batterie) → le nom relevé est celui de cette tuile ; plusieurs tuiles → le nom de l'accessoire (un seul nom par nœud) ; aucune → le nom de l'accessoire. Renommer une tuile change le nom du service, pas celui de l'accessoire.
 - À chaque changement, le démon attend **2 s** que les modifications groupées se terminent, refait le relevé, et l'envoie à tous les abonnés **s'il diffère** du dernier envoyé (date du relevé mise à part).
 - Les **batteries** sont relues toutes les heures, et sur `relire` ; pas d'abonnement aux caractéristiques, pour ne pas solliciter les appareils.
 - La joignabilité ne déclenche aucun envoi.

@@ -64,8 +64,12 @@ final class MaisonHomeKit: NSObject, SourceMaison, HMHomeManagerDelegate, HMHome
     private func releveCourant() -> NomsMaison {
         let accessoires = gestionnaire.homes.flatMap(\.accessories).map { a in
             let b = Self.batterie(a)
-            return AccessoireMaison(nom: NomAccessoire.affiche(accessoire: a.name,
-                                                               servicePrincipal: a.services.first(where: \.isPrimaryService)?.name),
+            // Une tuile de Maison = un service interactif, hors informations d'accessoire et batterie.
+            let tuiles = a.services.filter {
+                $0.isUserInteractive && $0.serviceType != HMServiceTypeAccessoryInformation
+                    && $0.serviceType != HMServiceTypeBattery
+            }.map(\.name)
+            return AccessoireMaison(nom: NomAccessoire.affiche(accessoire: a.name, tuiles: tuiles),
                                     piece: a.room?.name, fabricant: a.manufacturer, modele: a.model,
                                     firmware: a.firmwareVersion, categorie: a.category.localizedDescription,
                                     noeudMatter: AccessoireMaison.noeud(a.matterNodeID),
