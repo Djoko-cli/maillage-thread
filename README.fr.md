@@ -450,6 +450,15 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, 
   les heures (et sur demande). Il reste lancé tant qu'une app est abonnée
   (10 minutes après le départ de la dernière, ou 10 minutes après un
   lancement sans abonné), ou en permanence s'il est inscrit à l'ouverture de
+  session. Limite connue pour les anciennes apps (Maillage Thread 1.2.2,
+  Maillage Zigbee actuel) : elles ouvrent directement l'URL `releve`, et si le
+  démon ne tourne pas, cette URL le lance à froid, ce que HomeKit refuse (il ne
+  reçoit jamais les maisons). Si l'accès à Maison est accordé et qu'aucun bon
+  relevé n'est arrivé 100 s après le lancement, le démon répond aux relevés
+  ponctuels en attente par le relevé en erreur (« Maison n'a pas répondu ») et
+  se ferme, même avec des abonnés (Maillage Thread 1.3.0 se réabonne 5 s plus
+  tard et le relance proprement, sans URL). Les anciennes apps ne sont donc
+  fiables que si le démon tourne déjà, par exemple inscrit à l'ouverture de
   session.
 - Côté app : elle s'abonne au lancement, et de nouveau après 5 s, 10 s, 30 s,
   puis chaque minute si la connexion se ferme ; « Rafraîchir depuis Maison »
@@ -464,8 +473,8 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, 
   déclare (elle demande à LaunchServices quelle app l'ouvre), jamais en lisant
   son paquet, ce que le bac à sable interdit.
 - Outil de banc, sans l'app : `python3 outils/verifier-passeur.py releve|abonner`
-  joue le rôle de l'app sur la boucle locale et n'affiche que des nombres et
-  des états (jamais un nom, un identifiant ni le jeton).
+  joue le rôle de l'app sur la boucle locale, en lançant d'abord le démon sans
+  URL comme le fait l'app, et n'affiche que des nombres et des états (jamais un nom, un identifiant ni le jeton).
 - Priorité des noms : surnom > Maison (par le nœud, puis associé à la main) > HomeKit (`_hap._udp`) > hôte.
 - Un appareil que Maison ne nomme plus par son nœud (il a perdu son inscription à la fabrique d'Apple : le nœud
   exporté par Maison n'est annoncé par personne) peut être associé à la main : sa fiche propose « Associer à un

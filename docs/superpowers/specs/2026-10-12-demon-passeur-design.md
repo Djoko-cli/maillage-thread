@@ -46,7 +46,8 @@ Aujourd'hui, Passeur Noms est une app iOS « conçue pour iPad », lancée sur l
 Lecture stricte, comme aujourd'hui : port de 1 à 65535, jeton de 64 chiffres hexadécimaux en minuscules, rien d'autre dans la requête. L'app ouvre l'URL sans activer le démon (`activates = false`), l'URL étant le seul moyen de lui passer quelque chose (macOS retire les arguments de lancement d'une app du bac à sable).
 
 - **Banc du 13/10 :** HomeKit refuse un démon lancé à froid *par* une URL : homed coupe sa connexion XPC au premier sync (« Connection to daemon was interrupted », `NSCocoaErrorDomain` 4097) et ne livre jamais les maisons ; le démon répond à `etat` mais n'envoie aucun `releve`. Lancé *sans* URL (`open -g <app>`, ou à l'ouverture de session), il reçoit les maisons en 0,2 s et les URL envoyées ensuite fonctionnent. Règle : toute app cliente (Maillage Zigbee comprise) lance d'abord le démon sans URL, attend qu'il tourne puis 1,5 s, et seulement ensuite envoie l'URL (`abonner` ou `releve`).
-- **Banc du 13/10, trouver le démon :** le démon déclare un second schéma, `maillage-passeur-1` (`EnvoiPasseur.schemaProtocole`). Les apps le trouvent par `NSWorkspace.urlForApplication(toOpen:)` et lancent cette app exactement : jamais en lisant son paquet (le bac à sable l'interdit, l'app ne lit pas son Info.plist) ni par l'identifiant seul (LaunchServices garde des copies périmées : anciennes enveloppes « conçu pour iPad », produits de compilation). L'ancien passeur ne déclare pas ce schéma : s'il reste seul avec l'identifiant, l'app dit « ancienne version ».
+- **Banc du 13/10, limite des anciennes apps :** une ancienne app (Maillage Thread 1.2.2, Maillage Zigbee actuel) ouvre `maillage-passeur://releve` directement. Si le démon ne tourne pas, cette URL le lance à froid et homed lui refuse HomeKit : il ne reçoit jamais les maisons. Règle du démon (`attenteMaison`, 100 s) : si l'accès est `autorise` et qu'aucun relevé `ok` n'a été lu 100 s après son lancement, il sert les relevés ponctuels en attente avec le relevé en erreur (« Maison n'a pas répondu »), n'envoie rien d'autre et se ferme (« HomeKit ne répond pas »), **même avec des abonnés** : l'app 1.3.0 se réabonne 5 s plus tard et le relance proprement, sans URL. Accès `attente` (invite à l'écran) ou `refuse` : il ne se ferme pas pour cette raison. Les anciennes apps ne sont donc fiables que si le démon tourne déjà (par exemple inscrit à l'ouverture de session).
+- **Banc du 13/10, trouver le démon :** le démon déclare un second schéma, `maillage-passeur-1` (`EnvoiPasseur.schemaProtocole`). Les apps le trouvent par `NSWorkspace.urlForApplication(toOpen:)` et lancent cette app exactement : jamais en lisant son paquet (le bac à sable l'interdit, l'app ne lit pas son Info.plist) ni par l'identifiant seul (LaunchServices garde des copies périmées : anciennes enveloppes « conçu pour iPad », produits de compilation). L'ancien passeur (app iOS) ne déclare pas ce schéma : s'il reste seul avec l'identifiant, l'app dit « ancienne version ». Le schéma n'exclut que l'ancien passeur : des copies périmées du nouveau démon le déclarent aussi, et `outils/passeur.sh` désinscrit les doublons.
 
 ### 2.2 La connexion et les trames
 
@@ -95,7 +96,7 @@ Le jeton authentifie le démon auprès de l'app : un autre processus ne peut pas
   - politique d'activation `.accessory` ;
   - par sécurité, `orderOut` de toute fenêtre de l'app sur les notifications d'AppKit (devient clé, principale, mise à jour, exposée).
   Validé au cinquième essai : ni fenêtre ni éclair.
-- La scène imposée par UIKit est déclarée, sans contenu, et refermée dès sa connexion.
+- La scène imposée par UIKit est déclarée, sans contenu, et **reste connectée** (sa fenêtre est invisible grâce au Masqueur) : l'URL d'un lancement à froid arrive par cette scène, et la refermer dès sa connexion la perdrait.
 - Il crée le `HMHomeManager` et attend l'autorisation ; `acces` suit `authorizationStatus`.
 
 ### 3.2 Suivi de Maison
@@ -158,7 +159,8 @@ Les mêmes ajouts, faits par la session Zigbee : `ProtocolePasseur.swift` recopi
 | Démon fermé ou planté | — | réabonnement, dernier relevé gardé |
 | Accessoire inconnu ou non identifiable | `identifie` en erreur | message bref dans la fiche |
 | Ouverture de session refusée | `"aApprouver"` | ligne d'explication dans Réglages |
-| Ancienne app (relevé ponctuel) | URL `releve` servie à l'identique | inchangée |
+| Ancienne app (relevé ponctuel), démon déjà lancé | URL `releve` servie à l'identique | inchangée |
+| Ancienne app qui lance le démon à froid par l'URL `releve` | homed lui refuse HomeKit : relevé en erreur « Maison n'a pas répondu » après 100 s, puis le démon se ferme (même avec des abonnés : l'app 1.3.0 le relance sans URL) | échec de ce relevé ; les anciennes apps ne sont fiables que si le démon tourne déjà (par exemple inscrit à l'ouverture de session) |
 
 ## 6. Tests et banc
 

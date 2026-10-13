@@ -429,7 +429,16 @@ outils/passeur.sh          # build with your team (Xcode account), install, laun
   sent only if it differs from the last one; batteries are read every hour
   (and on request). It stays launched while an app is subscribed (10 minutes
   after the last one leaves, or 10 minutes after a launch with no subscriber),
-  or permanently if it is registered to open at login.
+  or permanently if it is registered to open at login. Known limit for older
+  apps (Maillage Thread 1.2.2, current Maillage Zigbee): they open the URL
+  `releve` directly, and if the daemon is not running that URL launches it cold,
+  which HomeKit refuses (it never receives the homes). If access to Home is
+  granted and no good reading arrived 100 s after launch, the daemon answers
+  the pending one-shot readings with the error reading ("Maison n'a pas répondu")
+  and quits, even with subscribers (Maillage Thread 1.3.0 resubscribes 5 s later
+  and relaunches it cleanly, without a URL). Older apps are therefore reliable
+  only if the daemon already runs, for example when it is registered to open at
+  login.
 - In the app: it subscribes at launch, and again after 5 s, 10 s, 30 s, then
   every minute if the connection closes; "Refresh from Home" sends `relire`
   (a request to a connected daemon that does not answer is released after 2
@@ -442,8 +451,9 @@ outils/passeur.sh          # build with your team (Xcode account), install, laun
   LaunchServices which app opens it), never by reading the daemon's bundle,
   which the sandbox forbids.
 - Bench tool, without the app: `python3 outils/verifier-passeur.py releve|abonner`
-  plays the app on the loopback and prints only counts and states (never a
-  name, an identifier or the token).
+  plays the app on the loopback, launching the daemon without a URL first like
+  the app does, and prints only counts and states (never a name, an identifier
+  or the token).
 - Priority of names: nickname > Home (by node, then linked by hand) > HomeKit (`_hap._udp`) > host.
 - A device Home no longer names by its node (it lost its enrolment in Apple's fabric, so the node Home exports is
   announced by nobody) can be linked by hand: its card offers "Link to a Home accessory…", listing the Home

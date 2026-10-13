@@ -116,6 +116,8 @@ struct DemonPasseurViesTests {
 
     @Test func sansAbonneAuLancement() async {
         let b = BancDemon(noms: BancDemon.noms())
+        // Maison repond au lancement : sans cela, le controle de 100 s fermerait le demon avant.
+        b.maison.changer()
         await b.horloge.avancer(.seconds(600))
         #expect(b.sorties == ["aucun abonné depuis 10 minutes"])
     }
@@ -193,5 +195,74 @@ struct DemonPasseurViesTests {
         let n = try NomsMaison.lire(try #require(b.ponctuels.first).json)
         #expect(n.statut == .erreur)
         #expect(n.message == "Maison n'a pas répondu")
+    }
+
+    // MARK: Maison muette apres un lancement a froid par une ancienne app
+
+    static let raisonMaisonMuette = "HomeKit ne répond pas : relance sans URL"
+
+    /// Acces accorde, aucun releve ok en 100 s : le demon se ferme, meme avec un abonne (l'app se reabonne et le relance).
+    @Test func maisonMuetteFermeLeDemonMemeAvecAbonne() async throws {
+        let b = BancDemon()
+        _ = await b.abonner()
+        await b.horloge.avancer(.seconds(99))
+        #expect(b.sorties.isEmpty)
+        await b.horloge.avancer(.seconds(1))
+        #expect(b.sorties == [Self.raisonMaisonMuette])
+        await b.horloge.avancer(.seconds(3600))
+        #expect(b.sorties == [Self.raisonMaisonMuette], "une seule sortie")
+    }
+
+    /// Un releve ok lu avant 100 s : le demon reste.
+    @Test func maisonRepondueAvant100sNeFermePas() async throws {
+        let b = BancDemon(noms: BancDemon.noms())
+        _ = await b.abonner()
+        await b.horloge.avancer(.seconds(100))
+        #expect(b.sorties.isEmpty)
+    }
+
+    /// Maison repond apres le lancement mais avant 100 s (changement groupe) : le demon reste.
+    @Test func maisonRepondueParUnChangementNeFermePas() async throws {
+        let b = BancDemon()
+        _ = await b.abonner()
+        await b.horloge.avancer(.seconds(30))
+        b.maison.noms = BancDemon.noms()
+        b.maison.changer()
+        await b.horloge.avancer(.seconds(200))
+        #expect(b.sorties.isEmpty)
+    }
+
+    /// Un releve en erreur ne compte pas comme une reponse de Maison.
+    @Test func releveEnErreurNeComptePasCommeReponse() async throws {
+        let b = BancDemon(noms: NomsMaison(date: .now, statut: .erreur, message: "Maison indisponible"))
+        _ = await b.abonner()
+        await b.horloge.avancer(.seconds(100))
+        #expect(b.sorties == [Self.raisonMaisonMuette])
+    }
+
+    /// Autorisation en attente (invite a l'ecran) ou refusee : le demon ne se ferme pas pour cette raison.
+    @Test(arguments: [EtatPasseur.Acces.attente, .refuse])
+    func accesNonAccordeNeFermePas(acces: EtatPasseur.Acces) async throws {
+        let b = BancDemon()
+        b.maison.acces = acces
+        _ = await b.abonner()
+        await b.horloge.avancer(.seconds(100))
+        #expect(b.sorties.isEmpty)
+    }
+
+    /// Un releve ponctuel qui attend Maison recoit le releve en erreur, puis le demon part quand l'envoi est fini.
+    @Test func maisonMuetteServitLePonctuelPuisFerme() async throws {
+        let b = BancDemon()
+        _ = await b.abonner()
+        await b.demon.recevoir(url: BancDemon.url(.releve, port: 50_123))
+        await b.horloge.avancer(.seconds(100))
+        let p = try #require(b.ponctuels.first)
+        #expect(p.cible.port == 50_123)
+        let n = try NomsMaison.lire(p.json)
+        #expect(n.statut == .erreur && n.message == "Maison n'a pas répondu")
+        #expect(b.ponctuels.count == 1)
+        #expect(b.sorties.isEmpty, "pas avant la fin de l'envoi")
+        b.finirPonctuels()
+        #expect(b.sorties == [Self.raisonMaisonMuette])
     }
 }

@@ -44,6 +44,12 @@ final class DemonPasseur {
     private var batteries: (any Annulable)?
     private var verification: (any Annulable)?
     private var attente: (any Annulable)?
+    /// Controle de 100 s apres le lancement : Maison a-t-elle donne un releve ok ?
+    private var controleMaison: (any Annulable)?
+    /// Un releve ok a ete lu depuis le lancement.
+    private var releveOkLu = false
+    /// Raison de la sortie decidee par le controle de Maison ; le demon part des que les envois en cours sont finis.
+    private var sortiePrevue: String?
 
     init(source: any SourceMaison, ouverture: any OuvertureSessionDemon, horloge: any Horloge, version: String,
          profilExpire: Date?, connecter: @escaping @MainActor (EnvoiPasseur.Cible) -> any LienApp,
@@ -65,6 +71,7 @@ final class DemonPasseur {
         planifierBatteries()
         planifierVerification()
         verifierDuree()
+        planifierControleMaison()
         journal.notice("lancement, version \(self.version, privacy: .public)")
     }
 
@@ -172,6 +179,11 @@ final class DemonPasseur {
     private func actualiser(batteries: Bool, demandeur: (any LienApp)?) async {
         guard let n = await source.releve(batteries: batteries) else { return }
         dernierReleve = n
+        if n.statut == .ok {
+            releveOkLu = true
+            controleMaison?.annuler()
+            controleMaison = nil
+        }
         servirPonctuels(n)
         let m = Self.message(n)
         let c = Self.comparable(n)
@@ -203,6 +215,30 @@ final class DemonPasseur {
             self.verifierDuree()
             self.planifierVerification()
         }
+    }
+
+    /// Lance par une URL `releve` d'une ancienne app alors que le demon ne tournait pas, HomeKit refuse parfois de
+    /// repondre au demon (homed, banc du 13/10) : il ne recevra jamais les maisons. Si l'acces est accorde et qu'aucun
+    /// releve ok n'est lu 100 s apres le lancement, les releves ponctuels en attente recoivent le releve en erreur et le
+    /// demon se ferme, meme avec des abonnes : l'app 1.3.0 se reabonne 5 s plus tard et le relance proprement, sans URL.
+    /// Acces en attente (invite en cours) ou refuse : le demon reste.
+    private func planifierControleMaison() {
+        controleMaison = horloge.apres(Self.attenteMaison) { [weak self] in
+            guard let self else { return }
+            self.controleMaison = nil
+            guard !self.releveOkLu, self.source.acces == .autorise else { return }
+            journal.error("Maison n'a donné aucun relevé : le démon se ferme pour être relancé sans URL")
+            self.sortiePrevue = "HomeKit ne répond pas : relance sans URL"
+            self.servirPonctuels(NomsMaison(date: .now, statut: .erreur, message: "Maison n'a pas répondu"))
+            self.sortirSiPret()
+        }
+    }
+
+    /// Part avec la raison prevue des qu'aucun envoi ponctuel n'est en cours (sinon la sortie couperait la livraison).
+    private func sortirSiPret() {
+        guard let raison = sortiePrevue, ponctuels == 0 else { return }
+        sortiePrevue = nil
+        quitter(raison)
     }
 
     /// Le releve en message `releve` (JSON compact).
@@ -257,7 +293,9 @@ final class DemonPasseur {
             guard let self else { return }
             self.ponctuels -= 1
             journal.notice("relevé ponctuel envoyé : \(n.accessoires.count) accessoires")
-            if self.abonnes.isEmpty, self.ponctuels == 0, self.ouverture.statut != .active {
+            if self.sortiePrevue != nil {
+                self.sortirSiPret()
+            } else if self.abonnes.isEmpty, self.ponctuels == 0, self.ouverture.statut != .active {
                 self.quitter("relevé ponctuel envoyé, aucun abonné")
             } else {
                 self.verifierDuree()
