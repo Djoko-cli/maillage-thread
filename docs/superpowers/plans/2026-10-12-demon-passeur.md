@@ -3196,11 +3196,11 @@ git commit -m "Installer le demon Passeur Noms en Catalyst ; outil de banc du pa
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 5 (contrôleur, avec Djoko) : installation**
+- [x] **Step 5 (contrôleur, avec Djoko) : installation**
 
 Ouvrir un onglet du Terminal de l'app nommé « Passeur Noms » et y lancer `outils/passeur.sh` (sa sortie masque déjà l'équipe ; ne pas faire de `tail` sur `$TMPDIR/maillage-passeur.log`, qui contient l'identité de signature). Djoko accepte la demande d'accès à Maison si elle paraît. Attendu (spec, banc 1) : pas d'icône dans le Dock, pas de fenêtre ni d'éclair. Vérifier le processus : `pgrep -lf "Passeur Noms.app/Contents/MacOS"`.
 
-- [ ] **Step 6 (contrôleur, avec Djoko) : relevé ponctuel et abonnement**
+- [x] **Step 6 (contrôleur, avec Djoko) : relevé ponctuel et abonnement**
 
 ```bash
 python3 outils/verifier-passeur.py releve
@@ -3214,7 +3214,7 @@ python3 outils/verifier-passeur.py abonner --duree 180 --relire
 
 Expected : un `etat`, un `releve` en version 2 avec tous les accessoires « avec id », `relire envoye`, un second `releve`. Pendant ces 3 minutes, Djoko renomme un accessoire dans Maison (puis lui rend son nom) : un `releve` arrive dans les secondes qui suivent chaque renommage (spec, section 8 : changements reçus en arrière-plan, premier point du banc).
 
-- [ ] **Step 7 (contrôleur) : journal**
+- [x] **Step 7 (contrôleur) : journal**
 
 ```bash
 /usr/bin/log show --last 15m --predicate 'subsystem == "fr.djoko.maillage.passeur"' --style compact | tail -40
