@@ -385,10 +385,8 @@ struct NomsInternesTests {
     @Test func problemeInstallation() {
         let ancienne = String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh.")
         let introuvable = String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
-        #expect(NomsInternes.problemeInstallation(nouveau: true, ancien: true) == nil)
-        #expect(NomsInternes.problemeInstallation(nouveau: true, ancien: false) == nil)
-        #expect(NomsInternes.problemeInstallation(nouveau: false, ancien: true) == ancienne)
-        #expect(NomsInternes.problemeInstallation(nouveau: false, ancien: false) == introuvable)
+        #expect(NomsInternes.problemeInstallation(ancien: true) == ancienne)
+        #expect(NomsInternes.problemeInstallation(ancien: false) == introuvable)
     }
 
     /// Les textes des fins d'abonnement.

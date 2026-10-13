@@ -252,7 +252,7 @@ final class NomsInternes {
         let nouveau = marque.flatMap { NSWorkspace.shared.urlForApplication(toOpen: $0) }
         guard let url = nouveau else {
             let ancien = NSWorkspace.shared.urlForApplication(withBundleIdentifier: idPasseur) != nil
-            return problemeInstallation(nouveau: false, ancien: ancien)
+            return problemeInstallation(ancien: ancien)
         }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = false
@@ -288,12 +288,11 @@ final class NomsInternes {
         }
     }
 
-    /// `nouveau` : une app ouvre `schemaProtocole` (le demon) ; `ancien` : une app porte l'identifiant du passeur.
+    /// Aucune app n'ouvre `schemaProtocole` (pas de demon) ; `ancien` : une app porte pourtant l'identifiant du passeur.
     /// L'ancien passeur (app iOS, sans ce schema) ne connait pas `abonner` et ouvrirait sa fenetre a chaque essai : il
     /// n'est pas lance.
-    nonisolated static func problemeInstallation(nouveau: Bool, ancien: Bool) -> String? {
-        if nouveau { return nil }
-        return ancien
+    nonisolated static func problemeInstallation(ancien: Bool) -> String {
+        ancien
             ? String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh.")
             : String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
     }

@@ -123,6 +123,9 @@ done
 arreter
 rm -rf "$APP"
 mkdir -p "$(dirname "$APP")"
+# Chemin absolu et reel (APP relatif, ou passant par un lien) : la copie installee est reconnue plus bas dans le dump
+# de LaunchServices, qui donne des chemins absolus ; sinon elle serait desinscrite avec les autres.
+APP="$(cd "$(dirname "$APP")" && pwd -P)/$(basename "$APP")"
 ditto "$PRODUIT" "$APP"
 "$LSREGISTER" -f "$APP"
 # Xcode reenregistre ses produits (builds iOS de DerivedData, enveloppes temporaires, compilations de verification) :

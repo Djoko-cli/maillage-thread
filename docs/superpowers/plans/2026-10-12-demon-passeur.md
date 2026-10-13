@@ -4526,7 +4526,7 @@ Pas de code, sauf correctifs. Djoko présent ; Maillage Thread 1.3.0 compilé lo
 - [x] **Step 2 (banc 2) :** l'app est abonnée (Réglages › Maison : « connecté · version 2.0 · accès à Maison autorisé ») ; Djoko renomme un accessoire dans Maison : le nom change dans l'app en quelques secondes ; puis il lui rend son nom.
 - [x] **Step 3 (banc 3) :** « Identifier » dans la fiche d'un appareil relié (par exemple le FP300 de l'essai du 12/10) : l'appareil réagit, la fiche dit « Identification demandée ».
 - [ ] **Step 4 (banc 4) :** l'interrupteur « Ouvrir Passeur Noms à l'ouverture de session » : macOS montre « Élément d'arrière-plan ajouté » ; Djoko ferme sa session puis la rouvre : `pgrep -lf "Passeur Noms.app/Contents/MacOS"` montre le démon avant l'ouverture de Maillage Thread. **Non fait : saute par Djoko le 13/10 (trop contraignant) ; inscription acceptee, demarrage a verifier a la prochaine session.**
-- [x] **Step 5 (banc 5) :** le contrôleur arrête le démon par son PID (`kill <PID>`) : l'app se réabonne seule (délai de 5 s, puis le démon relancé par l'URL) ; Réglages › Maison repasse à « connecté ».
+- [x] **Step 5 (banc 5) :** le contrôleur arrête le démon par son PID (`kill <PID>`) : l'app se réabonne seule (délai de 5 s, puis le démon relancé sans URL, puis l'URL) ; Réglages › Maison repasse à « connecté ».
 - [x] **Step 6 (banc 6) :** Maillage Thread 1.2.2 (l'app installée, relevé ponctuel) : Djoko la relance à la place de la compilation de travail, ouvre la vue par pièces ou « Rafraîchir depuis Maison » : les noms arrivent, sans fenêtre ni erreur de version.
 - [x] **Step 7 :** journal du démon relu (aucun nom, aucun UUID) ; résultats notés dans la mémoire du projet (`maillage-thread-projet.md`, `demon-homekit-catalyst.md`).
 
@@ -4539,7 +4539,10 @@ Après le banc : relecture finale de toute la branche par Opus, puis fusion sur 
 - [ ] **Step 1 :** avec l'accord de Djoko, envoyer à la session Maillage Zigbee (outil de messages entre sessions) une fiche courte :
   - recopier **à l'octet** `MaillageCoeur/Noms/ProtocolePasseur.swift` (il remplace son `EnvoiPasseur.swift`) et `MaillageCoeurTests/ProtocolePasseurTests.swift` depuis `main` de Maillage Thread, puis vérifier avec `cmp` ;
   - le relevé arrive en JSON brut (`MessagePasseur.releve(Data)`) : le lire dans `ReleveMaison`, qui gagne `id` dans `AccessoireReleve` et `versionActuelle = 2` (version 1 toujours lisible) ;
-  - `NomsPasseur` devient client abonné selon la spec, section 4.2, en reprenant `AbonnementPasseur` et le `NomsInternes` de Thread (réabonnement 5/10/30/60 s, délai 2 min, `relire`, `identifier`, `ouvertureSession`, détection de l'ancien passeur par `MaillagePasseurProtocole`) ; relevé gardé dans `releve-maison.json` ;
+  - `NomsPasseur` devient client abonné selon la spec, section 4.2, en reprenant `AbonnementPasseur` et le `NomsInternes` de Thread (réabonnement 5/10/30/60 s, délai 2 min, `relire`, `identifier`, `ouvertureSession`) ;
+  - trouver le démon par `EnvoiPasseur.schemaProtocole` et `NSWorkspace.urlForApplication(toOpen:)` (jamais en lisant son paquet : bac à sable) ; le lancer **sans URL** si aucune instance de CE paquet (son URL) ne tourne, attendre au plus 10 s puis 1,5 s, et seulement alors ouvrir l'URL avec `withApplicationAt:` ; message « ne démarre pas » après 10 s ;
+  - avertir : les noms du relevé sont désormais les noms des tuiles de Maison pour un accessoire à une seule tuile, ce qui touche la correspondance par nom exact de `FusionNoms` de Zigbee ;
+  - relevé gardé dans `releve-maison.json` ;
   - interrupteur d'ouverture de session dans ses Réglages, « Identifier » pour les appareils du pont retrouvés dans Maison (`FusionNoms`) ;
   - le démon est déjà installé par `outils/passeur.sh` de Maillage Thread ; rien à compiler côté Zigbee pour lui ;
   - spec : `docs/superpowers/specs/2026-10-12-demon-passeur-design.md` du dépôt Maillage Thread.
