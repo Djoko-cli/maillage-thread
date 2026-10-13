@@ -423,7 +423,9 @@ outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, 
 - `outils/passeur.sh` compile Passeur Noms et Masqueur, arrête le démon qui
   tourne (par son PID), remplace `~/Applications/Passeur Noms.app` seulement
   si c'est le script qui l'a installé (l'ancien « conçu pour iPad », ou le
-  démon), l'enregistre auprès de LaunchServices et le lance en arrière-plan.
+  démon), l'enregistre auprès de LaunchServices (en désinscrivant toute autre
+  copie enregistrée du démon, sans jamais effacer de fichier) et le lance en
+  arrière-plan.
   Premier lancement : macOS demande l'accès à Maison (il peut le redemander
   une fois, après le remplacement de l'ancien Passeur Noms).
 - L'échange : Maillage Thread écoute sur `127.0.0.1` (TCP, sur un port choisi

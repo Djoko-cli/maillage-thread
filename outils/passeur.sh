@@ -7,8 +7,9 @@
 # not found »). Relancer ce script pour renouveler le profil (les apps le rappellent 30 jours avant).
 # Compile, arrete le demon qui tourne (par son PID), remplace l'app installee (seulement une installation faite par ce
 # script : l'ancienne enveloppe, lien WrappedBundle, ou le demon, cle MaillagePasseurProtocole de son Info.plist),
-# l'enregistre aupres de LaunchServices (et desinscrit les copies de compilation, qui reclameraient aussi l'URL
-# maillage-passeur://), puis la lance en arriere-plan : le premier lancement demande l'acces a Maison.
+# l'enregistre aupres de LaunchServices (et desinscrit les autres copies enregistrees, produits de compilation ou
+# enveloppes, qui reclameraient aussi l'URL maillage-passeur://), puis la lance en arriere-plan : le premier
+# lancement demande l'acces a Maison.
 #
 #   outils/passeur.sh [--sans-lancer]
 #
@@ -124,6 +125,15 @@ rm -rf "$APP"
 mkdir -p "$(dirname "$APP")"
 ditto "$PRODUIT" "$APP"
 "$LSREGISTER" -f "$APP"
+# Xcode reenregistre ses produits (builds iOS de DerivedData, enveloppes temporaires, compilations de verification) :
+# toute AUTRE copie enregistree du passeur est desinscrite (jamais effacee), sinon elle reclame l'URL et l'identifiant.
+"$LSREGISTER" -dump 2>/dev/null |
+  awk '/^path:/{sub(/^path: */,""); sub(/ \(0x[0-9a-f]+\)$/,""); p=$0} /fr\.djoko\.maillage\.passeur$/{print p}' |
+  sort -u | grep "Passeur Noms.app$" | while IFS= read -r copie; do
+  case "$copie" in "$APP" | "$APP"/) continue ;; esac
+  "$LSREGISTER" -u "$copie" 2>/dev/null || true
+  echo "copie desinscrite de LaunchServices : $(printf '%s' "$copie" | sed "s|^$HOME|~|")"
+done || true
 if [ "$LANCER" = non ]; then
   echo "Passeur Noms installé (non lancé) : $APP"
 else

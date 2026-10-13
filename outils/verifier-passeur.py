@@ -180,6 +180,8 @@ def abonner(duree, relire):
 
 
 def main():
+    # Sortie ligne par ligne meme dans un tube (`| tee`) : sinon rien ne s'affiche avant la fin.
+    sys.stdout.reconfigure(line_buffering=True)
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("demande", choices=["releve", "abonner"])
     p.add_argument("--duree", type=int, default=120)

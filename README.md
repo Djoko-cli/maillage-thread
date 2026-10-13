@@ -403,7 +403,8 @@ outils/passeur.sh          # build with your team (Xcode account), install, laun
 - `outils/passeur.sh` builds Passeur Noms and Masqueur, stops the running
   daemon (by its PID), replaces `~/Applications/Passeur Noms.app` only if the
   script installed it (the old "Designed for iPad" one, or the daemon), registers
-  it with LaunchServices and launches it in the background. First launch: macOS
+  it with LaunchServices (and unregisters every other registered copy of the
+  daemon, never deleting files) and launches it in the background. First launch: macOS
   asks for access to Home (it may ask once more after the old Passeur Noms is
   replaced).
 - The exchange: Maillage Thread listens on `127.0.0.1` (TCP, on a port chosen
