@@ -55,11 +55,15 @@ struct MenuBarre: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(ControleurReglages.self) private var reglages
     @Environment(MisesAJour.self) private var misesAJour
+    @Environment(OuvertureSession.self) private var ouverture
     /// Fenetre du menu, pour le fermer apres « Ouvrir le graphe », « Journal… » et « Reglages… ».
     @State private var fenetreMenu = RefFenetre()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if surveillance.mode == .direct {
+                BandeauMaillageIoT(export: ExportMaillageIoT.partage) { exporterPourMaillageIoT() }
+            }
             entete
             if surveillance.etatEcoute == .reseauLocalRefuse {
                 Label("Accès au réseau local refusé", systemImage: "network.slash")
@@ -175,6 +179,12 @@ struct MenuBarre: View {
     private func ouvrirReglages() {
         reglages.montrer()
         fenetreMenu.fenetre?.close()
+    }
+
+    /// Le panneau d'enregistrement prend la place du menu, comme la fenetre des reglages.
+    private func exporterPourMaillageIoT() {
+        fenetreMenu.fenetre?.close()
+        ExportMaillageIoT.partage.lancer(ouverture: ouverture)
     }
 
     /// La fenetre de Sparkle prend la place du menu, comme celle des reglages.

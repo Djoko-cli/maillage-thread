@@ -189,7 +189,7 @@ struct FenetreReglages: View {
                 }
                 if let fin = nomsMaison.etat?.profilExpire,
                    NomsInternes.profilBientotExpire(nomsMaison.etat, maintenant: .now) {
-                    Text("Le profil de Passeur Noms expire le \(fin.formatted(date: .abbreviated, time: .omitted)) : relance outils/passeur.sh.")
+                    Text("Le profil de Passeur Noms expire le \(fin.formatted(date: .abbreviated, time: .omitted)) : relance outils/passeur.sh de maillage-iot.")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }

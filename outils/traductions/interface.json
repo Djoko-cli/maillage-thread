@@ -1,5 +1,4 @@
 {
-  "%@ (profil du passeur expiré ? relance outils/passeur.sh)": "%@ (Passeur profile expired? Run outils/passeur.sh again)",
   "%@ : %@": "%1$@: %2$@",
   "%@ : %@ %lld/%lld…": "%1$@: %2$@ %3$lld/%4$lld…",
   "%@ : %@…": "%1$@: %2$@…",
@@ -174,7 +173,6 @@
   "Partition %@ (incertaine : préfixe partagé)": "Partition %@ (uncertain: shared prefix)",
   "Pas de route IPv6 vers le réseau Thread : ce Mac n'a pas de route vers le préfixe OMR, où est l'adresse de la sonde. Voir « Route vers le réseau Thread » dans README.fr.md.": "No IPv6 route to the Thread network: this Mac has no route to the OMR prefix, where the probe's address is. See “Route to the Thread network” in README.md.",
   "Pas encore d'historique de la sonde pour ce nœud sur cette période.": "No probe history for this node over this period yet.",
-  "Passeur Noms introuvable : lance outils/passeur.sh.": "Passeur Noms not found: run outils/passeur.sh.",
   "Pile et Network Data": "Stack and Network Data",
   "Pièce isolée : %@ · clic sur une autre pièce pour y aller, clic à côté ou Échap pour revenir": "Isolated room: %@ · click another room to go there, click outside or press Esc to come back",
   "Placer dans une pièce…": "Place in a room…",

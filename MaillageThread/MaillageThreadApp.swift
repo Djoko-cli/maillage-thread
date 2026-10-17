@@ -86,6 +86,10 @@ struct MaillageThreadApp: App {
             CommandGroup(after: .appInfo) {
                 Button("Rechercher les mises à jour…") { misesAJour.rechercher() }
                     .disabled(!misesAJour.peutRechercher)
+                if !Self.demo {
+                    Button("Exporter pour Maillage IoT…") { ExportMaillageIoT.partage.lancer(ouverture: ouverture) }
+                        .disabled(ExportMaillageIoT.partage.enCours)
+                }
             }
             CommandGroup(replacing: .appSettings) {
                 Button("Réglages…") { reglages.montrer() }

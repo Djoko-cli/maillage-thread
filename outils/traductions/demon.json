@@ -5,7 +5,6 @@
   "Passeur Noms s'est déconnecté.": "Passeur Noms disconnected.",
   "Connexion avec Passeur Noms coupée.": "Connection with Passeur Noms lost.",
   "Écoute de Passeur Noms impossible : %@": "Cannot listen for Passeur Noms: %@",
-  "Passeur Noms est l'ancienne version : relance outils/passeur.sh.": "Passeur Noms is the old version: run outils/passeur.sh again.",
   "Identification demandée": "Identification requested",
   "Accessoire introuvable dans Maison": "Accessory not found in Home",
   "Cet accessoire ne sait pas s'identifier": "This accessory cannot identify itself",
@@ -19,9 +18,7 @@
   "Passeur Noms": "Passeur Noms",
   "Ouvrir Passeur Noms à l'ouverture de session": "Open Passeur Noms at login",
   "Accepte Passeur Noms dans Réglages Système › Général › Ouverture.": "Allow Passeur Noms in System Settings › General › Login Items.",
-  "Le profil de Passeur Noms expire le %@ : relance outils/passeur.sh.": "The Passeur Noms profile expires on %@: run outils/passeur.sh again.",
   "Identifier": "Identify",
   "Passeur Noms n'a pas répondu à la demande de relevé.": "Passeur Noms did not answer the reading request.",
-  "Pas encore de pièces de Maison": "No Home rooms yet",
-  "Passeur Noms ne démarre pas : relance outils/passeur.sh.": "Passeur Noms does not start: run outils/passeur.sh again."
+  "Pas encore de pièces de Maison": "No Home rooms yet"
 }

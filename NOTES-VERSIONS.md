@@ -6,6 +6,32 @@ the notes of the GitHub release and those of the update window.
 Maillage Thread : une section par version publiée, en anglais puis en français. `outils/publier.sh` en tire les
 notes de la version publiée sur GitHub et celles de la fenêtre de mise à jour.
 
+## 1.4.0
+
+**English**
+
+- **Maillage Thread becomes Maillage IoT**, one app for Thread and Zigbee networks. This is the last version of
+  Maillage Thread: a banner at the top of its menu links to the Maillage IoT download.
+- "Export for Maillage IoT…" (in the banner and in the app menu) writes a folder with the history, the log, the
+  nicknames, the rooms, the last Home names and the settings of Maillage Thread, for Maillage IoT to import. No
+  password or key goes into it, and Maillage Thread keeps working as before.
+- After a successful export, Maillage Thread offers to stop opening at login, so that both apps do not compete for
+  the USB probe at startup.
+- Passeur Noms is now built from the `maillage-iot` repository: `outils/passeur.sh` in this repository only points
+  there.
+
+**Français**
+
+- **Maillage Thread devient Maillage IoT**, une seule app pour les réseaux Thread et Zigbee. C'est la dernière
+  version de Maillage Thread : un bandeau en haut de son menu mène au téléchargement de Maillage IoT.
+- « Exporter pour Maillage IoT… » (dans le bandeau et dans le menu de l'app) écrit un dossier avec l'historique, le
+  journal, les surnoms, les pièces, les derniers noms de Maison et les réglages de Maillage Thread, que Maillage IoT
+  importe. Aucun mot de passe ni aucune clé n'y figure, et Maillage Thread continue de marcher comme avant.
+- Après un export réussi, Maillage Thread propose de ne plus s'ouvrir à l'ouverture de session, pour que les deux
+  apps ne se disputent pas la sonde USB au démarrage.
+- Passeur Noms se compile désormais depuis le dépôt `maillage-iot` : `outils/passeur.sh` de ce dépôt ne fait plus
+  qu'y renvoyer.
+
 ## 1.3.0
 
 **English**

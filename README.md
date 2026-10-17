@@ -2,6 +2,12 @@
 
 # Maillage Thread
 
+> **Maillage Thread becomes [Maillage IoT](https://github.com/Djoko-cli/maillage-iot)**, one app for Thread and
+> Zigbee networks. Version 1.4.0 is the last one. "Export for Maillage IoT…" (in the banner at the top of the menu,
+> or in the app menu) writes a folder that Maillage IoT imports: history, log, nicknames, rooms, last Home names and
+> settings, with no password or key. Passeur Noms is now built from the `maillage-iot` repository: here,
+> `outils/passeur.sh` only points there.
+
 <p align="center"><img src="docs/images/vue-3d.png" alt="The room view in 3D: the house, its floors, rooms, routers and radio links" width="100%"></p>
 
 <p align="center">
@@ -384,6 +390,10 @@ runs in the background, follows Home (names, rooms, zones, manufacturers,
 `matterNodeID`, batteries) and keeps Maillage Thread up to date over the Mac's
 loopback: a device renamed or moved in Home changes in the app within seconds.
 There is no folder to choose.
+
+Since 1.4.0, the script below lives in the
+[maillage-iot](https://github.com/Djoko-cli/maillage-iot) repository; the one here
+only points there. What follows describes it.
 
 ```sh
 outils/passeur.sh          # build with your team (Xcode account), install, launch

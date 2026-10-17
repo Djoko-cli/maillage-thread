@@ -2,6 +2,12 @@
 
 # Maillage Thread
 
+> **Maillage Thread devient [Maillage IoT](https://github.com/Djoko-cli/maillage-iot)**, une seule app pour les
+> réseaux Thread et Zigbee. La version 1.4.0 est la dernière. « Exporter pour Maillage IoT… » (dans le bandeau en
+> haut du menu, ou dans le menu de l'app) écrit un dossier que Maillage IoT importe : historique, journal, surnoms,
+> pièces, derniers noms de Maison et réglages, sans aucun mot de passe ni clé. Passeur Noms se compile désormais
+> depuis le dépôt `maillage-iot` : ici, `outils/passeur.sh` ne fait plus qu'y renvoyer.
+
 <p align="center"><img src="docs/images/vue-3d.png" alt="La vue par pièces en 3D : la maison, ses niveaux, ses pièces, ses routeurs et ses liens radio" width="100%"></p>
 
 <p align="center">
@@ -404,6 +410,10 @@ Maison (noms, pièces, zones, fabricants, `matterNodeID`, batteries) et tient
 Maillage Thread à jour par la boucle locale du Mac : un appareil renommé ou
 déplacé dans Maison change dans l'app en quelques secondes. Aucun dossier à
 choisir.
+
+Depuis la 1.4.0, le script ci-dessous vit dans le dépôt
+[maillage-iot](https://github.com/Djoko-cli/maillage-iot) ; celui d'ici ne fait
+plus qu'y renvoyer. La suite le décrit.
 
 ```sh
 outils/passeur.sh          # compile avec ton équipe (compte Xcode), installe, lance

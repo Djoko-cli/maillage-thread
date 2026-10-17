@@ -1,18 +1,18 @@
 {
   "sourceLanguage" : "fr",
   "strings" : {
-    "%@ (profil du passeur expiré ? relance outils/passeur.sh)" : {
+    "%@ (profil du passeur expiré ? relance outils/passeur.sh de maillage-iot)" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ (Passeur profile expired? Run outils/passeur.sh again)"
+            "value" : "%@ (Passeur profile expired? Run outils/passeur.sh from maillage-iot again)"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ (profil du passeur expiré ? relance outils/passeur.sh)"
+            "value" : "%@ (profil du passeur expiré ? relance outils/passeur.sh de maillage-iot)"
           }
         }
       }
@@ -189,6 +189,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ : rôle %2$@ → %3$@"
+          }
+        }
+      }
+    },
+    "%@ Le retirer dans Réglages Système › Général › Ouverture et extensions." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Remove it in System Settings › General › Login Items & Extensions."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Le retirer dans Réglages Système › Général › Ouverture et extensions."
+          }
+        }
+      }
+    },
+    "%@ Rien n'a changé dans Maillage Thread." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Nothing changed in Maillage Thread."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Rien n'a changé dans Maillage Thread."
           }
         }
       }
@@ -989,6 +1021,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Actif"
+          }
+        }
+      }
+    },
+    "Afficher dans le Finder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show in Finder"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher dans le Finder"
           }
         }
       }
@@ -1921,6 +1969,86 @@
         }
       }
     },
+    "Export en cours…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporting…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export en cours…"
+          }
+        }
+      }
+    },
+    "Export réussi" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export complete"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export réussi"
+          }
+        }
+      }
+    },
+    "Exporter" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporter"
+          }
+        }
+      }
+    },
+    "Exporter pour Maillage IoT" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export for Maillage IoT"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporter pour Maillage IoT"
+          }
+        }
+      }
+    },
+    "Exporter pour Maillage IoT…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export for Maillage IoT…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporter pour Maillage IoT…"
+          }
+        }
+      }
+    },
     "Fabriques : %lld" : {
       "localizations" : {
         "en" : {
@@ -2225,6 +2353,38 @@
         }
       }
     },
+    "L'export a été écrit, mais sa vérification a échoué." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The export was written, but its check failed."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'export a été écrit, mais sa vérification a échoué."
+          }
+        }
+      }
+    },
+    "L'export n'a pas abouti" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The export failed"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'export n'a pas abouti"
+          }
+        }
+      }
+    },
     "La clé passe par l'USB, sonde branchée, et reste dans le trousseau de ce Mac. Avec la liaison « Réseau Thread », la sonde peut être débranchée et alimentée ailleurs." : {
       "localizations" : {
         "en" : {
@@ -2337,6 +2497,86 @@
         }
       }
     },
+    "Le dossier d'export ne peut pas être dans le dossier des données de Maillage Thread." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The export folder cannot be inside the Maillage Thread data folder."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le dossier d'export ne peut pas être dans le dossier des données de Maillage Thread."
+          }
+        }
+      }
+    },
+    "Le dossier d'export reprend l'historique, le journal, les surnoms, les pièces, les noms de Maison et les réglages de Maillage Thread, sans aucun mot de passe ni clé." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The export folder takes the history, the log, the nicknames, the rooms, the Home names and the settings of Maillage Thread, with no password or key."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le dossier d'export reprend l'historique, le journal, les surnoms, les pièces, les noms de Maison et les réglages de Maillage Thread, sans aucun mot de passe ni clé."
+          }
+        }
+      }
+    },
+    "Le dossier « %@ » des données de Maillage Thread est illisible." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The “%@” folder of the Maillage Thread data cannot be read."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le dossier « %@ » des données de Maillage Thread est illisible."
+          }
+        }
+      }
+    },
+    "Le fichier « %@ » a changé pendant l'export." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file “%@” changed during the export."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le fichier « %@ » a changé pendant l'export."
+          }
+        }
+      }
+    },
+    "Le fichier « %@ » manque dans l'export." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file “%@” is missing from the export."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le fichier « %@ » manque dans l'export."
+          }
+        }
+      }
+    },
     "Le passeur a échoué : %@" : {
       "localizations" : {
         "en" : {
@@ -2369,18 +2609,18 @@
         }
       }
     },
-    "Le profil de Passeur Noms expire le %@ : relance outils/passeur.sh." : {
+    "Le profil de Passeur Noms expire le %@ : relance outils/passeur.sh de maillage-iot." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The Passeur Noms profile expires on %@: run outils/passeur.sh again."
+            "value" : "The Passeur Noms profile expires on %@: run outils/passeur.sh from maillage-iot again."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le profil de Passeur Noms expire le %@ : relance outils/passeur.sh."
+            "value" : "Le profil de Passeur Noms expire le %@ : relance outils/passeur.sh de maillage-iot."
           }
         }
       }
@@ -2529,6 +2769,38 @@
         }
       }
     },
+    "Maillage Thread devient Maillage IoT" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maillage Thread becomes Maillage IoT"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maillage Thread devient Maillage IoT"
+          }
+        }
+      }
+    },
+    "Maillage Thread s'ouvre encore à l'ouverture de session" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maillage Thread still opens at login"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maillage Thread s'ouvre encore à l'ouverture de session"
+          }
+        }
+      }
+    },
     "Maison" : {
       "localizations" : {
         "en" : {
@@ -2653,6 +2925,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Monter d'un étage"
+          }
+        }
+      }
+    },
+    "Ne plus ouvrir Maillage Thread à l'ouverture de session" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop opening Maillage Thread at login"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ne plus ouvrir Maillage Thread à l'ouverture de session"
           }
         }
       }
@@ -2797,6 +3085,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nouveau préfixe %@"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
           }
         }
       }
@@ -3041,34 +3345,34 @@
         }
       }
     },
-    "Passeur Noms est l'ancienne version : relance outils/passeur.sh." : {
+    "Passeur Noms est l'ancienne version : relance outils/passeur.sh de maillage-iot." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passeur Noms is the old version: run outils/passeur.sh again."
+            "value" : "Passeur Noms is the old version: run outils/passeur.sh from maillage-iot again."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passeur Noms est l'ancienne version : relance outils/passeur.sh."
+            "value" : "Passeur Noms est l'ancienne version : relance outils/passeur.sh de maillage-iot."
           }
         }
       }
     },
-    "Passeur Noms introuvable : lance outils/passeur.sh." : {
+    "Passeur Noms introuvable : lance outils/passeur.sh de maillage-iot." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passeur Noms not found: run outils/passeur.sh."
+            "value" : "Passeur Noms not found: run outils/passeur.sh from maillage-iot."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passeur Noms introuvable : lance outils/passeur.sh."
+            "value" : "Passeur Noms introuvable : lance outils/passeur.sh de maillage-iot."
           }
         }
       }
@@ -3089,18 +3393,18 @@
         }
       }
     },
-    "Passeur Noms ne démarre pas : relance outils/passeur.sh." : {
+    "Passeur Noms ne démarre pas : relance outils/passeur.sh de maillage-iot." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passeur Noms does not start: run outils/passeur.sh again."
+            "value" : "Passeur Noms does not start: run outils/passeur.sh from maillage-iot again."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passeur Noms ne démarre pas : relance outils/passeur.sh."
+            "value" : "Passeur Noms ne démarre pas : relance outils/passeur.sh de maillage-iot."
           }
         }
       }
@@ -4449,6 +4753,22 @@
         }
       }
     },
+    "Télécharger Maillage IoT" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download Maillage IoT"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Télécharger Maillage IoT"
+          }
+        }
+      }
+    },
     "USB" : {
       "localizations" : {
         "en" : {
@@ -4461,6 +4781,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "USB"
+          }
+        }
+      }
+    },
+    "Un dossier porte déjà ce nom." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A folder already has this name."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un dossier porte déjà ce nom."
+          }
+        }
+      }
+    },
+    "Une seule app pour les réseaux Thread et Zigbee. L'export reprend l'historique, le journal, les surnoms, les pièces et les réglages." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One app for Thread and Zigbee networks. The export takes the history, the log, the nicknames, the rooms and the settings."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une seule app pour les réseaux Thread et Zigbee. L'export reprend l'historique, le journal, les surnoms, les pièces et les réglages."
           }
         }
       }
@@ -6253,6 +6605,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "vérifié par la sonde %@"
+          }
+        }
+      }
+    },
+    "« %@ » est prêt pour Maillage IoT. Maillage Thread continue de marcher comme avant ; s'il s'ouvre encore à l'ouverture de session, les deux apps se disputeront la sonde USB au démarrage." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” is ready for Maillage IoT. Maillage Thread keeps working as before; if it still opens at login, both apps will compete for the USB probe at startup."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "« %@ » est prêt pour Maillage IoT. Maillage Thread continue de marcher comme avant ; s'il s'ouvre encore à l'ouverture de session, les deux apps se disputeront la sonde USB au démarrage."
+          }
+        }
+      }
+    },
+    "« %@ » est prêt pour Maillage IoT. Maillage Thread continue de marcher comme avant." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” is ready for Maillage IoT. Maillage Thread keeps working as before."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "« %@ » est prêt pour Maillage IoT. Maillage Thread continue de marcher comme avant."
+          }
+        }
+      }
+    },
+    "« %@ » est un lien symbolique." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” is a symbolic link."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "« %@ » est un lien symbolique."
           }
         }
       }

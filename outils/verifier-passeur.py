@@ -87,7 +87,7 @@ def lancer_sans_url():
         return
     r = subprocess.run(["open", "-g", "-b", ID_PASSEUR], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if r.returncode != 0:
-        raise SystemExit(f"open a echoue (code {r.returncode}) : Passeur Noms installe ? (outils/passeur.sh)")
+        raise SystemExit(f"open a echoue (code {r.returncode}) : Passeur Noms installe ? (outils/passeur.sh de maillage-iot)")
     for _ in range(100):
         if passeur_tourne():
             break
@@ -104,7 +104,7 @@ def ouvrir(demande, port, jeton):
     r = subprocess.run(["open", "-g", f"maillage-passeur://{demande}?port={port}&jeton={jeton}"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if r.returncode != 0:
-        raise SystemExit(f"open a echoue (code {r.returncode}) : Passeur Noms installe ? (outils/passeur.sh)")
+        raise SystemExit(f"open a echoue (code {r.returncode}) : Passeur Noms installe ? (outils/passeur.sh de maillage-iot)")
 
 
 def accepter(s, jeton, delai=120):

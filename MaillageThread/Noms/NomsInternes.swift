@@ -276,7 +276,7 @@ final class NomsInternes {
                 }
                 // Toujours pas lance apres 10 s : envoyer l'URL a froid serait refuse par HomeKit.
                 guard tourne() else {
-                    return String(localized: "Passeur Noms ne démarre pas : relance outils/passeur.sh.")
+                    return String(localized: "Passeur Noms ne démarre pas : relance outils/passeur.sh de maillage-iot.")
                 }
                 try? await Task.sleep(for: attenteDemarrage)
             }
@@ -284,7 +284,7 @@ final class NomsInternes {
             return nil
         } catch {
             // Cause la plus probable : le profil de developpement du demon a expire (un an).
-            return String(localized: "\(error.localizedDescription) (profil du passeur expiré ? relance outils/passeur.sh)")
+            return String(localized: "\(error.localizedDescription) (profil du passeur expiré ? relance outils/passeur.sh de maillage-iot)")
         }
     }
 
@@ -293,8 +293,8 @@ final class NomsInternes {
     /// n'est pas lance.
     nonisolated static func problemeInstallation(ancien: Bool) -> String {
         ancien
-            ? String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh.")
-            : String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
+            ? String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh de maillage-iot.")
+            : String(localized: "Passeur Noms introuvable : lance outils/passeur.sh de maillage-iot.")
     }
 
     /// L'attente avant le prochain abonnement, apres `tentative` echecs.

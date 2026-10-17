@@ -16,7 +16,7 @@
 // Le runtime renforce est deja pose par project.yml (ENABLE_HARDENED_RUNTIME) : avec une equipe, il
 // charge les cadres de l'app (Sparkle) sans lever la validation des bibliotheques, et les versions
 // publiees l'ont toujours (outils/publication.py).
-// Le passeur n'est signe avec l'equipe (Apple Development) que par outils/passeur.sh
+// Le passeur n'est signe avec l'equipe (Apple Development) que par outils/passeur.sh de maillage-iot
 // (DEVELOPMENT_TEAM en ligne de commande).
 CODE_SIGN_IDENTITY = -
 CODE_SIGN_STYLE = Manual

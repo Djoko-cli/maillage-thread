@@ -383,8 +383,8 @@ struct NomsInternesTests {
 
     /// L'ancien passeur (app iOS, sans le schema du protocole) n'est pas lance : il ne connait pas `abonner`.
     @Test func problemeInstallation() {
-        let ancienne = String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh.")
-        let introuvable = String(localized: "Passeur Noms introuvable : lance outils/passeur.sh.")
+        let ancienne = String(localized: "Passeur Noms est l'ancienne version : relance outils/passeur.sh de maillage-iot.")
+        let introuvable = String(localized: "Passeur Noms introuvable : lance outils/passeur.sh de maillage-iot.")
         #expect(NomsInternes.problemeInstallation(ancien: true) == ancienne)
         #expect(NomsInternes.problemeInstallation(ancien: false) == introuvable)
     }

@@ -86,7 +86,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # La version publiee (outils/publier.sh) ; le numero de compilation, que compare Sparkle, est donne a la
         # publication : le nombre de commits de main.
-        MARKETING_VERSION: "1.3.0"
+        MARKETING_VERSION: "1.4.0"
         CURRENT_PROJECT_VERSION: "1"
         # Le flux des mises a jour (appcast.xml du depot, que publier.sh tient a jour, a son adresse brute) et la cle
         # publique ; la repetition les remplace en ligne de commande.
@@ -95,7 +95,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: MaillageThread/Droits.entitlements
         ENABLE_HARDENED_RUNTIME: YES
   # Passeur Noms, demon de Maison (spec 2026-10-12-demon-passeur-design.md) : app Mac Catalyst sans fenetre ni Dock
-  # (LSUIElement), signee en developpement par outils/passeur.sh (HomeKit est refuse au Developer ID). Masqueur.bundle
+  # (LSUIElement), signee en developpement par outils/passeur.sh de maillage-iot (HomeKit est refuse au Developer ID). Masqueur.bundle
   # rend invisible, des sa creation, la fenetre de la scene que macOS impose.
   Masqueur:
     type: bundle
@@ -141,7 +141,7 @@ targets:
               - maillage-passeur-1
         # Ni Dock ni menu : un demon.
         LSUIElement: true
-        # Version du protocole parle (abonnement) : outils/passeur.sh reconnait ainsi le demon (les apps, par le schema).
+        # Version du protocole parle (abonnement) : outils/passeur.sh de maillage-iot reconnait ainsi le demon (les apps, par le schema).
         MaillagePasseurProtocole: 1
         NSHomeKitUsageDescription: "Passeur Noms lit les noms, pièces, zones, fabricants et batteries de vos accessoires Maison pour Maillage Thread et Maillage Zigbee, et fait clignoter un accessoire quand vous le demandez (Identifier). Rien ne sort de ce Mac."
         UILaunchScreen: {}
@@ -161,7 +161,7 @@ targets:
         MARKETING_VERSION: "2.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_ENTITLEMENTS: Passeur/Passeur.entitlements
-        # HomeKit exige un profil : signature automatique ; l'equipe est donnee par outils/passeur.sh
+        # HomeKit exige un profil : signature automatique ; l'equipe est donnee par outils/passeur.sh de maillage-iot
         # (DEVELOPMENT_TEAM en ligne de commande).
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: Apple Development
