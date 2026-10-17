@@ -243,8 +243,9 @@ final class NomsInternes {
         surNoms?(garde)
     }
 
-    /// Lanceur reel : Passeur Noms, installe par outils/passeur.sh, ouvert sans activation, d'abord sans URL puis avec
-    /// l'URL de la cible. Pas d'arguments de lancement : macOS retire ceux que passe une app du bac a sable (verifie le 30/09).
+    /// Lanceur reel : Passeur Noms, installe par outils/passeur.sh de maillage-iot, ouvert sans activation, d'abord sans
+    /// URL puis avec l'URL de la cible. Pas d'arguments de lancement : macOS retire ceux que passe une app du bac a sable
+    /// (verifie le 30/09).
     static func lancerPasseurDuMac(_ cible: EnvoiPasseur.Cible) async -> String? {
         // Le nouveau demon se trouve par son schema `schemaProtocole`, jamais en lisant son paquet (le bac a sable
         // l'interdit) ni par son identifiant seul (LaunchServices garde des copies perimees) : banc du 13/10.

@@ -209,6 +209,22 @@
         }
       }
     },
+    "%@ Rien n'a changé dans Maillage Thread ; l'ancien export est dans la Corbeille." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Nothing changed in Maillage Thread; the previous export is in the Trash."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Rien n'a changé dans Maillage Thread ; l'ancien export est dans la Corbeille."
+          }
+        }
+      }
+    },
     "%@ Rien n'a changé dans Maillage Thread." : {
       "localizations" : {
         "en" : {
@@ -2518,7 +2534,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The export folder takes the history, the log, the nicknames, the rooms, the Home names and the settings of Maillage Thread, with no password or key."
+            "value" : "The export folder includes the history, the log, the nicknames, the rooms, the Home names and the settings of Maillage Thread, with no password or key."
           }
         },
         "fr" : {
@@ -2534,7 +2550,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The “%@” folder of the Maillage Thread data cannot be read."
+            "value" : "The Maillage Thread data folder “%@” cannot be read."
           }
         },
         "fr" : {
@@ -2573,6 +2589,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Le fichier « %@ » manque dans l'export."
+          }
+        }
+      }
+    },
+    "Le nom de fichier « %@ » n'est pas valable dans un export." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file name “%@” is not valid in an export."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le nom de fichier « %@ » n'est pas valable dans un export."
           }
         }
       }
@@ -4790,7 +4822,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A folder already has this name."
+            "value" : "A folder with this name already exists."
           }
         },
         "fr" : {
@@ -4801,12 +4833,28 @@
         }
       }
     },
+    "Un élément qui n'est pas un ancien export porte déjà ce nom : choisir un autre nom." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An item that is not a previous export already has this name: choose another name."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un élément qui n'est pas un ancien export porte déjà ce nom : choisir un autre nom."
+          }
+        }
+      }
+    },
     "Une seule app pour les réseaux Thread et Zigbee. L'export reprend l'historique, le journal, les surnoms, les pièces et les réglages." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "One app for Thread and Zigbee networks. The export takes the history, the log, the nicknames, the rooms and the settings."
+            "value" : "One app for Thread and Zigbee networks. The export includes the history, the log, the nicknames, the rooms and the settings."
           }
         },
         "fr" : {

@@ -47,10 +47,17 @@ final class ExportMaillageIoT {
             Self.montrerEchec(ExportReprise.Erreur.destinationDansLeDossierDeLApp)
             return
         }
-        // Le panneau a fait confirmer le remplacement : l'ancien dossier part a la Corbeille.
+        // Le panneau a fait confirmer le remplacement : un ancien export ou un dossier vide part a la Corbeille ;
+        // jamais un autre dossier.
+        var remplace = false
         if fm.fileExists(atPath: url.path) {
+            guard ExportReprise.peutRemplacer(url) else {
+                Self.montrerEchec(ExportReprise.Erreur.remplacementRefuse)
+                return
+            }
             do {
                 try fm.trashItem(at: url, resultingItemURL: nil)
+                remplace = true
             } catch {
                 Self.montrerEchec(error)
                 return
@@ -67,7 +74,7 @@ final class ExportMaillageIoT {
         }.value
         switch resultat {
         case .success: Self.montrerReussite(dossier: url, ouverture: ouverture)
-        case .failure(let erreur): Self.montrerEchec(erreur)
+        case .failure(let erreur): Self.montrerEchec(erreur, ancienALaCorbeille: remplace)
         }
     }
 
@@ -108,11 +115,13 @@ final class ExportMaillageIoT {
         }
     }
 
-    private static func montrerEchec(_ erreur: Error) {
+    private static func montrerEchec(_ erreur: Error, ancienALaCorbeille: Bool = false) {
         let alerte = NSAlert()
         alerte.alertStyle = .warning
         alerte.messageText = String(localized: "L'export n'a pas abouti")
-        alerte.informativeText = String(localized: "\(cause(erreur)) Rien n'a changé dans Maillage Thread.")
+        alerte.informativeText = ancienALaCorbeille
+            ? String(localized: "\(cause(erreur)) Rien n'a changé dans Maillage Thread ; l'ancien export est dans la Corbeille.")
+            : String(localized: "\(cause(erreur)) Rien n'a changé dans Maillage Thread.")
         NSApp.activate()
         alerte.runModal()
     }
@@ -126,6 +135,8 @@ final class ExportMaillageIoT {
             return String(localized: "Le dossier d'export ne peut pas être dans le dossier des données de Maillage Thread.")
         case ExportReprise.Erreur.dossierIllisible(let chemin):
             return String(localized: "Le dossier « \(chemin) » des données de Maillage Thread est illisible.")
+        case ExportReprise.Erreur.remplacementRefuse:
+            return String(localized: "Un élément qui n'est pas un ancien export porte déjà ce nom : choisir un autre nom.")
         case let e as ContratExport.Erreur:
             switch e {
             case .fichierManquant(let chemin):
@@ -134,6 +145,8 @@ final class ExportMaillageIoT {
                 return String(localized: "Le fichier « \(chemin) » a changé pendant l'export.")
             case .lienSymbolique(let chemin):
                 return String(localized: "« \(chemin) » est un lien symbolique.")
+            case .cheminInvalide(let chemin):
+                return String(localized: "Le nom de fichier « \(chemin) » n'est pas valable dans un export.")
             default:
                 return String(localized: "L'export a été écrit, mais sa vérification a échoué.")
             }

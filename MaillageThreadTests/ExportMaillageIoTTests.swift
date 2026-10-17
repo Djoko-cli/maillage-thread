@@ -36,6 +36,10 @@ struct ExportMaillageIoTTests {
             (ContratExport.Erreur.empreinteFausse(f), String(localized: "Le fichier « \(f) » a changé pendant l'export.")),
             (ContratExport.Erreur.tailleFausse(f), String(localized: "Le fichier « \(f) » a changé pendant l'export.")),
             (ContratExport.Erreur.lienSymbolique("lien"), String(localized: "« \("lien") » est un lien symbolique.")),
+            (ExportReprise.Erreur.remplacementRefuse,
+             String(localized: "Un élément qui n'est pas un ancien export porte déjà ce nom : choisir un autre nom.")),
+            (ContratExport.Erreur.cheminInvalide("a\\b"),
+             String(localized: "Le nom de fichier « \("a\\b") » n'est pas valable dans un export.")),
             (ContratExport.Erreur.appDifferente, String(localized: "L'export a été écrit, mais sa vérification a échoué.")),
         ]
         for (erreur, texte) in cas {

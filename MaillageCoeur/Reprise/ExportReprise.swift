@@ -3,8 +3,8 @@ import Foundation
 /// L'export pour Maillage IoT (spec de Maillage IoT, section 4.2), sans interface : un dossier que
 /// `ContratExport.verifierDossier` relit sans erreur. Le contrat dit quoi copier et comment le decrire ; ici, on le fait :
 /// - lister les fichiers de `Application Support/<app>/` (un lien symbolique n'est jamais suivi : il est cite) ;
-/// - copier ceux que `ContratExport.classerFichiers` retient, sous le meme chemin, octet pour octet (le contenu seul,
-///   sans les attributs etendus, qui laisseraient des fichiers `._<nom>` sur un volume FAT ou exFAT) ;
+/// - copier ceux que `ContratExport.classerFichiers` retient, sous le meme chemin, octet pour octet (le contenu seul :
+///   les attributs du fichier d'origine ne sont pas recopies ; macOS en pose d'autres aux fichiers ecrits par l'app) ;
 /// - ecrire `reglages.json`, puis decrire chaque COPIE (jamais l'original, que l'app continue d'ecrire) ;
 /// - ecrire `manifeste.json`, puis relire tout le dossier avant de rendre le manifeste.
 /// Le dossier de l'app est seulement lu : l'app continue de marcher comme avant.
@@ -15,8 +15,12 @@ public enum ExportReprise {
         case destinationExistante
         /// La destination est le dossier de l'app, ou dedans, ou le contient : refusee avant toute ecriture.
         case destinationDansLeDossierDeLApp
-        /// Un dossier sous celui de l'app n'a pas pu etre parcouru (son chemin relatif) : rien n'est perdu en silence.
+        /// Un dossier sous celui de l'app n'a pas pu etre parcouru (son chemin relatif, ou le nom du dossier de l'app) :
+        /// rien n'est perdu en silence.
         case dossierIllisible(String)
+        /// L'element a remplacer n'est ni un ancien export (il a un `manifeste.json`) ni un dossier vide : l'app ne le
+        /// met pas a la Corbeille (`peutRemplacer`).
+        case remplacementRefuse
     }
 
     /// Ecrit l'export de `app` dans `destination`, un dossier qui ne doit pas exister. `source` : le dossier de
@@ -48,7 +52,7 @@ public enum ExportReprise {
                 try fm.createDirectory(at: cible.deletingLastPathComponent(), withIntermediateDirectories: true)
                 do {
                     try copier(source.appendingPathComponent(chemin), vers: cible)
-                } catch CocoaError.fileReadNoSuchFile where ContratExport.mois(de: chemin) != nil {
+                } catch where estAbsent(error) && ContratExport.mois(de: chemin) != nil {
                     // Un mois purge par l'app pendant l'export (plus de 90 jours) : elle l'a voulu, il n'est plus la.
                     try? fm.removeItem(at: cible)
                     continue
@@ -70,6 +74,25 @@ public enum ExportReprise {
         }
     }
 
+    /// Un fichier absent : `FileHandle` rend `NSFileNoSuchFileError` (4), d'autres API `NSFileReadNoSuchFileError` (260).
+    static func estAbsent(_ erreur: Error) -> Bool {
+        let e = erreur as NSError
+        return (e.domain == NSCocoaErrorDomain && [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(e.code))
+            || (e.domain == NSPOSIXErrorDomain && e.code == Int(ENOENT))
+    }
+
+    /// L'app peut mettre `url` a la Corbeille pour la remplacer par un export : rien a cet endroit, un ancien export
+    /// (un dossier avec `manifeste.json`), ou un dossier vide (`.DS_Store` mis a part). Jamais un autre dossier ni un
+    /// fichier, meme si le panneau d'enregistrement a fait confirmer le remplacement.
+    public static func peutRemplacer(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink != true else { return false }
+        var dossier: ObjCBool = false
+        guard fm.fileExists(atPath: url.path, isDirectory: &dossier) else { return true }
+        guard dossier.boolValue, let contenu = try? fm.contentsOfDirectory(atPath: url.path) else { return false }
+        return contenu.contains(ContratExport.nomManifeste) || contenu.allSatisfy { $0 == ".DS_Store" }
+    }
+
     /// `manifeste.json` ou `reglages.json` a la racine, a la casse et a la normalisation Unicode pres.
     static func estReserve(_ chemin: String) -> Bool {
         [ContratExport.nomManifeste, ContratExport.nomReglages]
@@ -83,14 +106,9 @@ public enum ExportReprise {
         return x == y || x.hasPrefix(y.hasSuffix("/") ? y : y + "/") || y.hasPrefix(x.hasSuffix("/") ? x : x + "/")
     }
 
-    /// Copie le contenu de `source` dans `cible` (nouveau fichier), par blocs de 1 Mio, sans les attributs.
+    /// Copie le contenu de `source` dans `cible` (nouveau fichier), par blocs de 1 Mio, sans ses attributs.
     static func copier(_ source: URL, vers cible: URL) throws {
-        let lecteur: FileHandle
-        do {
-            lecteur = try FileHandle(forReadingFrom: source)
-        } catch let e as NSError where e.domain == NSCocoaErrorDomain && e.code == NSFileReadNoSuchFileError {
-            throw CocoaError(.fileReadNoSuchFile)
-        }
+        let lecteur = try FileHandle(forReadingFrom: source)
         defer { try? lecteur.close() }
         guard FileManager.default.createFile(atPath: cible.path, contents: nil) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: cible.path])
@@ -116,9 +134,10 @@ public enum ExportReprise {
         let cles: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey]
         var illisible: String?
         guard let e = fm.enumerator(at: base, includingPropertiesForKeys: cles, errorHandler: { url, _ in
-            illisible = illisible ?? relatif(url)
+            let chemin = url.standardizedFileURL.path == base.path ? dossier.lastPathComponent : relatif(url)
+            illisible = illisible ?? chemin
             return false
-        }) else { throw Erreur.dossierIllisible("") }
+        }) else { throw Erreur.dossierIllisible(dossier.lastPathComponent) }
         var fichiers: [String] = [], liens: [String] = []
         for case let url as URL in e {
             let v = try url.resourceValues(forKeys: Set(cles))

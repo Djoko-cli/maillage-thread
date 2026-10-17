@@ -195,6 +195,39 @@ struct ExportRepriseTests {
                                         .init(chemin: "lien", raison: .horsContrat)])
     }
 
+    /// Un mois purge par l'app pendant l'export : la copie echoue sur un fichier absent, et l'export le reconnait.
+    @Test func fichierAbsentReconnu() throws {
+        let bac = try Bac()
+        try FileManager.default.createDirectory(at: bac.source, withIntermediateDirectories: true)
+        do {
+            try ExportReprise.copier(bac.source.appendingPathComponent("maillage-2026-04.jsonl"),
+                                     vers: bac.racine.appendingPathComponent("copie"))
+            Issue.record("la copie d'un fichier absent a reussi")
+        } catch {
+            #expect(ExportReprise.estAbsent(error))
+        }
+    }
+
+    /// L'app ne met a la Corbeille qu'un ancien export ou un dossier vide.
+    @Test func remplacementSeulementDUnAncienExportOuDUnDossierVide() throws {
+        let bac = try Bac()
+        let fm = FileManager.default
+        func dossier(_ nom: String, _ fichiers: [String]) throws -> URL {
+            let d = bac.racine.appendingPathComponent(nom)
+            try fm.createDirectory(at: d, withIntermediateDirectories: true)
+            for f in fichiers { try Data().write(to: d.appendingPathComponent(f)) }
+            return d
+        }
+        #expect(ExportReprise.peutRemplacer(bac.racine.appendingPathComponent("absent")))
+        #expect(ExportReprise.peutRemplacer(try dossier("vide", [])))
+        #expect(ExportReprise.peutRemplacer(try dossier("finder", [".DS_Store"])))
+        #expect(ExportReprise.peutRemplacer(try dossier("ancien", ["manifeste.json", "surnoms.json"])))
+        #expect(!ExportReprise.peutRemplacer(try dossier("autre", ["photo.jpg"])))
+        let fichier = bac.racine.appendingPathComponent("fichier")
+        try Data().write(to: fichier)
+        #expect(!ExportReprise.peutRemplacer(fichier))
+    }
+
     @Test func nomParDefautDuDossier() {
         var c = DateComponents(year: 2026, month: 10, day: 7, hour: 23, minute: 30)
         c.timeZone = TimeZone(secondsFromGMT: -5 * 3600)
