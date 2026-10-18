@@ -3,6 +3,20 @@
   <channel>
     <title>Maillage Thread</title>
     <item>
+      <title>1.4.0</title>
+      <pubDate>Sun, 18 Oct 2026 15:54:13 +0000</pubDate>
+      <sparkle:version>553</sparkle:version>
+      <sparkle:shortVersionString>1.4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+<p><strong>English</strong></p>
+<ul><li><strong>Maillage Thread becomes Maillage IoT</strong>, one app for Thread and Zigbee networks. This is the last version of Maillage Thread: a banner at the top of its menu links to the Maillage IoT download.</li><li>"Export for Maillage IoT…" (in the banner and in the app menu) writes a folder with the history, the log, the nicknames, the rooms, the last Home names and the settings of Maillage Thread, for Maillage IoT to import. No password or key goes into it, and Maillage Thread keeps working as before.</li><li>After a successful export, Maillage Thread offers to stop opening at login, so that both apps do not compete for the USB probe at startup.</li><li>Passeur Noms is now built from the <code>maillage-iot</code> repository: <code>outils/passeur.sh</code> in this repository only points there.</li></ul>
+<p><strong>Français</strong></p>
+<ul><li><strong>Maillage Thread devient Maillage IoT</strong>, une seule app pour les réseaux Thread et Zigbee. C'est la dernière version de Maillage Thread : un bandeau en haut de son menu mène au téléchargement de Maillage IoT.</li><li>« Exporter pour Maillage IoT… » (dans le bandeau et dans le menu de l'app) écrit un dossier avec l'historique, le journal, les surnoms, les pièces, les derniers noms de Maison et les réglages de Maillage Thread, que Maillage IoT importe. Aucun mot de passe ni aucune clé n'y figure, et Maillage Thread continue de marcher comme avant.</li><li>Après un export réussi, Maillage Thread propose de ne plus s'ouvrir à l'ouverture de session, pour que les deux apps ne se disputent pas la sonde USB au démarrage.</li><li>Passeur Noms se compile désormais depuis le dépôt <code>maillage-iot</code> : <code>outils/passeur.sh</code> de ce dépôt ne fait plus qu'y renvoyer.</li></ul>
+]]></description>
+      <enclosure url="https://github.com/Djoko-cli/maillage-thread/releases/download/maillage-v1.4.0/Maillage-Thread-1.4.0.dmg" length="9359049" type="application/octet-stream" sparkle:edSignature="S0fYWAUxEwkRYPMnaLWIxuNIJwQ/r/b2Jb/encgrmothV5EDA/hUkeZTpRl0ojb1MZalmHYvTkcDYovfMsMrCw=="/>
+    </item>
+    <item>
       <title>1.3.0</title>
       <pubDate>Tue, 13 Oct 2026 10:33:57 +0000</pubDate>
       <sparkle:version>544</sparkle:version>
