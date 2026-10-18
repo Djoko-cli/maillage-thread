@@ -1,5 +1,8 @@
 **English** · [Français](README.fr.md)
 
+> [!IMPORTANT]
+> **This project continues as [Maillage IoT](https://github.com/Djoko-cli/maillage-iot).**
+
 # Maillage Thread
 
 > **Maillage Thread becomes [Maillage IoT](https://github.com/Djoko-cli/maillage-iot)**, one app for Thread and
